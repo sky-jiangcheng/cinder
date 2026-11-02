@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.23.0] - 2026-11-02
+
 ### 变更
 
 - **界面内最后几处「手养旧配色」清掉了：换色从来不是「改一个 token」就完（ADR-0037 续，2026-11-02）**：上一轮把 UI token 换成了「暖纸 + 墨」，但**凡是手写颜色值的地方都各自存了一份调色板**——只换 token 只改得到走 token 的那一半。这一轮把所有手写色值扫出来逐个归位，共 6 处：① **外观页的主题缩略图**（最要紧的一处：那三个 64×44 的方块**声称**是「该主题下这个 app 的微缩版」，换色之前画的是中性灰 + Tailwind 蓝——**它在对用户说谎**，说的还是这个产品已经不用的那种语言；现在画的是真实配色，而它**不能读实况 token**——缩略图必须能画出「当前没启用」的那个主题，所以两套配色的目录值显式列在 `tokens.css` 的 `--preview-light-*` / `--preview-dark-*`）；② **仪表盘活动热力图**（冷中性灰五阶 + 一份深色主题覆盖 → 由 `--text-primary` 与 `--bg-secondary` 派生的五阶，深色主题**自动反相**，覆盖行整段删掉）；③ **深色主题的 note 引用块**（蓝色 rgba 底 → 由 `--accent` 派生的暖琥珀底）；④ **代码块**（冷灰近黑 + 冷灰字 → 浅色=品牌墨底 + 品牌纸字，深色=暖底 + 暖字阶）；⑤ `BlockEditor` 的 `--accent` 兜底值；⑥ `index.html` 的 `theme-color`（冷近黑 → 浅/深两套 `prefers-color-scheme` 下的暖纸 / 暖黑）。**顺带把「刻意不动」也写清楚了**：下拉箭头那条 data-URI 里的中性灰**不动**（装饰性控件的箭头，旁边有 3:1 的控件边框兜底，改它是一次无收益的重刷）。
@@ -641,7 +643,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.22.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.23.0...HEAD
+[2.23.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.22.0...v2.23.0
 [2.22.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.21.0...v2.22.0
 [2.21.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.20.0...v2.21.0
 [2.20.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.19.0...v2.20.0
