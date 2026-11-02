@@ -27,8 +27,8 @@
         },
         {
           "file": "features/knowledge",
-          "label": "知识库与笔记",
-          "label_en": "Knowledge Base & Notes"
+          "label": "知识：笔记与知识页",
+          "label_en": "Knowledge: Notes & Wiki Pages"
         },
         {
           "file": "features/dashboard",

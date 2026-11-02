@@ -7,25 +7,29 @@ order: 2
 
 The dashboard shows daily commit statistics, goal progress, and a year-long commit heatmap across all projects.
 
-> **Standalone page (`/dashboard`)**: the dashboard is a separate top-level route, reached from the "Dashboard" item in the main navigation; the home page (`/`) is a separate single-column workbench (knowledge-base assistant, memory-ring strip, featured projects, today's activity), and its "Open full dashboard" link jumps here. Dashboard panels (goal ring, heatmap, project grid, starred stats) keep full functionality — not hidden by default, not merged into Home — they simply live under their own route.
+> **Standalone page (`/dashboard`)**: the dashboard is a separate top-level route, reached from the "Dashboard" item in the main navigation; the home page (`/`) is a full-page console (ask + search). Dashboard panels (goal ring, heatmap, project grid, starred stats) keep full functionality — not hidden by default — they simply live under their own route.
+>
+> **The one place for "my output"** (ADR-0038, decision 5): project counts, repo counts and added lines have exactly one authority — the dashboard. Home no longer computes any of them, and the memory ring (recent session handoffs) moved here: it belongs to "my state", not to "my answer".
 
 ## Page structure (top to bottom)
 
 ```mermaid
 flowchart TB
-    STRIP["Memory-ring strip<br/>recent handoffs · global search entry"] --> RING["① Goal progress<br/>progress ring · summary bar"]
-    RING --> HEAT["② Commit heatmap<br/>last 52 weeks · click to jump to a day"]
-    HEAT --> CTRL["③ Controls<br/>date switch · combined search<br/>filters · sorting · rescan"]
-    CTRL --> GRID["④ Project grid"]
+    RING["① Memory ring<br/>recent session handoffs · write one"] --> GOAL["② Goal progress<br/>progress ring · summary bar"]
+    GOAL --> HEAT["③ Commit heatmap<br/>last 52 weeks · click to jump to a day"]
+    HEAT --> CTRL["④ Controls<br/>date switch · combined search<br/>filters · sorting · rescan"]
+    CTRL --> GRID["⑤ Project grid"]
     GRID --> STAR["Starred: full stat card<br/>goal bar · team total"]
     GRID --> PLAIN["Unstarred: minimal card<br/>name + star button"]
 ```
 
-How to read it: the page is a **vertical reading order** with a memory-ring strip on top, then four bands. The heatmap (②) is the global time view, the control bar (③) is its operating panel (switching the date changes both the heatmap and the project cards at once), and the project grid (④) splits cards by starred state — unstarred shows only the name, and you have to star a repository before it shows statistics. All three bands follow the **git author setting** (see [Settings](settings.md#author-configuration)).
+How to read it: the page is a **vertical reading order**, five bands. The heatmap (③) is the global time view, the control bar (④) is its operating panel (switching the date changes both the heatmap and the project cards at once), and the project grid (⑤) splits cards by starred state — unstarred shows only the name, and you have to star a repository before it shows statistics. All three bands follow the **git author setting** (see [Settings](settings.md#author-configuration)).
 
-### Memory-ring strip (page top)
+### Memory ring (page top, first block in the scroll area)
 
-A horizontal memory band at the very top of the home screen: the "Memory Ring" label on the left, **recent session handoffs** in the middle (click to open the owning project; auto-captured ones carry an "Auto" badge), and the **global search entry** on the right — it opens the standalone [global search page](search.md). With no handoffs yet, a placeholder hint is shown; on narrow screens the band wraps.
+The first block of the dashboard's scroll area: **recent session handoffs**. Click one to open the owning project; auto-captured ones carry an "Auto" badge. With no handoffs yet, a placeholder hint is shown.
+
+The **"Write a handoff record"** button next to it is the **only zero-configuration way into the session loop** — automatic capture at session end needs an MCP client, a model and a client that remembers to call the tool, none of which a first-time user has; writing one by hand needs no configuration at all. It moved here for the same reason the ring did: the memory ring belongs to "my state", while the home console belongs to "my answer".
 
 ### Goal progress
 

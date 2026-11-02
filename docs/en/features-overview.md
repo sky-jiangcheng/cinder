@@ -22,7 +22,7 @@ order: 2
 | Rich rendering | highlight.js code highlighting, Mermaid diagrams, KaTeX math, GFM callouts and task lists |
 | FTS5 full-text search | trigram + bm25 relevance ranking, snippet highlighting, covering notes and todos; short CJK queries automatically fall back to LIKE |
 | Version history | Auto snapshot on every save; line-level diff of any version against the current one, one-click restore |
-| Global search | ⌘/Ctrl+K command palette + a dedicated search page (federated: repos / notes / todos) |
+| Global search | The home console's "search" mode (federated: repos / notes / todos) + the ⌘/Ctrl+K command palette |
 
 ### AI-Ready Interfaces (Core)
 
@@ -69,7 +69,7 @@ The project detail page auto-extracts: README summary, tech stack list (20+ mani
 
 ### Dashboard & Stats (Support)
 
-> Home is a single-column workbench: knowledge-base assistant, memory-ring strip (recent handoffs + global-search entry), featured projects and today's activity on one page; `/search` is a dedicated search page; nav order home → dashboard → search → knowledge → review → settings.
+> Home is a full-page console (ask + search); the memory ring (recent handoffs) moved to the top of the dashboard, and project counts / added lines have exactly one authority — the dashboard. Nav order home → dashboard → knowledge → review → settings (`/search` and `/wiki` survive as redirects).
 
 | Feature | Description |
 |---------|-------------|

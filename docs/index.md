@@ -128,8 +128,8 @@ flowchart TB
 |------|------|
 | 安装并跑起第一次扫描 | [快速开始](getting-started.md) |
 | 备份数据 / 换机迁移 / 卸载 | [数据与备份](data-management.md) |
-| 看提交量 / 目标 / 热力图 | [首页工作台（仪表盘）](features/dashboard.md) |
-| 跨项目搜笔记、待办与项目 | [全局搜索](features/search.md) |
+| 看提交量 / 目标 / 热力图 | [仪表盘](features/dashboard.md) |
+| 跨项目搜笔记、待办与项目 | [对话台：问与搜](features/search.md) |
 | 写笔记、搜笔记、找回旧版本 | [知识库与笔记](features/knowledge.md) |
 | 看某个项目的技术栈与依赖 | [项目详情](features/project-detail.md) |
 | 让 Claude / Cursor 读写我的知识库 | [AI 集成](features/ai-integration.md) |

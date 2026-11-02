@@ -125,8 +125,8 @@ This manual covers Repotory's core features and use cases. The docs are written 
 |------|------|
 | Install Repotory and run the first scan | [Getting Started](getting-started.md) |
 | Back up data / migrate to a new machine / uninstall | [Data and Backup](data-management.md) |
-| View commits / goals / heatmap | [Home workbench (Dashboard)](features/dashboard.md) |
-| Search notes, todos, and projects across the board | [Global Search](features/search.md) |
+| View commits / goals / heatmap | [Dashboard](features/dashboard.md) |
+| Search notes, todos, and projects across the board | [Console: Ask & Search](features/search.md) |
 | Write notes, search notes, recover old versions | [Knowledge Base and Notes](features/knowledge.md) |
 | See a project's tech stack and dependencies | [Project Detail](features/project-detail.md) |
 | Let Claude / Cursor read and write my knowledge base | [AI Integration](features/ai-integration.md) |

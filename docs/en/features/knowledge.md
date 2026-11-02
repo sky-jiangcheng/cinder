@@ -1,11 +1,26 @@
 ---
-title: Knowledge Base and Notes
+title: Knowledge: Notes and Wiki Pages
 order: 3
 ---
 
-# Knowledge Base and Notes
+# Knowledge: Notes and Wiki Pages
 
-The knowledge base is the app's home page and the hub for cross-project notes: Markdown / block editor, tag categories, FTS5 full-text search, version history, and AI memory import.
+"Knowledge" is **one** tab in the main navigation with two views inside it: **Notes** (the raw material — writable, organizable) and **Wiki pages** (the finished product — read-only). The notes hub itself provides Markdown / block editor, tag categories, FTS5 full-text search, version history, and AI memory import.
+
+## One tab, two views (ADR-0038, decision 4)
+
+The knowledge base and the wiki list used to be two peer top-level tabs with nearly identical skeletons (search box + filter row + result count + list), while they retrieve two different kinds of things — one is **raw material** (notes / todos: writable, organizable, importable), the other **finished product** (approved pages, read-only). You had to work out which one to open, and the capabilities were **not symmetric**: the pages view had a project-scope dropdown and the notes view did not, even though note retrieval is cross-project anyway.
+
+They are now one tab:
+
+- **Route** `/knowledge`, with the view switched by `?view=notes|pages` (deep-linkable and shareable; the browser back button walks the view history)
+- **Shared skeleton**: one search box, **one project-scope dropdown**, one result-count bar, one set of empty and error states
+- **Different bodies**: the notes view is a grid plus filters (all / knowledge / other, pinned, tags, topics) plus writing actions (new / import / file for filing); the pages view is a list plus read-only, and its "**approved pages only**" semantics are unchanged (ADR-0032, decision 1 still holds)
+- **The scope dropdown is now given to the notes view too** — it was missing, even though the retrieval was cross-project all along
+
+> The old `/wiki` address redirects to `/knowledge?view=pages` (carrying `?q=` and `?project=` along), and the `/wiki/:id` detail route is untouched — deep links and shared links keep working.
+>
+> The search box here is a **filter within the view**, not a global search: global retrieval lives in the home console's "search" mode (see [Console: Ask & Search](search.md)).
 
 ```mermaid
 flowchart TB
@@ -53,7 +68,8 @@ highlight.js code highlighting, Mermaid diagrams, KaTeX math formulas, GFM callo
 
 ## Search
 
-- The home page search box is auto-focused; "Ask the knowledge base" mode returns answer snippets ranked by relevance
+- The search box at the top of the "Knowledge" tab is a **filter within the view**: it narrows notes / todos in the notes view, or approved pages in the pages view; the empty states and the count bar are shared by both
+- The home console's "search" mode is the **global retrieval** (notes / todos / project names, hits grouped by project), and its "ask" mode returns answer snippets ranked by relevance
 - FTS5 trigram + bm25 ranking, with snippets highlighting matched terms; short CJK queries automatically fall back to LIKE
 - Covers notes and todos; the `⌘/Ctrl+K` command palette works from anywhere
 
