@@ -228,3 +228,107 @@ func TestBuildLayeredMemory_EmptyStore(t *testing.T) {
 		t.Errorf("global-only assembly = %+v", m2.Layers())
 	}
 }
+
+// --- ADR-0040: the unscoped scope gets its own L2 ---------------------------
+//
+// The L2 slot answers "what is in this scope". Before ADR-0040 it had no
+// answer at all for the unscoped case: the whole assembly was skipped, so
+// the model was handed retrieved snippets and nothing else — it did not know
+// which projects the library even holds.
+
+// catalogCorpus seeds a project that has both code and knowledge, plus one
+// that has neither. The empty one must NOT show up: it says nothing about
+// the library and would only spend budget.
+func catalogCorpus(t *testing.T, svc *Service) (withContent int64) {
+	t.Helper()
+	withContent = seedProject(t, svc.db, "catalog-proj", "/tmp/catalog-proj")
+	if _, err := svc.db.Exec("INSERT INTO repositories (path, project_id) VALUES (?, ?)",
+		"/tmp/catalog-proj/repo", withContent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CreateNoteEx(svc.db, withContent, "A note", "the project has some knowledge",
+		"", "knowledge", "manual"); err != nil {
+		t.Fatal(err)
+	}
+	empty := seedProject(t, svc.db, "empty-proj", "/tmp/empty-proj")
+	_ = empty
+	return withContent
+}
+
+func catalogBlock(t *testing.T, m *LayeredMemory) *LayerBlock {
+	t.Helper()
+	for i := range m.Blocks {
+		if m.Blocks[i].Layer == LayerProjectCatalog {
+			return &m.Blocks[i]
+		}
+	}
+	return nil
+}
+
+func TestBuildLayeredMemory_UnscopedGivesCatalog(t *testing.T) {
+	svc, _ := setupService(t)
+	pid := catalogCorpus(t, svc)
+
+	m := svc.BuildLayeredMemory(0, "", LayerBudget{}, false)
+	cat := catalogBlock(t, m)
+	if cat == nil {
+		t.Fatalf("expected a catalog block under the unscoped scope, got %+v", m.Layers())
+	}
+	if !strings.Contains(cat.Text, "catalog-proj") {
+		t.Errorf("catalog does not mention the project: %q", cat.Text)
+	}
+	if !strings.Contains(cat.Text, "/tmp/catalog-proj") {
+		t.Errorf("catalog does not mention the project path: %q", cat.Text)
+	}
+	if !strings.Contains(cat.Text, "1 repos") || !strings.Contains(cat.Text, "1 notes") {
+		t.Errorf("catalog does not report the project's size: %q", cat.Text)
+	}
+	if strings.Contains(cat.Text, "empty-proj") {
+		t.Errorf("a project with neither code nor knowledge must not be listed: %q", cat.Text)
+	}
+	_ = pid
+}
+
+func TestBuildLayeredMemory_ProjectScopeKeepsTheScenario(t *testing.T) {
+	svc, _ := setupService(t)
+	pid := catalogCorpus(t, svc)
+
+	m := svc.BuildLayeredMemory(pid, "", LayerBudget{}, false)
+	if catalogBlock(t, m) != nil {
+		t.Fatalf("the catalog and the project scenario must not stack: %+v", m.Layers())
+	}
+	found := false
+	for _, blk := range m.Blocks {
+		if blk.Layer == LayerProjectScenario {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected the project scenario under a project scope, got %+v", m.Layers())
+	}
+}
+
+// Over budget the catalog is trimmed, not muted: an empty catalog reads as
+// "this library has no projects", which is a different statement from "there
+// are too many to list" — and the block must say how many it left out.
+func TestBuildLayeredMemory_CatalogTrimsOverBudget(t *testing.T) {
+	svc, _ := setupService(t)
+	for _, name := range []string{"alpha", "bravo", "charlie"} {
+		pid := seedProject(t, svc.db, name, "/tmp/"+name)
+		if _, err := svc.db.Exec("INSERT INTO repositories (path, project_id) VALUES (?, ?)",
+			"/tmp/"+name+"/repo", pid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := svc.BuildLayeredMemory(0, "", LayerBudget{CatalogChars: 80}, false)
+	cat := catalogBlock(t, m)
+	if cat == nil {
+		t.Fatalf("expected a catalog block, got %+v", m.Layers())
+	}
+	if cat.Items < 1 || cat.Items >= 3 {
+		t.Errorf("expected the cap to trim some of the three projects, kept %d", cat.Items)
+	}
+	if cat.Omitted != 3-cat.Items {
+		t.Errorf("expected the dropped projects to be reported, kept %d omitted %d", cat.Items, cat.Omitted)
+	}
+}

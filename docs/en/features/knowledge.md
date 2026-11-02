@@ -213,13 +213,20 @@ So "I generated a page but search cannot find it" is not a defect: anything a mo
 | Layer | Contents | When fetched |
 |-------|----------|--------------|
 | L3 global profile | **Approved** pages owned by no project (cross-project conventions, preferences) | always, first |
-| L2 project scenario | repository list + mined tech stack: what the project is | always, second |
+| L2 project scenario | repository list + mined tech stack: what the project is | **when a project is selected** |
+| L2 library catalog | which projects the library holds: name + path + repo count + note count | **when no project is selected** (mutually exclusive with the row above) |
 | L1 notes | curated knowledge (hand-written, Claude/OpenClaw/Hermes memory files, filed answers) | **only when a specific question is asked** |
 | L0 transcripts | session records (codex / opencode / cursor imports, and kind=log) | only on explicit request |
 
 Three points: the classification is a **provenance heuristic** — it says where a note came from, not how true it is; budgets are **per layer**, so a verbose L0 cannot crowd out the L3/L2 that give the model its bearings; and L3 reads approved pages only, so unreviewed compiler output never steers an answer.
 
+**"No project selected" is a scope too** ([ADR-0040](../adr/0040-unscoped-ask-orientation-and-handoff-evidence.md)). The ask panel's scope dropdown defaults to "all knowledge and all projects", and that option previously gave the model **nothing at all** — the whole context assembly was skipped, so it only got the retrieved fragments and did not even know which projects the library holds. That option now yields the **L2 library catalog**: each project's name, path, repository count and note count, **deliberately coarse** (tech stack and README excerpt stay project-scoped). The two L2s are **mutually exclusive**: pick a project and you get that project's scenario, pick none and you get the library catalog.
+
+**The library catalog is not L3.** L3 is "knowledge pages a human approved that belong to no project"; the catalog is the *fact* of which projects exist — different sources, different gates, and conflating them would hollow out L3's human gate.
+
 **L3 used to be structurally empty.** L3 only reads approved pages owned by no project, while every page-creating path forced a project — a real library held 45 pages and **not one global page**, so the layer could only ever answer "nothing". The review page now carries a **Page scope** area: an **approved** page can be **promoted to a global page**, which puts it into L3 and makes it visible to every project's answers, and it can be moved back into a named project (which is what makes the promotion reversible). It is a **human act** by design: ADR-0015 states that producing L3 automatically is exactly "the model writes into the store with no gate", so no automatic path can fill this layer. Promotion is a **widening** — one misjudged page then steers every project — so the button takes two clicks.
+
+**This layer is still empty most of the time.** The action exists, but nobody has promoted a page yet — a real library holds 45 pages and 0 global pages. Using L3 requires promoting an approved page in the review page first, which is a human act; no code can stand in for it. The **library catalog** in the paragraph above answers "which projects does this library hold", but not "what rules did I set for this library" — that is L3's job.
 
 ### lint: five checks and what they emit
 

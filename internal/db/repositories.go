@@ -50,6 +50,30 @@ func GetRepositoriesByProjectID(db *sql.DB, projectID int64) ([]Repository, erro
 	return repos, rows.Err()
 }
 
+// GetRepoCounts returns the number of repositories per project, keyed by
+// project id. It is the aggregate behind the whole-library project catalog
+// (ADR-0040): one query for the whole library, so the catalog does not turn
+// into an N+1 over projects. Projects with no repositories are absent from the
+// map rather than present with a zero — a caller counting over the map wants
+// the projects that actually have repositories.
+func GetRepoCounts(db *sql.DB) (map[int64]int, error) {
+	rows, err := db.Query("SELECT project_id, COUNT(*) FROM repositories WHERE project_id IS NOT NULL GROUP BY project_id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[int64]int{}
+	for rows.Next() {
+		var pid int64
+		var n int
+		if err := rows.Scan(&pid, &n); err != nil {
+			return nil, err
+		}
+		counts[pid] = n
+	}
+	return counts, rows.Err()
+}
+
 // UpsertRepositoryTx inserts or updates a repository row by path.
 func UpsertRepositoryTx(tx *sql.Tx, path string, projectID int64) error {
 	_, err := tx.Exec(

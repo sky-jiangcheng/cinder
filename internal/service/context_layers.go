@@ -2,9 +2,11 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"repotory/internal/db"
+	"repotory/internal/domain"
 )
 
 // Layered memory (ADR-0014 决策 6 / TODO M6-W5).
@@ -38,13 +40,18 @@ type MemoryLayer string
 const (
 	LayerGlobalProfile   MemoryLayer = "L3-global"
 	LayerProjectScenario MemoryLayer = "L2-project"
+	LayerProjectCatalog  MemoryLayer = "L2-catalog"
 	LayerNotes           MemoryLayer = "L1-notes"
 	LayerTranscripts     MemoryLayer = "L0-transcripts"
 )
 
 // layerOrder is the assembly order — orientation first, specifics last. Kept as a
 // slice rather than implied by sort keys so the intent is readable.
-var layerOrder = []MemoryLayer{LayerGlobalProfile, LayerProjectScenario, LayerNotes, LayerTranscripts}
+//
+// The two L2 variants are alternatives, not a sequence: a scope is either one
+// project (L2-project) or the whole library (L2-catalog), and only one of them
+// is ever assembled (ADR-0040 决策 1).
+var layerOrder = []MemoryLayer{LayerGlobalProfile, LayerProjectScenario, LayerProjectCatalog, LayerNotes, LayerTranscripts}
 
 // transcriptSources are the importers whose documents are raw session records.
 // Anything not listed classifies as L1 (curated), including the memory-file
@@ -81,7 +88,8 @@ func ClassifyNoteLayer(source, kind string) MemoryLayer {
 // model its bearings — the failure mode this whole layering exists to avoid.
 type LayerBudget struct {
 	GlobalChars     int // L3
-	ProjectChars    int // L2
+	ProjectChars    int // L2, project scope
+	CatalogChars    int // L2, whole-library scope (ADR-0040)
 	NotesItems      int // L1
 	NotesChars      int
 	TranscriptItems int // L0
@@ -93,6 +101,7 @@ type LayerBudget struct {
 var DefaultLayerBudget = LayerBudget{
 	GlobalChars:     1200,
 	ProjectChars:    1600,
+	CatalogChars:    2400,
 	NotesItems:      8,
 	NotesChars:      2400,
 	TranscriptItems: 3,
@@ -105,6 +114,9 @@ func (b LayerBudget) withDefaults() LayerBudget {
 	}
 	if b.ProjectChars <= 0 {
 		b.ProjectChars = DefaultLayerBudget.ProjectChars
+	}
+	if b.CatalogChars <= 0 {
+		b.CatalogChars = DefaultLayerBudget.CatalogChars
 	}
 	if b.NotesItems <= 0 {
 		b.NotesItems = DefaultLayerBudget.NotesItems
@@ -156,6 +168,15 @@ func (s *Service) BuildLayeredMemory(projectID int64, query string, budget Layer
 	}
 	if projectID > 0 {
 		if blk := s.layerProjectScenario(projectID, b.ProjectChars); blk.Items > 0 {
+			out.Blocks = append(out.Blocks, blk)
+		}
+	} else {
+		// No project scope: the L2 slot is filled by the whole-library catalog
+		// instead of going empty (ADR-0040 决策 1). Every layer has its scope —
+		// L2 answers "what is in this scope", and the scope here is the whole
+		// library. The two L2 variants never stack: a scope is one project or
+		// the library, not both.
+		if blk := s.layerProjectCatalog(b.CatalogChars); blk.Items > 0 {
 			out.Blocks = append(out.Blocks, blk)
 		}
 	}
@@ -253,6 +274,84 @@ func (s *Service) layerProjectScenario(projectID int64, charCap int) LayerBlock 
 		}
 	}
 	return LayerBlock{Layer: LayerProjectScenario, Text: clipRunes(text, charCap), Items: max(1, n)}
+}
+
+// layerProjectCatalog is L2 for the unscoped case: what the whole library
+// holds (ADR-0040 决策 1). It answers "which projects exist", which is the one
+// thing a model cannot know without being told — and it used to be told
+// nothing at all, because the unscoped ask path skipped the whole assembly.
+//
+// Deliberately COARSE: name, root path, repository count, note count. Tech
+// stack, README excerpt and contributors stay project-scoped (that is
+// aiProjectBaseContext's job) — this layer is orientation, not detail.
+//
+// It is NOT L3. L3 is human-approved wiki pages belonging to no project, and
+// ADR-0031 refuses an automatic fallback for it. The catalog is the fact of
+// which projects exist, aggregated from the projects / repositories /
+// project_notes tables — nothing the model wrote into the store.
+func (s *Service) layerProjectCatalog(charCap int) LayerBlock {
+	projects, err := db.GetAllProjects(s.db)
+	if err != nil || len(projects) == 0 {
+		return LayerBlock{Layer: LayerProjectCatalog}
+	}
+	repoCounts, err := db.GetRepoCounts(s.db)
+	if err != nil {
+		repoCounts = map[int64]int{}
+	}
+	noteCounts := map[int64]int{}
+	if counts, err := db.GetNoteCounts(s.db); err == nil {
+		for _, c := range counts {
+			noteCounts[c.ProjectID] = c.Count
+		}
+	}
+
+	// Note count first: a project with many repositories but no notes
+	// contributes less to "asking about knowledge" than one that has notes.
+	sorted := make([]domain.Project, len(projects))
+	copy(sorted, projects)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		ni, nj := noteCounts[sorted[i].ID], noteCounts[sorted[j].ID]
+		if ni != nj {
+			return ni > nj
+		}
+		return sorted[i].Name < sorted[j].Name
+	})
+
+	var (
+		sb   strings.Builder
+		used int
+		omit int
+		n    int
+	)
+	for _, p := range sorted {
+		repos, notes := repoCounts[p.ID], noteCounts[p.ID]
+		if repos == 0 && notes == 0 {
+			// A project with neither code nor knowledge is an empty shell row —
+			// it says nothing about the library and would only spend budget.
+			continue
+		}
+		name := firstNonEmpty(p.Name, p.RootPath)
+		line := fmt.Sprintf("- %s — %d repos, %d notes — %s\n",
+			name, repos, notes, p.RootPath)
+		c := len([]rune(line))
+		// The same rule every other layer follows: a cap smaller than one
+		// entry trims it rather than muting the whole layer (see
+		// layerGlobalProfile). An empty catalog reads as "this library has no
+		// projects", which is a different statement from "there are too many
+		// to list".
+		if used+c > charCap {
+			if n > 0 {
+				omit++
+				continue
+			}
+			line = clipRunes(line, charCap) + "\n"
+			c = len([]rune(line))
+		}
+		sb.WriteString(line)
+		used += c
+		n++
+	}
+	return LayerBlock{Layer: LayerProjectCatalog, Text: sb.String(), Items: n, Omitted: omit}
 }
 
 // layerNotes is L1: curated knowledge, matched by relevance. It goes through the

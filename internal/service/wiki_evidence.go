@@ -61,6 +61,33 @@ var DefaultEvidenceBudget = EvidenceBudget{MaxItems: 12, MaxChars: 4000, Deadlin
 const (
 	evidenceL0PageRunes = 200
 	evidenceL0NoteRunes = 140
+	// evidenceL0HandoffRunes is the L0 depth for a handoff record. A plain
+	// note's 140 runes is a fact plus its context; 140 runes of a handoff is
+	// its Markdown heading and half a clause — not readable on its own, so it
+	// would be admitted as a shape rather than as content.
+	evidenceL0HandoffRunes = 400
+)
+
+// Handoff records are the session-memory protocol's exit records (ADR-0007):
+// they say how the previous session ended, which is the one thing a question
+// about "what were we doing" cannot be answered from keyword search (the
+// titles are English `Session Handoff …`, and the body is a template).
+//
+// They enter the evidence set on their own channel rather than through FTS
+// (ADR-0040 决策 2). The shape is the one BuildProjectContext already uses
+// and abeval already measures ("first-position hit rate"): the latest record
+// in depth, the ones before it as one-line history.
+const (
+	// handoffEvidenceLimit is how many recent handoff records enter the set:
+	// the latest one plus a short timeline of the ones before it. More than a
+	// handful would crowd out the search hits, and a handoff list nobody reads
+	// past the first entry is not a list.
+	handoffEvidenceLimit = 3
+	// handoffEvidenceRunes is the depth ceiling for the latest handoff. It is
+	// deliberately far below contextHandoffFullLen (4000, the MCP context
+	// path): the whole evidence budget is 4000 characters, so a single item
+	// allowed 4000 would leave nothing for the other eleven.
+	handoffEvidenceRunes = 1200
 )
 
 func (b EvidenceBudget) withDefaults() EvidenceBudget {
@@ -115,6 +142,13 @@ func (s *Service) GatherEvidence(projectID int64, query string, budget EvidenceB
 
 	pages := s.evidencePages(query, projectID, lim, budget.Deadline)
 	notes := s.evidenceNotes(query, projectID, lim, start, budget.Deadline)
+	// Handoff records ride their own channel (ADR-0040 决策 2): they are what
+	// the previous session left behind, and keyword search cannot find them
+	// reliably (English titles, a fixed template body). They lead the note
+	// candidates — the same reason BuildProjectContext puts them first — and
+	// the count is capped so they cannot take over the budget.
+	handoffs := s.evidenceHandoffs(projectID, handoffEvidenceLimit)
+	notes = mergeHandoffNotes(handoffs, notes, lim)
 
 	// Interleave round-robin, NOT an id-level RRF fuse. hybrid.FuseRRF merges
 	// ranked id lists, and page ids and note ids come from different sequences —
@@ -147,9 +181,12 @@ func (s *Service) GatherEvidence(projectID int64, query string, budget EvidenceB
 			break
 		}
 		it := c.item
-		if it.Type == "page" {
+		switch {
+		case it.Type == "page":
 			it.Snippet = clipRunes(c.full, evidenceL0PageRunes)
-		} else {
+		case it.Kind == "handoff":
+			it.Snippet = clipRunes(c.full, evidenceL0HandoffRunes)
+		default:
 			it.Snippet = clipRunes(c.full, evidenceL0NoteRunes)
 		}
 		prefix := "N"
@@ -393,6 +430,74 @@ func (s *Service) evidencePages(query string, projectID int64, limit int, budget
 	return out
 }
 
+// evidenceHandoffs returns the recent handoff records as evidence candidates.
+//
+// The tag predicate is NOT re-implemented here: it comes from
+// db.ListRecentHandoffNotes, the same query the first-screen memory ring uses
+// and the same one abeval measures. Two copies of "what counts as a handoff"
+// would drift, and the drift would show up as "the AI cannot see the handoff
+// the ring shows" — a bug nobody would look for.
+//
+// The latest record is rendered in depth and the older ones collapse into
+// one-line history, which is the shape BuildProjectContext already produces
+// for the next session: the newest record is the current state of the work,
+// the older ones are history.
+func (s *Service) evidenceHandoffs(projectID int64, limit int) []EvidenceItem {
+	if limit <= 0 {
+		limit = handoffEvidenceLimit
+	}
+	notes, err := db.ListRecentHandoffNotes(s.db, projectID, limit)
+	if err != nil {
+		// A missing handoff channel must never turn into "AI 问答不可用".
+		log.Printf("wiki evidence: handoff lookup failed: %v", err)
+		return nil
+	}
+	out := make([]EvidenceItem, 0, len(notes))
+	for i, n := range notes {
+		var content string
+		if i == 0 {
+			content = clipRunes(strings.TrimSpace(n.Content), handoffEvidenceRunes)
+		} else {
+			content = oneLineSummary(n.Content, contextHandoffTimelineLen)
+		}
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
+		out = append(out, EvidenceItem{
+			Type: "note", ID: n.ID, ProjectID: n.ProjectID, ProjectName: n.ProjectName,
+			Title: firstNonEmpty(n.Title, "Untitled"), Kind: "handoff",
+			Snippet: content, Rank: i + 1, SourcePath: "handoff",
+		})
+	}
+	return out
+}
+
+// mergeHandoffNotes puts the handoff records at the head of the note
+// candidates and drops any search hit that IS one of them — the same record
+// must not appear twice under two refs, and a duplicated evidence item
+// silently inflates the budget's coverage claim.
+func mergeHandoffNotes(handoffs, notes []EvidenceItem, limit int) []EvidenceItem {
+	if len(handoffs) == 0 {
+		return notes
+	}
+	seen := make(map[int64]bool, len(handoffs))
+	for _, h := range handoffs {
+		seen[h.ID] = true
+	}
+	out := make([]EvidenceItem, 0, minInt(limit, len(handoffs)+len(notes)))
+	out = append(out, handoffs...)
+	for _, n := range notes {
+		if len(out) >= limit {
+			break
+		}
+		if seen[n.ID] {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 // evidenceNotes ranks notes through the existing search path, which already
 // carries the optional semantic RRF fusion (ADR-0012). Reusing it rather than
 // re-implementing means enabling semantic search also improves Q&A evidence.
@@ -567,26 +672,25 @@ type EvidenceAnswer struct {
 // delivered sooner", which requires identical prompts).
 func (s *Service) evidenceMessages(projectID int64, question, ev string) []chatMessage {
 	messages := []chatMessage{}
-	if projectID > 0 {
-		// L3 (cross-project profile) + L2 (project scenario) as orientation, then
-		// the retrieved specifics. Built via the layered assembly so this path and
-		// the standalone one cannot drift into two different notions of "project
-		// context". When retrieval found nothing, the previous behaviour is kept
-		// rather than silently answering with less context than before.
-		lay := s.BuildLayeredMemory(projectID, "", LayerBudget{}, false)
-		base := lay.Render()
-		if base == "" {
-			base = s.aiProjectBaseContext(projectID)
-		}
-		switch {
-		case base != "" && ev != "":
-			messages = append(messages, chatMessage{Role: "system", Content: base + "\n" + ev})
-		case base != "":
-			messages = append(messages, chatMessage{Role: "system", Content: base})
-		case ev != "":
-			messages = append(messages, chatMessage{Role: "system", Content: ev})
-		}
-	} else if ev != "" {
+	// Orientation is assembled for EVERY scope (ADR-0040 决策 1). The unscoped
+	// case used to skip the assembly entirely, which left the model with the
+	// retrieved snippets and nothing else — it did not even know which
+	// projects the library holds, so "what are my projects" had no answer and
+	// a cross-project question had no footing.
+	lay := s.BuildLayeredMemory(projectID, "", LayerBudget{}, false)
+	base := lay.Render()
+	if base == "" && projectID > 0 {
+		// The pre-L2 fallback: when the layered assembly found nothing for this
+		// project, keep the previous behaviour rather than silently answering
+		// with less context than before.
+		base = s.aiProjectBaseContext(projectID)
+	}
+	switch {
+	case base != "" && ev != "":
+		messages = append(messages, chatMessage{Role: "system", Content: base + "\n" + ev})
+	case base != "":
+		messages = append(messages, chatMessage{Role: "system", Content: base})
+	case ev != "":
 		messages = append(messages, chatMessage{Role: "system", Content: ev})
 	}
 	messages = append(messages, chatMessage{Role: "user", Content: question})

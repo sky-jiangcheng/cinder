@@ -805,9 +805,13 @@ func (a *App) DiffWikiPageVersion(pageID, versionID int64) (string, error) {
 // transcripts) under per-layer budgets. An empty query means orientation only, so
 // no note retrieval happens at all; raw transcripts are included only when a
 // caller explicitly asks (ADR-0014 决策 6). Read-only.
+//
+// projectID 0 is the unscoped case, and it is a scope of its own: L2 then
+// holds the whole-library catalog instead of one project's scenario
+// (ADR-0040 决策 1).
 func (a *App) LayeredProjectContext(projectID int64, query string, includeTranscripts bool) (*service.LayeredMemory, error) {
 	if projectID < 0 {
-		return nil, fmt.Errorf("project id must be >= 0 (0 = global profile only)")
+		return nil, fmt.Errorf("project id must be >= 0 (0 = whole-library scope)")
 	}
 	return a.svc.BuildLayeredMemory(projectID, query, service.DefaultLayerBudget, includeTranscripts), nil
 }

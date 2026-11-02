@@ -583,3 +583,117 @@ func TestGatherEvidenceSurvivesProjectLookupFailure(t *testing.T) {
 		t.Fatal("GatherEvidence returned nil on a closed db; it must degrade, not break")
 	}
 }
+
+// --- ADR-0040: the unscoped ask, and handoff records as evidence -------------
+
+// handoffCorpus seeds one handoff record. The tag is what makes it a handoff
+// (the same predicate the memory ring and abeval use), so the fixture uses
+// the same spelling.
+func handoffCorpus(t *testing.T, svc *Service, projectID int64, title, content string) int64 {
+	t.Helper()
+	note, err := db.CreateNoteEx(svc.db, projectID, title, content, "handoff", "knowledge", "mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return note.ID
+}
+
+// The unscoped ask used to carry no context at all: the assembly was skipped
+// when projectID was 0, so the model received the retrieved snippets and
+// nothing else. It could not answer "which projects do I have" because it had
+// never been told.
+func TestEvidenceMessages_UnscopedCarriesContext(t *testing.T) {
+	svc, _ := setupService(t)
+	pid := seedProject(t, svc.db, "asked-proj", "/tmp/asked-proj")
+	if _, err := svc.db.Exec("INSERT INTO repositories (path, project_id) VALUES (?, ?)",
+		"/tmp/asked-proj/repo", pid); err != nil {
+		t.Fatal(err)
+	}
+
+	msgs := svc.evidenceMessages(0, "我有哪些项目", "EVIDENCE-BLOCK")
+	if len(msgs) != 2 {
+		t.Fatalf("expected a system message plus the question, got %d messages", len(msgs))
+	}
+	if msgs[0].Role != "system" {
+		t.Fatalf("expected the first message to be the system context, got %q", msgs[0].Role)
+	}
+	if !strings.Contains(msgs[0].Content, "asked-proj") {
+		t.Errorf("the unscoped context does not mention the project: %q", msgs[0].Content)
+	}
+	if !strings.Contains(msgs[0].Content, "EVIDENCE-BLOCK") {
+		t.Errorf("the evidence block was dropped: %q", msgs[0].Content)
+	}
+}
+
+// A handoff record is the previous session's exit record. It has to reach the
+// model on its own channel: its title is English ("Session Handoff …") and
+// its body is a fixed template, so keyword search in Chinese never finds it.
+func TestGatherEvidence_HandoffEntersEvidence(t *testing.T) {
+	svc, _ := setupService(t)
+	pid := seedProject(t, svc.db, "handoff-proj", "/tmp/handoff-proj")
+	id := handoffCorpus(t, svc, pid, "Session Handoff 2026-10-26 18:34",
+		"# Session Handoff\n\n## Summary\n把探针的目录解析修好了。\n")
+
+	ev := svc.GatherEvidence(0, "最近有哪些会话交接记录", EvidenceBudget{})
+	var found *EvidenceItem
+	for i := range ev.Items {
+		if ev.Items[i].ID == id {
+			found = &ev.Items[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("the handoff record did not reach the evidence set: %+v", ev.Items)
+	}
+	if found.Kind != "handoff" {
+		t.Errorf("expected kind=handoff, got %q", found.Kind)
+	}
+	if found.Ref == "" {
+		t.Error("the handoff record is not citable (no ref)")
+	}
+	if !strings.Contains(found.Snippet, "探针") {
+		t.Errorf("the handoff record was admitted without its content: %q", found.Snippet)
+	}
+}
+
+// Scoped to a project, the handoff channel returns THAT project's handoffs
+// and nobody else's.
+func TestGatherEvidence_HandoffRespectsScope(t *testing.T) {
+	svc, _ := setupService(t)
+	alpha := seedProject(t, svc.db, "alpha", "/tmp/alpha")
+	bravo := seedProject(t, svc.db, "bravo", "/tmp/bravo")
+	alphaID := handoffCorpus(t, svc, alpha, "Session Handoff alpha", "# Session Handoff\n\n## Summary\nalpha 的交接。\n")
+	bravoID := handoffCorpus(t, svc, bravo, "Session Handoff bravo", "# Session Handoff\n\n## Summary\nbravo 的交接。\n")
+
+	ev := svc.GatherEvidence(alpha, "交接", EvidenceBudget{})
+	seen := map[int64]bool{}
+	for _, it := range ev.Items {
+		seen[it.ID] = true
+	}
+	if !seen[alphaID] {
+		t.Errorf("the scoped handoff is missing: %+v", ev.Items)
+	}
+	if seen[bravoID] {
+		t.Errorf("a handoff from another project leaked into the scope: %+v", ev.Items)
+	}
+}
+
+// The same record can be reached by both channels (a handoff whose text
+// matches the query). It must appear once — a duplicated evidence item
+// inflates the coverage claim without adding anything.
+func TestGatherEvidence_HandoffIsNotDuplicated(t *testing.T) {
+	svc, _ := setupService(t)
+	pid := seedProject(t, svc.db, "dup-proj", "/tmp/dup-proj")
+	id := handoffCorpus(t, svc, pid, "Session Handoff zephyrine",
+		"# Session Handoff\n\n## Summary\nzephyrine 通道的交接记录。\n")
+
+	ev := svc.GatherEvidence(pid, "zephyrine", EvidenceBudget{})
+	count := 0
+	for _, it := range ev.Items {
+		if it.ID == id {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected the handoff exactly once, got %d copies: %+v", count, ev.Items)
+	}
+}
