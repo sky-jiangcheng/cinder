@@ -102,17 +102,17 @@
   z-index: 1;
 }
 
-.cellSimple.level0 { background: #f0f0ee; }
-.cellSimple.level1 { background: #c8c8c3 }
-.cellSimple.level2 { background: #9a9a94 }
-.cellSimple.level3 { background: #5e5e58 }
-.cellSimple.level4 { background: #1a1a1a }
-
-[data-theme="dark"] .cellSimple.level0 { background: #2a2a2a; }
-[data-theme="dark"] .cellSimple.level1 { background: #4a4a4a; }
-[data-theme="dark"] .cellSimple.level2 { background: #6a6a6a; }
-[data-theme="dark"] .cellSimple.level3 { background: #9a9a94; }
-[data-theme="dark"] .cellSimple.level4 { background: #e8e8e8; }
+/* The activity ramp is DERIVED, not hand-picked: every level is the theme's
+   own ink mixed into its own card surface. --text-primary is the brand ink in
+   the light theme and the brand paper in the dark one, so the same five
+   percentages produce a light-to-dark ramp in one theme and a dark-to-light
+   ramp in the other — no dark-theme override, and no second copy of the
+   palette to drift. */
+.cellSimple.level0 { background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-secondary)); }
+.cellSimple.level1 { background: color-mix(in srgb, var(--text-primary) 22%, var(--bg-secondary)); }
+.cellSimple.level2 { background: color-mix(in srgb, var(--text-primary) 45%, var(--bg-secondary)); }
+.cellSimple.level3 { background: color-mix(in srgb, var(--text-primary) 72%, var(--bg-secondary)); }
+.cellSimple.level4 { background: var(--text-primary); }
 
 .legendSimple {
   display: flex;

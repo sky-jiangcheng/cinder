@@ -31,7 +31,7 @@
 
 .blockItemDragging {
   opacity: 0.5;
-  border-color: var(--accent, #4c8dff);
+  border-color: var(--accent, #7A3E12);
 }
 
 .blockGutter {
@@ -129,7 +129,7 @@
 }
 
 .blockAdd:hover {
-  border-color: var(--accent, #4c8dff);
+  border-color: var(--accent, #7A3E12);
   color: var(--text-primary);
 }
 

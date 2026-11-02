@@ -72,6 +72,25 @@
   --success: #2D6A2D;
   --success-soft: #E7EFE7;
 
+  /* --- Preview palette (the theme picker) ---------------------------------
+     The appearance tab draws each option as a miniature of the app — page,
+     card, text line, accent — so the three swatches can be told apart by eye
+     instead of by reading the label. A swatch has to be able to show a theme
+     that is NOT the active one, so these cannot simply read the live theme:
+     they are a catalogue of both palettes. brandTokens.test.ts asserts each
+     value equals the live token it depicts, so the catalogue cannot drift
+     away from the palette it claims to show. */
+  --preview-light-page: #F0EBDF;
+  --preview-light-card: #FCFAF4;
+  --preview-light-edge: #D7CDB6;
+  --preview-light-line: #66604F;
+  --preview-light-accent: #7A3E12;
+  --preview-dark-page: #191713;
+  --preview-dark-card: #211E18;
+  --preview-dark-edge: #3A352E;
+  --preview-dark-line: #9B9484;
+  --preview-dark-accent: #E09155;
+
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(27, 27, 27, 0.06);
   --shadow-md: 0 2px 10px rgba(27, 27, 27, 0.08);

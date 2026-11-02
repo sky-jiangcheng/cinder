@@ -57,10 +57,13 @@
 }
 
 /* Page ground. The "system" swatch is split down the middle because that is
-   literally what the mode does — half the OS is light, half is dark. */
-.themePreview[data-preview="light"] { background: #f5f5f3; }
-.themePreview[data-preview="dark"] { background: #1a1a1a; }
-.themePreview[data-preview="system"] { background: linear-gradient(90deg, #f5f5f3 0 50%, #1a1a1a 50% 100%); }
+   literally what the mode does — half the OS is light, half is dark.
+   The values come from the preview tokens in tokens.css, which carry both
+   themes' palettes: a swatch must be able to show a theme that is not the
+   active one, so it cannot read the live theme. */
+.themePreview[data-preview="light"] { background: var(--preview-light-page); }
+.themePreview[data-preview="dark"] { background: var(--preview-dark-page); }
+.themePreview[data-preview="system"] { background: linear-gradient(90deg, var(--preview-light-page) 0 50%, var(--preview-dark-page) 50% 100%); }
 
 /* Card block — the lightest surface in each theme. Kept low-contrast so the
    accent strokes below stay the thing the eye lands on. */
@@ -75,10 +78,10 @@
   opacity: 0.9;
 }
 
-.themePreview[data-preview="light"]::before { background: #ffffff; border: 1px solid #e0ded8; }
-.themePreview[data-preview="dark"]::before { background: #2a2a2a; border: 1px solid #3a3a3a; }
+.themePreview[data-preview="light"]::before { background: var(--preview-light-card); border: 1px solid var(--preview-light-edge); }
+.themePreview[data-preview="dark"]::before { background: var(--preview-dark-card); border: 1px solid var(--preview-dark-edge); }
 .themePreview[data-preview="system"]::before {
-  background: linear-gradient(90deg, #ffffff 0 50%, #2a2a2a 50% 100%);
+  background: linear-gradient(90deg, var(--preview-light-card) 0 50%, var(--preview-dark-card) 50% 100%);
   border: 1px solid transparent;
 }
 
@@ -93,22 +96,22 @@
   height: 2px;
   border-radius: 1px;
   /* Accent-coloured: the one hue that actually differs between themes. */
-  background: #2563eb;
+  background: var(--preview-light-accent);
   box-shadow:
     0 6px 0 0 currentColor,
     0 12px 0 0 rgba(0, 0, 0, 0.22);
 }
 
-.themePreview[data-preview="light"]::after { color: #6a6a6a; }
-.themePreview[data-preview="dark"]::after { color: #949494; }
+.themePreview[data-preview="light"]::after { color: var(--preview-light-line); }
+.themePreview[data-preview="dark"]::after { color: var(--preview-dark-line); background: var(--preview-dark-accent); }
 .themePreview[data-preview="system"]::after {
   /* Each stroke takes the hue of the half it sits in: left side light, right
      side dark. Drawn as two masked gradients so the split stays crisp at the
      same 50% line as the swatch ground. */
   color: transparent;
   background:
-    linear-gradient(90deg, #6a6a6a 0 50%, #949494 50% 100%) no-repeat 0 6px / 100% 2px,
-    linear-gradient(90deg, #2563eb 0 50%, #60a5fa 50% 100%) no-repeat 0 0 / 100% 2px;
+    linear-gradient(90deg, var(--preview-light-line) 0 50%, var(--preview-dark-line) 50% 100%) no-repeat 0 6px / 100% 2px,
+    linear-gradient(90deg, var(--preview-light-accent) 0 50%, var(--preview-dark-accent) 50% 100%) no-repeat 0 0 / 100% 2px;
   box-shadow: 0 12px 0 0 rgba(0, 0, 0, 0.28);
 }
 

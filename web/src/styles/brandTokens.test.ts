@@ -28,9 +28,15 @@ const procName = 'node:' + 'process'
 
 interface NodeFs {
   readFileSync(p: string, enc: string): string
+  readdirSync(p: string, opts: { withFileTypes: true }): NodeDirent[]
+}
+interface NodeDirent {
+  name: string
+  isDirectory(): boolean
 }
 interface NodePath {
   resolve(...p: string[]): string
+  join(...p: string[]): string
 }
 interface NodeProcess {
   cwd(): string
@@ -243,5 +249,113 @@ describe('palette contrast', () => {
         ).toBeGreaterThanOrEqual(4.5)
       }
     }
+  })
+})
+
+describe('preview palette', () => {
+  // The appearance tab draws each option as a miniature of the app so the
+  // three themes can be told apart by eye. It cannot read the LIVE theme for
+  // that: a swatch has to be able to show a theme that is not the active one.
+  // So the preview palette is a catalogue of both, and the catalogue is only
+  // honest as long as every value in it equals the live token it depicts.
+  const PAIRS: Array<[preview: string, live: string, theme: 'light' | 'dark']> = [
+    ['--preview-light-page', '--bg-primary', 'light'],
+    ['--preview-light-card', '--bg-secondary', 'light'],
+    ['--preview-light-edge', '--border-subtle', 'light'],
+    ['--preview-light-line', '--text-tertiary', 'light'],
+    ['--preview-light-accent', '--accent', 'light'],
+    ['--preview-dark-page', '--bg-primary', 'dark'],
+    ['--preview-dark-card', '--bg-secondary', 'dark'],
+    ['--preview-dark-edge', '--border-subtle', 'dark'],
+    ['--preview-dark-line', '--text-tertiary', 'dark'],
+    ['--preview-dark-accent', '--accent', 'dark'],
+  ]
+
+  it('depicts the live palette, not a copy of it', async () => {
+    const { light, dark } = await readThemes()
+    for (const [preview, live, themeName] of PAIRS) {
+      // The catalogue is declared once, in :root; the palette it depicts for
+      // the dark theme lives in the dark block. Compare the catalogue entry
+      // with the theme it claims to show.
+      const catalogue = light.vars
+      const depicted = themeName === 'light' ? light : dark
+      expect(catalogue[preview], `${preview} is not defined`).toBeTruthy()
+      expect(
+        catalogue[preview],
+        `${preview} (${themeName}) no longer matches ${live} — the swatch would lie about the app`,
+      ).toBe(depicted.vars[live])
+    }
+  })
+
+  it('declares the catalogue once, in :root', async () => {
+    // The catalogue holds both themes' values, so it must not be re-declared
+    // per theme — one list, one place to change.
+    const { dark } = await readThemes()
+    for (const [preview] of PAIRS) {
+      expect(dark.vars[preview], `the dark theme re-declares ${preview}`).toBeUndefined()
+    }
+  })
+})
+
+describe('legacy palette', () => {
+  // The palette ADR-0037 replaced, one colour at a time: the cold Tailwind
+  // blue the app wore as its accent, and the neutral greys it wore
+  // everywhere else. Two components kept a hand-kept copy of the old
+  // neutrals — the theme-picker swatches and the activity heatmap — and both
+  // were showing the user a colour language the product no longer speaks.
+  // A grep is the only honest guard against a copy creeping back in: the
+  // tokens are the palette, and everything else must refer to them.
+  const LEGACY_HEXES = [
+    '#2563eb', '#3b82f6', '#60a5fa', '#eff6ff', '#1e3a5f', '#4c8dff',
+    'rgba(88, 165, 255',
+    '#f0f0ee', '#c8c8c3', '#9a9a94', '#5e5e58',
+    '#1a1a1a', '#2a2a2a', '#3a3a3a', '#4a4a4a',
+    '#e0ded8', '#6a6a6a', '#949494', '#e8e8e8', '#f5f5f3',
+    '#e0e0e0', '#111', '#ddd',
+  ]
+
+  /** A literal, matched only when it is not the prefix of a longer hex. */
+  function legacyPattern(literal: string): RegExp {
+    const escaped = literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(escaped + '(?![0-9a-f])', 'i')
+  }
+
+  async function listUiFiles(): Promise<string[]> {
+    const fsName = 'node:' + 'fs'
+    const pathName = 'node:' + 'path'
+    const procName = 'node:' + 'process'
+    const fs = (await import(/* @vite-ignore */ fsName)) as unknown as NodeFs
+    const path = (await import(/* @vite-ignore */ pathName)) as unknown as NodePath
+    const proc = (await import(/* @vite-ignore */ procName)) as unknown as NodeProcess
+    const found: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) walk(full)
+        else found.push(full)
+      }
+    }
+    walk(path.resolve(proc.cwd(), 'src'))
+    found.push(path.resolve(proc.cwd(), 'index.html'))
+    return found
+  }
+
+  it('is not worn anywhere in the UI', async () => {
+    const fsName = 'node:' + 'fs'
+    const fs = (await import(/* @vite-ignore */ fsName)) as unknown as NodeFs
+    const files = await listUiFiles()
+    const offenders: string[] = []
+    for (const file of files) {
+      if (/\.test\.(ts|tsx)$/.test(file)) continue
+      if (!/\.(css|tsx|ts|html)$/.test(file)) continue
+      const text = (await fs.readFileSync(file, 'utf8')).toLowerCase()
+      for (const hex of LEGACY_HEXES) {
+        if (legacyPattern(hex).test(text)) offenders.push(`${file}: ${hex}`)
+      }
+    }
+    expect(
+      offenders,
+      'the palette ADR-0037 replaced is back in the UI — use the tokens instead',
+    ).toEqual([])
   })
 })

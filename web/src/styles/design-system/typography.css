@@ -24,7 +24,7 @@
 }
 .markdown-body pre {
   background: var(--text-primary);
-  color: #e0e0e0;
+  color: var(--bg-secondary);
   padding: 12px 16px;
   border-radius: var(--radius-md);
   overflow-x: auto;
@@ -49,7 +49,11 @@
 .markdown-body th, .markdown-body td { border: 1px solid var(--border-default); padding: 6px 10px; text-align: left; }
 .markdown-body th { background: var(--bg-tertiary); }
 
+/* The code panel is a surface, so it speaks the same warm language as the
+   rest of the app: in the light theme it is the brand ink carrying the brand
+   paper, in the dark theme the warm ground carrying the warm text ramp. The
+   cold greys it used to wear were the last of the old palette. */
 [data-theme="dark"] .markdown-body pre {
-  background: #111;
-  color: #ddd;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
 }

@@ -95,8 +95,10 @@
 }
 .markdown-body ul.task-list li input[type="checkbox"] { margin-top: 4px; flex-shrink: 0; }
 
-/* Dark theme callout backgrounds */
-[data-theme="dark"] .markdown-body .callout-note { background: rgba(88, 165, 255, 0.08); }
+/* Dark theme callout backgrounds. The note callout wears the accent, so its
+   tint is derived from the accent token — the value it used to carry was a
+   leftover of the blue accent the app no longer wears. */
+[data-theme="dark"] .markdown-body .callout-note { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 [data-theme="dark"] .markdown-body .callout-tip { background: rgba(45, 106, 79, 0.12); }
 [data-theme="dark"] .markdown-body .callout-important { background: rgba(224, 123, 0, 0.1); }
 [data-theme="dark"] .markdown-body .callout-warning { background: rgba(201, 87, 87, 0.1); }

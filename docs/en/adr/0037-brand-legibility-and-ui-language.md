@@ -156,6 +156,28 @@ Brand discipline is enforced by CI, not by memory. This ADR's implementation add
 
 **Checklist, item by item**: 1–4 done (tokens / component / both assertions); 5 this ADR mirrored in both languages plus the indexes; 6 see `CHANGELOG.md` and `TODO.md`; 7 checked as above — **the IDE sides need no change**; **plus the docs site as a fourth surface (accent aligned, AA fixed)**.
 
+## Landing record (2026-11-02, continued): the last hand-kept copies of the old palette inside the UI
+
+The previous section closed the **front doors** (the app / the docs site / the two IDE surfaces). This round looked **inside the UI itself**: everywhere a colour value was written by hand instead of taken from a token, a private copy of the old palette had been sitting there — unrelated to the master, unrelated to the new tokens, just "written that way at the time".
+
+| Where | Was | Now |
+|---|---|---|
+| The theme swatches in the appearance tab (`AppearanceTab.module.css`) | neutral-grey paper + a Tailwind blue accent stroke | a miniature of that theme's **real** palette (warm paper + warm ink stroke / warm black + amber stroke) |
+| The activity heatmap on the dashboard (`Heatmap.module.css`) | a cold neutral five-step ramp plus a separate dark-theme override | five steps derived from `--text-primary` over `--bg-secondary`; the dark theme inverts on its own (the override block is gone) |
+| The note callout in the dark theme (`features/markdown.css`) | a blue rgba field | a warm amber field derived from `--accent` |
+| The code block (`design-system/typography.css`) | cold near-black + cold grey text | light: brand ink ground carrying brand paper text; dark: warm ground carrying the warm text ramp |
+| `BlockEditor`'s `--accent` fallback | blue | warm bronze |
+| `index.html`'s `theme-color` | cold near-black | warm paper / warm black under the two `prefers-color-scheme` schemes |
+
+**The swatches are the one that mattered most here.** Those three 64×44 chips **claim** to be "a miniature of the app in that theme" (the source comment says so). Before the re-colour they drew neutral grey plus blue — **they were lying to the user**, in the language of a product that no longer exists. They now draw the real palette, and they **cannot simply read the live tokens**: a swatch has to be able to show the theme that is *not* active, so both palettes are listed explicitly in `tokens.css` (`--preview-light-*` / `--preview-dark-*`) and an assertion pins each catalogue entry to the live token it depicts — **if the catalogue drifts, the test turns red**.
+
+**Two new assertions** (`web/src/styles/brandTokens.test.ts`):
+
+1. **The preview catalogue must equal the live palette**: ten pairwise comparisons (`--preview-light-accent` == the light `--accent`, `--preview-dark-page` == the dark `--bg-primary`, …); and the catalogue is declared **exactly once, in `:root`** — the dark theme must not re-declare it, or there is a second copy free to drift.
+2. **The old palette must not come back**: every old colour ADR-0037 replaced (the Tailwind blue family, the cold grey family, that one blue rgba) is listed, `web/src/**` and `web/index.html` are scanned, and **a hit turns the test red**. The guard scans comments too — and it duly caught two old hex values that this round had written into a comment.
+
+> Lesson: **re-colouring was never "change one token"**. Every place that hard-codes a colour keeps its own copy of the palette, so changing the tokens only reaches the half that already used them; the other half has to be swept up by "find every hand-written colour value and put it back on the tokens". Had this round only swapped the tokens, four surfaces would still have been speaking the old language (the theme swatches, the heatmap, the callout, the code block) — and each one on its own looks like nothing is wrong.
+
 ## Revision record
 
-(No revisions to this ADR yet. See the landing record above.)
+- **2026-11-02 (second closing pass)**: records the clearing of the last hand-kept copies of the old palette inside the UI, and the two new assertions (the preview catalogue equals the live palette; the old palette must not come back). **The decisions themselves are unchanged** — decision 2 ("the brand colour enters the UI tokens") was simply carried through to the end this time.
