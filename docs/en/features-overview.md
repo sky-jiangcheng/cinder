@@ -24,6 +24,8 @@ order: 2
 | Version history | Auto snapshot on every save; line-level diff of any version against the current one, one-click restore |
 | Global search | The home console's "search" mode (federated: repos / notes / todos) + the ⌘/Ctrl+K command palette |
 
+> **Knowledge is one tab with three views inside** (ADR-0038, decision 4 + ADR-0039, decisions 1 and 3): the top-level segmented control switches "Notes / Wiki pages" (two states of one object), and the notes view switches between "All notes / To file" with a tab (two different things). All three share one search box, one project-scope dropdown and one count bar.
+
 ### AI-Ready Interfaces (Core)
 
 | Channel | Description |
@@ -46,7 +48,7 @@ Compiled knowledge pages with a controlled relation vocabulary, and a review que
 | Feature | Description |
 |---------|-------------|
 | LLM wiki compiler | Compiles notes into structured wiki pages (entity / concept / synthesis …) as **pending** drafts; the compiler never edits an approved page ([ADR-0015](adr/0015-w3-minimal-compile-loop.md)) |
-| Review queue | Approve / reject / delete pending pages; rejected pages stay as tombstones (`reject ≠ delete`) |
+| Review queue | Approve / reject / delete pending pages; rejected pages stay as tombstones (`reject ≠ delete`); the review page is **five tabs with count badges** (pending / merge suggestions / page scope / background jobs / error pages) — one queue at a time |
 | Page versions | Every page change is snapshotted by a database trigger into an append-only `page_versions` table; line-level diff and restore ([ADR-0021](adr/0021-temporal-graph-page-versions.md)) |
 | Merge suggestions | Structural candidate discovery (shared sources / slug shape / title overlap / existing links — at least two independent signals); the model adds a second opinion, and **only a human can adopt a merge**. Merges leave tombstones and re-point edges ([ADR-0019](adr/0019-entity-resolution-merge.md)) |
 | Community summaries | Label Propagation over the approved graph drafts synthesis pages per topic; **opt-in gate** (`wiki_community_summary`), hard budgets, auditable outbound bytes ([ADR-0020](adr/0020-community-synthesis.md)) |
@@ -69,7 +71,7 @@ The project detail page auto-extracts: README summary, tech stack list (20+ mani
 
 ### Dashboard & Stats (Support)
 
-> Home is a full-page console (ask + search); the memory ring (recent handoffs) moved to the top of the dashboard, and project counts / added lines have exactly one authority — the dashboard. Nav order home → dashboard → knowledge → review → settings (`/search` and `/wiki` survive as redirects).
+> Home is a full-page console (ask + search); the memory ring (recent handoffs) moved into the dashboard's "Sessions" tab, and project counts / added lines have exactly one authority — the dashboard. Nav order home → dashboard → knowledge → review → settings (`/search` and `/wiki` survive as redirects).
 
 | Feature | Description |
 |---------|-------------|

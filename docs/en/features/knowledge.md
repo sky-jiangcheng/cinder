@@ -15,12 +15,22 @@ They are now one tab:
 
 - **Route** `/knowledge`, with the view switched by `?view=notes|pages` (deep-linkable and shareable; the browser back button walks the view history)
 - **Shared skeleton**: one search box, **one project-scope dropdown**, one result-count bar, one set of empty and error states
-- **Different bodies**: the notes view is a grid plus filters (all / knowledge / other, pinned, tags, topics) plus writing actions (new / import / file for filing); the pages view is a list plus read-only, and its "**approved pages only**" semantics are unchanged (ADR-0032, decision 1 still holds)
+- **Different bodies**: the notes view is a grid plus filters (all / knowledge / other, pinned, tags, topics) plus writing actions (new / import); the pages view is a list plus read-only, and its "**approved pages only**" semantics are unchanged (ADR-0032, decision 1 still holds)
 - **The scope dropdown is now given to the notes view too** — it was missing, even though the retrieval was cross-project all along
 
 > The old `/wiki` address redirects to `/knowledge?view=pages` (carrying `?q=` and `?project=` along), and the `/wiki/:id` detail route is untouched — deep links and shared links keep working.
 >
 > The search box here is a **filter within the view**, not a global search: global retrieval lives in the home console's "search" mode (see [Console: Ask & Search](search.md)).
+
+### Two tabs inside the notes view (ADR-0039, decision 3)
+
+The notes view carries a second tab pair: **"All notes"** and **"To file (N)"**.
+
+"To file" used to render *after* the note grid — and the note grid is a page roughly 10,000px tall, so it actually sat at the very bottom of the page, reachable only through a "To file 14" jump link. **The very existence of a control like that says "it is elsewhere, and it is hard to find".** It is now a tab inside the notes drawer, and the jump link is gone with it: when there are no notes to file, the tab does not take a slot at all.
+
+"To file" is not a filtered subset of notes — it is **another workbench** (re-filing the notes in the landing buckets into real projects, deleting emptied placeholders), with a different shape and different actions from the note grid. So under ADR-0039's three-way rule it is a **tab**, not a chip.
+
+The top-level "Notes / Wiki pages" switch stays a **segmented control** rather than a tab: it is **two states of one object** (raw material / finished product), not two places. The two sets of controls differ in shape and position (pill segment / underlined tab), and only the notes drawer has an inner tab, so there is no ambiguity.
 
 ```mermaid
 flowchart TB
@@ -111,7 +121,7 @@ Six built-in sources idempotently import the memory and session transcripts you 
 
 Three rules that are easy to trip over:
 
-1. **Imports land on a project, but a non-match is no longer dropped.** Documents are matched to a specific project by project name / repository path; whatever does not match (ADR-0023) lands on a **"Unfiled repo" placeholder** named after the repo (promoted to a real project once a scan finds that same repo), or on the always-present **Uncategorized** default project when there is no repo path — and can be re-filed later from the **Organize** area at the bottom of this page. Scanning projects first still raises the hit rate.
+1. **Imports land on a project, but a non-match is no longer dropped.** Documents are matched to a specific project by project name / repository path; whatever does not match (ADR-0023) lands on a **"Unfiled repo" placeholder** named after the repo (promoted to a real project once a scan finds that same repo), or on the always-present **Uncategorized** default project when there is no repo path — and can be re-filed later from the **Organize** area in this page's **"To file" tab**. Scanning projects first still raises the hit rate.
 2. **`openclaw`, `hermes` and `codebuddy-memory` target projects are now optional** (`openclaw_project` / `hermes_project` / `codebuddy_project`): set one to attach all their notes to it, or leave it unset and they land on Uncategorized — no more silent skipping.
 3. **A repeat import is not a failure.** `created=0` plus `updated=N` means idempotency worked and the content was refreshed.
 
@@ -121,7 +131,7 @@ Imported notes carry `kind` = `knowledge` (memory files) or `log` (session recor
 
 ### Landing & organize ([ADR-0023](../adr/0023-note-ownership-knowledge-organize.md))
 
-Knowledge imported with no matching project is no longer lost — it lands on a **placeholder** (an "Unfiled repo" project named after the repo) or the **Uncategorized** default project, marked in the data by `project_kind`. The **Organize** area at the bottom of this page lets you re-file a batch of notes from a placeholder / Uncategorized bucket into a real project (or back into Uncategorized), or **confirm-delete** an emptied or orphaned placeholder (Uncategorized is never deletable; deletion is always a manual confirmation, never an automatic cascade). Project cards and the detail page badge these two buckets and show the associated repo path.
+Knowledge imported with no matching project is no longer lost — it lands on a **placeholder** (an "Unfiled repo" project named after the repo) or the **Uncategorized** default project, marked in the data by `project_kind`. The **Organize** area in this page's **"To file" tab** lets you re-file a batch of notes from a placeholder / Uncategorized bucket into a real project (or back into Uncategorized), or **confirm-delete** an emptied or orphaned placeholder (Uncategorized is never deletable; deletion is always a manual confirmation, never an automatic cascade). Project cards and the detail page badge these two buckets and show the associated repo path.
 
 For browsing, clicking a note in the knowledge base now **jumps straight to that note in the project's Notes tab and highlights it** (`/project/:id?tab=notes&noteId=N`) instead of only opening the project.
 
@@ -138,6 +148,24 @@ Notes are the **raw record**; pages are the **compiled artifact**. The same fact
 | `query` | A filed answer from Q&A (see "File as page" in [AI Integration](ai-integration.md)) |
 
 The page layer is a **derived cache**: notes remain the source of truth, the whole layer can be dropped and rebuilt (`DropWikiSchema`), and if it is dropped it grows back on the next open.
+
+### The review page: five queues = five tabs (ADR-0039, decision 2)
+
+The review page (`/review`) used to stack six blocks into one long scroll: the pending queue / merge candidates / page scope / compile jobs / rejected pages / community summary. Their **shapes and actions are completely different** (approve / merge / promote / assign / cancel / delete) — **not filters over one list, but six places** — and merge candidates ran up to 20 rows in front of the review queue, so working through the queue meant scrolling past a pile of unrelated things.
+
+They are now five tabs, each carrying a **count badge**:
+
+| Tab | Holds | When it appears |
+|---|---|---|
+| **Pending review** | the `pending` page queue (approve / mark unqualified) | always (with an empty state when empty) |
+| **Merge suggestions** | candidate pairs found by structural signals | always — "nothing found" is itself an answer the reviewer wants |
+| **Page scope** | promoting / demoting approved pages | when there is content |
+| **Background jobs** | compile / lint jobs + the community summary report | when there is content |
+| **Error pages** | the records replaced by error pages | when there is content |
+
+The badge is not decoration: tabbing means "content outside the current tab is invisible", so **the count is the only thing that tells a user whether a tab is worth clicking**. Empty tabs take no slot (a block with nothing in it should not occupy a position), but a **zero count is still shown** — "Pending 0" says "the queue is empty", whereas a missing badge says nothing at all.
+
+`?view=pending|merge|scope|jobs|rejected` is deep-linkable and shareable, and the browser back button walks back through the queues.
 
 ### Edges between pages: a controlled relation vocabulary (schema v21)
 
@@ -211,7 +239,7 @@ Notes have had `note_versions` all along; pages did not — `wiki_pages.content`
 
 ### Concept merge ([ADR-0019](../adr/0019-entity-resolution-merge.md))
 
-The compiler writes one note at a time, so concepts split. ADR-0015 accepted "concepts will split, a human merges them" as the price of that design but shipped no merge tool. The review page now has a **merge suggestions** area.
+The compiler writes one note at a time, so concepts split. ADR-0015 accepted "concepts will split, a human merges them" as the price of that design but shipped no merge tool. The review page now has a **merge suggestions** tab.
 
 - **Candidate discovery is structural, free, with no model and no vector.** Four signals: shared source notes, slug shape (one is a prefix of the other, or they are within 2-rune edit distance), title word overlap, and an existing `ref` / `mentions` edge between the two pages. A pair needs **at least two independent signals** to be reported (the two cheapest sum to exactly the threshold). `contradicts` and `supersedes` edges are deliberately **not** similarity signals — they assert that the two pages are different things.
 - **Cost stays bounded**: pairs only ever form between pages that share a token, a slug prefix, a source note or an edge — never a full cross product; a bucket larger than 40 pages is skipped outright (that is the stopword guard — a word like `project` or `api` that appears everywhere carries no similarity information).
