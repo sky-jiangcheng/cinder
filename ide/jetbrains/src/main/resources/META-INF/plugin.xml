@@ -14,6 +14,11 @@
           plugin only launches a binary the user already has; it never
           downloads, builds or supervises a remote server.
 
+      ADR-0036 (Accepted 2026-11-02) rewrote the panel's FORM: it is a
+      conversation console (conversation feed, folded history, announcement
+      bar, always-there composer) rather than a searcher, and the VS Code
+      extension ships the same console.
+
       The plugin is a DISTRIBUTION surface, not a platform (ADR-0006): the
       binary name, the data directory and the MCP prefix are untouched.
     -->
@@ -26,44 +31,51 @@
     <description><![CDATA[
         The local-first memory layer for AI coding agents.
 
-        Search your Repotory knowledge base from inside the IDE and read the
-        result in full, without leaving the editor.
+        Ask your Repotory knowledge base a question from inside the IDE and
+        read the answer with its sources, without leaving the editor.
 
         Repotory keeps what your coding agents learn — why a decision was
         made, what gotcha you hit, what to do next — in a local, searchable
-        store. This plugin is the reader for it:
+        store. This plugin is the console for it:
 
-        • A knowledge reader that looks and behaves like the rest of your IDE:
-          a native search field with a space switch (notes or approved wiki
-          pages), your results as thumbnails on the left (kind, title, matched
-          excerpt), and the selected knowledge expanded on the right — the
-          first result is selected by default, and notes open in full with
-          their markdown rendered. Todos show their excerpt, labelled as
-          such. The divider between the two sides is yours to drag.
-        • Full-text search (FTS5) over every note and todo you ever
-          captured, ranked exactly as the Repotory desktop app ranks it —
-          the plugin reimplements no ranking, no snippet extraction, no
-          gating.
-        • One-click jump: double-click (or "Open in Repotory") deep-links
-          the item into the Repotory web app.
-        • Note maintenance in place: edit a note's title, kind, tags and
-          项目 (project), add a new note under the same 项目, or let the AI
-          tidy a note into a restructured proposal — sections, an index,
-          and a mermaid flowchart when the content is really a process.
-          The proposal opens in the editor for your review; nothing is
-          saved until you save it.
-        • Works out of the box: the tool window checks the service when it
+        • A conversation, not a result list: you ask a question, the turn joins
+          the feed, and the turns stay there. The newest two stay open; older
+          ones fold into one row and open on click, so "what did I just ask"
+          is always one click away.
+        • Three knowledge faces, one keystroke apart: Ask answers with prose
+          and a folded "Sources" list, Notes brings up your notes and todos,
+          Pages brings up the approved knowledge pages. A note or a page
+          opens IN PLACE, inside the turn that produced it.
+        • Locked to your project by default: the chip next to the modes shows
+          which project the panel is scoped to, and clicking it puts the
+          panel back to cross-project. Ask and Pages really filter
+          server-side; Notes cannot (the tool has no project parameter), so
+          the panel filters the hits itself and tells you how many it
+          dropped.
+        • Full-text search (FTS5) over every note and todo you ever captured,
+          ranked exactly as the Repotory desktop app ranks it — the plugin
+          reimplements no ranking, no snippet extraction, no gating.
+        • One-click jump: "Open in Repotory" deep-links the item into the
+          Repotory web app.
+        • Note maintenance without leaving the IDE: edit a note's title, kind,
+          tags and 项目 (project), add a new note under the same 项目, or let
+          the AI tidy a note into a restructured proposal — sections, an
+          index, and a mermaid flowchart when the content is really a
+          process. The proposal opens in the editor for your review; nothing
+          is saved until you save it.
+        • Works out of the box: the tool window checks the channel when it
           opens and shows the result as a status pill. If nothing answers,
-          it starts the local repotory-server you already have and retries
-          the query — nothing is downloaded or built, and a service you
-          started yourself is never touched.
+          it starts the local repotory-server you already have — nothing is
+          downloaded or built, and a service you started yourself is never
+          touched.
 
-        The plugin is a thin client: it talks to the loopback-only
-        Repotory service over its local HTTP API. Everything stays on your
-        machine — there is nothing to authenticate and nothing that leaves
-        it. One build covers the whole IntelliJ family (IDEA, PyCharm,
-        WebStorm, GoLand and the rest), on IntelliJ 2024.2 or newer,
-        independently of your project's JDK.
+        The plugin is a thin client: its data goes over MCP to repotory-mcp,
+        which opens the same local database the desktop app uses, and the two
+        things that still speak HTTP talk to the loopback-only Repotory
+        service. Everything stays on your machine — there is nothing to
+        authenticate and nothing that leaves it. One build covers the whole
+        IntelliJ family (IDEA, PyCharm, WebStorm, GoLand and the rest), on
+        IntelliJ 2024.2 or newer, independently of your project's JDK.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -90,7 +102,7 @@
         <action id="dev.repotory.jetbrains.OpenToolWindow"
                 class="dev.repotory.jetbrains.OpenRepotoryAction"
                 text="Repotory"
-                description="Open the Repotory knowledge search">
+                description="Open the Repotory chat console">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

@@ -1,18 +1,23 @@
 // Repotory for VS Code — thin client over Repotory (ADR-0009 step two / TODO M5).
 //
-// Commands: load session context, write the session handoff and search the
-// knowledge base; a status-bar item and a knowledge-search sidebar make the
-// product visible inside the IDE. Everything is delegated: read endpoints go
-// to the loopback-only headless service when it is up, all tools go through
+// Commands: load session context, write the session handoff and ask the
+// knowledge base; a status-bar item and the chat console make the product
+// visible inside the IDE. Everything is delegated: read endpoints go to the
+// loopback-only headless service when it is up, all tools go through
 // repotory-mcp over stdio — zero logic duplication (thin-client discipline).
+//
+// The panel is a CONVERSATION (ADR-0036): a question goes in, a turn comes
+// out, and the turns stay in the feed. The conversation model lives in
+// chatSession.ts, the rendering in chatConsole.ts.
 import * as vscode from "vscode";
 import * as path from "node:path";
 import * as os from "node:os";
 import { accessSync, constants as fsConstants, existsSync } from "node:fs";
 import { exec, execFile } from "node:child_process";
 import { McpStdioClient } from "./mcpClient.js";
-import { getJson, parseOrganizeProposal, parseProjects, parseSearchHits, parseWikiPages, parseWikiRead, postJson, type OrganizeProposal, type ProjectOption } from "./headless.js";
-import { parseNoteRead, RepotorySearchViewProvider, type EditorDraft, type Source, type Thumb } from "./searchView.js";
+import { getJson, postJson } from "./headless.js";
+import { RepotoryChatConsoleProvider } from "./chatConsole.js";
+import { ChatSession, type Transport } from "./chatSession.js";
 
 const CONFIG_SECTION = "repotory";
 const SERVER_URL_KEY = "serverUrl";
@@ -22,24 +27,13 @@ const BINARY_NAMES = ["repotory-mcp", "repotory-mcp.exe"];
 const RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases";
 const AI_INTEGRATION_DOC =
   "https://github.com/sky-jiangcheng/repotory/blob/master/docs/features/ai-integration.md";
+/** The webview view the chat console lives in. */
+const CONSOLE_VIEW_ID = "repotory.notesSearch";
 
 export let output: vscode.OutputChannel;
 let statusItem: vscode.StatusBarItem;
 let mcp: McpStdioClient | null = null;
 let extensionContext: vscode.ExtensionContext | undefined;
-
-/**
- * Which knowledge space the sidebar reads.
- *
- * Notes/todos and approved knowledge pages have separate id sequences, so the
- * reader shows one space at a time (ADR-0032): "id 12" is a note in one and a
- * page in the other, and a list that mixed them would make every read
- * ambiguous.
- */
-let searchSource: Source = "notes";
-
-/** The last query that was run, so a source switch can re-run it. */
-let lastQuery = "";
 
 interface HandoffStatus {
   note_id?: number;
@@ -69,8 +63,6 @@ interface WorkspaceResolution {
   MatchedOn?: string;
   Candidates?: unknown[];
 }
-
-let lastResolution: WorkspaceResolution | null = null;
 
 type BinarySource = "setting" | "env" | "storage" | "path" | "common";
 
@@ -252,39 +244,22 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
   }
 }
 
-// refreshScope asks the backend which project/repository this workspace is, and
-// shows the answer. The matching rules live server-side on purpose: the MCP tools
-// resolve the same path, and a TypeScript reimplementation would let the sidebar
-// and an agent's repotory_context disagree about which knowledge a session gets.
-async function refreshScope(view: RepotorySearchViewProvider): Promise<void> {
+// The scope lives in the chat session now (ADR-0036): the panel locks to the
+// workspace's project, and the status bar shows what it resolved to. The
+// matching rules live server-side on purpose: the MCP tools resolve the same
+// path, and a TypeScript reimplementation would let the panel and an agent's
+// repotory_context disagree about which knowledge a session gets.
+function showScopeInStatusBar(scope: { projectId: number; projectName: string; repository: string }): void {
+  if (!statusItem) return;
   const dir = workspacePath();
-  if (!dir) {
-    lastResolution = null;
-    view.setScope("");
+  if (!scope.projectId) {
+    statusItem.tooltip = dir
+      ? `Repotory: ${dir} is not in the knowledge base yet\n\nClick to load the session context`
+      : "Repotory: click to load the session context";
     return;
   }
-  try {
-    const response = (await postJson(serverUrl(), "/api/rpc", {
-      method: "ResolveWorkspacePath",
-      args: [dir],
-    })) as { result?: WorkspaceResolution | null };
-    const res = response.result ?? null;
-    lastResolution = res;
-    if (res?.Project) {
-      const repo = res.Repository?.path ? res.Repository.path.split(/[\\/]/).pop() : undefined;
-      view.setScope(repo ? `${res.Project.name} · ${repo}` : res.Project.name);
-      if (statusItem) {
-        statusItem.tooltip =
-          `Workspace: ${res.Project.name}${repo ? " / " + repo : ""}\n${dir}\n\nClick to load the session context`;
-      }
-    } else {
-      view.setScope("Repotory: not in the knowledge base yet");
-    }
-  } catch {
-    // No headless service: the commands still work through repotory-mcp, so the
-    // view stays silent about scope rather than asserting something unverified.
-    view.setScope("");
-  }
+  const label = scope.repository ? `${scope.projectName} / ${scope.repository}` : scope.projectName;
+  statusItem.tooltip = `Workspace: ${label}\n${dir ?? ""}\n\nClick to load the session context`;
 }
 
 async function pingHeadless(): Promise<boolean> {
@@ -396,315 +371,6 @@ async function writeHandoff(): Promise<void> {
   );
   showOutput("Handoff recorded", noteText);
   void refreshLastHandoff();
-}
-
-/**
- * Run one query and push the hits into the webview.
- *
- * The single search path for both entry points — the webview's own search
- * box and the "Repotory: Search Knowledge" command both end here, so the
- * two can never drift apart (same call, same ranking, same parser).
- *
- * Two sources, two tools, one parser each. The plugin holds no retrieval
- * logic of its own: notes/todos go through `repotory_notes_search` and the
- * approved knowledge pages through `repotory_wiki_search` (ADR-0032), both
- * served by the same Go service layer the desktop app uses.
- */
-async function runSearch(
-  view: RepotorySearchViewProvider,
-  query: string,
-  source: Source = searchSource,
-): Promise<void> {
-  searchSource = source;
-  lastQuery = query;
-  if (!query) {
-    view.postEmpty(source, scopeLabel());
-    return;
-  }
-  try {
-    if (source === "wiki") {
-      // No workspace path here on purpose: a project scope would FILTER the
-      // pages down to that project (plus the global ones), while the notes
-      // path only re-ranks. A search surface that silently hides pages is a
-      // worse surprise than a long list, and the desktop app's /wiki page
-      // defaults to "all projects" too.
-      const text = await withProgress("searching knowledge pages", () =>
-        callTool("repotory_wiki_search", { query }),
-      );
-      view.postWikiPages(query, parseWikiPages(text), scopeLabel());
-      return;
-    }
-    const searchArgs: Record<string, unknown> = { query };
-    // Ranking only: notes recorded in THIS repository lead the result list.
-    const dir = workspacePath();
-    if (dir) searchArgs.path = dir;
-    const text = await withProgress("searching knowledge", () =>
-      callTool("repotory_notes_search", searchArgs),
-    );
-    view.postHits(query, parseSearchHits(text), scopeLabel());
-  } catch (err) {
-    // A failed search must not look like an empty one (the desktop app's
-    // own rule): the view shows the reason instead of a blank list.
-    view.postError(`Search failed: ${err instanceof Error ? err.message : String(err)}`);
-    throw err;
-  }
-}
-
-function scopeLabel(): string {
-  const res = lastResolution;
-  if (!res?.Project) return "";
-  const repo = res.Repository?.path ? res.Repository.path.split(/[\\/]/).pop() : undefined;
-  return repo ? `${res.Project.name} · ${repo}` : res.Project.name;
-}
-
-/**
- * Fetch the full body of the selected hit.
- *
- * Notes have a row to read (repotory_notes_read → the whole note); todos
- * do not — the matched excerpt is the most the search contract returns, so
- * the pane says "excerpt" rather than pretending it is the full item.
- * An approved knowledge page is read with the page tool (ADR-0032): the
- * two id spaces are separate, so the wrong tool would answer about the
- * wrong thing.
- * Either way the user sees content immediately, never a spinner that dies
- * into an empty pane.
- */
-async function selectHit(view: RepotorySearchViewProvider, id: number): Promise<void> {
-  const hit = view.lastHits.find((h) => h.id === id);
-  if (hit?.type === "wiki") {
-    try {
-      const page = parseWikiRead(await callTool("repotory_wiki_read", { id }));
-      if (page) {
-        view.postDetail({
-          type: "wiki",
-          id: page.id,
-          project_id: page.project_id,
-          title: page.title,
-          body: page.content,
-          source: "wiki",
-          updated_at: page.updated_at,
-          pageKind: page.kind,
-          slug: page.slug,
-        });
-        return;
-      }
-    } catch {
-      /* fall through to the excerpt below */
-    }
-    view.postDetail({
-      type: "wiki",
-      id,
-      project_id: hit.project_id,
-      title: hit.title,
-      body: hit.snippet,
-      source: "snippet",
-      pageKind: hit.pageKind,
-      slug: hit.slug,
-    });
-    return;
-  }
-  try {
-    const text = await callTool("repotory_notes_read", { id });
-    const detail = parseNoteRead(text);
-    if (detail) {
-      view.postDetail(detail);
-      return;
-    }
-  } catch {
-    /* fall through to the snippet below */
-  }
-  view.postDetail({
-    type: hit?.type ?? "note",
-    id,
-    project_id: hit?.project_id ?? 0,
-    title: hit?.title ?? `note ${id}`,
-    body: hit?.snippet ?? "",
-    source: "snippet",
-  });
-}
-
-/** Deep-link a hit into the Repotory web UI, the same routes the JetBrains plugin opens. */
-async function openHit(hit: Thumb | undefined): Promise<void> {
-  if (!hit) return;
-  const route =
-    hit.type === "wiki"
-      ? `/wiki/${hit.id}`
-      : hit.type === "todo"
-        ? `/project/${hit.project_id}?tab=todos`
-        : `/project/${hit.project_id}?noteId=${hit.id}`;
-  const url = `${serverUrl().replace(/\/+$/, "")}${route}`;
-  await vscode.env.openExternal(vscode.Uri.parse(url));
-}
-
-// ---------------------------------------------------------------- note maintenance
-//
-// The detail pane is also the note editor: edit a note, create one under the
-// same project, or let the AI tidy a note. Field writes go through the
-// MCP tools (the extension's knowledge transport); the one operation the MCP
-// surface deliberately does not carry — moving a note between projects
-// (MoveNote is desktop-only by design: re-filing knowledge is a human act) —
-// goes over the HTTP RPC bridge the extension already speaks for scope
-// resolution. Both paths end in the same service layer, so there is still
-// exactly one implementation (ADR-0009).
-
-/** The project list for the editor's project dropdown. */
-async function fetchProjectOptions(): Promise<ProjectOption[]> {
-  try {
-    return parseProjects(await callTool("repotory_projects_list", {}));
-  } catch {
-    // A missing dropdown degrades to the read-only project chip in the
-    // webview; the rest of the editor works without it.
-    return [];
-  }
-}
-
-/** Open the editor on an existing note (its stored fields). */
-async function openEditorForNote(view: RepotorySearchViewProvider, id: number): Promise<void> {
-  const detail = parseNoteRead(await callTool("repotory_notes_read", { id }));
-  if (!detail) {
-    view.postError(`Note ${id} could not be read — nothing to edit.`);
-    return;
-  }
-  const projects = await fetchProjectOptions();
-  view.postEditor(
-    {
-      id: detail.id,
-      project_id: detail.project_id,
-      title: detail.title,
-      tags: detail.tags ?? "",
-      kind: detail.kind ?? "knowledge",
-      content: detail.body,
-    },
-    projects,
-    false,
-  );
-}
-
-/** Open the editor on a new note under the given project. */
-async function openEditorForNew(view: RepotorySearchViewProvider, projectId: number): Promise<void> {
-  const projects = await fetchProjectOptions();
-  view.postEditor(
-    { id: 0, project_id: projectId, title: "", tags: "", kind: "knowledge", content: "" },
-    projects,
-    false,
-  );
-}
-
-/**
- * Run the AI tidy and open its PROPOSAL in the editor.
- *
- * The service writes nothing: the proposal lands in the same editor a manual
- * edit uses, so reviewing machine-generated wording IS the edit flow, and
- * only the user's save persists it. The stored note is read once more to
- * carry kind/pinned into the draft (the proposal only covers title/tags/
- * content).
- */
-async function organizeNoteInView(view: RepotorySearchViewProvider, id: number): Promise<void> {
-  const text = await withProgress("tidying note with AI", () =>
-    callTool("repotory_notes_organize", { id }),
-  );
-  const proposal: OrganizeProposal | undefined = parseOrganizeProposal(text);
-  if (!proposal) {
-    view.postError("AI tidy failed: the service returned no usable proposal.");
-    return;
-  }
-  const stored = parseNoteRead(await callTool("repotory_notes_read", { id }));
-  const projects = await fetchProjectOptions();
-  view.postEditor(
-    {
-      id: proposal.note_id || id,
-      project_id: stored?.project_id ?? 0,
-      title: proposal.title,
-      tags: proposal.tags,
-      kind: stored?.kind ?? "knowledge",
-      content: proposal.content,
-    },
-    projects,
-    true,
-    proposal.warning,
-  );
-}
-
-/**
- * Persist an editor draft: update in place, or create under the chosen project.
- *
- * Fields are written first, the project move second: a failed move (the HTTP
- * service is down — MCP works without it) must not lose the edit the user
- * just made. After a successful save the freshly written note replaces the
- * editor, so what is on screen is what is in the store.
- */
-async function saveEditorDraft(view: RepotorySearchViewProvider, draft: EditorDraft): Promise<void> {
-  try {
-    if (draft.id) {
-      const updatedText = await callTool("repotory_notes_update", {
-        id: draft.id,
-        content: draft.content,
-        title: draft.title,
-        tags: draft.tags,
-        category: draft.kind,
-      });
-      let detail = parseNoteRead(updatedText);
-      if (!detail) {
-        // The update succeeded (no throw) but the payload is unusable: one
-        // more read gets the truth rather than trusting a guess.
-        detail = parseNoteRead(await callTool("repotory_notes_read", { id: draft.id }));
-      }
-      if (!detail) {
-        view.postEditorError("Saved, but reading the note back failed — reopen it to see the result.");
-        return;
-      }
-      if (draft.project_id && detail.project_id && draft.project_id !== detail.project_id) {
-        try {
-          await moveNoteViaRpc(draft.id, draft.project_id);
-          detail = { ...detail, project_id: draft.project_id };
-        } catch (err) {
-          view.postEditorError(
-            `Fields saved, but moving the note failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          return;
-        }
-      }
-      view.postSaved(detail);
-      return;
-    }
-    const createdText = await callTool("repotory_notes_create", {
-      project_id: draft.project_id,
-      title: draft.title,
-      content: draft.content,
-      tags: draft.tags,
-      category: draft.kind,
-    });
-    const created = parseNoteRead(createdText);
-    if (!created) {
-      view.postEditorError("Created, but reading the note back failed — search for it to see the result.");
-      return;
-    }
-    view.postCreated(
-      { type: "note", id: created.id, project_id: created.project_id, title: created.title, snippet: "" },
-      created,
-    );
-  } catch (err) {
-    view.postEditorError(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-/**
- * Move a note to another project over the HTTP RPC bridge.
- *
- * The MCP surface has no move tool on purpose (MoveNote is registered
- * desktop-only: re-filing knowledge is a human decision an agent must not
- * make), and this extension is a human-driven client — the same bridge the
- * JetBrains plugin and the browser frontend use. Throws on failure so the
- * caller can report the partial save honestly.
- */
-async function moveNoteViaRpc(noteId: number, projectId: number): Promise<void> {
-  const response = (await postJson(serverUrl(), "/api/rpc", {
-    method: "MoveNote",
-    args: [noteId, projectId],
-  })) as { error?: string } | null;
-  if (response?.error) {
-    throw new Error(response.error);
-  }
 }
 
 // `repotory-init` is private and is not installed globally, so a shipped VSIX
@@ -1062,24 +728,32 @@ export function activate(context: vscode.ExtensionContext): void {
   statusItem.command = "repotory.loadContext";
   void refreshLastHandoff();
 
-  const searchView = new RepotorySearchViewProvider(context);
-  searchView.onSearch = (query, source) => runSearch(searchView, query, source);
-  searchView.onSource = (source) => {
-    // The list is cleared first: the rows on screen belong to the other id
-    // space, and a stale row is a row the reader would open with the wrong
-    // tool.
-    searchView.postEmpty(source, scopeLabel());
-    return runSearch(searchView, lastQuery, source);
+  const chatConsole = new RepotoryChatConsoleProvider();
+  const transport: Transport = {
+    callTool,
+    // The headless RPC bridge: the one place MCP deliberately does not carry
+    // (project resolution, moving a note between projects).
+    rpc: async (method, args) => {
+      const response = (await postJson(serverUrl(), "/api/rpc", { method, args })) as {
+        result?: unknown;
+        error?: string;
+      } | null;
+      if (response?.error) throw new Error(response.error);
+      return response?.result ?? null;
+    },
+    serverUrl,
+    workspacePath,
+    openExternal: async (url) => {
+      await vscode.env.openExternal(vscode.Uri.parse(url));
+    },
   };
-  searchView.onSelect = (id) => selectHit(searchView, id);
-  searchView.onOpen = (hit) => openHit(hit);
-  searchView.onEdit = (id) => openEditorForNote(searchView, id);
-  searchView.onCreate = (projectId) => openEditorForNew(searchView, projectId);
-  searchView.onOrganize = (id) => organizeNoteInView(searchView, id);
-  searchView.onSave = (draft) => saveEditorDraft(searchView, draft);
-  void refreshScope(searchView);
+  const session = new ChatSession(transport, (message) => chatConsole.post(message));
+  chatConsole.onMessage = (msg) => session.handle(msg);
+  chatConsole.onReady = () => session.init();
+  session.onScopeChanged = (scope) => showScopeInStatusBar(scope);
+  void session.refreshScope();
   context.subscriptions.push(
-    vscode.workspace.onDidChangeWorkspaceFolders(() => void refreshScope(searchView)),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => void session.refreshScope()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(`${CONFIG_SECTION}.${MCP_PATH_KEY}`)) resetMcp();
     }),
@@ -1101,26 +775,30 @@ export function activate(context: vscode.ExtensionContext): void {
       }),
     );
 
+  // A command APPENDS a turn to the conversation instead of replacing the
+  // panel's content (ADR-0036): the panel is a history, and a command that
+  // wiped it would make the history a lie.
+  const askInConsole = async (mode: "ask" | "notes" | "pages", prompt: string): Promise<void> => {
+    const query = await vscode.window.showInputBox({
+      prompt,
+      ignoreFocusOut: true,
+    });
+    if (!query) return;
+    await session.run(query, mode);
+    await vscode.commands.executeCommand(`${CONSOLE_VIEW_ID}.focus`);
+  };
+
   register("repotory.loadContext", loadContext);
   register("repotory.handoff", writeHandoff);
-  register("repotory.search", async () => {
-    const query = await vscode.window.showInputBox({
-      prompt: "Repotory — search notes & todos (FTS5)",
-      placeHolder: "e.g. deploy hook",
-      ignoreFocusOut: true,
-    });
-    if (!query) return;
-    await runSearch(searchView, query, "notes");
-  });
-  register("repotory.searchWiki", async () => {
-    const query = await vscode.window.showInputBox({
-      prompt: "Repotory — search the approved knowledge pages",
-      placeHolder: "e.g. ADR-0021",
-      ignoreFocusOut: true,
-    });
-    if (!query) return;
-    await runSearch(searchView, query, "wiki");
-  });
+  register("repotory.ask", () =>
+    askInConsole("ask", "Repotory — ask the knowledge base (answer with sources)"),
+  );
+  register("repotory.search", () =>
+    askInConsole("notes", "Repotory — search notes & todos (FTS5)"),
+  );
+  register("repotory.searchWiki", () =>
+    askInConsole("pages", "Repotory — search the approved knowledge pages"),
+  );
   register("repotory.registerMcp", () => registerMcp(context));
   register("repotory.diagnose", () => diagnose(context));
   register("repotory.setMcpPath", async () => {
@@ -1130,7 +808,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     statusItem,
-    vscode.window.registerWebviewViewProvider("repotory.notesSearch", searchView, {
+    vscode.window.registerWebviewViewProvider(CONSOLE_VIEW_ID, chatConsole, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     { dispose: () => mcp?.stop() },

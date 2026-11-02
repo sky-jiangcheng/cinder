@@ -35,3 +35,12 @@ This must also reconcile with ADR-0006 head-on: the scope freeze froze "platform
 - Positive: the product gains visible presence inside the IDE (command palette / status bar / sidebar); new-user onboarding drops from hand-edited config to a single command; one VSIX investment covers the whole VS Code family; the marketplace listing becomes a landable destination for word of mouth.
 - Negative: +1 TypeScript extension codebase (a thin shell whose maintenance surface is limited to the API layer); JetBrains users remain on manual config during the extension phase.
 - Open: the JetBrains demand-signal threshold (order of magnitude of issues/stars) is set after the VS Code extension ships, from real conversion data; the extension's lifecycle handling of the headless server (auto-start / reuse) follows the dsh plugin's practice and is documented at implementation time.
+
+## Amendment record (2026-11-02, [ADR-0036](0036-ide-chat-console.md))
+
+The decisions in this ADR are kept as written. ADR-0036 **amends the FORM of the sidebar in decision 3**, not its existence:
+
+- **Decision 3's "sidebar note search" becomes "sidebar chat console"**. The panel is no longer a searcher ("a box + a thumbnail list + a detail pane") but a conversation feed: one question and its answer is a turn, the old turns fold away, and details open in place inside the turn that produced them (ADR-0036 decisions 1 / 3 / 7). **The sidebar stays where it is; what it holds changes.**
+- **The panel can answer for the first time**: `repotory_ask` (ADR-0033) is wired, and the answer carries its source list. The retrieval surface existed long ago; the answering surface arrives with this round — and "being able to answer questions" is exactly what makes a memory readable as a sequence.
+- **The scope goes from global to "locked to the current project" by default**: the chip shows `🔒 <project>` and clicking it unlocks back to cross-project (ADR-0036 decision 2). The lock is a default, not a restriction.
+- **The command palette commands stay**, but `Search Knowledge` / `Search Approved Knowledge Pages` now **append a turn to the conversation** instead of replacing the result, and a new `Ask the Knowledge Base` command is added.

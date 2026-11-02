@@ -182,7 +182,7 @@ cd .. && go build -o repotory-server ./cmd/server
 | `SearchWikiPages(projectID, query, limit)` | 检索已批准页（bm25 + CJK 松弛回退）；作用域语义与取证路径一致：选项目 = 该项目的页 **+ 全局页**，不选 = 全部 |
 | `GetWikiPage(pageID)` | 读一页的正文、slug、kind、作用域、出边 / 入边与来源笔记 id；**非 approved 的页一律拒绝**（读取也被闸门管着） |
 
-三个绑定都有 MCP 孪生（`repotory_wiki_search` / `repotory_wiki_read`），并被两个 IDE 分发面消费（VS Code 侧边栏、JetBrains 工具窗）——插件只调绑定，不自己写检索。
+三个绑定都有 MCP 孪生（`repotory_wiki_search` / `repotory_wiki_read`），并被两个 IDE 分发面消费（VS Code 对话台、JetBrains 工具窗）——插件只调绑定，不自己写检索。
 
 **人浏览不写 `access_count`**：那一列的含义是「这一页被塞进过某次回答的证据块」，人打开一页是另一种访问，混进去会让同一个信号一义两用。详见 ADR-0032。
 

@@ -35,6 +35,10 @@
         }
       },
       {
+        "command": "repotory.ask",
+        "title": "Repotory: Ask the Knowledge Base"
+      },
+      {
         "command": "repotory.searchWiki",
         "title": "Repotory: Search Approved Knowledge Pages"
       },
@@ -118,7 +122,7 @@
       "repotory-explorer": [
         {
           "id": "repotory.notesSearch",
-          "name": "Knowledge Search",
+          "name": "Repotory Chat",
           "type": "webview"
         }
       ]
@@ -136,7 +140,9 @@
   "scripts": {
     "compile": "tsc -p ./ && node scripts/sync-init.mjs",
     "sync-init": "node scripts/sync-init.mjs",
-    "watch": "tsc -w -p ./"
+    "watch": "tsc -w -p ./",
+    "test": "tsc -p ./ && node --test out/__tests__/",
+    "preview:console": "tsc -p ./ && node scripts/preview-console.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

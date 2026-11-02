@@ -1,0 +1,5 @@
+# Sources, tests and the dev-only preview harness are not shipped; the
+# compiled output is the extension.
+src/**
+scripts/**
+out/__tests__/**

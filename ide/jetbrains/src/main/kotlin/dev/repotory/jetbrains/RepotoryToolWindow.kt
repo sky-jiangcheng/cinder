@@ -1,57 +1,50 @@
-// Knowledge-search tool window for the Repotory plugin.
+// The Repotory chat console — the plugin's conversation panel.
 //
-// ADR-0027 decision 2①: notes + todos, searched through the shared
-// service layer. The plugin does NOT reimplement ranking, gating or snippet
-// extraction — it renders what `SearchAll` returns.
-//
-// ADR-0027 decision 2②: a result opens the Repotory SPA in the system
-// browser, deep-linked to that result. The plugin does not embed the SPA:
-// one rendering of the knowledge UI, the desktop app's.
-//
-// Layout (2026-10-29 revision) — a native IDE reader, no T-shape:
+// ADR-0036 (Accepted 2026-11-02) rewrote this panel: it used to be a
+// SEARCHER (one query, a list of thumbnails, a detail pane) and it is now a
+// CONSOLE. The layout is the one the VS Code extension ships, region for
+// region:
 //
 //   ┌──────────────────────────────────────────────────────────┐
-//   │ ▪ Repotory                          [● online] [↻] [▶]     │  identity + service
+//   │ ▪ Repotory  the local-first memory layer…    [● online][↻][▶]│  ① header
 //   ├──────────────────────────────────────────────────────────┤
-//   │ 🔍 [search…………………………]                [Notes][Pages]    │  query + space
-//   ├──────────────────────┬───────────────────────────────────┤
-//   │ results               │ [✎][+][⚡][⧉][↗]                │  per-item actions
-//   │ (kind · title ·       │ the selected knowledge, in full   │
-//   │  matched excerpt)     │                                   │
-//   ├──────────────────────┴───────────────────────────────────┤
-//   │ status line                                                │
+//   │ ⚠ announcement bar — one line, dismissible                │  ② announcement
+//   ├──────────────────────────────────────────────────────────┤
+//   │ ▸ 3 earlier turns                                        │  ④ folded history
+//   │ [ASK] why does the gateway retry 503?                     │  ③ the feed
+//   │       Because the backoff is capped at 30 s.              │     (the only
+//   │       Sources (2) ▸                                       │      scroll area)
+//   │ [NOTES] fts5 quirk                                       │
+//   │       ┌ note #42 ──────────────────────────────┐          │
+//   │       │ FTS5 quirk                             │          │
+//   │       │ content tables answer…                 │          │
+//   │       │ Open in Repotory · Copy · Edit …       │          │
+//   │       └────────────────────────────────────────┘          │
+//   ├──────────────────────────────────────────────────────────┤
+//   │ [ what do you want to know?                       ]        │  ⑤ input area
+//   │ [Ask][Notes][Pages]                    [🔒 pay-common][Send]│
 //   └──────────────────────────────────────────────────────────┘
 //
-// Why it changed: the previous panel stacked a fixed cream brand band over
-// a fixed-width column and a row of text buttons. Every one of those had a
-// width of its own, so a narrow tool window stretched the band, clipped the
-// buttons and let the status message push the buttons off the panel — the
-// "T" deformed instead of reflowing. The new shell gives every region a
-// flexible width: the header is a slim native strip, the two columns are a
-// draggable split pane, and every action is an icon in a platform toolbar.
+// Why it changed: a result that REPLACES the previous one cannot be read as
+// a sequence, and Repotory's value is in the sequence — a gotcha is the
+// follow-up of a debugging session. The conversation feed keeps every turn,
+// folds the old ones away, and opens an item IN PLACE (there is no second
+// pane — ADR-0036 decision 7).
 //
-// Connection (2026-10-29 revision): the panel PROBES the service on open and
-// shows the answer as a status pill. When nothing answers, it starts the
-// local service ONCE, by itself, and retries the query — the commonest
-// first-run state (the plugin is installed, no server is running) used to
-// need a click on a button that only appeared after a failed search.
-//
-// The full body of a note is fetched on selection (GetNote over the same
-// RPC bridge); todos carry their whole content in the excerpt, and a note
-// whose read fails falls back to the excerpt with a label that says so.
-//
-// The action toolbar is the maintenance surface (2026-10-23): Edit and New
-// open the shared NoteEditorDialog, AI Tidy asks the service for a
-// reorganization PROPOSAL that opens the SAME dialog — machine-generated
-// wording is never saved silently; the user's save is the gate.
+// The project lock is a DEFAULT, not a restriction: the chip opens and the
+// panel goes back to cross-project. Ask and Pages really filter (the project
+// id goes to the tool); Notes cannot (the notes tool has no project
+// parameter), so the panel filters the hits itself and says how many it
+// dropped.
 //
 // Three runtime properties this file is responsible for:
-//   · typing debounces (300 ms) and every search carries a sequence number, so
-//     a slow early response can never overwrite the results of a later query;
-//   · nothing fails silently — a transport error, a 4xx/5xx and an unavailable
-//     web UI each become visible text in the panel, never just an empty list;
-//   · the EDT never waits on the network: search and note reads run on
-//     pooled threads, the pane is repainted from invokeLater.
+//   · nothing fails silently — a transport error, a refused tool and an
+//     unreachable service each become visible text in the announcement bar,
+//     never just an empty answer;
+//   · the EDT never waits on the network: every call runs on a pooled thread
+//     and the panel is repainted from invokeLater;
+//   · the fold state belongs to the UI: a collapsed turn stays collapsed
+//     while other turns arrive.
 package dev.repotory.jetbrains
 
 import com.intellij.icons.AllIcons
@@ -67,7 +60,6 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.actionSystem.ToggleAction
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -78,12 +70,10 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ex.ToolWindowManagerEx
 import com.intellij.ui.JBColor
-import com.intellij.ui.SearchTextField
-import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
@@ -92,39 +82,31 @@ import java.awt.Dimension
 import java.awt.Font
 import java.awt.Graphics
 import java.awt.Graphics2D
+import java.awt.GridLayout
+import java.awt.Insets
 import java.awt.RenderingHints
 import java.awt.datatransfer.StringSelection
-import java.awt.event.ComponentAdapter
-import java.awt.event.ComponentEvent
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
+import java.awt.event.FocusAdapter
+import java.awt.event.FocusEvent
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
 import javax.swing.BorderFactory
-import javax.swing.DefaultListModel
+import javax.swing.BoxLayout
+import javax.swing.ButtonGroup
 import javax.swing.Icon
 import javax.swing.ImageIcon
+import javax.swing.JButton
 import javax.swing.JEditorPane
 import javax.swing.JLabel
-import javax.swing.JList
 import javax.swing.JPanel
-import javax.swing.JSplitPane
 import javax.swing.JTextArea
-import javax.swing.ListSelectionModel
-import javax.swing.Timer
-import javax.swing.JViewport
-import javax.swing.event.DocumentEvent
-import javax.swing.event.DocumentListener
+import javax.swing.JToggleButton
+import javax.swing.SwingUtilities
+import javax.swing.UIManager
+import javax.swing.event.HyperlinkEvent
 import kotlin.math.ceil
-
-/** Trailing-edge debounce: the query runs 300 ms after the last keystroke. */
-private const val DEBOUNCE_MS = 300
-
-/** Narrower than this the list becomes unusable, so the split refuses to go below it. */
-private val LIST_MIN_WIDTH = JBUI.scale(200)
-
-/** Where the split puts the divider the first time the panel opens. */
-private val LIST_DEFAULT_WIDTH = JBUI.scale(300)
 
 /** The notification group the plugin posts its service problems to. */
 private const val NOTIFICATION_GROUP = "Repotory"
@@ -144,73 +126,70 @@ private enum class LinkState {
     CHECKING,
 }
 
-/** Kind badge colours, paired light/dark so they follow the IDE theme. */
-private val BADGE_NOTE = JBColor(Color(0x1D, 0x4E, 0xD8), Color(0x60, 0xA5, 0xFA))
-private val BADGE_TODO = JBColor(Color(0x8B, 0x6F, 0x3A), Color(0xD9, 0xB7, 0x73))
-private val BADGE_WIKI = JBColor(Color(0x6F, 0x42, 0xC1), Color(0xD2, 0xA8, 0xFF))
-
-/**
- * The knowledge spaces the reader searches.
- *
- * Notes/todos and wiki pages have INDEPENDENT id sequences, so the two are
- * never mixed in one result list: a row saying "12" would be ambiguous, and
- * the deep link would open the wrong thing. One space on screen at a time.
- */
-private enum class Source(val label: String, val hint: String) {
-    NOTES("Notes", "Search notes and todos"),
-    WIKI("Pages", "Search the approved knowledge pages"),
-}
-
 class RepotoryToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val panel = RepotoryPanel()
+        val panel = RepotoryPanel(project)
         val content = ContentFactory.getInstance().createContent(panel, "", false)
         content.setDisposer(panel)
         toolWindow.contentManager.addContent(content)
     }
 }
 
-class RepotoryPanel : JPanel(), Disposable {
-    private val model = DefaultListModel<RepotoryHit>()
-    private val list = JBList(model)
-    private val detail = JEditorPane()
-    private val status = StatusField()
-    private val search = SearchTextField()
+/**
+ * The chat console.
+ *
+ * The panel owns the FOLD STATE and the chrome; the session owns the data.
+ * Every click in the feed is an `<a href="repotory:…">`, dispatched by the
+ * hyperlink listener — Swing has no DOM, so the href is the event bus.
+ */
+class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
+
+    private val session = ChatSession(McpChatTransport(project), ::post)
+    private val feed = JEditorPane()
+    private val feedScroll = JBScrollPane(feed)
+    private val announcement = AnnouncementBar()
     private val pill = ConnectionPill()
-
     private val serviceToolbar: ActionToolbar
-    private val sourceToolbar: ActionToolbar
-    private val detailToolbar: ActionToolbar
 
-    private var source = Source.NOTES
-    private var disposed = false
+    /** The composer's text field. */
+    private val inputField = ChatTextArea()
+
+    /** The composer's scroll pane — it grows with the question. */
+    private val fieldScroll = JBScrollPane(inputField)
+
+    /** The scope chip: which project the panel is locked to. */
+    private val scopeChipButton = JButton("All projects")
 
     /**
-     * Bumped for every search that is started or invalidated. A response whose
-     * sequence number no longer matches is stale and is dropped: without it, a
-     * slow "dep" response could land after a fast "deploy hook" one and repaint
-     * the list with older results.
+     * The collapsed turns, the expanded source lists and the opened cards.
+     *
+     * They live here, not in the session: a collapsed turn must stay
+     * collapsed while other turns arrive (ADR-0036 decision 3). A re-render
+     * reads them; it never resets them.
      */
-    private var searchSeq = 0
+    private val collapsedTurns = mutableSetOf<String>()
+    private val expandedSources = mutableSetOf<String>()
+    private val expandedCards = mutableSetOf<String>()
 
-    /** Same guard for the detail pane: a slow note read must not overwrite a newer selection. */
-    private var detailSeq = 0
+    /** Whether the folded history is open. */
+    private var showEarlier = false
+
+    /** The mode the composer sends to. */
+    private var mode = ChatMode.ASK
+
+    private var disposed = false
 
     /**
      * True once the panel has offered to locate the `repotory-mcp` binary.
      *
-     * The offer is a MODAL dialog, and a modal nobody asked for interrupts
-     * the work. It is made once: after the user declines, the panel keeps
-     * working and keeps saying what is missing — without asking again on
-     * every keystroke.
+     * The offer is a notification, not a modal dialog, and it is made once:
+     * after the user declines, the panel keeps working and keeps saying what
+     * is missing — without asking again on every question.
      */
     private var mcpHelpOffered = false
 
     /** True while a start is in flight, so a second click cannot double-spawn. */
     private var starting = false
-
-    /** Keystrokes restart this timer; only the last one survives to fire. */
-    private val debounce = Timer(DEBOUNCE_MS) { runSearch() }
 
     init {
         // JPanel ships with a FlowLayout; BorderLayout has to replace it
@@ -218,33 +197,35 @@ class RepotoryPanel : JPanel(), Disposable {
         // default layout manager's single placeholder component.
         removeAll()
         layout = BorderLayout(0, 0)
-        debounce.isRepeats = false
 
         serviceToolbar = buildToolbar("RepotoryService", serviceActions())
-        sourceToolbar = buildToolbar("RepotorySource", sourceActions())
-        detailToolbar = buildToolbar("RepotoryDetail", detailActions())
 
         add(headerStrip(), BorderLayout.NORTH)
-        add(readerBody(), BorderLayout.CENTER)
-        add(statusBar(), BorderLayout.SOUTH)
+        add(conversationArea(), BorderLayout.CENTER)
+        add(inputArea(), BorderLayout.SOUTH)
 
         pill.onClick = { reconnect() }
-        search.toolTipText = Source.NOTES.hint
-        // The pill must be honest before the first search: an open panel that
-        // says "checking…" forever is worse than one that says "offline".
+        feed.addHyperlinkListener { event -> onHyperlink(event) }
+        announcement.onDismiss = { announcement.dismiss() }
+        renderScope()
+        renderMode()
+
         probeConnection()
+        // The session comes up AFTER the panel is on screen: posting into a
+        // half-built panel is the race the VS Code side had to solve with its
+        // "ready" handshake, and the scope resolution needs the network, so it
+        // cannot run on the EDT either.
+        background { session.init() }
     }
 
     // ------------------------------------------------------------- header strip
 
     /**
-     * The top band: the mark, the wordmark, the connection pill and the two
-     * service actions.
+     * The top band: the mark, the wordmark, the tagline and the two service
+     * actions.
      *
-     * A slim native strip, not a printed card. The old cream band was the
-     * brand's own colour, which meant it ignored the IDE theme AND had a
-     * fixed height that a narrow window stretched; a strip with flexible
-     * regions reflows instead.
+     * A slim native strip, not a printed card: every region has a flexible
+     * width, so a narrow tool window reflows instead of clipping.
      */
     private fun headerStrip(): JPanel {
         val header = JPanel(BorderLayout(JBUI.scale(8), 0))
@@ -256,8 +237,16 @@ class RepotoryPanel : JPanel(), Disposable {
         val brand = JPanel(BorderLayout(JBUI.scale(6), 0))
         brand.isOpaque = false
         markLabel(JBUI.scale(18))?.let { brand.add(it, BorderLayout.WEST) }
-        val wordmark = JLabel("Repotory")
-        wordmark.font = wordmark.font.deriveFont(Font.BOLD)
+        val wordmark = JPanel()
+        wordmark.isOpaque = false
+        wordmark.layout = BoxLayout(wordmark, BoxLayout.Y_AXIS)
+        val name = JLabel("Repotory")
+        name.font = name.font.deriveFont(Font.BOLD)
+        val tagline = JLabel(ChatConsoleHtml.tagline())
+        tagline.font = tagline.font.deriveFont(JBUI.scaleFontSize(10f).toFloat())
+        tagline.foreground = UIUtil.getContextHelpForeground()
+        wordmark.add(name)
+        wordmark.add(tagline)
         brand.add(wordmark, BorderLayout.CENTER)
 
         val service = JPanel(BorderLayout(JBUI.scale(6), 0))
@@ -278,8 +267,6 @@ class RepotoryPanel : JPanel(), Disposable {
         return JLabel(ImageIcon(scaled))
     }
 
-    // ------------------------------------------------------------- toolbars
-
     /**
      * A platform toolbar for [group].
      *
@@ -295,9 +282,9 @@ class RepotoryPanel : JPanel(), Disposable {
         return toolbar
     }
 
-    /** Refresh (re-probe and re-search) and Start (bring the local service up). */
+    /** Refresh (re-probe the channel) and Start (bring the local service up). */
     private fun serviceActions(): ActionGroup = DefaultActionGroup(
-        object : AnAction("Refresh", "Re-check the service and search again", AllIcons.Actions.Refresh), DumbAware {
+        object : AnAction("Refresh", "Re-check the Repotory channel", AllIcons.Actions.Refresh), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
             override fun actionPerformed(e: AnActionEvent) = reconnect()
@@ -316,367 +303,614 @@ class RepotoryPanel : JPanel(), Disposable {
         },
     )
 
-    /**
-     * The space switch: notes on one side, approved wiki pages on the other.
-     *
-     * Two toggles rather than one combined list, because the two spaces have
-     * independent id sequences — a merged list would make "page 12" ambiguous.
-     * ToggleAction is used instead of a pair of JToggleButtons because the
-     * platform keeps exactly one of them lit: a plain toggle button switches
-     * itself OFF when it is clicked again, which would leave the reader with
-     * no source at all.
-     */
-    private fun sourceActions(): ActionGroup = DefaultActionGroup(
-        object : ToggleAction(Source.NOTES.label, Source.NOTES.hint, null), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun isSelected(e: AnActionEvent): Boolean = source == Source.NOTES
-
-            override fun setSelected(e: AnActionEvent, state: Boolean) {
-                if (state) switchSource(Source.NOTES)
-            }
-        },
-        object : ToggleAction(Source.WIKI.label, Source.WIKI.hint, null), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun isSelected(e: AnActionEvent): Boolean = source == Source.WIKI
-
-            override fun setSelected(e: AnActionEvent, state: Boolean) {
-                if (state) switchSource(Source.WIKI)
-            }
-        },
-    )
+    // --------------------------------------------------------- conversation area
 
     /**
-     * The per-item actions: edit, new, AI tidy, copy, open in Repotory.
+     * The announcement bar and the feed.
      *
-     * They live above the detail pane because they act on the SELECTED item,
-     * and the selected item is what the detail pane shows.
+     * The feed is the ONLY scroll area (ADR-0036 decision 1): there is no
+     * detail pane beside it, so a narrow tool window never squeezes a column
+     * of text into something unreadable.
      */
-    private fun detailActions(): ActionGroup = DefaultActionGroup(
-        object : AnAction("Edit", "Edit the selected note", AllIcons.Actions.Edit), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+    private fun conversationArea(): JPanel {
+        val area = JPanel(BorderLayout(0, 0))
+        area.add(announcement, BorderLayout.NORTH)
 
-            override fun update(e: AnActionEvent) {
-                e.presentation.isEnabled = selectedNote() != null
-            }
+        feed.contentType = "text/html"
+        feed.isEditable = false
+        feed.editorKit = detailHtmlKit()
+        feed.border = JBUI.Borders.empty()
+        feed.text = ChatConsoleHtml.render(emptyList(), false, emptySet(), emptySet(), emptySet())
+        feed.caretPosition = 0
 
-            override fun actionPerformed(e: AnActionEvent) = editSelected()
-        },
-        object : AnAction("New note", "Add a note under the same project", AllIcons.General.Add), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun update(e: AnActionEvent) {
-                e.presentation.isEnabled = selectedNote() != null
-            }
-
-            override fun actionPerformed(e: AnActionEvent) = newNoteUnderSelectedProject()
-        },
-        object : AnAction("AI Tidy", "Let the AI restructure this note — review the proposal, then save", AllIcons.Actions.Lightning), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun update(e: AnActionEvent) {
-                e.presentation.isEnabled = selectedNote() != null
-            }
-
-            override fun actionPerformed(e: AnActionEvent) = organizeSelected()
-        },
-        object : AnAction("Copy", "Copy the full text to the clipboard", AllIcons.Actions.Copy), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun update(e: AnActionEvent) {
-                e.presentation.isEnabled = list.selectedValue != null
-            }
-
-            override fun actionPerformed(e: AnActionEvent) = copySelected()
-        },
-        object : AnAction("Open in Repotory", "Open this item in the Repotory app", AllIcons.General.Web), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun update(e: AnActionEvent) {
-                e.presentation.isEnabled = list.selectedValue != null
-            }
-
-            override fun actionPerformed(e: AnActionEvent) = openSelected()
-        },
-    )
-
-    // ------------------------------------------------------------- reader body
-
-    /** The query row and the two-column split: results on the left, the item on the right. */
-    private fun readerBody(): JPanel {
-        val body = JPanel(BorderLayout(0, 0))
-        body.add(searchRow(), BorderLayout.NORTH)
-
-        list.selectionMode = ListSelectionModel.SINGLE_SELECTION
-        list.cellRenderer = ThumbRenderer()
-        list.setFixedCellHeight(JBUI.scale(58))
-        list.emptyText.text = "Search your Repotory knowledge base"
-        list.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent) {
-                if (e.clickCount == 2) openSelected()
-            }
-        })
-        list.addListSelectionListener { event ->
-            if (event.valueIsAdjusting) return@addListSelectionListener
-            // The toolbar's enabled state follows the selection, so it has to
-            // be told the selection changed.
-            detailToolbar.updateActionsAsync()
-            showDetail(list.selectedValue)
-        }
-        val listPane = JBScrollPane(list)
-        listPane.border = JBUI.Borders.customLineRight(JBColor.border())
-        listPane.minimumSize = Dimension(LIST_MIN_WIDTH, 0)
-
-        detail.contentType = "text/html"
-        detail.isEditable = false
-        detail.editorKit = detailHtmlKit()
-        detail.text = promoHtml()
-        detail.border = JBUI.Borders.empty(10, 14)
-
-        val detailArea = JPanel(BorderLayout(0, 0))
-        detailArea.add(detailToolbar.component, BorderLayout.NORTH)
-        detailArea.add(JBScrollPane(detail), BorderLayout.CENTER)
-        detailArea.minimumSize = Dimension(JBUI.scale(220), 0)
-
-        // A split pane, not a fixed-width column: the divider follows the
-        // window when it is resized and can be dragged by the user, so the
-        // two halves never squeeze each other into illegibility.
-        val split = JSplitPane(JSplitPane.HORIZONTAL_SPLIT, listPane, detailArea)
-        split.border = JBUI.Borders.empty()
-        split.isOneTouchExpandable = true
-        split.resizeWeight = 0.38
-        split.dividerLocation = LIST_DEFAULT_WIDTH
-        body.add(split, BorderLayout.CENTER)
-        return body
+        feedScroll.border = JBUI.Borders.empty()
+        feedScroll.viewport.border = JBUI.Borders.empty()
+        area.add(feedScroll, BorderLayout.CENTER)
+        return area
     }
 
-    /** The query field and the space switch, on one row. */
-    private fun searchRow(): JPanel {
-        val row = JPanel(BorderLayout(JBUI.scale(6), 0))
-        row.border = JBUI.Borders.compound(
-            JBUI.Borders.customLineBottom(JBColor.border()),
-            JBUI.Borders.empty(4, 8),
-        )
-        search.addDocumentListener(object : DocumentListener {
-            override fun insertUpdate(e: DocumentEvent) = scheduleSearch()
-            override fun removeUpdate(e: DocumentEvent) = scheduleSearch()
-            override fun changedUpdate(e: DocumentEvent) = scheduleSearch()
-        })
-        row.add(search, BorderLayout.CENTER)
-        row.add(sourceToolbar.component, BorderLayout.EAST)
-        return row
-    }
+    // ------------------------------------------------------------- input area
 
     /**
-     * Switches the space the reader searches.
+     * The composer: the question, the three modes, the scope chip and Send.
      *
-     * The rows on screen belong to the other space's id sequence, so they are
-     * cleared before the new query runs — leaving them on screen next to a
-     * result list of a different kind of thing is how "id 12" becomes
-     * ambiguous.
+     * It is ALWAYS there (ADR-0036 decision 6): the old panel stacked "query on
+     * top, results below, detail below that", and the bottom of the window was
+     * a status line that had to be squeezed out of the way.
      */
-    private fun switchSource(next: Source) {
-        if (source == next) return
-        source = next
-        model.clear()
-        // The toggle button that is lit has to follow the switch.
-        sourceToolbar.updateActionsAsync()
-        // Both in-flight answers answer the OTHER space: they must not land.
-        searchSeq++
-        detailSeq++
-        detail.text = promoHtml()
-        detail.caretPosition = 0
-        status.text = " "
-        search.toolTipText = next.hint
-        val query = search.text.trim()
-        if (query.isNotEmpty()) runSearch()
-    }
-
-    // ------------------------------------------------------------- status bar
-
-    private fun statusBar(): JPanel {
-        val bar = JPanel(BorderLayout(0, 0))
-        bar.border = JBUI.Borders.compound(
+    private fun inputArea(): JPanel {
+        val area = JPanel(BorderLayout(0, 0))
+        area.border = JBUI.Borders.compound(
             JBUI.Borders.customLineTop(JBColor.border()),
-            JBUI.Borders.empty(4, 8),
+            JBUI.Borders.empty(6, 8),
         )
-        bar.add(status, BorderLayout.CENTER)
-        return bar
+
+        val composer = JPanel(BorderLayout(0, JBUI.scale(5)))
+        inputField.placeholder = mode.placeholder
+        inputField.onSubmit = { submit() }
+        inputField.onResize = { fitInput() }
+        inputField.addComponentListener(object : java.awt.event.ComponentAdapter() {
+            override fun componentResized(e: java.awt.event.ComponentEvent) = fitInput()
+        })
+        fieldScroll.border = BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(JBColor.border()),
+            JBUI.Borders.empty(1, 1),
+        )
+        composer.add(fieldScroll, BorderLayout.CENTER)
+
+        val row = JPanel(BorderLayout(JBUI.scale(6), 0))
+        row.isOpaque = false
+        row.add(modeButtons(), BorderLayout.WEST)
+        row.add(scopeChip(), BorderLayout.CENTER)
+        row.add(sendButton(), BorderLayout.EAST)
+        composer.add(row, BorderLayout.SOUTH)
+
+        area.add(composer, BorderLayout.CENTER)
+        fitInput()
+        return area
     }
 
     /**
-     * The status line's text field.
+     * Grow the composer with its content.
      *
-     * It was a JLabel: a label cannot wrap, so a long message was either
-     * clipped or — worse — claimed the whole width of a BorderLayout row and
-     * pushed the buttons off the panel. This field wraps instead, and it
-     * grows to fit the text it holds.
-     *
-     * JTextArea does not size itself to its content, so the row count is
-     * derived from the text and the current width, and recomputed whenever
-     * the panel is resized (a narrower tool window wraps into more lines).
+     * The multi-line box rises with the question (ADR-0036 decision 6) — up to
+     * a ceiling, after which it scrolls instead of eating the feed.
      */
-    private class StatusField : JTextArea() {
-        init {
-            isEditable = false
-            isOpaque = false
-            isFocusable = false
-            lineWrap = true
-            wrapStyleWord = true
-            border = JBUI.Borders.empty(0)
-            // The panel's other text is JLabel text; the default JTextArea
-            // font would be the editor font (monospace) and look foreign.
-            font = JBLabel().font
-            rows = 1
-            addComponentListener(object : ComponentAdapter() {
-                override fun componentResized(e: ComponentEvent) {
-                    fit()
+    private fun fitInput() {
+        inputField.fitHeight()
+        val lineHeight = inputField.getFontMetrics(inputField.font).height
+        fieldScroll.preferredSize = Dimension(0, inputField.rows * lineHeight + JBUI.scale(8))
+        fieldScroll.revalidate()
+    }
+
+    /** The three knowledge faces, as one selected at a time. */
+    private fun modeButtons(): JPanel {
+        val group = ButtonGroup()
+        val panel = JPanel(GridLayout(1, 3, JBUI.scale(3), 0))
+        panel.isOpaque = false
+        for (candidate in ChatMode.entries) {
+            val button = JToggleButton(candidate.label)
+            button.isSelected = candidate == mode
+            button.toolTipText = candidate.placeholder
+            group.add(button)
+            button.addActionListener {
+                // A ButtonGroup lets the last toggle switch itself off; the
+                // panel always has exactly one mode, so it goes back on.
+                if (!button.isSelected) {
+                    button.isSelected = true
+                    return@addActionListener
                 }
-            })
+                switchMode(candidate)
+            }
+            panel.add(button)
         }
+        return panel
+    }
 
-        override fun setText(t: String?) {
-            super.setText(t)
-            fit()
-        }
+    /** The scope chip: which project the panel is locked to. */
+    private fun scopeChip(): JPanel {
+        val panel = JPanel(BorderLayout())
+        panel.isOpaque = false
+        scopeChipButton.toolTipText = ""
+        scopeChipButton.addActionListener { session.toggleScope() }
+        panel.add(scopeChipButton, BorderLayout.EAST)
+        return panel
+    }
 
-        /** Rows the wrapped text needs at the width this field currently has. */
-        private fun fit() {
-            val needed = rowsFor(text)
-            if (needed != rows) rows = needed
-        }
+    /** The send button. */
+    private fun sendButton(): JButton {
+        val button = JButton("Send")
+        button.addActionListener { submit() }
+        return button
+    }
 
-        private fun rowsFor(value: String): Int {
-            if (value.isBlank()) return 1
-            // ~6px per character at the label font. Before the first layout
-            // the width is still zero, so a scaled guess stands in.
-            val usable = if (width > 0) width else JBUI.scale(280)
-            val perLine = maxOf(16, usable / 6)
-            return ceil(value.length.toDouble() / perLine).toInt().coerceIn(1, 3)
+    /** Ask the current mode the question in the composer, and clear it. */
+    private fun submit() {
+        val text = inputField.text.trim()
+        if (text.isEmpty()) return
+        inputField.text = ""
+        inputField.fitHeight()
+        background { session.run(text, mode) }
+    }
+
+    // ------------------------------------------------------------- the session
+
+    /**
+     * The session's output, marshalled onto the EDT.
+     *
+     * The session runs on pooled threads, so every event has to come back to
+     * the UI thread before it touches a component.
+     */
+    private fun post(event: ChatEvent) {
+        val app = ApplicationManager.getApplication()
+        if (app.isDispatchThread) {
+            applyEvent(event)
+        } else {
+            app.invokeLater { if (!disposed) applyEvent(event) }
         }
     }
 
-    // ------------------------------------------------------------- search
+    private fun applyEvent(event: ChatEvent) {
+        when (event) {
+            is ChatEvent.Turn -> renderFeed()
+            is ChatEvent.Announce -> showAnnouncement(event.level, event.message)
+            is ChatEvent.Scope -> renderScope()
+            is ChatEvent.Mode -> renderMode()
+        }
+    }
 
-    private fun scheduleSearch() {
+    /** Switch the knowledge face the composer talks to. */
+    private fun switchMode(next: ChatMode) {
+        if (mode == next) return
+        mode = next
+        session.setMode(next)
+        renderMode()
+    }
+
+    private fun renderMode() {
+        inputField.placeholder = mode.placeholder
+    }
+
+    /**
+     * The chip's wording.
+     *
+     * The lock is a default, not a restriction, so the chip says which of the
+     * two it is — and a workspace that resolves to no project says so instead
+     * of pretending it is scoped.
+     */
+    private fun renderScope() {
+        val chip = scopeChipButton
+        val scope = session.currentScope()
+        when {
+            scope.projectId <= 0 -> {
+                chip.text = "No project"
+                chip.toolTipText = "This workspace does not resolve to a Repotory project yet — " +
+                    "the panel searches across all projects."
+                chip.isEnabled = false
+            }
+            scope.locked -> {
+                chip.text = "🔒 " + scope.projectName
+                chip.toolTipText = "Locked to ${scope.projectName} — click to search across all projects."
+                chip.isEnabled = true
+            }
+            else -> {
+                chip.text = "All projects"
+                chip.toolTipText = "Searching across all projects — click to lock back to ${scope.projectName}."
+                chip.isEnabled = true
+            }
+        }
+    }
+
+    /** The scope chip's wording is rendered by [renderScope]. */
+
+    /**
+     * The announcement bar: one line, with a background, dismissible.
+     *
+     * It replaces the old status line (ADR-0036 decision 5): a failure that
+     * sits at the bottom of the window, under everything, is a failure the
+     * reader never sees.
+     */
+    private fun showAnnouncement(level: ChatLevel, message: String) {
+        announcement.show(level, message)
+    }
+
+    // ---------------------------------------------------------------- the feed
+
+    /** Repaint the feed from the session's turns and the panel's fold state. */
+    private fun renderFeed() {
         if (disposed) return
-        val query = search.text.trim()
-        if (query.isEmpty()) {
-            debounce.stop()
-            // Invalidate any in-flight response: it answers a query the user
-            // has already erased, and repainting the list with it would look
-            // like a bug.
-            searchSeq++
-            model.clear()
-            status.text = " "
+        val html = ChatConsoleHtml.render(
+            turns = session.turns(),
+            showEarlier = showEarlier,
+            collapsedTurns = collapsedTurns,
+            expandedSources = expandedSources,
+            expandedCards = expandedCards,
+        )
+        val bar = feedScroll.verticalScrollBar
+        val wasAtBottom = bar.value + bar.visibleAmount >= bar.maximum - 16
+        val previous = bar.value
+        feed.text = html
+        feed.caretPosition = 0
+        feedScroll.revalidate()
+        // The feed is rebuilt from scratch, so the scroll position has to be
+        // put back: a reader who scrolled up to re-read an old answer must not
+        // be yanked to the bottom by the next turn arriving.
+        SwingUtilities.invokeLater {
+            if (disposed) return@invokeLater
+            feedScroll.validate()
+            bar.value = if (wasAtBottom) bar.maximum else minOf(previous, bar.maximum)
+        }
+    }
+
+    /**
+     * Dispatch a click in the feed.
+     *
+     * Every action in the feed is an `<a href="repotory:…">`; Swing's
+     * LinkController hands the raw href over as the event's description. A
+     * link inside a note body is an ordinary URL and opens in the browser.
+     */
+    private fun onHyperlink(event: HyperlinkEvent) {
+        if (event.eventType != HyperlinkEvent.EventType.ACTIVATED) return
+        val href = event.description ?: return
+        if (href.startsWith(ChatConsoleHtml.LINK_SCHEME)) {
+            handleFeedAction(href.removePrefix(ChatConsoleHtml.LINK_SCHEME))
             return
         }
-        status.text = "Searching…"
-        debounce.restart()
+        if (href.startsWith("http://") || href.startsWith("https://")) {
+            BrowserUtil.browse(href)
+        }
     }
 
-    private fun runSearch() {
-        if (disposed) return
-        val query = search.text.trim()
-        if (query.isEmpty()) return
-        val seq = ++searchSeq
-        // Captured before the request goes out: the answer belongs to the
-        // space it was asked for, and a switch in between must not relabel it.
-        val space = source
-        status.text = "Searching \"$query\"…"
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
-            // MCP is the plugin's data channel (ADR-0035): searching does
-            // not need a running service at all.
-            val outcome = if (space == Source.WIKI) {
-                repotoryMcp.searchWiki(query)
+    /** One action of the feed. */
+    private fun handleFeedAction(target: String) {
+        val parts = target.trim('/').split('/')
+        when (parts.firstOrNull()) {
+            "earlier" -> {
+                showEarlier = !showEarlier
+                renderFeed()
+            }
+            "turn" -> {
+                val turnId = parts.getOrNull(1) ?: return
+                when (parts.getOrNull(2)) {
+                    "toggle" -> {
+                        if (!collapsedTurns.remove(turnId)) collapsedTurns.add(turnId)
+                    }
+                    "sources" -> {
+                        if (!expandedSources.remove(turnId)) expandedSources.add(turnId)
+                    }
+                }
+                renderFeed()
+            }
+            "card" -> {
+                val turnId = parts.getOrNull(1) ?: return
+                val cardType = parts.getOrNull(2) ?: return
+                val cardId = parts.getOrNull(3)?.toLongOrNull() ?: return
+                when (parts.getOrNull(4)) {
+                    "toggle" -> toggleCard(turnId, cardType, cardId)
+                    "open" -> openCard(turnId, cardType, cardId)
+                    "copy" -> copyCard(turnId, cardType, cardId)
+                    "edit" -> editCard(turnId, cardType, cardId)
+                    "create" -> newNoteUnder(turnId, cardType, cardId)
+                    "organize" -> organizeCard(turnId, cardType, cardId)
+                }
+            }
+        }
+    }
+
+    /**
+     * Open a card in place, or close it again.
+     *
+     * The card is marked open FIRST and repainted, so the reader sees
+     * "Loading…" instead of a card that does not react; the body arrives
+     * with the turn update.
+     */
+    private fun toggleCard(turnId: String, cardType: String, cardId: Long) {
+        val key = "$turnId/$cardType/$cardId"
+        if (!expandedCards.remove(key)) {
+            expandedCards.add(key)
+            background { session.expandCard(turnId, cardType, cardId) }
+        }
+        renderFeed()
+    }
+
+    // ---------------------------------------------------------------- actions
+
+    /**
+     * The card a feed action addresses.
+     *
+     * Notes and todos have INDEPENDENT id sequences, so the same number can
+     * name two different cards in one turn: the card is addressed by its id
+     * AND its type.
+     */
+    private fun card(turnId: String, cardType: String, cardId: Long): ChatCard? =
+        session.turns().firstOrNull { it.id == turnId }
+            ?.cards?.firstOrNull { it.hit.type == cardType && it.hit.id == cardId }
+
+    /**
+     * Deep-link a card into the Repotory web UI.
+     *
+     * Deep links are best-effort (ADR-0035 decision 6): a headless server
+     * started without `--web-dist` answers the API but 404s every other path,
+     * so opening the URL would drop the user on a dead page with no
+     * explanation at all. The probe asks the server whether it serves the UI
+     * first — the same question, the same way, the JetBrains plugin asks.
+     */
+    private fun openCard(turnId: String, cardType: String, cardId: Long) {
+        val hit = card(turnId, cardType, cardId)?.hit ?: return
+        val serverUrl = RepotorySettings.serverUrl()
+        val url = repotoryClient.deepLink(serverUrl, hit)
+        background({ repotoryClient.servesWebUi(serverUrl) }) { servesUi ->
+            if (!servesUi) {
+                offerFallback(url)
             } else {
-                repotoryMcp.search(query)
-            }
-            app.invokeLater {
-                // A newer keystroke (or a cleared box) supersedes this response.
-                if (disposed || seq != searchSeq) return@invokeLater
-                when (outcome) {
-                    is SearchOutcome.Hits -> {
-                        model.clear()
-                        outcome.hits.forEach { model.addElement(it) }
-                        // Default selection: the first hit, so the detail pane
-                        // is never empty while results are on screen.
-                        if (outcome.hits.isNotEmpty()) list.selectedIndex = 0
-                        pill.state = LinkState.ONLINE
-                        status.text = if (outcome.hits.isEmpty()) {
-                            "No matches for \"$query\""
-                        } else {
-                            "${outcome.hits.size} result(s) for \"$query\""
-                        }
-                    }
-                    is SearchOutcome.Failure -> {
-                        model.clear()
-                        // The CHANNEL is down (ADR-0035). The usual cause is a
-                        // missing repotory-mcp binary, and that has a fix: a
-                        // path. The local service is not involved any more —
-                        // searching never needed it.
-                        if (repotoryMcp.problem != null) {
-                            pill.state = LinkState.OFFLINE
-                            status.text = outcome.message
-                            offerMcpBinaryOnce()
-                        } else {
-                            status.text = outcome.message
-                        }
-                    }
-                }
+                showAnnouncement(ChatLevel.INFO, "Opened $url")
+                BrowserUtil.browse(url)
             }
         }
     }
-
-    // ------------------------------------------------------------- detail pane
 
     /**
-     * Expands the selected hit. Notes get their full body over GetNote;
-     * wiki pages over GetWikiPage; todos (and failed reads) show the matched
-     * excerpt, labelled.
-     *
-     * The pane shows the excerpt immediately — a reader that blanks out
-     * while the note loads reads as a bug — and swaps in the full body when
-     * it arrives. detailSeq drops a read that a newer selection overtook.
+     * The headless server serves its web UI only when it was started with
+     * `--web-dist` (cmd/server/main.go); without it every non-/api path is
+     * a 404 and the deep link goes nowhere. A server the plugin started carries
+     * its sibling `web/` automatically (RepotoryServer.kt); for one the user
+     * started by hand, the plugin cannot add the flag — but it can stop the
+     * user from landing on a bare 404 with no explanation.
      */
-    private fun showDetail(hit: RepotoryHit?) {
-        val seq = ++detailSeq
-        if (hit == null) {
-            detail.text = promoHtml()
-            detail.caretPosition = 0
-            return
-        }
-        detail.text = loadingHtml(hit)
-        detail.caretPosition = 0
-        if (hit.type == "wiki") {
-            // An approved page: the body plus the graph around it (ADR-0032).
-            val app = ApplicationManager.getApplication()
-            app.executeOnPooledThread {
-                val page = repotoryMcp.wikiPage(hit.id)
-                app.invokeLater {
-                    if (disposed || seq != detailSeq) return@invokeLater
-                    detail.text = if (page != null) wikiPageHtml(page) else excerptHtml(hit, full = true)
-                    detail.caretPosition = 0
-                }
+    private fun offerFallback(url: String) {
+        val choice = Messages.showDialog(
+            "Repotory answered, but it is not serving its web UI, so this link lands on a 404 page.\n\n" +
+                "Either restart the running server with:\n" +
+                "  repotory-server --port 18765 --web-dist <release bundle>/web\n" +
+                "or stop it and press the start button, which launches the release bundle " +
+                "together with its web/ directory.\n\n" +
+                "URL: $url",
+            "Repotory: web UI not available",
+            arrayOf("Open Anyway", "Copy URL", "Cancel"),
+            2,
+            Messages.getWarningIcon(),
+        )
+        when (choice) {
+            0 -> BrowserUtil.browse(url)
+            1 -> {
+                CopyPasteManager.getInstance().setContents(StringSelection(url))
+                showAnnouncement(ChatLevel.INFO, "URL copied to clipboard")
             }
-            return
+            else -> showAnnouncement(ChatLevel.INFO, "Cancelled — the link would have 404ed")
         }
-        if (hit.type != "note") {
-            detail.text = excerptHtml(hit)
-            return
+    }
+
+    /** Copy the card's title and body to the clipboard. */
+    private fun copyCard(turnId: String, cardType: String, cardId: Long) {
+        val found = card(turnId, cardType, cardId) ?: return
+        val hit = found.hit
+        val body = when (val cardBody = found.body) {
+            null -> hit.snippet
+            is CardBody.NoteBody -> cardBody.note.body
+            is CardBody.PageBody -> cardBody.page.content
+            is CardBody.TextBody -> cardBody.text
         }
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
+        val text = buildString {
+            appendLine(hit.title.ifBlank { "(untitled)" })
+            appendLine()
+            append(body)
+        }
+        CopyPasteManager.getInstance().setContents(StringSelection(text))
+        showAnnouncement(ChatLevel.INFO, "Copied to clipboard")
+    }
+
+    /**
+     * Edit a note. The hit carries only the excerpt, so the note is re-read,
+     * the shared editor dialog opens, and an OK saves fields first and the
+     * project change second — a failed move must not lose the edit the user
+     * just made.
+     */
+    private fun editCard(turnId: String, cardType: String, cardId: Long) {
+        val hit = card(turnId, cardType, cardId)?.hit ?: return
+        if (hit.type != "note") return
+        background({
             val note = repotoryMcp.note(hit.id)
-            app.invokeLater {
-                if (disposed || seq != detailSeq) return@invokeLater
-                detail.text = if (note != null) noteHtml(note) else excerptHtml(hit, full = true)
-                detail.caretPosition = 0
+            val projects = repotoryMcp.projects()
+            note to projects
+        }) { (note, projects) ->
+            if (note == null) {
+                showAnnouncement(ChatLevel.ERROR, "Note #${hit.id} could not be read — nothing to edit")
+            } else {
+                openEditor(
+                    NoteDraft(
+                        id = note.id,
+                        projectId = note.projectId,
+                        title = note.title,
+                        tags = note.tags,
+                        kind = note.kind.ifBlank { "knowledge" },
+                        content = note.body,
+                        pinned = note.pinned,
+                    ),
+                    projects, proposal = false, warning = "",
+                    turnId = turnId, cardType = hit.type, cardId = cardId,
+                )
             }
         }
     }
+
+    /** New note under the SAME project as the card. */
+    private fun newNoteUnder(turnId: String, cardType: String, cardId: Long) {
+        val hit = card(turnId, cardType, cardId)?.hit ?: return
+        background({ repotoryMcp.projects() }) { projects ->
+            openEditor(
+                NoteDraft(id = 0, projectId = hit.projectId, title = "", tags = "", kind = "knowledge", content = ""),
+                projects, proposal = false, warning = "",
+                turnId = turnId, cardType = hit.type, cardId = cardId,
+            )
+        }
+    }
+
+    /**
+     * AI tidy: ask the service for a reorganization PROPOSAL and open the
+     * SAME editor with it. Nothing is written by the service; the user's save
+     * is the gate. The stored note is re-read so kind and pinned carry into
+     * the draft (the proposal covers title/tags/content only).
+     */
+    private fun organizeCard(turnId: String, cardType: String, cardId: Long) {
+        val hit = card(turnId, cardType, cardId)?.hit ?: return
+        if (hit.type != "note") return
+        showAnnouncement(ChatLevel.INFO, "AI tidying note #${hit.id}… (this can take a while)")
+        background({
+            val proposal = repotoryMcp.organizeNote(hit.id)
+            val note = repotoryMcp.note(hit.id)
+            val projects = repotoryMcp.projects()
+            Triple(proposal, note, projects)
+        }) { (proposal, note, projects) ->
+            openEditor(
+                NoteDraft(
+                    id = if (proposal.noteId > 0) proposal.noteId else hit.id,
+                    projectId = note?.projectId ?: hit.projectId,
+                    title = proposal.title,
+                    tags = proposal.tags,
+                    kind = note?.kind?.ifBlank { "knowledge" } ?: "knowledge",
+                    content = proposal.content,
+                    pinned = note?.pinned ?: false,
+                ),
+                projects, proposal = true, warning = proposal.warning,
+                turnId = turnId, cardType = hit.type, cardId = cardId,
+            )
+        }
+    }
+
+    /**
+     * Opens the shared editor; an OK saves through [saveDraft].
+     *
+     * The editor is a DIALOG, not a card of its own: Swing has no inline
+     * editing surface, and a modal form is the platform's own answer. The
+     * card behind it is re-read after the save, so the feed shows what was
+     * actually written.
+     */
+    private fun openEditor(
+        original: NoteDraft,
+        projects: List<ProjectOption>,
+        proposal: Boolean,
+        warning: String,
+        turnId: String?,
+        cardType: String?,
+        cardId: Long?,
+    ) {
+        val dialog = NoteEditorDialog(project, original, projects, proposal, warning)
+        if (!dialog.showAndGet()) {
+            showAnnouncement(ChatLevel.INFO, "Edit cancelled — nothing saved")
+            return
+        }
+        saveDraft(original, dialog.editedDraft(), turnId, cardType, cardId)
+    }
+
+    /**
+     * Persists an edited draft: UpdateNoteFull, then MoveNote when the project
+     * changed. The card is repainted from the freshly stored note, so what is
+     * on screen is what is in the database.
+     */
+    private fun saveDraft(
+        original: NoteDraft,
+        edited: NoteDraft,
+        turnId: String?,
+        cardType: String?,
+        cardId: Long?,
+    ) {
+        val serverUrl = RepotorySettings.serverUrl()
+        showAnnouncement(
+            ChatLevel.INFO,
+            if (edited.id == 0L) "Creating note…" else "Saving note #${edited.id}…",
+        )
+        background({
+            try {
+                if (edited.id == 0L) {
+                    val created = repotoryMcp.createNote(edited)
+                    SaveOutcome(saved = created)
+                } else {
+                    val updated = repotoryMcp.updateNote(edited)
+                    // MoveNote stays on HTTP on purpose (ADR-0035 decision 2): moving
+                    // a note between projects is a human decision, not an agent's.
+                    // It is the ONE write that still needs the local service — and
+                    // when the service is down the fields ARE saved, so the wording
+                    // must say "the move failed", never "the save failed".
+                    val moveError = if (original.projectId != 0L && edited.projectId != original.projectId) {
+                        try {
+                            repotoryClient.moveNote(serverUrl, edited.id, edited.projectId)
+                            null
+                        } catch (e: Exception) {
+                            e.message ?: e.javaClass.simpleName
+                        }
+                    } else {
+                        null
+                    }
+                    SaveOutcome(saved = updated, moveError = moveError)
+                }
+            } catch (e: Exception) {
+                SaveOutcome(failure = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName)
+            }
+        }) { outcome ->
+            val saved = outcome.saved
+            if (saved == null) {
+                showAnnouncement(
+                    ChatLevel.ERROR,
+                    "${if (edited.id == 0L) "Create" else "Save"} failed: ${outcome.failure}",
+                )
+                return@background
+            }
+            // The MCP surface cannot CLEAR a title (an empty value means
+            // "keep what is there"), so a title the user emptied survives the
+            // write. Saying so beats reporting a success that did not do
+            // what was asked.
+            val titleKept = edited.title.isEmpty() && saved.title.isNotEmpty()
+            showAnnouncement(
+                when {
+                    outcome.moveError != null -> ChatLevel.WARN
+                    titleKept -> ChatLevel.WARN
+                    else -> ChatLevel.INFO
+                },
+                when {
+                    outcome.moveError != null ->
+                        "Fields saved, but the project move failed: ${outcome.moveError} " +
+                            "(moving a note between projects needs the local Repotory service)."
+                    titleKept ->
+                        "Saved note #${edited.id}, but the title could not be cleared — " +
+                            "the MCP write path keeps the old title."
+                    edited.id == 0L -> "Created note #${saved.id}"
+                    else -> "Saved note #${saved.id}"
+                },
+            )
+            if (turnId != null && cardType != null && cardId != null) {
+                if (edited.id == 0L) {
+                    // The new note joined the turn as a card of its own, so the
+                    // reader sees what was just written.
+                    background { session.addCard(turnId, hitOf(saved)) }
+                } else {
+                    // The card shows what was actually written.
+                    background { session.expandCard(turnId, cardType, cardId, force = true) }
+                }
+            }
+        }
+    }
+
+    /** What one save produced: the stored note, or the reason it did not happen. */
+    private data class SaveOutcome(
+        val saved: NoteDetail? = null,
+        val moveError: String? = null,
+        val failure: String? = null,
+    )
+
+    /**
+     * The card a freshly created note becomes.
+     *
+     * The route vocabulary belongs to the frontend (web/src/App.tsx): a note
+     * opens the project page on the notes tab with ?noteId=.
+     */
+    private fun hitOf(note: NoteDetail): RepotoryHit = RepotoryHit(
+        type = "note",
+        id = note.id,
+        projectId = note.projectId,
+        title = note.title,
+        snippet = snippetPlain(note.body, 140),
+        route = "/project/${note.projectId}?noteId=${note.id}",
+    )
 
     // ------------------------------------------------------------- connection
 
@@ -689,46 +923,38 @@ class RepotoryPanel : JPanel(), Disposable {
     private fun probeConnection() {
         if (disposed) return
         pill.state = LinkState.CHECKING
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
+        background({
             // The channel the panel actually depends on is MCP (ADR-0035),
-            // not the local service: search, read, write and organize all
+            // not the local service: ask, search, read, write and organize all
             // work with no server running. The probe asks whether the MCP
             // binary is there — cheap, and it spawns nothing.
-            val resolution = McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                if (resolution.found) {
-                    pill.state = LinkState.ONLINE
-                } else {
-                    pill.state = LinkState.OFFLINE
-                    status.text = resolution.problem ?: "repotory-mcp was not found."
-                }
+            McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
+        }) { resolution ->
+            if (resolution.found) {
+                pill.state = LinkState.ONLINE
+            } else {
+                pill.state = LinkState.OFFLINE
+                showAnnouncement(ChatLevel.WARN, resolution.problem ?: "repotory-mcp was not found.")
             }
         }
     }
 
     /**
-     * The pill was clicked (or Refresh was pressed): check the service and,
-     * if it is up, run the current query again.
+     * The pill was clicked (or Refresh was pressed): check the channel again.
      */
     private fun reconnect() {
         if (disposed) return
         pill.state = LinkState.CHECKING
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
-            val resolution = McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                if (resolution.found) {
-                    pill.state = LinkState.ONLINE
-                    val query = search.text.trim()
-                    if (query.isNotEmpty()) runSearch() else status.text = "Repotory MCP channel ready."
-                } else {
-                    pill.state = LinkState.OFFLINE
-                    status.text = resolution.problem ?: "repotory-mcp was not found."
-                    offerMcpBinaryOnce()
-                }
+        background({
+            McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
+        }) { resolution ->
+            if (resolution.found) {
+                pill.state = LinkState.ONLINE
+                showAnnouncement(ChatLevel.INFO, "Repotory MCP channel ready.")
+            } else {
+                pill.state = LinkState.OFFLINE
+                showAnnouncement(ChatLevel.WARN, resolution.problem ?: "repotory-mcp was not found.")
+                offerMcpBinaryOnce()
             }
         }
     }
@@ -741,10 +967,9 @@ class RepotoryPanel : JPanel(), Disposable {
      * file. The notice lists every directory that was tried: "not found"
      * without the list is not actionable.
      *
-     * A BALLOON, not a modal dialog: the channel can be down on every
-     * keystroke while the user types, and a dialog nobody asked for would
-     * interrupt that work. This is the same posture the VS Code extension
-     * takes — a notification with buttons, not a blocking dialog.
+     * A NOTIFICATION, not a modal dialog: the channel can be down on every
+     * question the user asks, and a dialog nobody asked for would interrupt
+     * that work.
      */
     private fun offerMcpBinaryOnce() {
         if (mcpHelpOffered) return
@@ -779,7 +1004,7 @@ class RepotoryPanel : JPanel(), Disposable {
     }
 
     /**
-     * Starts the local Repotory service and retries the query.
+     * Starts the local Repotory service.
      *
      * The local service is an OPTIONAL enhancement since ADR-0035 decision 6:
      * the panel's data comes over MCP, and the service is only needed for the
@@ -794,345 +1019,244 @@ class RepotoryPanel : JPanel(), Disposable {
         if (disposed || starting) return
         starting = true
         pill.state = LinkState.STARTING
-        status.text = "Starting the local Repotory service…"
+        showAnnouncement(ChatLevel.INFO, "Starting the local Repotory service…")
         val serverUrl = RepotorySettings.serverUrl()
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
-            val outcome = repotoryServer.start(serverUrl) { message ->
-                app.invokeLater {
-                    if (!disposed) status.text = message
+        background({
+            repotoryServer.start(serverUrl) { message ->
+                ApplicationManager.getApplication().invokeLater {
+                    if (!disposed) showAnnouncement(ChatLevel.INFO, message)
                 }
             }
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                starting = false
-                when (outcome) {
-                    is StartOutcome.Started -> {
-                        if (!outcome.healthy) {
-                            // The process is up but /health never answered:
-                            // say so instead of promising a service that is
-                            // not there yet.
-                            pill.state = LinkState.STARTING
-                            status.text = "The server process is running but is not answering yet — " +
-                                "click the status pill to retry."
-                        } else {
-                            pill.state = LinkState.ONLINE
-                            status.text = if (outcome.webUi) {
-                                "Service on port ${outcome.port}. Searching again…"
-                            } else {
-                                "Service on port ${outcome.port} (API-only — “Open in Repotory” would 404). " +
-                                    "Searching again…"
-                            }
-                            runSearch()
-                        }
-                    }
-                    StartOutcome.AlreadyRunning -> {
+        }) { outcome ->
+            starting = false
+            when (outcome) {
+                is StartOutcome.Started -> {
+                    if (!outcome.healthy) {
+                        // The process is up but /health never answered:
+                        // say so instead of promising a service that is
+                        // not there yet.
+                        pill.state = LinkState.STARTING
+                        showAnnouncement(
+                            ChatLevel.WARN,
+                            "The server process is running but is not answering yet — " +
+                                "click the status pill to retry.",
+                        )
+                    } else {
                         pill.state = LinkState.ONLINE
-                        status.text = "The service is already running. Searching again…"
-                        runSearch()
-                    }
-                    is StartOutcome.BinaryMissing -> {
-                        pill.state = LinkState.OFFLINE
-                        status.text = "No repotory-server binary found — set its path in " +
-                            "Settings | Tools | Repotory."
-                        // The user PRESSED the button, so a dialog is welcome
-                        // here — this is not the panel interrupting itself. It
-                        // offers the file picker and the release page, the
-                        // same two ways out the VS Code extension gives.
-                        if (offerServerBinaryHelp(outcome.searched)) {
-                            startLocalService()
-                        }
-                    }
-                    is StartOutcome.Failed -> {
-                        pill.state = LinkState.OFFLINE
-                        status.text = outcome.message
+                        showAnnouncement(
+                            ChatLevel.INFO,
+                            if (outcome.webUi) {
+                                "Service on port ${outcome.port}."
+                            } else {
+                                "Service on port ${outcome.port} (API-only — “Open in Repotory” would 404)."
+                            },
+                        )
                     }
                 }
-            }
-        }
-    }
-
-
-    // ------------------------------------------------------------- actions
-
-    /** The selected hit, when it is a note (a todo has no note row to edit). */
-    private fun selectedNote(): RepotoryHit? = list.selectedValue?.takeIf { it.type == "note" }
-
-    private fun copySelected() {
-        val hit = list.selectedValue ?: return
-        val app = ApplicationManager.getApplication()
-        // The full body is one loopback call away, but the EDT must not wait
-        // for it: copy on a pooled thread, then report on the EDT.
-        app.executeOnPooledThread {
-            val body = when (hit.type) {
-                "note" -> repotoryMcp.note(hit.id)?.body
-                "wiki" -> repotoryMcp.wikiPage(hit.id)?.content
-                else -> null
-            }
-            val text = buildString {
-                appendLine(hit.title.ifBlank { "(untitled)" })
-                appendLine()
-                append(body ?: snippetPlain(hit.snippet, 2000))
-            }
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                CopyPasteManager.getInstance().setContents(StringSelection(text))
-                status.text = "Copied to clipboard"
-            }
-        }
-    }
-
-    // ------------------------------------------------------- maintenance
-
-    /**
-     * Edit the selected note. The hit is re-read (it carries only the
-     * excerpt), the shared editor dialog opens, and an OK saves fields first
-     * and the project change second — a failed move must not lose the
-     * edit the user just made.
-     */
-    private fun editSelected() {
-        val hit = selectedNote() ?: return
-        status.text = "Loading note #${hit.id}…"
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
-            val note = repotoryMcp.note(hit.id)
-            val projects = repotoryMcp.projects()
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                if (note == null) {
-                    status.text = "Note #${hit.id} could not be read — nothing to edit"
-                    return@invokeLater
+                StartOutcome.AlreadyRunning -> {
+                    pill.state = LinkState.ONLINE
+                    showAnnouncement(ChatLevel.INFO, "The service is already running.")
                 }
-                openEditor(
-                    NoteDraft(
-                        id = note.id,
-                        projectId = note.projectId,
-                        title = note.title,
-                        tags = note.tags,
-                        kind = note.kind.ifBlank { "knowledge" },
-                        content = note.body,
-                        pinned = note.pinned,
-                    ),
-                    projects, proposal = false, warning = "",
-                )
-            }
-        }
-    }
-
-    /** New note under the SAME project as the selected note. */
-    private fun newNoteUnderSelectedProject() {
-        val hit = selectedNote() ?: return
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
-            val projects = repotoryMcp.projects()
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                openEditor(
-                    NoteDraft(id = 0, projectId = hit.projectId, title = "", tags = "", kind = "knowledge", content = ""),
-                    projects, proposal = false, warning = "",
-                )
-            }
-        }
-    }
-
-    /**
-     * AI tidy: ask the service for a reorganization PROPOSAL and open the
-     * SAME editor with it. Nothing is written by the service; the user's save
-     * is the gate. The stored note is re-read so kind and pinned carry into
-     * the draft (the proposal covers title/tags/content only).
-     */
-    private fun organizeSelected() {
-        val hit = selectedNote() ?: return
-        status.text = "AI tidying note #${hit.id}… (this can take a while)"
-        val app = ApplicationManager.getApplication()
-        val reportFailure = { message: String ->
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                status.text = message
-            }
-        }
-        app.executeOnPooledThread {
-            val proposal = try {
-                repotoryMcp.organizeNote(hit.id)
-            } catch (e: McpException) {
-                reportFailure(e.message ?: "整理失败")
-                return@executeOnPooledThread
-            } catch (e: Exception) {
-                reportFailure("整理失败：${e.message ?: e.javaClass.simpleName}")
-                return@executeOnPooledThread
-            }
-            val note = repotoryMcp.note(hit.id)
-            val projects = repotoryMcp.projects()
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                openEditor(
-                    NoteDraft(
-                        id = if (proposal.noteId > 0) proposal.noteId else hit.id,
-                        projectId = note?.projectId ?: hit.projectId,
-                        title = proposal.title,
-                        tags = proposal.tags,
-                        kind = note?.kind?.ifBlank { "knowledge" } ?: "knowledge",
-                        content = proposal.content,
-                        pinned = note?.pinned ?: false,
-                    ),
-                    projects, proposal = true, warning = proposal.warning,
-                )
-            }
-        }
-    }
-
-    /** Opens the shared editor; an OK saves through [saveDraft]. */
-    private fun openEditor(
-        original: NoteDraft,
-        projects: List<ProjectOption>,
-        proposal: Boolean,
-        warning: String,
-    ) {
-        val dialog = NoteEditorDialog(null, original, projects, proposal, warning)
-        if (!dialog.showAndGet()) {
-            status.text = "Edit cancelled — nothing saved"
-            return
-        }
-        saveDraft(original, dialog.editedDraft())
-    }
-
-    /**
-     * Persists an edited draft: UpdateNoteFull, then MoveNote when the project
-     * changed. The detail pane is repainted from the freshly stored note, so
-     * what is on screen is what is in the database.
-     */
-    private fun saveDraft(original: NoteDraft, edited: NoteDraft) {
-        val serverUrl = RepotorySettings.serverUrl()
-        status.text = if (edited.id == 0L) "Creating note…" else "Saving note #${edited.id}…"
-        val app = ApplicationManager.getApplication()
-        app.executeOnPooledThread {
-            if (edited.id == 0L) {
-                val created = try {
-                    repotoryMcp.createNote(edited)
-                } catch (e: Exception) {
-                    app.invokeLater {
-                        if (disposed) return@invokeLater
-                        status.text = "Create failed: ${e.message ?: e.javaClass.simpleName}"
+                is StartOutcome.BinaryMissing -> {
+                    pill.state = LinkState.OFFLINE
+                    showAnnouncement(
+                        ChatLevel.WARN,
+                        "No repotory-server binary found — set its path in Settings | Tools | Repotory.",
+                    )
+                    // The user PRESSED the button, so a dialog is welcome
+                    // here — this is not the panel interrupting itself. It
+                    // offers the file picker and the release page, the
+                    // same two ways out the VS Code extension gives.
+                    if (offerServerBinaryHelp(outcome.searched)) {
+                        startLocalService()
                     }
-                    return@executeOnPooledThread
                 }
-                app.invokeLater {
-                    if (disposed) return@invokeLater
-                    // The new note is not in the current result list; show it
-                    // in full so the user sees exactly what was stored.
-                    status.text = "Created note #${created.id}"
-                    detail.text = noteHtml(created)
-                    detail.caretPosition = 0
+                is StartOutcome.Failed -> {
+                    pill.state = LinkState.OFFLINE
+                    showAnnouncement(ChatLevel.ERROR, outcome.message)
                 }
-                return@executeOnPooledThread
-            }
-            val updated = try {
-                repotoryMcp.updateNote(edited)
-            } catch (e: Exception) {
-                app.invokeLater {
-                    if (disposed) return@invokeLater
-                    status.text = "Save failed: ${e.message ?: e.javaClass.simpleName}"
-                }
-                return@executeOnPooledThread
-            }
-            // MoveNote stays on HTTP on purpose (ADR-0035 decision 2): moving
-            // a note between projects is a human decision, not an agent's. It
-            // is the ONE write that still needs the local service — and when
-            // the service is down the fields ARE saved, so the wording must
-            // say "the move failed", never "the save failed".
-            val moveError = if (original.projectId != 0L && edited.projectId != original.projectId) {
-                try {
-                    repotoryClient.moveNote(serverUrl, edited.id, edited.projectId)
-                    null
-                } catch (e: Exception) {
-                    e.message ?: e.javaClass.simpleName
-                }
-            } else {
-                null
-            }
-            // The MCP tool answers with the note as stored, so the pane is
-            // repainted from what was actually written — one round trip less
-            // than reading it back.
-            val fresh = updated
-            // The MCP surface cannot CLEAR a title (an empty value means
-            // "keep what is there"), so a title the user emptied survives the
-            // write. Saying so beats reporting a success that did not do
-            // what was asked.
-            val titleKept = edited.title.isEmpty() && updated.title.isNotEmpty()
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                status.text = when {
-                    moveError != null ->
-                        "Fields saved, but the project move failed: $moveError " +
-                            "(moving a note between projects needs the local Repotory service)."
-                    titleKept ->
-                        "Saved note #${edited.id}, but the title could not be cleared — " +
-                            "the MCP write path keeps the old title."
-                    else -> "Saved note #${edited.id}"
-                }
-                detail.text = noteHtml(fresh)
-                detail.caretPosition = 0
             }
         }
     }
 
-    private fun openSelected() {
-        val hit = list.selectedValue ?: return
-        val serverUrl = RepotorySettings.serverUrl()
-        val url = repotoryClient.deepLink(serverUrl, hit)
+    // ------------------------------------------------------------- the plumbing
+
+    /** Run work off the EDT. */
+    private fun background(work: () -> Unit) {
+        if (disposed) return
+        ApplicationManager.getApplication().executeOnPooledThread { work() }
+    }
+
+    /** Run work off the EDT and report its outcome back on the EDT. */
+    private fun <T> background(work: () -> T, then: (T) -> Unit) {
+        if (disposed) return
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
-            // Asked before every jump rather than cached: the answer is cheap
-            // (one loopback GET) and it changes the moment the user restarts
-            // the server with --web-dist.
-            val servesUi = repotoryClient.servesWebUi(serverUrl)
-            app.invokeLater {
-                if (disposed) return@invokeLater
-                if (servesUi) {
-                    status.text = "Opened $url"
-                    BrowserUtil.browse(url)
-                } else {
-                    status.text = "Repotory is running API-only — this link would land on a 404"
-                    offerFallback(url)
-                }
-            }
-        }
-    }
-
-    /**
-     * The headless server serves its web UI only when it was started with
-     * `--web-dist` (cmd/server/main.go); without it every non-/api path is
-     * a 404 and the deep link goes nowhere. A server the plugin started carries
-     * its sibling `web/` automatically (RepotoryServer.kt); for one the user
-     * started by hand, the plugin cannot add the flag — but it can stop the
-     * user from landing on a bare 404 with no explanation.
-     */
-    private fun offerFallback(url: String) {
-        val choice = Messages.showDialog(
-            "Repotory answered, but it is not serving its web UI, so this link lands on a 404 page.\n\n" +
-                "Either restart the running server with:\n" +
-                "  repotory-server --port 18765 --web-dist <release bundle>/web\n" +
-                "or stop it and press the start button, which launches the release bundle " +
-                "together with its web/ directory.\n\n" +
-                "URL: $url",
-            "Repotory: web UI not available",
-            arrayOf("Open Anyway", "Copy URL", "Cancel"),
-            2,
-            Messages.getWarningIcon(),
-        )
-        when (choice) {
-            0 -> BrowserUtil.browse(url)
-            1 -> {
-                CopyPasteManager.getInstance().setContents(StringSelection(url))
-                status.text = "URL copied to clipboard"
-            }
-            else -> status.text = "Cancelled — the link would have 404ed"
+            val result = work()
+            app.invokeLater { if (!disposed) then(result) }
         }
     }
 
     override fun dispose() {
         disposed = true
-        debounce.stop()
+    }
+}
+
+/**
+ * The composer's text field: a multi-line box that grows with its content and
+ * shows the mode's placeholder while it is empty.
+ *
+ * Enter sends, Shift+Enter breaks the line — the same convention the VS Code
+ * console uses, so the muscle memory carries over.
+ */
+private class ChatTextArea : JTextArea() {
+    /** The hint shown while the field is empty. */
+    var placeholder: String = ""
+
+    /** Called when the reader presses Enter. */
+    var onSubmit: (() -> Unit)? = null
+
+    /** Called when the field's height changed and the panel has to follow. */
+    var onResize: (() -> Unit)? = null
+
+    init {
+        lineWrap = true
+        wrapStyleWord = true
+        rows = 1
+        font = Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(12))
+        border = JBUI.Borders.empty(2, 4)
+        addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent) {
+                if (e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown) {
+                    e.consume()
+                    onSubmit?.invoke()
+                }
+            }
+        })
+        addFocusListener(object : FocusAdapter() {
+            override fun focusGained(e: FocusEvent) = fitHeight()
+        })
+        document.addDocumentListener(object : javax.swing.event.DocumentListener {
+            override fun insertUpdate(e: javax.swing.event.DocumentEvent?) = fitHeight()
+            override fun removeUpdate(e: javax.swing.event.DocumentEvent?) = fitHeight()
+            override fun changedUpdate(e: javax.swing.event.DocumentEvent?) = fitHeight()
+        })
+    }
+
+    /** Grow the field with its content, up to a readable ceiling. */
+    fun fitHeight() {
+        val width = width.coerceAtLeast(JBUI.scale(220))
+        val metrics = getFontMetrics(font)
+        val lines = text.split("\n").sumOf { line ->
+            if (line.isEmpty()) 1 else maxOf(1, ceil(metrics.stringWidth(line).toDouble() / width).toInt())
+        }
+        val wanted = lines.coerceIn(1, 8)
+        if (rows != wanted) {
+            rows = wanted
+            onResize?.invoke()
+        }
+    }
+
+    override fun paintComponent(g: Graphics) {
+        super.paintComponent(g)
+        if (text.isNotEmpty() || placeholder.isEmpty()) return
+        g.color = UIUtil.getContextHelpForeground()
+        val metrics = g.fontMetrics
+        g.drawString(placeholder, insets.left + 2, insets.top + metrics.ascent)
+    }
+}
+
+/**
+ * The announcement bar: one line, with a background, dismissible.
+ *
+ * It replaces the old status line (ADR-0036 decision 5): the status of the
+ * panel is not a footnote under the conversation, it is a banner above it.
+ */
+private class AnnouncementBar : JPanel(BorderLayout(JBUI.scale(6), 0)) {
+    private val message = AnnouncementText()
+    private val dismiss = JButton("✕")
+
+    /** Called when the reader dismisses the banner. */
+    var onDismiss: (() -> Unit)? = null
+
+    init {
+        isVisible = false
+        border = JBUI.Borders.compound(
+            JBUI.Borders.customLineBottom(JBColor.border()),
+            JBUI.Borders.empty(5, 8),
+        )
+        message.foreground = JBColor.foreground()
+        dismiss.margin = Insets(0, 2, 0, 2)
+        dismiss.toolTipText = "Dismiss"
+        dismiss.addActionListener { onDismiss?.invoke() }
+        add(message, BorderLayout.CENTER)
+        add(dismiss, BorderLayout.EAST)
+    }
+
+    /** Show a message, replacing whatever was there. */
+    fun show(level: ChatLevel, text: String) {
+        message.text = text
+        background = when (level) {
+            ChatLevel.INFO -> JBColor.background()
+            ChatLevel.WARN -> JBColor(Color(0xFF, 0xF6, 0xD5), Color(0x3B, 0x33, 0x14))
+            ChatLevel.ERROR -> JBColor(Color(0xFF, 0xE6, 0xE6), Color(0x3B, 0x1F, 0x1F))
+        }
+        isVisible = true
+        revalidate()
+        repaint()
+    }
+
+    /** Take the banner down; the panel keeps its state, the banner does not. */
+    fun dismiss() {
+        message.text = ""
+        isVisible = false
+        revalidate()
+        repaint()
+    }
+}
+
+/**
+ * The announcement bar's text.
+ *
+ * It wraps: the messages say things like "The local Repotory service is not
+ * reachable at http://127.0.0.1:18765 — the project lock needs it, so the
+ * panel searches across all projects", and a label that cannot wrap either
+ * clips that sentence or claims the whole width of the panel and pushes the
+ * dismiss button off the edge.
+ */
+private class AnnouncementText : JTextArea() {
+    init {
+        isEditable = false
+        isOpaque = false
+        isFocusable = false
+        lineWrap = true
+        wrapStyleWord = true
+        border = JBUI.Borders.empty(0)
+        font = UIManager.getFont("Label.font") ?: font
+        rows = 1
+        addComponentListener(object : java.awt.event.ComponentAdapter() {
+            override fun componentResized(e: java.awt.event.ComponentEvent) = fit()
+        })
+    }
+
+    override fun setText(t: String?) {
+        super.setText(t)
+        fit()
+    }
+
+    /** Rows the wrapped text needs at the width this field currently has. */
+    private fun fit() {
+        val needed = rowsFor(text)
+        if (needed != rows) rows = needed
+    }
+
+    private fun rowsFor(value: String): Int {
+        if (value.isBlank()) return 1
+        // ~6px per character at the label font. Before the first layout the
+        // width is still zero, so a scaled guess stands in.
+        val usable = if (width > 0) width else JBUI.scale(280)
+        val perLine = maxOf(16, usable / 6)
+        return ceil(value.length.toDouble() / perLine).toInt().coerceIn(1, 3)
     }
 }
 
@@ -1141,7 +1265,7 @@ class RepotoryPanel : JPanel(), Disposable {
  *
  * It replaces the old "start the service" button, which only appeared after
  * a search had already failed. The pill is always visible, so the reader
- * always knows whether the service is there — and clicking it is the way to
+ * always knows whether the channel is there — and clicking it is the way to
  * try again.
  */
 private class ConnectionPill : JPanel(BorderLayout(JBUI.scale(5), 0)) {
@@ -1163,8 +1287,8 @@ private class ConnectionPill : JPanel(BorderLayout(JBUI.scale(5), 0)) {
         add(dot, BorderLayout.WEST)
         add(label, BorderLayout.CENTER)
         cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-        addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent) {
+        addMouseListener(object : java.awt.event.MouseAdapter() {
+            override fun mouseClicked(e: java.awt.event.MouseEvent) {
                 onClick?.invoke()
             }
         })
@@ -1176,7 +1300,7 @@ private class ConnectionPill : JPanel(BorderLayout(JBUI.scale(5), 0)) {
             LinkState.ONLINE -> Triple(
                 JBColor(Color(0x3F, 0x8F, 0x4E), Color(0x73, 0xBD, 0x79)),
                 "online",
-                "The Repotory MCP channel is ready — searching, reading and writing work now. " +
+                "The Repotory MCP channel is ready — asking, searching, reading and writing work now. " +
                     "The local service is only needed for deep links and moving a note between projects. " +
                     "Click to re-check.",
             )
@@ -1223,134 +1347,6 @@ private class ColorDotIcon(private val size: Int, var color: Color) : Icon {
         } finally {
             g2.dispose()
         }
-    }
-}
-
-/**
- * A label that shortens its text with an ellipsis instead of cutting it.
- *
- * A plain JLabel simply draws past its own bounds — the words are chopped
- * mid-word with no sign that something was cut. An ellipsis says "there is
- * more" instead.
- */
-private class ElidingLabel(full: String) : JLabel() {
-    private var fullText: String = full
-
-    init {
-        text = full
-    }
-
-    override fun setSize(w: Int, h: Int) {
-        super.setSize(w, h)
-        elide()
-    }
-
-    private fun elide() {
-        if (width <= 0) return
-        val metrics = getFontMetrics(font)
-        if (metrics.stringWidth(fullText) <= width) {
-            if (text != fullText) text = fullText
-            return
-        }
-        var cut = fullText
-        while (cut.isNotEmpty() && metrics.stringWidth(cut + "…") > width) {
-            cut = cut.dropLast(1)
-        }
-        val elided = if (cut.isEmpty()) "…" else "$cut…"
-        if (text != elided) text = elided
-    }
-}
-
-/**
- * One thumbnail: kind badge, title, matched excerpt.
- *
- * A JPanel (not a JLabel) so the badge and the title sit on one row with
- * different colours; opaque, because a transparent renderer shows the
- * list's own stripes through the card. Selection colours come from the
- * JList, so the row follows the IDE theme.
- */
-private class ThumbRenderer : JPanel(BorderLayout(JBUI.scale(6), 0)), javax.swing.ListCellRenderer<RepotoryHit> {
-    private val badge = JLabel()
-    private val title = ElidingLabel("")
-    private val snippet = ElidingLabel("")
-
-    /** The list this row belongs to; its viewport says how wide the row may be. */
-    private var owner: JList<out RepotoryHit>? = null
-
-    init {
-        isOpaque = true
-        border = JBUI.Borders.empty(6, 10)
-        val row = JPanel(BorderLayout(JBUI.scale(6), 0))
-        row.isOpaque = false
-        badge.font = badge.font.deriveFont(JBUI.scaleFontSize(9f).toFloat())
-        badge.border = JBUI.Borders.empty(1, 4)
-        row.add(badge, BorderLayout.WEST)
-        title.font = title.font.deriveFont(Font.BOLD, JBUI.scaleFontSize(12f).toFloat())
-        row.add(title, BorderLayout.CENTER)
-        add(row, BorderLayout.NORTH)
-        snippet.font = snippet.font.deriveFont(JBUI.scaleFontSize(11f).toFloat())
-        add(snippet, BorderLayout.CENTER)
-    }
-
-    override fun getListCellRendererComponent(
-        list: JList<out RepotoryHit>?,
-        value: RepotoryHit?,
-        index: Int,
-        isSelected: Boolean,
-        cellHasFocus: Boolean,
-    ): Component {
-        val hit = value
-        if (hit == null) {
-            title.text = ""
-            snippet.text = ""
-            badge.text = ""
-            return this
-        }
-        owner = list
-        badge.text = badgeLabel(hit).uppercase()
-        badge.foreground = when (hit.type) {
-            "todo" -> BADGE_TODO
-            "wiki" -> BADGE_WIKI
-            else -> BADGE_NOTE
-        }
-        badge.border = BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(badge.foreground, 1),
-            JBUI.Borders.empty(1, 4),
-        )
-        title.text = hit.title.ifBlank { "(untitled)" }
-        title.toolTipText = hit.title
-        snippet.text = if (hit.snippet.isBlank()) " " else snippetPlain(hit.snippet)
-        snippet.toolTipText = snippetPlain(hit.snippet, 600)
-
-        if (isSelected) {
-            background = list?.selectionBackground
-            foreground = list?.selectionForeground
-            title.foreground = list?.selectionForeground
-            snippet.foreground = list?.selectionForeground
-        } else {
-            background = list?.background
-            foreground = list?.foreground
-            title.foreground = list?.foreground
-            snippet.foreground = JBColor(Color(0x6A, 0x6A, 0x6A), Color(0x94, 0x94, 0x94))
-        }
-        return this
-    }
-
-    /**
-     * The row is as wide as the pane shows it, not as wide as its text.
-     *
-     * A JList lays its cells out at the LIST's width, and the list's width
-     * is its preferred width — which, for a row renderer, is the width of
-     * the longest label. A long excerpt therefore made the list wider than
-     * the pane, and the text ran under the split divider and was chopped in
-     * half instead of ending in an ellipsis. Reporting the viewport's width
-     * instead lays the row out exactly as wide as it is seen, so the
-     * eliding labels do their job.
-     */
-    override fun getPreferredSize(): Dimension {
-        val preferred = super.getPreferredSize()
-        val visible = (owner?.parent as? JViewport)?.extentSize?.width ?: 0
-        return if (visible > 0) Dimension(visible, preferred.height) else preferred
     }
 }
 

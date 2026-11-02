@@ -592,6 +592,13 @@ jobs:
       - name: Bundled repotory-init is in sync
         run: git diff --exit-code -- repotory-init/index.mjs
 
+      # The chat console's parsers are pure functions with no editor around
+      # them (the ask answer's source list, the project lock's filters), so
+      # they are unit-tested here. `npm test` compiles first: the tests run
+      # against the compiled output, the same code the VSIX ships.
+      - name: Unit tests
+        run: npm test
+
 
   # ------------------------------------------------------ JetBrains plugin ----
   # Same reasoning as the VS Code job above: release.yml does not build the

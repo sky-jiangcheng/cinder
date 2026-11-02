@@ -1,6 +1,7 @@
 // Thin HTTP helper for the Repotory headless service (repotory server).
 // The headless API is loopback-only by design (see internal/httpapi/server.go).
 import * as http from "node:http";
+import type { AskAnswer, EvidenceSource, ProjectOption } from "./chatTypes.js";
 
 export function getJson(base: string, path: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -163,6 +164,37 @@ export interface WikiPageDetail {
 }
 
 /**
+ * True when the running server also serves the Repotory web UI.
+ *
+ * A headless server started without `--web-dist` answers the API but 404s
+ * every other path, so a deep link opened against it lands the user on a dead
+ * page with no explanation. The probe asks for the SPA root and requires an
+ * HTML answer: a 404 from the API mux, or a JSON body, means there is no web
+ * UI here.
+ *
+ * The JetBrains plugin asks the same question the same way
+ * (RepotoryClient.servesWebUi): deep links are best-effort in BOTH IDEs
+ * (ADR-0035 decision 6), and the two must not drift apart on what counts as
+ * "the UI is there".
+ */
+export async function servesWebUi(base: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.request(base.replace(/\/+$/, "") + "/", { method: "GET" }, (res) => {
+      const type = String(res.headers["content-type"] ?? "").toLowerCase();
+      resolve(res.statusCode === 200 && type.includes("text/html"));
+      // Drain the body so the socket can be reused/closed cleanly.
+      res.resume();
+    });
+    req.on("error", () => resolve(false));
+    req.setTimeout(4000, () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.end();
+  });
+}
+
+/**
  * Parse the `repotory_wiki_search` tool result into page summaries.
  *
  * The result is a bare JSON array, like every other list tool (see
@@ -206,10 +238,7 @@ export function excerpt(text: unknown, max = 90): string {
 }
 
 /** One project as the webview's project dropdown needs it. */
-export interface ProjectOption {
-  id: number;
-  name: string;
-}
+export type { ProjectOption };
 
 /**
  * Parse the `repotory_projects_list` tool result into dropdown options.
@@ -270,4 +299,149 @@ export function parseOrganizeProposal(text: string): OrganizeProposal | undefine
     tags: typeof obj.tags === "string" ? obj.tags : "",
     warning: typeof obj.warning === "string" && obj.warning ? obj.warning : undefined,
   };
+}
+
+// --------------------------------------------------------------- ask answers
+
+/**
+ * One source line of an `repotory_ask` answer.
+ *
+ * The tool writes it with Go's %q for the title, so the title may carry
+ * backslash escapes ("a \"quoted\" title") and the id space is "page" or
+ * "note" (service.EvidenceItem.Type). The shape is:
+ *
+ *     [P1] page "Some title" (id 42, slug some-slug, project Repotory)
+ *     [N3] note "Another title" (id 7, project Repotory)
+ *
+ * The slug and the project name are optional; the id is not.
+ */
+const ASK_SOURCE_LINE = /^\[([A-Za-z]?\d+)\]\s+(\S+)\s+"((?:[^"\\]|\\.)*)"\s*\((.*)\)\s*$/;
+
+/** The parenthesised tail: `id 42[, slug s][, project P]`. */
+const ASK_SOURCE_META = /^id (\d+)(?:, slug ([^,]*))?(?:, project (.*))?$/;
+
+/**
+ * The trailing note the tool appends when the context budget dropped
+ * matches. It is an annotation, not a source — and it must not be mistaken
+ * for a malformed one.
+ */
+const ASK_OMITTED_LINE = /^\(\d+ further match\(es\) omitted[^)]*\)$/;
+
+/** The marker the tool puts between the reply and the source list. */
+const ASK_SOURCES_MARKER = "\n\nSources:\n";
+
+/**
+ * Parse the `repotory_ask` answer into the reply and its sources.
+ *
+ * The tool answers in TEXT (ADR-0033): a reply, then a source list. The
+ * marker is searched from the END, because a reply may legitimately contain
+ * the word "Sources:" — the real list is always the last one.
+ *
+ * A source line that does not match the contract means the contract changed
+ * (or the model wrote into the list). The whole text is then returned
+ * UNPARSED, so the caller shows it verbatim: half a source list is worse
+ * than no parsing, because the reader cannot tell what was dropped.
+ */
+export function parseAskAnswer(text: string): AskAnswer {
+  const raw = text ?? "";
+  const at = raw.lastIndexOf(ASK_SOURCES_MARKER);
+  if (at < 0) {
+    // No source list at all: a keyword fallback, or a reply with no evidence.
+    // That is a complete answer, not a parse failure.
+    return { answer: raw.trim(), raw, sources: [], parsed: true };
+  }
+  const answer = raw.slice(0, at).trim();
+  const sources: EvidenceSource[] = [];
+  for (const line of raw.slice(at + ASK_SOURCES_MARKER.length).split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (ASK_OMITTED_LINE.test(trimmed)) continue;
+    const match = ASK_SOURCE_LINE.exec(trimmed);
+    if (!match) return { answer: "", raw, sources: [], parsed: false };
+    const meta = ASK_SOURCE_META.exec(match[4]?.trim() ?? "");
+    if (!meta) return { answer: "", raw, sources: [], parsed: false };
+    sources.push({
+      ref: match[1] ?? "",
+      type: match[2] ?? "",
+      title: unquoteGo(match[3] ?? ""),
+      id: Number(meta[1]),
+      slug: meta[2] ? meta[2] : undefined,
+      project: meta[3] ? meta[3] : undefined,
+    });
+  }
+  return { answer, raw, sources, parsed: true };
+}
+
+/**
+ * Undo Go's %q quoting of a source title.
+ *
+ * The service writes titles with %q, so a title with a quote, a backslash or
+ * a newline arrives escaped. Anything this does not recognise is kept
+ * verbatim (backslash included) rather than dropped.
+ */
+export function unquoteGo(text: string): string {
+  if (!text.includes("\\")) return text;
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch !== "\\") {
+      out += ch;
+      continue;
+    }
+    const next = text[i + 1];
+    i++;
+    switch (next) {
+      case "n":
+        out += "\n";
+        break;
+      case "t":
+        out += "\t";
+        break;
+      case "r":
+        out += "\r";
+        break;
+      case "a":
+        out += "\x07";
+        break;
+      case "b":
+        out += "\b";
+        break;
+      case "f":
+        out += "\f";
+        break;
+      case "v":
+        out += "\x0b";
+        break;
+      case "\\":
+        out += "\\";
+        break;
+      case '"':
+        out += '"';
+        break;
+      case "x": {
+        const hex = text.slice(i + 1, i + 3);
+        if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+          out += String.fromCharCode(parseInt(hex, 16));
+          i += 2;
+        } else {
+          out += "\\x";
+        }
+        break;
+      }
+      case "u": {
+        const hex = text.slice(i + 1, i + 5);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          out += String.fromCharCode(parseInt(hex, 16));
+          i += 4;
+        } else {
+          out += "\\u";
+        }
+        break;
+      }
+      default:
+        out += next === undefined ? "\\" : "\\" + next;
+        break;
+    }
+  }
+  return out;
 }

@@ -182,7 +182,7 @@ The family above is the write side, and those are human acts; this family is the
 | `SearchWikiPages(projectID, query, limit)` | searches approved pages (bm25 + CJK relaxation); the scope matches the evidence path exactly: a project scope means that project's pages **plus the global ones**, no scope means all of them |
 | `GetWikiPage(pageID)` | reads one page's body, slug, kind, scope, outbound / inbound edges and the ids of the notes it was compiled from; **anything that is not approved is refused** (the gate governs reading too) |
 
-All three have MCP twins (`repotory_wiki_search` / `repotory_wiki_read`), and both IDE distribution surfaces consume them (the VS Code sidebar, the JetBrains tool window) — the plugins only call the bindings, they never write retrieval of their own.
+All three have MCP twins (`repotory_wiki_search` / `repotory_wiki_read`), and both IDE distribution surfaces consume them (the VS Code chat console, the JetBrains tool window) — the plugins only call the bindings, they never write retrieval of their own.
 
 **Human browsing does not write `access_count`**: that column means "this page was surfaced into some answer's evidence", and a human opening a page is a different visit — mixing them would make one signal carry two meanings. See ADR-0032.
 
