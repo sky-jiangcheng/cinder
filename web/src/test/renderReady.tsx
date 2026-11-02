@@ -26,8 +26,10 @@ import type { ReactElement } from 'react'
 //    because fake timers appear only in the `renderHook` tests
 //    (`useDebouncedCallback`, `useConfirmClick`, `useScanPolling`, `useApiData`),
 //    none of which goes through `renderReady`. Never combine the two.
-// 2. Scope is the four files that share `MemoryRouter` + mocked i18n:
-//    `Review`, `Home`, `Dashboard`, `Search`. `AiTab` (no router, required
+// 2. Scope is the files that share `MemoryRouter` + mocked i18n:
+//    `Review`, `Home`, `Dashboard`, `Knowledge`. (`Search` was deleted by
+//    ADR-0038 — the search page is now the console's search mode.) `AiTab`
+//    (no router, required
 //    props), `NotFound` and `App.smoke` (real i18n instance) are deliberately
 //    OUT — they get no `settle()` floor, so an interaction test written there
 //    must wait for its own data. The split is not merged into one helper because

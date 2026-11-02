@@ -104,6 +104,28 @@
   max-width: 72ch;
 }
 
+/* ---------- Tab strip (ADR-0039 decision 2) ---------- */
+
+/* The strip is the page's only section switcher. The buttons themselves are
+   the design system's global .tab-btn / .tab-active (TabStrip renders them),
+   so only the box around the strip belongs to this module. */
+.tabStrip {
+  /* Switching tabs scrolls the strip back to the top of the scrollport.
+     .mainContent is the scroller (not the window), and the pinned toolbar
+     above covers roughly the first 43px of it — the offset leaves the strip
+     clear of that bar instead of tucking it underneath. */
+  scroll-margin-top: 56px;
+}
+
+/* One panel = one tab's content. The tab label is the heading, so a panel
+   never repeats it; what a panel still carries is the copy that explains the
+   queue (mergeHint / scopeHint / rejectedHint). */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .sectionHead {
   display: flex;
   align-items: center;
@@ -116,16 +138,6 @@
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-
-.countChip {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border-radius: 999px;
-  padding: 1px 9px;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Job rows ---------- */

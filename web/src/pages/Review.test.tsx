@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { lagged, renderReady } from '../test/renderReady'
 
 // Partial mock: override the backend-calling endpoints, keep everything else
@@ -44,7 +45,7 @@ import {
   findMergeCandidates, getProjects, listApprovedWikiPages, listCompileJobs, listPendingWikiPages,
   listRejectedWikiPages, listWikiPageVersions, mergeWikiPages, promoteWikiPageToGlobal,
   rejectWikiPage, runCommunitySummary, startCompileJob, startLintJob,
-  type MergeCandidate, type MergeCandidateReport, type WikiCommunityReport,
+  type CompileJob, type MergeCandidate, type MergeCandidateReport, type WikiCommunityReport,
   type WikiPageVersion, type WikiPendingPage,
 } from '../api/client'
 import ReviewPage, { jobErrorText } from './Review'
@@ -86,6 +87,19 @@ const approvedPage = (over: Partial<WikiPendingPage> = {}): WikiPendingPage => (
   ...over,
 })
 
+// A replaced page. Rejecting replaces a page with an error placeholder rather
+// than deleting it, so the row survives as a tombstone.
+const rejectedPage = (over: Partial<WikiPendingPage> = {}): WikiPendingPage => ({
+  page: {
+    id: 41, slug: 'broken-page', title: '编译失败页', kind: 'concept', project_id: 4,
+    content: '编译失败', updated_at: '2026-10-12 15:04:05', status: 'rejected', source: 'compiler',
+  },
+  source_note_ids: [],
+  out_links: [],
+  in_links: [],
+  ...over,
+})
+
 const candidate = (over: Partial<MergeCandidate> = {}): MergeCandidate => ({
   winner_id: 11, winner_slug: 'payment-gateway', loser_id: 3, loser_slug: 'gateway-payment',
   score: 7, signals: ['shared-notes', 'title-overlap'], shared_notes: 2, project_id: 4,
@@ -95,6 +109,14 @@ const candidate = (over: Partial<MergeCandidate> = {}): MergeCandidate => ({
 const report = (over: Partial<MergeCandidateReport> = {}): MergeCandidateReport => ({
   project_id: 4, pages: 12, pairs_scored: 9, pairs_possible: 66,
   candidates: [candidate()], truncated: false,
+  ...over,
+})
+
+const job = (over: Partial<CompileJob> = {}): CompileJob => ({
+  id: 31, project_id: 4, kind: 'compile', requested_notes: 3, status: 'succeeded',
+  notes_total: 3, notes_done: 3, pages_created: 2, pages_updated: 0, links_created: 1,
+  attachments: 0, revision_todos: 0, rejected_ops: 0, findings: 0,
+  created_at: '2026-10-12 15:04:05',
   ...over,
 })
 
@@ -114,9 +136,89 @@ const communityReport = (over: Partial<WikiCommunityReport> = {}): WikiCommunity
   ...over,
 })
 
+// The URL is part of the contract (?view= is the deep-link surface), so the
+// tests need to read it — and to walk it, the way the browser's back button
+// does.
+function LocationProbe() {
+  const loc = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <span data-testid="location">{loc.pathname + loc.search}</span>
+      <button type="button" data-testid="back" onClick={() => navigate(-1)}>back</button>
+    </>
+  )
+}
+
 // renderReady (ADR-0026) — the page fills its queues from a Promise.all inside a
 // useEffect, so returning before that settles is how this file used to flake.
-const renderReview = async () => { await renderReady(<ReviewPage />) }
+const renderReview = async (initial = '/review') => {
+  await renderReady(
+    <>
+      <LocationProbe />
+      <ReviewPage />
+    </>,
+    { initialEntries: [initial] },
+  )
+}
+
+// The tab strip (ADR-0039). A tab's accessible name is its label plus its
+// count badge, so the tab is found by the label prefix; the badge is the one
+// element inside the button whose own text is a number.
+const TAB_LABELS: Record<string, string> = {
+  pending: 'review.tabPending',
+  merge: 'review.tabMerge',
+  scope: 'review.tabScope',
+  jobs: 'review.tabJobs',
+  rejected: 'review.tabRejected',
+}
+
+function tabName(key: string): RegExp {
+  return new RegExp(`^${TAB_LABELS[key].replace(/\./g, '\\.')}`)
+}
+
+/** The tab of a queue. */
+function tab(key: string): HTMLElement {
+  return screen.getByRole('tab', { name: tabName(key) })
+}
+
+/** The tab of a queue, or null when that queue has no tab at all. */
+function queryTab(key: string): HTMLElement | null {
+  return screen.queryByRole('tab', { name: tabName(key) })
+}
+
+/** The count badge of a tab. */
+function tabCount(key: string): string {
+  return within(tab(key)).getByText(/^\d+$/).textContent ?? ''
+}
+
+/** The open panel — only the selected tab's panel is rendered. */
+function openPanel(): HTMLElement | null {
+  return screen.queryByRole('tabpanel')
+}
+
+/** The id of the open panel, e.g. "review-panel-merge". */
+function openPanelId(): string | undefined {
+  return openPanel()?.id
+}
+
+/** The rows of the open panel. */
+function rows(): HTMLElement[] {
+  const p = openPanel()
+  return p ? within(p).queryAllByRole('listitem') : []
+}
+
+/** Open a tab and wait for its panel. The tab itself may only appear once its
+ *  queue has loaded, so both are awaited. */
+async function openTab(key: string) {
+  const btn = await waitFor(() => {
+    const el = queryTab(key)
+    expect(el).toBeTruthy()
+    return el as HTMLElement
+  })
+  fireEvent.click(btn)
+  await waitFor(() => expect(openPanelId()).toBe(`review-panel-${key}`))
+}
 
 // The project filter renders one <option> per entry of `projects`, and that
 // state only lands after the load effect's getProjects() promise resolves. So
@@ -138,36 +240,12 @@ async function pickProject(id: number, name: string) {
   await waitFor(() => expect(select.value).toBe(String(id)))
 }
 
-// The merge-suggestion <section> carries no accessible name (just an <h2>), and a
-// document-wide `listitem` query would also count the pending and rejected card
-// lists — so these tests must scope to the container before counting rows.
-//
-// 一条实测事实：`no-node-access` 在调用点上会报同样的 `heading.closest('section')`，
-// 挪进函数后却完全不报。规则是看上下文的，这正是它只能当形态守卫、不能当时序保证的
-// 又一个理由（ADR-0026 条件 4）。此处不需要 disable 注释——写了反而会被报成
-// unused override。
-async function mergeSection(): Promise<HTMLElement> {
-  const heading = await screen.findByText('review.mergeHeading')
-  return heading.closest('section') as HTMLElement
-}
-
-function mergeRows(section: HTMLElement): HTMLLIElement[] {
-  return Array.from(section.querySelectorAll('li'))
-}
-
-// The scope section carries no accessible name either (just an <h2>), so its
-// rows are counted through the same container pattern as the merge section.
-async function scopeSection(): Promise<HTMLElement> {
-  const heading = await screen.findByText('review.scopeHeading')
-  return heading.closest('section') as HTMLElement
-}
-
-function scopeRows(section: HTMLElement): HTMLLIElement[] {
-  return Array.from(section.querySelectorAll('li'))
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
+  // jsdom has no layout engine, so scrollIntoView is missing. The page calls
+  // it when a tab switch returns the reader to the top of the new panel — a
+  // no-op is enough for the test.
+  Element.prototype.scrollIntoView = vi.fn()
   // The three promises ADR-0026 names as this page's load path. Under
   // REPO_TEST_LAG_MS they land late on purpose — that is the promotion-criterion-1
   // probe, and it is a no-op on every ordinary run.
@@ -185,6 +263,189 @@ beforeEach(() => {
   mockAssign.mockResolvedValue(undefined)
 })
 
+// The five queues are five tabs (ADR-0039 decision 2). What matters is not
+// that the markup changed but that a reviewer can now see, at a glance, which
+// queues have something in them — and reach each one without scrolling past
+// the others.
+describe('Review tabs (ADR-0039 decision 2)', () => {
+  it('lists the five queues with their counts', async () => {
+    mockListPending.mockResolvedValue([pendingPage()])
+    mockFindCandidates.mockResolvedValue(report())
+    mockListApproved.mockResolvedValue([approvedPage()])
+    mockListJobs.mockResolvedValue([job()])
+    mockListRejected.mockResolvedValue([rejectedPage()])
+    await renderReview()
+    await screen.findByText('支付网关')
+    expect(tab('pending').textContent).toContain('review.tabPending')
+    expect(tab('merge').textContent).toContain('review.tabMerge')
+    expect(tab('scope').textContent).toContain('review.tabScope')
+    expect(tab('jobs').textContent).toContain('review.tabJobs')
+    expect(tab('rejected').textContent).toContain('review.tabRejected')
+    // The badge is the number that says whether a tab is worth clicking.
+    expect(tabCount('pending')).toBe('1')
+    expect(tabCount('merge')).toBe('1')
+    expect(tabCount('scope')).toBe('1')
+    expect(tabCount('jobs')).toBe('1')
+    expect(tabCount('rejected')).toBe('1')
+  })
+
+  it('lands on the pending queue by default', async () => {
+    await renderReview()
+    await screen.findByText('review.emptyPendingTitle')
+    expect(tab('pending').getAttribute('aria-selected')).toBe('true')
+    expect(openPanelId()).toBe('review-panel-pending')
+  })
+
+  it('gives an empty queue no tab', async () => {
+    // An empty tab is a click that leads nowhere. Only the two queues that
+    // answer a question ("what is waiting?" / "did the scan find duplicates?")
+    // stay when they have nothing to show.
+    await renderReview()
+    await screen.findByText('review.emptyPendingTitle')
+    expect(queryTab('pending')).toBeTruthy()
+    expect(queryTab('merge')).toBeTruthy()
+    expect(queryTab('scope')).toBeNull()
+    expect(queryTab('jobs')).toBeNull()
+    expect(queryTab('rejected')).toBeNull()
+  })
+
+  it('switches to the merge panel and stops rendering the queue', async () => {
+    mockListPending.mockResolvedValue([pendingPage()])
+    mockFindCandidates.mockResolvedValue(report())
+    await renderReview()
+    await screen.findByText('支付网关')
+    fireEvent.click(tab('merge'))
+    await waitFor(() => expect(openPanelId()).toBe('review-panel-merge'))
+    // One queue at a time: the pending cards are gone, not merely hidden
+    // behind the tab.
+    expect(screen.queryByText('支付网关')).toBeNull()
+    expect(await screen.findByText('review.mergeAdopt')).toBeTruthy()
+  })
+
+  it('writes the tab into the URL', async () => {
+    await renderReview()
+    await screen.findByText('review.emptyPendingTitle')
+    fireEvent.click(tab('merge'))
+    await waitFor(
+      () => expect(screen.getByTestId('location').textContent).toContain('view=merge'),
+      { timeout: 2000 },
+    )
+  })
+
+  it('keeps the back button able to walk the tab switch', async () => {
+    await renderReview()
+    await screen.findByText('review.emptyPendingTitle')
+    fireEvent.click(tab('merge'))
+    await waitFor(
+      () => expect(screen.getByTestId('location').textContent).toContain('view=merge'),
+      { timeout: 2000 },
+    )
+    // Back: the queue comes back. A REPLACE write would have eaten the step
+    // and left the back button on the page before the tab.
+    fireEvent.click(screen.getByTestId('back'))
+    await waitFor(
+      () => expect(screen.getByTestId('location').textContent).not.toContain('view=merge'),
+      { timeout: 2000 },
+    )
+    expect(tab('pending').getAttribute('aria-selected')).toBe('true')
+    expect(openPanelId()).toBe('review-panel-pending')
+  })
+
+  it('lands on the merge panel when the URL says so', async () => {
+    mockFindCandidates.mockImplementation(() => lagged(report()))
+    await renderReview('/review?view=merge')
+    expect(await screen.findByText('review.mergeAdopt')).toBeTruthy()
+    expect(tab('merge').getAttribute('aria-selected')).toBe('true')
+    expect(openPanelId()).toBe('review-panel-merge')
+  })
+
+  it('falls back to the pending queue for an unknown view', async () => {
+    await renderReview('/review?view=nope')
+    await screen.findByText('review.emptyPendingTitle')
+    expect(tab('pending').getAttribute('aria-selected')).toBe('true')
+    expect(openPanelId()).toBe('review-panel-pending')
+  })
+
+  it('returns the reader to the top of the new panel', async () => {
+    await renderReview()
+    await screen.findByText('review.emptyPendingTitle')
+    const scroll = vi.mocked(Element.prototype.scrollIntoView)
+    scroll.mockClear()
+    fireEvent.click(tab('merge'))
+    await waitFor(() => expect(scroll).toHaveBeenCalled())
+    expect(scroll).toHaveBeenCalledWith({ block: 'start' })
+    // The scrolled element is the strip, not the panel: the strip is what the
+    // reader should see, and its CSS scroll-margin-top keeps it clear of the
+    // pinned toolbar.
+    const ctx = scroll.mock.contexts[0] as HTMLElement | undefined
+    expect(ctx).toBeTruthy()
+    expect(within(ctx as HTMLElement).getByRole('tablist')).toBeTruthy()
+  })
+
+  it('wires the tabs to their panels for assistive tech', async () => {
+    await renderReview()
+    await screen.findByText('review.emptyPendingTitle')
+    const selected = tab('pending')
+    expect(selected.getAttribute('role')).toBe('tab')
+    expect(selected.getAttribute('aria-selected')).toBe('true')
+    expect(selected.getAttribute('aria-controls')).toBe('review-panel-pending')
+    // Only the selected tab is in the tab order; the rest are reached with the
+    // arrow keys.
+    expect(tab('merge').getAttribute('tabindex')).toBe('-1')
+    const p = openPanel() as HTMLElement
+    expect(p.getAttribute('role')).toBe('tabpanel')
+    expect(p.getAttribute('aria-labelledby')).toBe('review-tab-pending')
+  })
+
+  it('keeps the selected tab in place when its queue empties', async () => {
+    // The last replaced page is deleted while the rejected tab is open. The
+    // tab must NOT vanish under the reader: a tab that disappears mid-review
+    // moves the panel without being asked — and the panel would jump back the
+    // moment another replaced page showed up.
+    mockListRejected.mockResolvedValue([rejectedPage()])
+    await renderReview()
+    await openTab('rejected')
+    expect(openPanelId()).toBe('review-panel-rejected')
+
+    mockListRejected.mockResolvedValue([])
+    fireEvent.click(screen.getByText('review.reload'))
+    await screen.findByText('review.emptyTab')
+    expect(queryTab('rejected')).toBeTruthy()
+    expect(tab('rejected').getAttribute('aria-selected')).toBe('true')
+    expect(openPanelId()).toBe('review-panel-rejected')
+  })
+
+  it('takes the reader to the report after a community synthesis run', async () => {
+    // The report lives in the jobs tab. The run was paid for and it just
+    // finished — the reader has to see the counters without having to know
+    // which tab they are in and go looking.
+    mockGetProjects.mockResolvedValue([{
+      id: 4, name: 'Alpha', root_path: '/x', level_override: 0, is_auto_grouped: false,
+      is_starred: false, created_at: '', repo_count: 1, total_added: 0, total_deleted: 0,
+      my_added: 0, my_deleted: 0, my_files: 0, my_added_7d: 0, is_workday: false, below_standard: false,
+    }])
+    mockCommunity.mockResolvedValue(communityReport())
+    await renderReview()
+    await pickProject(4, 'Alpha')
+    const button = (await screen.findByText('review.startCommunity')) as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+    fireEvent.click(button)
+    await waitFor(() => expect(openPanelId()).toBe('review-panel-jobs'))
+    expect(await screen.findByText('review.communityHeading')).toBeTruthy()
+  })
+
+  it('keeps the default queue out of the URL', async () => {
+    // Same convention as the knowledge page's ?view=: "/review" says "the
+    // queue", "?view=merge" says which one.
+    await renderReview()
+    await screen.findByText('review.emptyPendingTitle')
+    await openTab('merge')
+    expect(screen.getByTestId('location').textContent).toContain('view=merge')
+    fireEvent.click(tab('pending'))
+    await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('view='))
+  })
+})
+
 describe('Review merge suggestions (ADR-0019)', () => {
   it('renders each candidate as a directed pair, loser first', async () => {
     mockFindCandidates.mockImplementation(() => lagged(report({
@@ -197,26 +458,25 @@ describe('Review merge suggestions (ADR-0019)', () => {
       ],
     })))
     await renderReview()
-    const section = await mergeSection()
-    // A1 (ADR-0026): the merge section is mounted unconditionally, so `await`ing
-    // its heading waits for nothing — the rows are the data. With
-    // REPO_TEST_LAG_MS set, the old synchronous read here ran one render early
-    // and saw zero rows.
-    await waitFor(() => expect(mergeRows(section)).toHaveLength(2))
-    const rows = mergeRows(section)
-    expect(rows).toHaveLength(2)
+    await openTab('merge')
+    // A1 (ADR-0026): the tab is mounted unconditionally, so `await`ing it
+    // waits for nothing — the rows are the data. With REPO_TEST_LAG_MS set,
+    // the old synchronous read here ran one render early and saw zero rows.
+    await waitFor(() => expect(rows()).toHaveLength(2))
+    const list = rows()
+    expect(list).toHaveLength(2)
     // Direction is the row's whole payload: [[loser]] → [[winner]]. The loser's
     // slug must come BEFORE the winner's, or a reviewer reading top-down would
     // absorb the wrong page.
-    expect(rows[0].textContent).toMatch(/gateway-payment.*→.*payment-gateway/)
-    expect(rows[1].textContent).toMatch(/quota-refresh.*→.*quota-sync/)
+    expect(list[0].textContent).toMatch(/gateway-payment.*→.*payment-gateway/)
+    expect(list[1].textContent).toMatch(/quota-refresh.*→.*quota-sync/)
     // Signals and score are the "why" the structural pass is allowed to claim.
-    expect(rows[0].textContent).toContain('shared-notes')
-    expect(rows[0].textContent).toContain('title-overlap')
-    expect(rows[1].textContent).not.toContain('title-overlap')
+    expect(list[0].textContent).toContain('shared-notes')
+    expect(list[0].textContent).toContain('title-overlap')
+    expect(list[1].textContent).not.toContain('title-overlap')
     // shared_notes is emitted only when non-zero — a "0 shared notes" chip is noise.
-    expect(rows[0].textContent).toContain('review.mergeSharedNotes')
-    expect(rows[1].textContent).not.toContain('review.mergeSharedNotes')
+    expect(list[0].textContent).toContain('review.mergeSharedNotes')
+    expect(list[1].textContent).not.toContain('review.mergeSharedNotes')
     expect(screen.getAllByText('review.mergeAdopt')).toHaveLength(2)
   })
 
@@ -227,6 +487,7 @@ describe('Review merge suggestions (ADR-0019)', () => {
       edges_redirected: 2, edges_dropped: 0, notes_reattached: 3, loser_previous_status: 'approved',
     })
     await renderReview()
+    await openTab('merge')
     const adopt = await screen.findByText('review.mergeAdopt')
     fireEvent.click(adopt)
     // Armed, not executed — a merge destroys the loser's content, so one click
@@ -244,16 +505,16 @@ describe('Review merge suggestions (ADR-0019)', () => {
   it('hides a dismissed pair locally without calling anything', async () => {
     mockFindCandidates.mockImplementation(() => lagged(report()))
     await renderReview()
-    const section = await mergeSection()
-    // A1 (ADR-0026): the heading is mounted unconditionally, so waiting for it
+    await openTab('merge')
+    // A1 (ADR-0026): the tab is mounted unconditionally, so waiting for it
     // proves nothing about the rows — wait for the row itself.
-    await waitFor(() => expect(mergeRows(section)).toHaveLength(1))
-    fireEvent.click(within(section).getByText('review.mergeIgnore'))
-    await waitFor(() => expect(mergeRows(section)).toHaveLength(0))
+    await waitFor(() => expect(rows()).toHaveLength(1))
+    fireEvent.click(within(openPanel() as HTMLElement).getByText('review.mergeIgnore'))
+    await waitFor(() => expect(rows()).toHaveLength(0))
     // Ignoring is a view-local filter: nothing is sent anywhere, and nothing is
     // stored — no endpoint exists to record it, by design.
     expect(mockMerge).not.toHaveBeenCalled()
-    expect(section.textContent).toContain('review.emptyMergeTitle')
+    expect((openPanel() as HTMLElement).textContent).toContain('review.emptyMergeTitle')
   })
 
   it('degrades a null candidate report to the empty state instead of throwing', async () => {
@@ -262,19 +523,16 @@ describe('Review merge suggestions (ADR-0019)', () => {
     mockFindCandidates.mockImplementation(() => lagged(null as unknown as MergeCandidateReport))
     mockListPending.mockImplementation(() => lagged([pendingPage()]))
     await renderReview()
-    expect(await screen.findByText('review.mergeHeading')).toBeTruthy()
-    // A1 (ADR-0026): the empty-merge title and the pending row are both
-    // effect-filled, while the heading is not — await one of the data elements
-    // before reading the rest synchronously.
-    expect(await screen.findByText('payment-gateway')).toBeTruthy()
-    expect(screen.getByText('review.emptyMergeTitle')).toBeTruthy()
+    await openTab('merge')
+    expect(await screen.findByText('review.emptyMergeTitle')).toBeTruthy()
     // The rest of the page survived the null too.
-    expect(screen.getByText('review.pendingHeading')).toBeTruthy()
+    expect(screen.getByText('review.tabPending')).toBeTruthy()
   })
 
   it('says when the list was truncated', async () => {
     mockFindCandidates.mockResolvedValue(report({ truncated: true }))
     await renderReview()
+    await openTab('merge')
     expect(await screen.findByText('review.mergeTruncated')).toBeTruthy()
   })
 })
@@ -299,16 +557,16 @@ describe('Review page scope (ADR-0031)', () => {
       }),
     ]))
     await renderReview()
-    const section = await scopeSection()
-    const rows = scopeRows(section)
-    expect(rows).toHaveLength(2)
+    await openTab('scope')
+    const list = rows()
+    expect(list).toHaveLength(2)
     // A project page names its project; a global page says "global".
-    expect(rows[0].textContent).toContain('Alpha')
-    expect(rows[0].textContent).toContain('review.scopePromote')
-    expect(rows[1].textContent).toContain('review.scopeGlobal')
+    expect(list[0].textContent).toContain('Alpha')
+    expect(list[0].textContent).toContain('review.scopePromote')
+    expect(list[1].textContent).toContain('review.scopeGlobal')
     // A global page offers the reverse move instead of the promotion.
-    expect(rows[1].textContent).toContain('review.scopeDemote')
-    expect(rows[1].textContent).not.toContain('review.scopePromote')
+    expect(list[1].textContent).toContain('review.scopeDemote')
+    expect(list[1].textContent).not.toContain('review.scopePromote')
   })
 
   // The promotion changes what steers every future answer in every project,
@@ -316,6 +574,7 @@ describe('Review page scope (ADR-0031)', () => {
   it('asks for confirmation before promoting a page to the global tier', async () => {
     mockListApproved.mockImplementation(() => lagged([approvedPage()]))
     await renderReview()
+    await openTab('scope')
     const promote = await screen.findByText('review.scopePromote')
     fireEvent.click(promote)
     expect(mockPromote).not.toHaveBeenCalled()
@@ -341,6 +600,7 @@ describe('Review page scope (ADR-0031)', () => {
       }),
     ]))
     await renderReview()
+    await openTab('scope')
     const demote = (await screen.findByText('review.scopeDemote')) as HTMLButtonElement
     // No project picked yet: the button says so by being disabled.
     await waitFor(() => expect(demote.disabled).toBe(true))
@@ -351,12 +611,12 @@ describe('Review page scope (ADR-0031)', () => {
     await waitFor(() => expect(mockAssign).toHaveBeenCalledWith(22, 4))
   })
 
-  // No approved pages, no scope section: a section about a move nobody can make
+  // No approved pages, no scope tab: a surface about a move nobody can make
   // is noise.
-  it('hides the scope section when there is nothing to scope', async () => {
+  it('gives the scope queue no tab when there is nothing to scope', async () => {
     await renderReview()
-    await screen.findByText('review.pendingHeading')
-    expect(screen.queryByText('review.scopeHeading')).toBeNull()
+    await screen.findByText('review.emptyPendingTitle')
+    expect(queryTab('scope')).toBeNull()
   })
 })
 
@@ -384,6 +644,9 @@ describe('Review community synthesis (ADR-0020)', () => {
     await waitFor(() => expect(button.disabled).toBe(false))
     fireEvent.click(button)
     await waitFor(() => expect(mockCommunity).toHaveBeenCalledWith(4))
+    // The report belongs to the jobs tab: it is "what the machine produced",
+    // not a queue the reviewer works through.
+    await openTab('jobs')
     expect(await screen.findByText('review.communityHeading')).toBeTruthy()
     // The counters stay on screen after the toast expires — a paid-for run whose
     // evidence vanishes in five seconds is not evidence.
@@ -407,6 +670,7 @@ describe('Review community synthesis (ADR-0020)', () => {
     const button = (await screen.findByText('review.startCommunity')) as HTMLButtonElement
     await waitFor(() => expect(button.disabled).toBe(false))
     fireEvent.click(button)
+    await openTab('jobs')
     await screen.findByText('review.communityHeading')
     expect(screen.getByText('未开启（wiki_community）：只做了结构检测')).toBeTruthy()
     expect(screen.queryByText('review.communityPagesCreated')).toBeNull()

@@ -102,6 +102,24 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* ============================================
+   The notes drawer's inner tab strip (ADR-0039 decision 3)
+   ============================================ */
+
+/* The strip is the shared TabStrip component: its buttons are the design
+   system's global .tab-btn / .tab-active (an underlined tab), and its badge
+   is the component's own. Nothing here re-draws a tab — this page only says
+   WHERE the strip sits: under the toolbar, above the count bar.
+
+   The two levels of controls on this page must not blur into one another.
+   The segmented control above (.viewSwitch / .viewTab) is a pill: it says
+   "the knowledge base has two drawers, this is one of them". This strip is
+   an underline: it says "this drawer has two workbenches". Different shape,
+   different level, different meaning. */
+.subTabs {
+  margin-bottom: 16px;
+}
+
 /* The project scope. It used to belong to the pages view alone, which left
    the notes view — cross-project by nature — without the one control that
    makes a cross-project list readable. */

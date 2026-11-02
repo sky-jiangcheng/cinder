@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigationType, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   approveWikiPage, assignWikiPageProject, cancelCompileJob, deleteCompiledPage, diffWikiPageVersion,
@@ -13,6 +14,8 @@ import type {
 import DiffViewer from '../components/DiffViewer'
 import ErrorBanner from '../components/ErrorBanner'
 import Icon from '../components/Icon'
+import TabStrip from '../components/TabStrip'
+import type { TabItem } from '../components/TabStrip'
 import { useConfirmClick } from '../hooks/useConfirmClick'
 import { useToast } from '../hooks/useToast'
 import { renderMarkdown } from '../utils/markdown'
@@ -86,9 +89,75 @@ export function jobErrorText(msg: string, t: (k: string) => string): string {
 const mergePairKey = (projectId: number, c: MergeCandidate) =>
   `${projectId}:${c.loser_id}>${c.winner_id}`
 
+// ADR-0039 decision 2: the six stacked sections become five tabs.
+//
+// These are NOT filters over one list: they are five different shapes of work
+// (an approval queue / a candidate-pair list / a scope table / a job list / a
+// record of replaced pages), and each one carries a count badge — a tab that
+// hides its count forces the reviewer to click through every tab to learn
+// which one has anything in it.
+//
+// The order is fixed so the badges stay comparable between visits. Three of
+// the tabs only exist when they have something to show: "no scope to move" is
+// not a section a reviewer needs to scroll past. Pending and merge are always
+// there — an empty queue is an answer, and "the structural pass found
+// nothing" is the answer ADR-0019's scan exists to give.
+type ReviewView = 'pending' | 'merge' | 'scope' | 'jobs' | 'rejected'
+
+const REVIEW_VIEWS: ReviewView[] = ['pending', 'merge', 'scope', 'jobs', 'rejected']
+
+/** The deep-link surface: ?view= is shareable; an unknown value falls back to pending. */
+function readView(raw: string | null): ReviewView {
+  return raw !== null && (REVIEW_VIEWS as string[]).includes(raw) ? (raw as ReviewView) : 'pending'
+}
+
 function ReviewPage() {
   const { t } = useTranslation()
   const toast = useToast()
+
+  // ---- Which tab is open (ADR-0039 decision 6: the tabs are addressable) ----
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlView = readView(searchParams.get('view'))
+  const [view, setView] = useState<ReviewView>(urlView)
+  // What WE put into the URL. react-router may render an intermediate
+  // location while our own write is in flight, and adopting that as an
+  // external change would move the reviewer out of the panel they just picked.
+  const written = useRef<ReviewView>(urlView)
+  // Only a history navigation (back / forward) may overwrite the local state.
+  const navType = useNavigationType()
+  const tabStripRef = useRef<HTMLDivElement>(null)
+
+  // Switching tabs returns the reader to the top of the new panel: the rows
+  // of the previous tab are gone, and staying at the old scroll offset makes
+  // the switch look like it did nothing. The scroller is .mainContent, not the
+  // window, so the strip itself is scrolled into view — its CSS
+  // scroll-margin-top keeps it clear of the pinned toolbar above.
+  const scrollToStrip = useCallback(() => {
+    tabStripRef.current?.scrollIntoView({ block: 'start' })
+  }, [])
+
+  const switchView = useCallback((next: string) => {
+    const key = next as ReviewView
+    if (key === view) return
+    setView(key)
+    written.current = key
+    // PUSH, not REPLACE: the back button has to be able to walk back through
+    // the tab switches — with REPLACE it would step over them and land on the
+    // page before the tab, which reads as "the tab ate my history" (the same
+    // call as the knowledge page's view switch).
+    // The default view stays out of the URL (same convention as the knowledge
+    // page's ?view=): "/review" says "the queue", "?view=merge" says which.
+    setSearchParams(key === 'pending' ? {} : { view: key }, { replace: false })
+    scrollToStrip()
+  }, [view, setSearchParams, scrollToStrip])
+
+  useEffect(() => {
+    if (navType !== 'POP') return
+    if (urlView === written.current) return
+    written.current = urlView
+    setView(urlView)
+    scrollToStrip()
+  }, [navType, urlView, scrollToStrip])
 
   const [projects, setProjects] = useState<Project[]>([])
   const [projectFilter, setProjectFilter] = useState<number>(0) // 0 = all
@@ -226,6 +295,10 @@ function ReviewPage() {
         toast({ kind: 'error', title: t('review.communityNoReport') })
         return
       }
+      // The report lives in the jobs tab ("what the machine produced"). The run
+      // was paid for and it just finished — the reader has to see the counters
+      // without having to know which tab they are in and go looking.
+      switchView('jobs')
       // Gate off = detection only. Saying "0 pages created" would read as "there
       // is nothing to synthesise", when the real answer is "you never turned this
       // on" — so the backend's own note goes up verbatim instead.
@@ -249,6 +322,40 @@ function ReviewPage() {
     for (const p of projects) m.set(p.id, p.name)
     return (pid: number) => (pid === 0 ? t('review.globalProject') : (m.get(pid) ?? t('review.globalProject')))
   }, [projects, t])
+
+  // The strip's contents. The badge is the number that says whether a tab is
+  // worth clicking, so every tab that exists carries one — including the
+  // empty pending queue ("0" is information, a missing badge is not).
+  //
+  // A queue that has something takes a slot. The SELECTED one keeps its slot
+  // even when it empties under the reader (the last replaced page is deleted
+  // while the rejected tab is open): a tab disappearing mid-review would move
+  // the panel without being asked, and — worse — the panel would jump back
+  // the moment another replaced page showed up. An empty tab that you are
+  // standing on says "0"; a tab that vanishes says nothing.
+  const tabs = useMemo<TabItem[]>(() => {
+    const items: TabItem[] = [
+      { key: 'pending', label: t('review.tabPending'), count: pending.length },
+      { key: 'merge', label: t('review.tabMerge'), count: mergeCandidates.length },
+    ]
+    if (approved.length > 0 || view === 'scope') {
+      items.push({ key: 'scope', label: t('review.tabScope'), count: approved.length })
+    }
+    // The community synthesis report is "what the machine produced", not a
+    // queue — so it shares the jobs tab rather than holding a tab of its own.
+    if (jobs.length > 0 || community !== null || view === 'jobs') {
+      items.push({ key: 'jobs', label: t('review.tabJobs'), count: jobs.length })
+    }
+    if (rejected.length > 0 || view === 'rejected') {
+      items.push({ key: 'rejected', label: t('review.tabRejected'), count: rejected.length })
+    }
+    return items
+  }, [t, view, pending.length, mergeCandidates.length, approved.length, jobs.length, rejected.length, community])
+
+  // The panel follows the selection. The fallback is a safety net for the
+  // frame before the data lands: a deep link to a queue that has not loaded
+  // yet must not render a panel whose tab is not on the strip.
+  const activeView: ReviewView = tabs.some(tab => tab.key === view) ? view : 'pending'
 
   return (
     <div className={s.page}>
@@ -309,106 +416,142 @@ function ReviewPage() {
 
         {loadError && <ErrorBanner message={loadError} onRetry={reload} />}
 
-        {/* The last synthesis run stays on screen: its counters are the evidence
-            that a paid-for call did something, and a toast expires long before a
-            reviewer has read six numbers. */}
-        {community && <CommunityReport report={community} />}
+        {/* One switcher for the five queues (ADR-0039 decision 2). The tab
+            label IS the heading, so no panel repeats it. The strip is the
+            scroll target of a tab switch, which is why it carries the ref. */}
+        <div className={s.tabStrip} ref={tabStripRef}>
+          <TabStrip
+            items={tabs}
+            active={activeView}
+            onChange={switchView}
+            ariaLabel={t('review.tablistLabel')}
+            idPrefix="review"
+          />
+        </div>
 
-        {/* Jobs and rejected sections only exist when they have content: a
-            reviewer who just wants the queue should not scroll past two empty
-            boxes on every visit. */}
-        {jobs.length > 0 && (
-          <section>
-            <div className={s.sectionHead}>
-              <h2>{t('review.jobHeading')}</h2>
-            </div>
-            <ul className={s.jobList}>
-              {jobs.map(j => (
-                <JobRow key={j.id} job={j} projectLabel={projectLabel} busy={busy} onCancel={onCancel} />
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section>
-          <div className={s.sectionHead}>
-            <h2>{t('review.pendingHeading')}</h2>
-            <span className={s.countChip}>{pending.length}</span>
+        {activeView === 'pending' && (
+          <div
+            role="tabpanel"
+            id="review-panel-pending"
+            aria-labelledby="review-tab-pending"
+            className={s.panel}
+          >
+            {pending.length === 0
+              ? <div className="empty-state small">
+                  <div className="empty-icon"><Icon name="file-text" size={32} /></div>
+                  <h3>{t('review.emptyPendingTitle')}</h3>
+                  <p>{t('review.emptyPendingMsg')}</p>
+                </div>
+              : <ul className={s.cardList}>
+                  {pending.map(p => (
+                    <ReviewCard key={p.page.id} item={p} projectLabel={projectLabel}
+                      busy={busy} onApprove={onApprove} onReject={onReject} />
+                  ))}
+                </ul>}
           </div>
-          {pending.length === 0
-            ? <div className="empty-state small">
-                <div className="empty-icon"><Icon name="file-text" size={32} /></div>
-                <h3>{t('review.emptyPendingTitle')}</h3>
-                <p>{t('review.emptyPendingMsg')}</p>
-              </div>
-            : <ul className={s.cardList}>
-                {pending.map(p => (
-                  <ReviewCard key={p.page.id} item={p} projectLabel={projectLabel}
-                    busy={busy} onApprove={onApprove} onReject={onReject} />
-                ))}
-              </ul>}
-        </section>
-
-        {/* Page scope (ADR-0031). Only rendered when there is something to scope:
-            a section about a move nobody can make is noise. */}
-        {approved.length > 0 && (
-          <section>
-            <div className={s.sectionHead}>
-              <h2>{t('review.scopeHeading')}</h2>
-              <span className={s.countChip}>{approved.length}</span>
-            </div>
-            <p className={s.lead}>{t('review.scopeHint')}</p>
-            <ul className={s.scopeList}>
-              {approved.slice(0, scopeMaxRows).map(p => (
-                <ScopeRow key={p.page.id} item={p} projects={projects} projectLabel={projectLabel}
-                  busy={busy} onPromote={onPromote} onAssign={onAssign} />
-              ))}
-            </ul>
-            {approved.length > scopeMaxRows && (
-              <p className={s.note}>{t('review.scopeTruncated', { n: approved.length })}</p>
-            )}
-          </section>
         )}
 
         {/* Merge suggestions (ADR-0019): always mounted, because "the structural
             pass found nothing" is itself the answer a reviewer wants — unlike the
-            job and error sections, which are absence of a thing nobody asked for. */}
-        <section>
-          <div className={s.sectionHead}>
-            <h2>{t('review.mergeHeading')}</h2>
-            <span className={s.countChip}>{mergeCandidates.length}</span>
+            job and error tabs, which are absence of a thing nobody asked for. */}
+        {activeView === 'merge' && (
+          <div
+            role="tabpanel"
+            id="review-panel-merge"
+            aria-labelledby="review-tab-merge"
+            className={s.panel}
+          >
+            <p className={s.lead}>{t('review.mergeHint')}</p>
+            {mergeCandidates.length === 0
+              ? <div className="empty-state small">
+                  <div className="empty-icon"><Icon name="check" size={32} /></div>
+                  <h3>{t('review.emptyMergeTitle')}</h3>
+                  <p>{t('review.emptyMergeMsg')}</p>
+                </div>
+              : <ul className={s.mergeList}>
+                  {mergeCandidates.map(c => (
+                    <MergeRow key={`${c.loser_id}-${c.winner_id}`} item={c} busy={busy}
+                      onMerge={onMerge} onIgnore={onIgnoreMerge} />
+                  ))}
+                </ul>}
+            {merge?.truncated && (
+              <p className={s.note}>{t('review.mergeTruncated', { n: merge.candidates?.length ?? 0 })}</p>
+            )}
           </div>
-          <p className={s.lead}>{t('review.mergeHint')}</p>
-          {mergeCandidates.length === 0
-            ? <div className="empty-state small">
-                <div className="empty-icon"><Icon name="check" size={32} /></div>
-                <h3>{t('review.emptyMergeTitle')}</h3>
-                <p>{t('review.emptyMergeMsg')}</p>
-              </div>
-            : <ul className={s.mergeList}>
-                {mergeCandidates.map(c => (
-                  <MergeRow key={`${c.loser_id}-${c.winner_id}`} item={c} busy={busy}
-                    onMerge={onMerge} onIgnore={onIgnoreMerge} />
-                ))}
-              </ul>}
-          {merge?.truncated && (
-            <p className={s.note}>{t('review.mergeTruncated', { n: merge.candidates?.length ?? 0 })}</p>
-          )}
-        </section>
+        )}
 
-        {rejected.length > 0 && (
-          <section>
-            <div className={s.sectionHead}>
-              <h2>{t('review.rejectedHeading')}</h2>
-              <span className={s.countChip}>{rejected.length}</span>
-            </div>
-            <ul className={s.cardList}>
-              {rejected.map(p => (
-                <ReviewCard key={p.page.id} item={p} projectLabel={projectLabel}
-                  busy={busy} rejected onDelete={onDelete} />
-              ))}
-            </ul>
-          </section>
+        {/* Page scope (ADR-0031). The tab only exists when there is something to
+            scope: a surface about a move nobody can make is noise. */}
+        {activeView === 'scope' && (
+          <div
+            role="tabpanel"
+            id="review-panel-scope"
+            aria-labelledby="review-tab-scope"
+            className={s.panel}
+          >
+            <p className={s.lead}>{t('review.scopeHint')}</p>
+            {approved.length === 0 ? (
+              <p className="empty-hint">{t('review.emptyTab')}</p>
+            ) : (
+              <ul className={s.scopeList}>
+                {approved.slice(0, scopeMaxRows).map(p => (
+                  <ScopeRow key={p.page.id} item={p} projects={projects} projectLabel={projectLabel}
+                    busy={busy} onPromote={onPromote} onAssign={onAssign} />
+                ))}
+              </ul>
+            )}
+            {approved.length > scopeMaxRows && (
+              <p className={s.note}>{t('review.scopeTruncated', { n: approved.length })}</p>
+            )}
+          </div>
+        )}
+
+        {activeView === 'jobs' && (
+          <div
+            role="tabpanel"
+            id="review-panel-jobs"
+            aria-labelledby="review-tab-jobs"
+            className={s.panel}
+          >
+            {jobs.length > 0 ? (
+              <ul className={s.jobList}>
+                {jobs.map(j => (
+                  <JobRow key={j.id} job={j} projectLabel={projectLabel} busy={busy} onCancel={onCancel} />
+                ))}
+              </ul>
+            ) : !community ? (
+              <p className="empty-hint">{t('review.emptyTab')}</p>
+            ) : null}
+            {/* The last synthesis run stays on screen once it exists: its
+                counters are the evidence that a paid-for call did something,
+                and a toast expires long before a reviewer has read six
+                numbers. */}
+            {community && <CommunityReport report={community} />}
+          </div>
+        )}
+
+        {activeView === 'rejected' && (
+          <div
+            role="tabpanel"
+            id="review-panel-rejected"
+            aria-labelledby="review-tab-rejected"
+            className={s.panel}
+          >
+            {/* The tab label had to shrink to "error pages" to fit the strip;
+                what it lost — that these pages were REPLACED, not deleted — is
+                what this line carries. */}
+            <p className={s.lead}>{t('review.rejectedHint')}</p>
+            {rejected.length === 0 ? (
+              <p className="empty-hint">{t('review.emptyTab')}</p>
+            ) : (
+              <ul className={s.cardList}>
+                {rejected.map(p => (
+                  <ReviewCard key={p.page.id} item={p} projectLabel={projectLabel}
+                    busy={busy} rejected onDelete={onDelete} />
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
     </div>

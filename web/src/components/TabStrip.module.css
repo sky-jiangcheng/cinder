@@ -1,0 +1,34 @@
+/* ============================================
+   TabStrip — the one tab strip (ADR-0039 decision 5)
+   The buttons themselves are the design system's global .tab-btn / .tab-active
+   (web/src/styles/design-system/shared.css); only the badge and the strip's
+   own box live here.
+   ============================================ */
+
+.strip {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  /* A strip with many tabs must scroll sideways rather than wrap into two
+     rows — a wrapped strip reads as two unrelated rows of buttons. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* The count badge. Same token family as the section count chips
+   (.countChip / .sectionCount), so a tab badge and a section count read as
+   the same kind of number. */
+.badge {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  font-variant-numeric: tabular-nums;
+}

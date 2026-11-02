@@ -20,6 +20,14 @@
   padding-right: 4px;
 }
 
+/* tab 条（ADR-0039 决策 4）——滚动区里的第一个元素。
+   按钮本身用设计系统已有的全局 .tab-btn / .tab-active，徽标用
+   TabStrip.module.css 里那一个：这里只补滚动区里 tab 条与面板之间的间距，
+   不另造第二套 tab 外观。 */
+.tabBar {
+  margin-bottom: 16px;
+}
+
 .controls {
   display: flex;
   align-items: center;
