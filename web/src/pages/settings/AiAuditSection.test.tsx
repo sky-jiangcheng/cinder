@@ -203,9 +203,13 @@ describe('AiAuditSection the call list', () => {
 
   it('says so when there is nothing recorded yet', async () => {
     renderSection()
-    await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
-
-    expect(screen.getByText(/还没有调用记录/)).toBeTruthy()
+    // findBy* waits for the element instead of polling it — the same
+    // convention the call-list tests above use. The empty-state line only
+    // renders once the audit LIST has come back (one fetch later than the
+    // panel's first paint), so waiting for the status CALL to happen is not
+    // the same as waiting for the text to be on screen. On a slow machine
+    // the two are far enough apart to fail the assertion.
+    expect(await screen.findByText(/还没有调用记录/)).toBeTruthy()
     expect(screen.queryByTestId('ai-audit-table')).toBeNull()
   })
 })
