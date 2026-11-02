@@ -19,14 +19,30 @@ type StorageSafetyReport struct {
 // storage environments known to endanger SQLite WAL and concurrent locking
 // (such as FUSE, NFS, network shares, or active cloud sync directories like
 // iCloud, OneDrive, Dropbox).
+//
+// The target may be a database file or the directory that holds it. When it
+// does not exist yet, the parent decides: an existing parent directory means
+// the target is a file inside it (a not-yet-created database), otherwise the
+// target itself is the directory. Resolving it the other way round would make
+// the writability probe fail on every fresh install.
 func CheckStorageSafety(targetPath string) StorageSafetyReport {
 	if targetPath == "" {
 		targetPath = GetDbPath()
 	}
 	dir := targetPath
-	fi, err := os.Stat(targetPath)
-	if err == nil && !fi.IsDir() {
-		dir = filepath.Dir(targetPath)
+	if fi, err := os.Stat(targetPath); err == nil {
+		if !fi.IsDir() {
+			dir = filepath.Dir(targetPath)
+		}
+	} else if parent := filepath.Dir(targetPath); isExistingDir(parent) {
+		// The target does not exist, and the parent IS a directory — so the
+		// target was meant to be a file inside it. This is the fresh-install
+		// case (GetDbPath creates the data directory but not the database file
+		// yet) and the "data directory was removed" case. Resolving the
+		// directory wrongly here means the writability probe below writes
+		// "<db file>/.safety_probe_<pid>", which can never succeed, so every
+		// fresh install reports a bogus "unwritable" storage risk.
+		dir = parent
 	}
 
 	report := StorageSafetyReport{
@@ -105,4 +121,10 @@ func CheckStorageSafety(targetPath string) StorageSafetyReport {
 	}
 
 	return report
+}
+
+// isExistingDir reports whether path exists and is a directory.
+func isExistingDir(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
 }
