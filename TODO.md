@@ -5,7 +5,7 @@
 
 ## 现状速查（新会话从这里开始）
 
-- 品牌 **Repotory**（原 RepoNest），版本 **v2.21.0**，SSOT 在 `wails.json`（发布记录见 [CHANGELOG.md](CHANGELOG.md)）。**定位：AI 编码 Agent 的本地记忆层**——记忆存在本地 SQLite 里，不在任何一家 Agent 的私有记忆里，所以「Claude Code 写的交接，Cursor 明天能读到」；这句话是对外第一屏的统一口径（收口动作见 Sprint 4.4）。
+- 品牌 **Repotory**（原 RepoNest），版本 **v2.22.0**，SSOT 在 `wails.json`（发布记录见 [CHANGELOG.md](CHANGELOG.md)）。**定位：AI 编码 Agent 的本地记忆层**——记忆存在本地 SQLite 里，不在任何一家 Agent 的私有记忆里，所以「Claude Code 写的交接，Cursor 明天能读到」；这句话是对外第一屏的统一口径（收口动作见 Sprint 4.4）。
 - schema **v28**（v28：ADR-0030 AI 调用审计 `ai_call_log` 底座；v27：ADR-0028 主题层 `note_topics`；v26：wiki 页访问强化信号 `access_count` / `last_accessed_at` 底座，随 v2.9.0 发布；ADR-0023 笔记归属 `project_kind` 已随 v2.3.0 发布；`page_embeddings` 页面向量空间 + `page_embed_dirty` 增量队列，ADR-0018 lane 2 已落码；`evidencePages` 图感知取证 `wiki_graph_search` 已随 lane 2 晋升开启（2026-10-21））；ADR-0018 lane 1 与 lane 2 均 **Accepted**（lane 1 真库演练 PASS，产物 `v21-rehearse/`；lane 2 于 2026-10-21 过条件 10 三门，实现定型与负结果见 ADR 晋升记录）。
 - 近期大项均已落地：插件脚本运行时（yaegi）已移除（C11-B）、全局 CSS Modules 迁移收口（全局 1,227 行）、D25 首屏经 **ADR-0024** 演进为**首页工作台**——记忆环条 + 知识库智能助手（`web/src/pages/home/HomeKnowledgeAssistant.tsx`）+ 重点项目速览 / 今日动态（`web/src/pages/Home.tsx`），全局搜索独立为 `/search` 顶级页（空闲态含热门项目 top6 / 热门标签 top12 推荐，`web/src/pages/Search.tsx`）。⚠ **`/dashboard` 从未重定向**：仪表盘是独立顶级页、主导航「仪表盘」与「搜索」两项并存，首页只给「进入完整仪表盘」直达链接——ADR-0024 决策 1 的「单栏融合 + 重定向」措辞已于 2026-10-23 按落码修订。
 - **M7 lane 2 生产管线已激活（2026-10-22）**：`semantic_search=1` + LM Studio 端点（`text-embedding-nomic-embed-text-v1.5`，dim=768）+ 双向量重建落库（笔记 133 / approved 页 27，经运行中 headless server 的 `/api/rpc` 完成，激活前 live 已文件备份 `repotory.db.backup-20261022-093904`）。live 直评证据门 **k=2/5/10/20 delta +0.114 / +0.159 / +0.205 / +0.205**（ndcg 全正，与晋升 v4 逐点一致，graph perfect 13/22、零回退）——生产口径由 FTS-only +0.023 升级为全管线。

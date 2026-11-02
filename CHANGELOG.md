@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.22.0] - 2026-11-02
+
 ### 变更
 
 - **两个 IDE 面板从「检索器」改成「对话台」——面板第一次能回答问题（ADR-0036，2026-11-02）**：用户点出的一条——「idea 跟 vscode 插件以参考 Cline 插件的标准进行优化，并锁定项目为本项目，历史记录折叠，主体以对话框为主，重构 UI 设计跟功能设计」。**改之前的两个面板是同一个东西**：一个输入框、一列缩略图、一个详情窗格。那是**检索器**，而 Repotory 的定位是「AI 编码 Agent 的本地记忆层」——记忆的价值在**序列**里（一个 gotcha 是哪次排障的后续），可一次查询覆盖上一次的结果等于「读不成一段历史」；而仓库里唯一能回答「这个问题」的东西（`repotory_ask`，ADR-0033，带 `Sources:` 的证据答案）在 IDE 面板里**根本没接线**，面板只会 grep。**第二个结构性问题**：面板检索整个知识库且**说不出结果来自哪个项目**，而桌面端的项目页是按项目切的——两个面对同一份数据给出两种范围。
@@ -620,7 +622,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.21.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.22.0...HEAD
+[2.22.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.21.0...v2.22.0
 [2.21.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.20.0...v2.21.0
 [2.20.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.19.0...v2.20.0
 [2.19.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.18.0...v2.19.0
