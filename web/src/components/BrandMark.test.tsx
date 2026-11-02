@@ -146,4 +146,58 @@ describe('BrandMark', () => {
     )
     expect(src).not.toMatch(/BrandMark/)
   })
+
+  it('re-weights the frame so the printed edge survives the rendering', () => {
+    // The regression (ADR-0037): the master draws a 9-unit hairline on the
+    // 512 grid. At the rail's 26px that is 0.46px — under one pixel, so the
+    // browser smears the frame into a grey line. The frame is the mark's
+    // only distinguishing feature ("a square warm card with a heavier ink
+    // line around it"), so at UI sizes it was losing exactly the thing that
+    // made the mark identifiable.
+    //
+    // The icon generator already re-weights its glyph domain for precisely
+    // this reason (scripts/generate-icons.mjs, 34 units at 24px); the UI
+    // was the one surface that never got the treatment.
+    for (const size of [17, 20, 22, 26, 32, 64]) {
+      const { container, unmount } = render(<BrandMark size={size} />)
+      const frame = container.querySelector('[stroke]')
+      expect(frame, `no frame drawn at ${size}px`).not.toBeNull()
+      const stroke = Number(frame!.getAttribute('stroke-width'))
+      expect(
+        (stroke * size) / 512,
+        `frame at ${size}px must render at least 1px wide`,
+      ).toBeGreaterThanOrEqual(1)
+      // The paper margin around the frame has to survive too. A frame with
+      // no paper around it is not a printed edge, it is a dark border — and
+      // the master inset (26 units) cannot hold once the stroke is heavier.
+      const inset = Number(frame!.getAttribute('x'))
+      expect(
+        ((inset - stroke / 2) * size) / 512,
+        `paper margin at ${size}px must be at least 1px`,
+      ).toBeGreaterThanOrEqual(1)
+      unmount()
+    }
+  })
+
+  it('reproduces the master exactly at the master size', () => {
+    // Re-weighting must not creep upward: at 512 the geometry has to be the
+    // master's geometry, or the app icon and the UI mark stop being the
+    // same drawing.
+    const { container } = render(<BrandMark size={512} />)
+    const frame = container.querySelector('[stroke]')!
+    expect(Number(frame.getAttribute('stroke-width'))).toBe(9)
+    expect(frame.getAttribute('x')).toBe('26')
+    expect(frame.getAttribute('width')).toBe('460')
+  })
+
+  it('collapses to the bare letter at glyph-domain sizes', () => {
+    // At or below 16px a framed card reads as a bright square rather than a
+    // letter — the exact failure the icon generator's glyph domain exists
+    // to prevent. The letter takes currentColor so it belongs to whatever
+    // surface it lands on; a fixed near-black would vanish on a dark ground.
+    const { container } = render(<BrandMark size={16} />)
+    expect(container.querySelector('[stroke]')).toBeNull()
+    expect(container.querySelector('rect')).toBeNull()
+    expect(container.querySelector('path')!.getAttribute('fill')).toBe('currentColor')
+  })
 })

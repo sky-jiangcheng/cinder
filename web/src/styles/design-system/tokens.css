@@ -1,55 +1,81 @@
 /* ============================================
    Design Tokens
-   Claude-inspired minimal style — refined for better visual hierarchy
+   Warm-paper editorial style — the palette is derived from the brand SSOT
+   (build/icon.svg) so the app reads as the same object as the icon in the
+   dock (ADR-0037).
    ============================================ */
 
 :root {
-  /* Backgrounds */
-  --bg-primary: #f5f5f3;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #eeece8;
-  --bg-hover: #eceae6;
-  --bg-active: #e6e3dd;
+  /* --- Brand SSOT ---------------------------------------------------
+     These two values are the brand's entire palette: the warm-paper field
+     and the near-black ink of the mark in build/icon.svg. Every colour
+     below is a derivative of them.
 
-  /* Borders */
-  --border-subtle: #e0ded8;
-  --border-default: #ccc9c1;
+     They are kept here as literal values (not as colour-mix() recipes)
+     because a test reads build/icon.svg and compares the two files — a
+     hand-kept copy is exactly the failure mode CONTRIBUTING.md warns about
+     ("four half-landed rebrands, every one of them a hand-kept copy"). */
+  --brand-paper: #F5F0E4;
+  --brand-ink: #1B1B1B;
+
+  /* Backgrounds — the warm-paper family. The page is a shade deeper than
+     the brand card so a card still reads as a card on top of it; the card
+     surface is paper white rather than screen white, because pure #ffffff
+     next to a warm ground looks dirty. */
+  --bg-primary: #F0EBDF;
+  --bg-secondary: #FCFAF4;
+  --bg-tertiary: #E9E3D5;
+  --bg-hover: #E8E2D2;
+  --bg-active: #E3DCCA;
+
+  /* Borders. --border-default draws control boundaries (buttons, inputs,
+     chips), so it clears WCAG 1.4.11's 3:1 non-text contrast on every
+     surface a control sits on; the previous cool grey managed only 1.52:1.
+     --border-subtle is a decorative divider and stays quiet. */
+  --border-subtle: #D7CDB6;
+  --border-default: #8A816B;
 
   /* Text. --text-tertiary carries 12-13px secondary copy throughout the app,
      so it is dark enough to clear WCAG AA (4.5:1) against every surface it
-     lands on -- card white, page grey and the --bg-tertiary row fill -- rather
-     than the lighter grey it replaced, which only reached 3.5:1. It still
-     reads a step quieter than --text-secondary, so the ramp survives.
+     lands on -- card white, page paper and the --bg-tertiary row fill --
+     rather than the lighter grey it replaced, which only reached 3.5:1. It
+     still reads a step quieter than --text-secondary, so the ramp survives.
      --text-muted is reserved for genuinely non-essential decoration
-     (placeholders, disabled affordances) and stays below AA by design. */
-  --text-primary: #1a1a1a;
-  --text-secondary: #555555;
-  --text-tertiary: #6a6a6a;
-  --text-muted: #8a8a8a;
-  --text-danger: #8b4a4a;
+     (placeholders, disabled affordances) and stays below AA by design.
+     --text-primary is the brand ink, unchanged in value from the mark. */
+  --text-primary: #1B1B1B;
+  --text-secondary: #4F4B41;
+  --text-tertiary: #66604F;
+  --text-muted: #8C8577;
+  --text-danger: #8B4A4A;
 
-  /* Accents / semantic */
-  --accent: #2563eb;
-  --accent-light: #3b82f6;
-  --accent-dark: #1d4ed8;
-  --accent-soft: #eff6ff;
+  /* Accents / semantic.
+     The accent is the brand ink pushed warm: a deep bronze-brown line
+     instead of the cold Tailwind blue the app used to wear. Brand
+     recognition then comes from the whole surface reading as one product
+     rather than from a blue that matched nothing else. Every value below
+     clears 4.5:1 against every surface it lands on, in both themes. */
+  --accent: #7A3E12;
+  --accent-light: #8F4E1C;
+  --accent-dark: #5E2E0C;
+  --accent-soft: #F2E4CD;
 
-  --danger: #8b4a4a;
-  --danger-soft: #f5ecec;
+  --danger: #8B4A4A;
+  --danger-soft: #F5E7E7;
 
-  --warning: #8b6f3a;
-  --warning-soft: #f5efe6;
+  --warning: #6B5A18;
+  --warning-soft: #F1EBD8;
 
-  --info: #4a6b8b;
-  --info-soft: #eceef5;
+  --info: #456380;
+  --info-soft: #E6EAEF;
 
-  --success: #2d6a2d;
-  --success-soft: #e8f3e8;
+  --success: #2D6A2D;
+  --success-soft: #E7EFE7;
 
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.10);
+  --shadow-sm: 0 1px 3px rgba(27, 27, 27, 0.06);
+  --shadow-md: 0 2px 10px rgba(27, 27, 27, 0.08);
+  --shadow-lg: 0 4px 16px rgba(27, 27, 27, 0.10);
 
   /* Radii */
   --radius-sm: 6px;
@@ -73,45 +99,49 @@
   --transition-base: 0.25s ease;
 
   /* Overlay / component colors */
-  --overlay: rgba(0, 0, 0, 0.35);
+  --overlay: rgba(27, 27, 27, 0.35);
 }
 
 [data-theme="dark"] {
-  /* Backgrounds */
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #222222;
-  --bg-tertiary: #2a2a2a;
-  --bg-hover: #2e2e2e;
-  --bg-active: #353535;
+  /* Backgrounds — the same warm family, inverted: the paper becomes the ink
+     and the ground goes to a warm near-black rather than a cold one. */
+  --bg-primary: #191713;
+  --bg-secondary: #211E18;
+  --bg-tertiary: #292520;
+  --bg-hover: #2D2922;
+  --bg-active: #312C25;
 
   /* Borders */
-  --border-subtle: #333333;
-  --border-default: #3a3a3a;
+  --border-subtle: #3A352E;
+  --border-default: #78705E;
 
-  /* Text */
-  --text-primary: #e8e8e8;
-  --text-secondary: #a0a0a0;
-  --text-tertiary: #949494;
-  --text-muted: #757575;
-  --text-danger: #d97373;
+  /* Text. The dark theme's primary ink is the brand paper: the two themes
+     use the same two brand colours, swapped. */
+  --text-primary: #F5F0E4;
+  --text-secondary: #B8B1A2;
+  --text-tertiary: #9B9484;
+  --text-muted: #7E7768;
+  --text-danger: #DE7676;
 
-  /* Accents / semantic */
-  --accent: #60a5fa;
-  --accent-light: #93c5fd;
-  --accent-dark: #3b82f6;
-  --accent-soft: #1e3a5f;
+  /* Accents / semantic. The accent turns light here, as it must against a
+     dark ground — a warm amber rather than the pale blue it replaced. Its
+     hue sits far enough from --warning to stay a separate signal. */
+  --accent: #E09155;
+  --accent-light: #F2B278;
+  --accent-dark: #C07B3D;
+  --accent-soft: #3A2E1D;
 
-  --danger: #d97373;
-  --danger-soft: #3a2a2a;
+  --danger: #DE7676;
+  --danger-soft: #3A2A2A;
 
-  --warning: #d9b373;
-  --warning-soft: #3a332a;
+  --warning: #E0C24A;
+  --warning-soft: #37301C;
 
-  --info: #7a9ab8;
-  --info-soft: #2a303a;
+  --info: #7A9AB8;
+  --info-soft: #2A303A;
 
-  --success: #4caf50;
-  --success-soft: #2a3a2a;
+  --success: #4EB352;
+  --success-soft: #2A3A2A;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);

@@ -457,7 +457,16 @@ function page(title, activeFile, contentHtml, locale, base, extraHead = '') {
   <link rel="alternate icon" href="${faviconIcoHref}${iconV ? `?v=${iconV}` : ''}">
   <title>${title && !title.includes('Repotory') ? title + ' · ' : ''}${loc.titleSuffix}</title>
 ${extraHead}  <style>
-    :root { --bg: #f8f9fa; --text: #1a1a2e; --muted: #6c757d; --accent: #4caf50; --border: #e2e8f0; --sidebar-w: 240px; }
+    /* The accent is the brand's, not the framework's: the docs site used to
+       wear Material Green 500, a leftover with no relation to anything else
+       in the product, while the app wore a Tailwind blue and the icons wore
+       warm paper + near-black — three colour languages for one brand
+       (ADR-0037). The accent now comes from the same family as the app's:
+       warm bronze on the light reading surface, warm amber on the dark
+       sidebar (a dark bronze would be unreadable there). The neutrals below
+       stay the docs site's own — re-theming them is a design project, not a
+       brand-identity fix. */
+    :root { --bg: #f8f9fa; --text: #1a1a2e; --muted: #6c757d; --accent: #7A3E12; --accent-on-dark: #E09155; --accent-soft: #F2E4CD; --border: #e2e8f0; --sidebar-w: 240px; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
     a { color: var(--accent); text-decoration: none; }
@@ -467,7 +476,7 @@ ${extraHead}  <style>
     .sidebar-brand-row { display: flex; align-items: center; gap: 10px; }
     .sidebar-brand-row svg { display: block; flex-shrink: 0; }
     .sidebar-brand h1 { font-size: 18px; font-weight: 700; }
-    .sidebar-brand span { color: var(--accent); }
+    .sidebar-brand span { color: var(--accent-on-dark); }
     .sidebar-brand small { display: block; font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 4px; }
     .lang-switch { display: inline-flex; gap: 0; margin-top: 8px; font-size: 11px; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px; overflow: hidden; }
     .lang-switch .lang-pill { display: block; padding: 3px 10px; color: rgba(255,255,255,0.75); background: transparent; }
@@ -477,7 +486,7 @@ ${extraHead}  <style>
     .sidebar h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.4); padding: 12px 20px 6px; }
     .sidebar a { display: block; padding: 6px 20px; color: rgba(255,255,255,0.75); font-size: 13px; }
     .sidebar a:hover { background: rgba(255,255,255,0.08); color: #fff; text-decoration: none; }
-    .sidebar a.active { color: var(--accent); font-weight: 600; }
+    .sidebar a.active { color: var(--accent-on-dark); font-weight: 600; }
     .main { margin-left: var(--sidebar-w); flex: 1; padding: 40px 48px; max-width: 860px; }
     .main h1 { font-size: 28px; margin-bottom: 8px; }
     .main .subtitle { color: var(--muted); margin-bottom: 32px; font-size: 15px; }
@@ -492,7 +501,7 @@ ${extraHead}  <style>
     .main table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px; }
     .main th, .main td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
     .main th { background: #f1f5f9; font-weight: 600; }
-    .main blockquote { background: #eff6ff; border-left: 3px solid #3b82f6; padding: 12px 16px; border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 13px; color: #334155; }
+    .main blockquote { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 13px; color: #334155; }
     .main blockquote.warning { background: #fef3c7; border-left-color: #f59e0b; }
     .main .nav-links { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 32px; }
     .main .nav-links a { background: var(--bg); border: 1px solid var(--border); padding: 6px 14px; border-radius: 6px; font-size: 13px; color: var(--text); }
