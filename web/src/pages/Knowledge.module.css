@@ -64,6 +64,104 @@
   align-items: center;
 }
 
+/* The view switcher: two states of ONE object (the raw notes / the approved
+   pages), not two places. A segmented control says "same thing, two faces",
+   where a pair of tabs would say "two places" — which is exactly the split
+   ADR-0038 removed. */
+.viewSwitch {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.viewTab {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 5px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.viewTab:hover {
+  color: var(--text-primary);
+}
+
+.viewTabActive {
+  background: var(--bg-primary);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The project scope. It used to belong to the pages view alone, which left
+   the notes view — cross-project by nature — without the one control that
+   makes a cross-project list readable. */
+.scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.scopeLabel {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.select {
+  height: 32px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  max-width: 220px;
+}
+
+.select:hover {
+  border-color: var(--text-muted);
+}
+
+.select:focus-visible {
+  border-color: var(--accent-light);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+[data-theme='dark'] .select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a8a8a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* The write actions of the notes half. They sit on their own row under the
+   shared toolbar: the toolbar belongs to both views, the verbs belong to the
+   notes alone. */
+.actions {
+  margin-bottom: 16px;
+}
+
+/* The shared loading block: one skeleton for both views, so a slow backend
+   looks the same whichever half of the tab is open. */
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .searchIcon {
   position: absolute;
   left: 12px;
@@ -80,16 +178,6 @@
   font-size: 14px;
   /* Room for the icon on the left and the hint on the right. */
   padding-right: 16px;
-}
-
-.searchHint {
-  position: absolute;
-  right: 12px;
-  font-size: 11px;
-  color: var(--text-muted);
-  pointer-events: none;
-  background: var(--bg-secondary);
-  padding-left: 8px;
 }
 
 /* Note: this breakpoint intentionally tracks layouts/main.css's 768px (where
@@ -117,12 +205,23 @@
   /* Actions take the full width on a phone: two 13px labels plus a search
      field cannot share a 390px line without either wrapping or shrinking the
      field below a usable size. */
-  .toolbar :global(.page-head-actions) {
+  .actions {
     width: 100%;
   }
 
-  .toolbar :global(.page-head-actions) :global(.btn) {
+  .actions :global(.btn) {
     flex: 1;
+  }
+
+  /* The scope dropdown gets its own line: it is the widest control in the
+     toolbar, and squeezing it next to the search field leaves both unusable. */
+  .scope {
+    width: 100%;
+  }
+
+  .select {
+    flex: 1;
+    max-width: none;
   }
 }
 

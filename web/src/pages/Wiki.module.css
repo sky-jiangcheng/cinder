@@ -1,122 +1,19 @@
 /* ============================================
-   /wiki — the approved knowledge layer, read by
-   a person (ADR-0032).
+   The approved-pages BODY of the knowledge tab
+   (ADR-0032 semantics, ADR-0038 decision 4).
 
-   Only classes exclusive to this page live here.
+   Only what the pages body draws lives here. The shared
+   skeleton — search field, project scope, result count,
+   loading and error handling — belongs to Knowledge.tsx
+   and its module.
+
+   Only classes exclusive to this body live here.
    Shared and therefore global: .btn, .form-input,
    .empty-*, .skeleton, .visually-hidden.
    ============================================ */
 
-.page {
-  display: flex;
-  flex-direction: column;
-}
-
-/* The toolbar is a control surface, not a title block: the nav bar already
-   names the section. It stays pinned while the list scrolls so the query and
-   the scope are always one glance away.
-
-   The sticky offsets track .main-content's 32px padding-top (20px below
-   768px) — sticky measures `top` from the scrollport edge, so a plain
-   `top: 0` would park the bar 32px down with content visibly scrolling
-   through the band. Same arithmetic as the knowledge page's toolbar. */
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding-bottom: 16px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border-subtle);
-
-  position: sticky;
-  top: -32px;
-  margin-top: -32px;
-  padding-top: 32px;
-  margin-left: -32px;
-  margin-right: -32px;
-  padding-left: 32px;
-  padding-right: 32px;
-  background: var(--bg-primary);
-  z-index: 5;
-}
-
-.search {
-  position: relative;
-  /* Capped, not `flex: 1`: a search box stretched across the whole content
-     width is a scanning problem, not a convenience. */
-  flex: 1 1 320px;
-  max-width: 520px;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-.searchIcon {
-  position: absolute;
-  left: 12px;
-  color: var(--text-muted);
-  pointer-events: none;
-  display: block;
-}
-
-.searchInput {
-  width: 100%;
-  padding: 10px 14px 10px 34px;
-  font-size: 14px;
-}
-
-.scope {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.scopeLabel {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.select {
-  height: 32px;
-  padding: 0 30px 0 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-family: inherit;
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  outline: none;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  max-width: 220px;
-}
-
-.select:hover {
-  border-color: var(--text-muted);
-}
-
-.select:focus-visible {
-  border-color: var(--accent-light);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-[data-theme='dark'] .select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a8a8a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-}
-
-/* Live result count — quiet metadata, not a heading: the list right below it
-   already says the same thing by existing. */
-.resultCount {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 12px;
-}
-
+/* The approved pages, top to bottom. The result count that used to sit
+   here is drawn by the shared skeleton now (one count bar for the tab). */
 .list {
   display: flex;
   flex-direction: column;
@@ -238,31 +135,4 @@
   font-size: 11px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 768px) {
-  /* The layout gutter drops to 20px at this breakpoint (layouts/main.css),
-     so the sticky offsets must track it or the pinned bar parks off-edge. */
-  .toolbar {
-    top: -20px;
-    margin-top: -20px;
-    padding-top: 20px;
-    margin-left: -20px;
-    margin-right: -20px;
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-
-  .search {
-    max-width: none;
-  }
-
-  .scope {
-    width: 100%;
-  }
-
-  .select {
-    flex: 1;
-    max-width: none;
-  }
 }

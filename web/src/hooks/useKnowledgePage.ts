@@ -11,18 +11,31 @@ import { useDebouncedCallback } from './useDebouncedCallback'
 
 export type KindFilter = 'all' | 'knowledge' | 'other'
 
+export interface UseKnowledgePageOptions {
+  // The knowledge tab's skeleton owns the project list (the scope dropdown
+  // lives there), so the hook must NOT fetch a second copy when the caller
+  // hands one in: the same list fetched twice is one fetch too many, and the
+  // two copies could disagree.
+  projects?: Project[]
+  // The shared project scope (0 = every project). It is the outermost
+  // narrowing of the note list — the notes view is cross-project by nature,
+  // so the scope is what turns it into "this project's notes".
+  scopeProjectId?: number
+}
+
 /**
  * Encapsulates all data-fetching, search, and mutation logic for the
  * Knowledge page. The page component only handles rendering.
  */
-export function useKnowledgePage() {
+export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
+  const { projects: externalProjects, scopeProjectId = 0 } = options
   const { t } = useTranslation()
   const [notes, setNotes] = useState<NoteWithProject[]>([])
   const [tags, setTags] = useState<string[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
+  const [ownProjects, setOwnProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [query, setQuery] = useState('')
+  const [query, setQueryState] = useState('')
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [kindFilter, setKindFilter] = useState<KindFilter>('all')
   const [activeTag, setActiveTag] = useState<string | null>(null)
@@ -49,10 +62,27 @@ export function useKnowledgePage() {
 
   useEffect(() => () => { if (messageTimer.current) clearTimeout(messageTimer.current) }, [])
 
+  // The externally supplied project list is read through a ref so that
+  // `fetchAll` keeps a stable identity: the skeleton loads the projects
+  // right after mount, and a new list identity must not re-trigger the
+  // fetch effect (it would refetch every note for a list that did not
+  // change).
+  const externalRef = useRef(externalProjects)
+  useEffect(() => { externalRef.current = externalProjects }, [externalProjects])
+
   const fetchAll = useCallback(() => {
     setError('')
-    Promise.all([listAllNotes(), listAllTags(), getProjects()])
-      .then(([n, tg, ps]) => { setNotes(n); setTags(tg); setProjects(ps) })
+    // With an external list the hook does not fetch projects at all — the
+    // skeleton already has them, and two copies of the same list can
+    // disagree.
+    const ext = externalRef.current
+    const ps = ext ? Promise.resolve(ext) : getProjects()
+    Promise.all([listAllNotes(), listAllTags(), ps])
+      .then(([n, tg, p]) => {
+        setNotes(n)
+        setTags(tg)
+        if (!ext) setOwnProjects(p)
+      })
       .catch((e: unknown) => { setError(e instanceof Error ? e.message : t('common.failed')) })
       .finally(() => setLoading(false))
   }, [t])
@@ -68,10 +98,20 @@ export function useKnowledgePage() {
       .catch(() => { if (seq === searchSeq.current) { setHits([]); if (ask) setAskMode(true) } })
   }, 300)
 
-  const handleSearchInput = useCallback((q: string) => {
-    setQuery(q)
+  // setQuery IS the search entry point. The knowledge tab's skeleton owns the
+  // query string (one field for both views, ADR-0038), and it drives the
+  // hook through this setter — so a search always follows the field the
+  // user is actually typing in.
+  const setQuery = useCallback((q: string) => {
+    setQueryState(q)
     runSearch(q, askMode)
   }, [runSearch, askMode])
+
+  // The old name for the same thing, kept for the callers that still speak
+  // it: two entrances to one behaviour would drift apart.
+  const handleSearchInput = useCallback((q: string) => {
+    setQuery(q)
+  }, [setQuery])
 
   const handlePin = useCallback(async (id: number, pinned: boolean) => {
     setNotes(prev => prev.map(n => n.id === id ? { ...n, pinned: !pinned } : n))
@@ -108,15 +148,39 @@ export function useKnowledgePage() {
     }
   }, [flashMessage, fetchAll, t])
 
+  // The notes that fall inside the current project scope. Every derived list
+  // below is computed from THESE, not from the whole library: under a scope,
+  // a chip that advertises a tag or a topic that does not exist in the scope
+  // can only lead to an empty state, which reads as "the scope broke the
+  // filter" rather than "there is nothing here".
+  const scopedNotes = useMemo(
+    () => (scopeProjectId ? notes.filter(n => n.project_id === scopeProjectId) : notes),
+    [notes, scopeProjectId],
+  )
+
   const filtered = useMemo(() => {
-    let list = notes
+    let list = scopedNotes
+    // The project scope is the OUTERMOST narrowing: it answers "whose notes",
+    // and the kind / tag / topic filters then narrow within that project.
+    // (ADR-0038 decision 4 — the notes view is cross-project by nature, so
+    // the scope is what turns it into "this project's notes".)
     if (kindFilter === 'knowledge') list = list.filter(n => n.kind === 'knowledge')
     else if (kindFilter === 'other') list = list.filter(n => n.kind !== 'knowledge')
     if (activeTag) list = list.filter(n => parseTags(n.tags).includes(activeTag))
     if (activeTopic) list = list.filter(n => n.topic_name === activeTopic)
     if (pinnedOnly) list = list.filter(n => n.pinned)
     return list
-  }, [notes, kindFilter, activeTag, activeTopic, pinnedOnly])
+  }, [scopedNotes, kindFilter, activeTag, activeTopic, pinnedOnly])
+
+  // The tag chips follow the scope too. The backend's tag list spans the
+  // whole library, so under a project scope it would advertise tags the
+  // scope does not have.
+  const scopedTags = useMemo(() => {
+    if (!scopeProjectId) return tags
+    const set = new Set<string>()
+    scopedNotes.forEach(n => parseTags(n.tags).forEach(tg => set.add(tg)))
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [tags, scopedNotes, scopeProjectId])
 
   // The topics actually present in the loaded notes, with their counts. The
   // list is derived from the notes rather than fetched per project: this
@@ -124,12 +188,16 @@ export function useKnowledgePage() {
   // for a chip row.
   const topicCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    notes.forEach(n => {
+    scopedNotes.forEach(n => {
       if (!n.topic_name) return
       counts.set(n.topic_name, (counts.get(n.topic_name) ?? 0) + 1)
     })
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  }, [notes])
+  }, [scopedNotes])
+
+  // The project list is the caller's when it hands one in (the knowledge
+  // tab's skeleton owns it); otherwise the hook fetches its own.
+  const projects = externalProjects ?? ownProjects
 
   // Quick Note / Create Note / the project jump list must all work on a cold
   // start (zero notes), so this is derived from the scanned project list.
@@ -141,17 +209,26 @@ export function useKnowledgePage() {
     return Array.from(set.entries()).sort((a, b) => a[0].localeCompare(b[0]))
   }, [projects])
 
-  const pinnedCount = useMemo(() => notes.filter(n => n.pinned).length, [notes])
+  const pinnedCount = useMemo(() => scopedNotes.filter(n => n.pinned).length, [scopedNotes])
 
   const recentNotes = useMemo(() => {
-    return [...notes]
+    return [...scopedNotes]
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, 5)
-  }, [notes])
+  }, [scopedNotes])
+
+  // The search hits follow the scope as well. The pages view's retrieval is
+  // scoped server-side (`searchWikiPages(scope, …)`), so the notes view's
+  // hits have to be narrowed the same way — otherwise the two views of the
+  // same tab answer "what does this project contain?" differently.
+  const scopedHits = useMemo(
+    () => (hits && scopeProjectId ? hits.filter(h => h.project_id === scopeProjectId) : hits),
+    [hits, scopeProjectId],
+  )
 
   return {
     // State
-    notes, tags, loading, error, query, hits, kindFilter, activeTag,
+    notes, tags: scopedTags, loading, error, query, hits: scopedHits, kindFilter, activeTag,
     activeTopic, pinnedOnly, importing, message, newNotePicker, askMode, exportingId,
     // Derived
     filtered, projectNames, pinnedCount, recentNotes, topicCounts,

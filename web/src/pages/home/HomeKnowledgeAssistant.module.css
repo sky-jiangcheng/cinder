@@ -1,106 +1,106 @@
-/* HomeKnowledgeAssistant.module.css — Styling for the Home AI Knowledge Assistant */
+/* HomeKnowledgeAssistant.module.css — 首页对话台（ADR-0038 决策 2、3）
+   布局由「有没有对话」决定，不是一个展开动画：
+     空闲态 = 居中的大输入框 + 三源合并的推荐区；
+     发起后 = 输入区常驻底部，对话流是页面唯一的滚动区。
+   旧版是一张 min-height 520px 的卡片，内部 .chatStream 还自带 max-height
+   580px 的滚动，嵌在会滚动的页面里 —— 两层滚动区，问得越多越得滚两遍。 */
 
-/* overflow: clip keeps the card's rounded-corner clipping without creating a
-   scroll container — that is what lets .header stick to the main scroller's
-   top edge (dock below the navbar) instead of being sliced mid-text when the
-   page scrolls. overflow: hidden stays first as the fallback: engines without
-   clip (WKWebView on macOS 12 / Safari 15) keep today's static-header look. */
-.container {
+/* --- 外壳 ------------------------------------------------------------------- */
+
+.console {
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  overflow: clip;
-  min-height: 520px;
   flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
-/* Header */
-.header {
+.consoleHeader {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-subtle);
   gap: 16px;
   flex-wrap: wrap;
-  /* Dock below the navbar when the page scrolls: same bg as the bar, so the
-     seam is invisible; at scroll-top the card's corner clipping (above) still
-     rounds this header, no radius of its own needed. The negative top cancels
-     .mainContent's padding so the docked header sits flush against the navbar
-     instead of leaving a content-filled sliver above it — keep the two values
-     in sync with App.module.css (.mainContent padding / ≤768px override). */
-  position: sticky;
-  top: -32px;
-  z-index: 5;
+  padding: 2px 4px 12px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-@media (max-width: 768px) {
-  .header {
-    top: -20px;
-  }
-}
-
-.titleArea {
+.headerLeft {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-.title {
-  margin: 0;
+.consoleTitle {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
-.badgeLive {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+/* 后端状态胶囊。老版这里挂着一个写死 "Live" 的呼吸灯徽章——没配 AI 端点时
+   它仍然在闪，那是界面在说一件不成立的事。改成如实显示「AI 已连接 / 本地检索」。 */
+.statusChip {
   font-size: 11px;
   font-weight: 500;
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 10px;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.liveDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: pulseDot 2s infinite ease-in-out;
-}
-
-@keyframes pulseDot {
-  0%, 100% { opacity: 0.4; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.1); }
-}
-
-.subtitle {
-  margin: 0;
-  font-size: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.statusChip[data-state='ai'] {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
 }
 
 .headerRight {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* --- 问 / 搜 模式开关 -------------------------------------------------------- */
+
+.modeSwitch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.modeBtn {
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius-md) - 2px);
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.modeBtn:hover {
+  color: var(--text-primary);
+}
+
+.modeBtnActive {
+  background: var(--bg-primary);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .scopeSelect {
   max-width: 220px;
-  height: 32px;
+  height: 30px;
   font-size: 12px;
   padding: 4px 10px;
   background: var(--bg-primary);
@@ -113,7 +113,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 32px;
+  height: 30px;
   padding: 0 10px;
   font-size: 12px;
   background: transparent;
@@ -130,40 +130,48 @@
   border-color: var(--border-default);
 }
 
-/* Chat Stream */
-.chatStream {
+/* --- 主体 ------------------------------------------------------------------- */
+
+.consoleBody {
   flex: 1;
-  overflow-y: auto;
-  padding: 24px 20px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  min-height: 280px;
-  max-height: 580px;
 }
 
-/* Empty welcome state: center via `safe center` instead of the old
-   `margin: auto` on the child — when the stream is shorter than the welcome
-   block (narrow/short windows), margin:auto clips the unreachable top half,
-   while `safe` falls back to start-alignment and keeps everything reachable. */
-.streamEmpty {
+/* 空闲态：整页居中。safe center 而不是 margin:auto——内容比容器高时
+   margin:auto 会把不可达的上半截裁掉，safe 会退回顶端对齐并保持可达。 */
+.consoleIdle .consoleBody {
+  overflow-y: auto;
+}
+
+.consoleActive .consoleBody {
+  overflow: hidden;
+}
+
+/* --- 空闲态 ----------------------------------------------------------------- */
+
+.idleStage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: safe center;
+  gap: 26px;
+  padding: 24px 0 28px;
 }
 
-/* Empty State */
-.emptyState {
-  margin: 0;
-  max-width: 640px;
+.idleIntro {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 14px 12px 10px;
+  max-width: 620px;
 }
 
 .welcomeIconArea {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: var(--radius-lg);
   background: var(--accent-soft);
   color: var(--accent);
@@ -171,38 +179,78 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .welcomeTitle {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .welcomeDesc {
-  margin: 0 0 16px;
+  margin: 0;
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.6;
 }
 
-.quickPrompts {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+/* --- 推荐区：三源合并，一处权威 --------------------------------------------- */
+
+.recoArea {
   width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recoTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.recoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.recoBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.recoBlockTitle {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.promptList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .promptCard {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  background: var(--bg-secondary);
+  gap: 8px;
+  padding: 7px 9px;
+  background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   text-align: left;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -212,8 +260,6 @@
 .promptCard:hover {
   border-color: var(--accent);
   background: var(--bg-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
 }
 
 .promptIcon {
@@ -224,11 +270,179 @@
 
 .promptText {
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.45;
   font-weight: 500;
 }
 
-/* Message Rows */
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.chip svg {
+  color: var(--warning);
+  flex-shrink: 0;
+}
+
+.recoEmpty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- 输入区 ----------------------------------------------------------------- */
+
+.inputArea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 空闲态：居中的大输入框。 */
+.inputHero {
+  width: 100%;
+  max-width: 760px;
+}
+
+.inputHero .inputBox {
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+}
+
+.inputHero .textarea {
+  font-size: 14px;
+  min-height: 68px;
+}
+
+/* 发起后：常驻页面底部的紧凑条。 */
+.inputDocked {
+  flex: none;
+  padding: 10px 4px 4px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.inputBox {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  transition: border-color var(--transition-fast);
+}
+
+.inputBox:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  resize: none;
+  outline: none;
+  max-height: 140px;
+  font-family: inherit;
+}
+
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.sendBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.sendBtn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.sendBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.inputFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.fallbackNotice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.settingsLink {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+}
+
+/* --- 对话流 ----------------------------------------------------------------- */
+
+.stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 .msgRow {
   display: flex;
   gap: 12px;
@@ -261,11 +475,17 @@
   color: var(--accent);
 }
 
+.avatarSearch {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
 .msgBody {
   display: flex;
   flex-direction: column;
-  max-width: 85%;
+  max-width: 88%;
   gap: 6px;
+  min-width: 0;
 }
 
 .msgMeta {
@@ -309,6 +529,16 @@
   gap: 14px;
 }
 
+/* 本地回退的诚实标记：这条回复是关键词匹配，不是答案（ADR-0033 决策 2）。 */
+.localBadge {
+  align-self: flex-start;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
 .markdownText {
   font-size: 13px;
   line-height: 1.6;
@@ -337,7 +567,8 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-/* Typing indicator */
+/* --- 打字指示器 ------------------------------------------------------------- */
+
 .typingIndicator {
   display: inline-flex;
   align-items: center;
@@ -368,7 +599,154 @@
   40% { transform: scale(1); opacity: 1; }
 }
 
-/* Embedded Cards Sections */
+/* --- 搜模式的结果：按项目分组 ---------------------------------------------- */
+
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.searchCount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.searchGroupHint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.searchGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.searchGroupTitle {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.searchGroupCount {
+  font-size: 10px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.hitList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hitItem {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.hitRow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 9px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: all var(--transition-fast);
+}
+
+.hitRow:hover {
+  border-color: var(--accent);
+}
+
+.hitType {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.hitBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hitTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hitSnippet {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「就这条追问」——搜与问之间唯一的耦合点。 */
+.hitAsk {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.hitAsk:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.searchEmpty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.searchEmpty p {
+  margin: 0;
+}
+
+/* --- 引用卡片 --------------------------------------------------------------- */
+
 .cardSection {
   display: flex;
   flex-direction: column;
@@ -387,7 +765,6 @@
   color: var(--text-secondary);
 }
 
-/* Project Cards Grid */
 .projectCardsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -467,7 +844,6 @@
   gap: 4px;
 }
 
-/* Knowledge Cards Grid */
 .knowledgeCardsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -557,7 +933,8 @@
   overflow: hidden;
 }
 
-/* Action toolbar on reply */
+/* --- 回复动作 --------------------------------------------------------------- */
+
 .msgActions {
   display: flex;
   align-items: center;
@@ -585,109 +962,26 @@
   color: var(--text-primary);
 }
 
-/* Input Bar */
-.inputArea {
-  padding: 14px 20px 18px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+/* --- 焦点可见 --------------------------------------------------------------- */
 
-.inputBox {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 8px 12px;
-  transition: border-color var(--transition-fast);
-}
-
-.inputBox:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-
-.textarea {
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 2px 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  resize: none;
-  outline: none;
-  max-height: 140px;
-  font-family: inherit;
-}
-
-.textarea::placeholder {
-  color: var(--text-muted);
-}
-
-.sendBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
-}
-
-.sendBtn:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.sendBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.inputFooter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.fallbackNotice {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-muted);
-}
-
-.settingsLink {
-  color: var(--accent);
-  text-decoration: underline;
-  cursor: pointer;
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 11px;
+.modeBtn:focus-visible,
+.chip:focus-visible,
+.promptCard:focus-visible,
+.hitAsk:focus-visible,
+.hitRow:focus-visible,
+.clearBtn:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
 }
 
 @media (max-width: 640px) {
-  .header {
-    flex-direction: column;
+  .consoleHeader {
     align-items: stretch;
   }
   .headerRight {
     justify-content: space-between;
   }
-  .quickPrompts {
+  .recoGrid {
     grid-template-columns: 1fr;
   }
   .msgBody {
@@ -696,5 +990,12 @@
   .projectCardsGrid,
   .knowledgeCardsGrid {
     grid-template-columns: 1fr;
+  }
+  .hitItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hitAsk {
+    align-self: flex-end;
   }
 }

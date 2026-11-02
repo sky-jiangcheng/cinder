@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigationType, useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { browseWikiPages, getProjects, searchWikiPages } from '../api/client'
+import { browseWikiPages, searchWikiPages } from '../api/client'
 import type { Project, WikiPageSummary } from '../api/client'
-import ErrorBanner from '../components/ErrorBanner'
 import Icon from '../components/Icon'
 import s from './Wiki.module.css'
 
 // The approved knowledge layer, read by a person (ADR-0032).
+//
+// This is the PAGES BODY of the knowledge tab (ADR-0038 decision 4): the
+// skeleton — search field, project scope, result count, empty/error
+// handling — belongs to the tab, and this file is only what the approved
+// pages look like. The scope, the query and the count are handed in; the
+// URL is the tab's business.
 //
 // Three things this page is NOT:
 //
@@ -28,54 +33,36 @@ import s from './Wiki.module.css'
 // every row says so — without that label the extra page reads like a filter
 // that leaked.
 
-export default function Wiki() {
+export interface WikiPagesViewProps {
+  // The shared query and project scope (0 = every project). The skeleton
+  // owns both, because the notes body searches with the same two.
+  query?: string
+  scope?: number
+  // The project list, for naming the scope of a row.
+  projects?: Project[]
+  // The skeleton renders the result count and the error banner, so the body
+  // reports what it has instead of drawing its own.
+  onCount?: (count: number, countKey: string) => void
+  onError?: (message: string, retry: () => void) => void
+  onLoading?: (loading: boolean) => void
+}
+
+export default function WikiPagesView({
+  query = '',
+  scope = 0,
+  projects = [],
+  onCount,
+  onError,
+  onLoading,
+}: WikiPagesViewProps) {
   const { t } = useTranslation()
-  const [searchParams, setSearchParams] = useSearchParams()
-  // ?q= and ?project= are the deep-link surface: a scoped, searched view is
-  // worth sharing, and the browser's back button has to walk it.
-  const urlQuery = searchParams.get('q') ?? ''
-  const urlScope = Number(searchParams.get('project') ?? '0') || 0
-  const [query, setQuery] = useState(urlQuery)
-  const [scope, setScope] = useState(urlScope)
-  const [projects, setProjects] = useState<Project[]>([])
   const [pages, setPages] = useState<WikiPageSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [token, setToken] = useState(0)
 
-  // What WE put into the URL. react-router may render an intermediate
-  // location while our own write is in flight, and adopting that as an
-  // external change would wipe the tail of what the user just typed.
-  const written = useRef({ q: urlQuery, p: urlScope })
-  // Only a history navigation (back / forward) may overwrite the local state;
-  // our own PUSH/REPLACE writes must not.
-  const navType = useNavigationType()
-
-  useEffect(() => {
-    if (navType !== 'POP') return
-    if (urlQuery !== written.current.q) setQuery(urlQuery)
-    if (urlScope !== written.current.p) setScope(urlScope)
-  }, [navType, urlQuery, urlScope])
-
-  // The scope dropdown needs the project list. Its failure is not the page's
-  // failure: the pages still load, and a row whose project is unknown falls
-  // back to its id rather than to a blank scope label.
-  useEffect(() => {
-    let cancelled = false
-    getProjects()
-      .then(ps => { if (!cancelled) setProjects(ps) })
-      .catch(() => { /* the scope degrades to "all projects" */ })
-    return () => { cancelled = true }
-  }, [])
-
   useEffect(() => {
     const q = query.trim()
-    written.current = { q, p: scope }
-    const next: Record<string, string> = {}
-    if (q) next.q = q
-    if (scope) next.project = String(scope)
-    setSearchParams(next, { replace: true })
-
     let cancelled = false
     // The search is debounced; the browse feed is not (there is nothing to
     // type into it).
@@ -95,7 +82,7 @@ export default function Wiki() {
         })
     }, q ? 200 : 0)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [query, scope, token, setSearchParams, t])
+  }, [query, scope, token, t])
 
   const projectName = useMemo(() => {
     const m = new Map<number, string>()
@@ -105,92 +92,57 @@ export default function Wiki() {
 
   const searching = query.trim().length > 0
 
-  return (
-    <div className={s.page}>
-      {/* The nav bar already names this section ("知识页"), so a visible title
-          would be duplication — it stays for screen readers and the document
-          outline (same call as the knowledge and review pages). */}
-      <h1 className="visually-hidden">{t('wiki.title')}</h1>
+  // The count and the failure are the skeleton's to draw: one count bar and
+  // one error banner for the whole tab, whatever the body underneath is.
+  useEffect(() => { onCount?.(pages.length, 'wiki.resultCount') }, [pages.length, onCount])
+  const retry = useCallback(() => { setToken(n => n + 1) }, [])
+  useEffect(() => { onError?.(error, retry) }, [error, retry, onError])
+  useEffect(() => { onLoading?.(loading) }, [loading, onLoading])
 
-      <div className={s.toolbar}>
-        <div className={s.search} role="search" aria-label={t('wiki.searchAria')}>
-          <Icon name="search" size={15} className={s.searchIcon} />
-          <input
-            type="search"
-            className={`form-input ${s.searchInput}`}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder={t('wiki.searchPlaceholder')}
-            aria-label={t('wiki.searchAria')}
-          />
-        </div>
-        <label className={s.scope}>
-          <span className={s.scopeLabel}>{t('wiki.scopeLabel')}</span>
-          <select
-            className={s.select}
-            value={scope}
-            onChange={e => setScope(Number(e.target.value))}
-          >
-            <option value={0}>{t('wiki.scopeAll')}</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </label>
+  // While the pages are loading the skeleton shows the shared skeleton
+  // block, and a failure is the skeleton's error banner — this body draws
+  // neither, so the two views fail and load the same way.
+  if (loading || error) return null
+
+  if (pages.length === 0) {
+    return searching ? (
+      <div className="empty-state small">
+        <div className="empty-icon"><Icon name="search" size={32} /></div>
+        <h3>{t('wiki.noMatchTitle')}</h3>
+        <p>{t('wiki.noMatchMsg')}</p>
       </div>
-
-      {error ? (
-        <ErrorBanner message={error} onRetry={() => setToken(n => n + 1)} />
-      ) : loading ? (
-        <div className={s.list} aria-hidden>
-          <div className="skeleton skeleton-text" style={{ height: 56 }} />
-          <div className="skeleton skeleton-text" style={{ height: 56 }} />
-          <div className="skeleton skeleton-text" style={{ height: 56 }} />
+    ) : (
+      <div className="empty-state large">
+        <div className="empty-icon"><Icon name="file-text" size={32} /></div>
+        <h3>{t('wiki.emptyTitle')}</h3>
+        <p>{t('wiki.emptyMsg')}</p>
+        <div className="empty-actions">
+          <Link to="/review" className="btn btn-secondary">{t('wiki.emptyLink')}</Link>
         </div>
-      ) : pages.length === 0 ? (
-        searching ? (
-          <div className="empty-state small">
-            <div className="empty-icon"><Icon name="search" size={32} /></div>
-            <h3>{t('wiki.noMatchTitle')}</h3>
-            <p>{t('wiki.noMatchMsg')}</p>
-          </div>
-        ) : (
-          <div className="empty-state large">
-            <div className="empty-icon"><Icon name="file-text" size={32} /></div>
-            <h3>{t('wiki.emptyTitle')}</h3>
-            <p>{t('wiki.emptyMsg')}</p>
-            <div className="empty-actions">
-              <Link to="/review" className="btn btn-secondary">{t('wiki.emptyLink')}</Link>
-            </div>
-          </div>
-        )
-      ) : (
-        <>
-          {/* Live result count, as quiet metadata: the list below it says the
-              same thing by existing. */}
-          <div className={s.resultCount} aria-live="polite">
-            {t('wiki.resultCount', { count: pages.length })}
-          </div>
-          <ul className={s.list}>
-            {pages.map(p => (
-              <li key={p.id}>
-                <Link to={`/wiki/${p.id}`} className={s.row}>
-                  <span className={s.rowHead}>
-                    <span className={`${s.kindBadge} ${s['kindBadge_' + p.kind] ?? ''}`}>
-                      {t(`wiki.kind_${p.kind}`, p.kind)}
-                    </span>
-                    <span className={s.rowTitle}>{p.title || p.slug}</span>
-                    <span className={`${s.scopeBadge} ${p.project_id === 0 ? s.scopeBadgeGlobal : ''}`}>
-                      {p.project_id === 0 ? t('wiki.scopeGlobal') : projectName(p.project_id)}
-                    </span>
-                  </span>
-                  <span className={s.rowSlug}>{p.slug}</span>
-                  <span className={s.rowSnippet}>{p.snippet}</span>
-                  <span className={s.rowDate}>{p.updated_at.slice(0, 10)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </div>
+      </div>
+    )
+  }
+
+  return (
+    <ul className={s.list}>
+      {pages.map(p => (
+        <li key={p.id}>
+          <Link to={`/wiki/${p.id}`} className={s.row}>
+            <span className={s.rowHead}>
+              <span className={`${s.kindBadge} ${s['kindBadge_' + p.kind] ?? ''}`}>
+                {t(`wiki.kind_${p.kind}`, p.kind)}
+              </span>
+              <span className={s.rowTitle}>{p.title || p.slug}</span>
+              <span className={`${s.scopeBadge} ${p.project_id === 0 ? s.scopeBadgeGlobal : ''}`}>
+                {p.project_id === 0 ? t('wiki.scopeGlobal') : projectName(p.project_id)}
+              </span>
+            </span>
+            <span className={s.rowSlug}>{p.slug}</span>
+            <span className={s.rowSnippet}>{p.snippet}</span>
+            <span className={s.rowDate}>{p.updated_at.slice(0, 10)}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   )
 }

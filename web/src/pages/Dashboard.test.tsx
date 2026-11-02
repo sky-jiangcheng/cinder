@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { renderReady } from '../test/renderReady'
 
 // Partial mock: override the backend-calling endpoints, keep everything else
@@ -20,6 +20,7 @@ vi.mock('../api/client', async (importOriginal) => {
     searchProjects: vi.fn(),
     searchAll: vi.fn(),
     triggerScan: vi.fn(),
+    listRecentHandoffs: vi.fn(),
   }
 })
 
@@ -40,6 +41,8 @@ import {
   getScanStatus,
   searchProjects,
   searchAll,
+  listRecentHandoffs,
+  type HandoffEntry,
   type Project,
   type Summary,
 } from '../api/client'
@@ -55,6 +58,7 @@ const mockGetStatusBar = vi.mocked(getStatusBar)
 const mockGetScanStatus = vi.mocked(getScanStatus)
 const mockSearchProjects = vi.mocked(searchProjects)
 const mockSearchAll = vi.mocked(searchAll)
+const mockListRecentHandoffs = vi.mocked(listRecentHandoffs)
 
 // First Dashboard component test (D25): the page previously only had App.smoke
 // shell coverage, while the ADR-0017 promotion gate requires functional tests
@@ -76,6 +80,17 @@ const proj = (id: number, name: string, over: Partial<Project> = {}): Project =>
   my_added_7d: 0,
   is_workday: true,
   below_standard: false,
+  ...over,
+})
+
+// 记忆环的一行：最近交接记录（ADR-0038 决策 5 把它从首页搬到了仪表盘）。
+const entry = (over: Partial<HandoffEntry> = {}): HandoffEntry => ({
+  note_id: 1,
+  project_id: 2,
+  project_name: 'Alpha',
+  title: 'Session Handoff 2026-10-12 15:04',
+  updated_at: '2026-10-12 15:04:05',
+  auto_captured: false,
   ...over,
 })
 
@@ -110,6 +125,8 @@ beforeEach(() => {
   mockGetScanStatus.mockResolvedValue({ running: false, backfilling: false, message: '', progress: 0, total: 0 })
   mockSearchProjects.mockResolvedValue([])
   mockSearchAll.mockResolvedValue([])
+  // 记忆环：默认没有交接记录。
+  mockListRecentHandoffs.mockResolvedValue([])
 })
 
 describe('Dashboard (first-screen project status half)', () => {
@@ -141,5 +158,41 @@ describe('Dashboard (first-screen project status half)', () => {
     // Dashboard.tsx swaps the goal for the weekend hint on non-workdays
     // (dashboard.weekend, defaultValue "Happy weekend").
     expect(await screen.findByText('Happy weekend')).toBeTruthy()
+  })
+})
+
+// ADR-0038 决策 5：记忆环（最近交接记录 + 写一条交接记录）从首页搬进仪表盘。
+// 首页已经是整页对话台，仪表盘是记忆环的唯一一处——所以这里钉住「它在仪表盘里」。
+describe('Dashboard (memory ring, ADR-0038 decision 5)', () => {
+  it('shows the recent handoffs in the ring at the top of the dashboard', async () => {
+    mockListRecentHandoffs.mockResolvedValue([
+      entry({ note_id: 1, auto_captured: true }),
+      entry({ note_id: 2, project_name: 'Beta', title: 'Session Handoff 2026-10-11 09:30', auto_captured: false }),
+    ])
+    await renderReady(<Dashboard />)
+
+    const ring = screen.getByRole('region', { name: '记忆环' })
+    expect(await screen.findByText('Session Handoff 2026-10-12 15:04')).toBeTruthy()
+    expect(ring.textContent).toContain('Alpha')
+    expect(screen.getByText('Session Handoff 2026-10-11 09:30')).toBeTruthy()
+    // 徽标只给自动捕捉的那条：手写记录不该被标成「自动」。
+    expect(screen.getAllByText('自动')).toHaveLength(1)
+  })
+
+  it('offers the empty hint when no handoff exists yet', async () => {
+    await renderReady(<Dashboard />)
+    expect(await screen.findByText('还没有交接记录——写一条，或等会话结束后出现在这里')).toBeTruthy()
+  })
+
+  it('opens the handoff composer from the ring', async () => {
+    await renderReady(<Dashboard />)
+
+    const write = await screen.findByRole('button', { name: /写一条交接记录/ })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(write)
+
+    // HandoffComposer 打开后就是一个 dialog——「写一条交接记录」这条零配置
+    // 路径因此是可达的，不需要 MCP 客户端、模型或任何配置。
+    expect(await screen.findByRole('dialog')).toBeTruthy()
   })
 })

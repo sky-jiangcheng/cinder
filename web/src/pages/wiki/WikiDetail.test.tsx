@@ -145,6 +145,9 @@ describe('the /wiki/:id detail route (ADR-0032)', () => {
     renderDetail()
 
     const back = await screen.findByRole('link', { name: /返回知识页列表/ })
-    expect(back.getAttribute('href')).toBe('/wiki')
+    // The wiki list is the "pages" view of the Knowledge tab now (ADR-0038
+    // decision 4), so the back link goes straight there instead of bouncing
+    // through the /wiki redirect.
+    expect(back.getAttribute('href')).toBe('/knowledge?view=pages')
   })
 })

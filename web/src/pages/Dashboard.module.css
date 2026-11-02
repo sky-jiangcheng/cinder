@@ -215,3 +215,128 @@
   color: var(--warning);
   font-weight: 500;
 }
+
+/* 记忆环 (ADR-0038 决策 5) — 最近交接记录 + 「写一条交接记录」。
+   从首页搬过来时样式也搬过来：记忆环是同一块东西，换个落点不该换张脸。
+   唯一改动是 .autoBadge 用色改成 CSS 变量（品牌调色板只认 token，
+   见 web/src/styles/brandTokens.test.ts）。 */
+
+.ring {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.ringHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ringHead h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ringSub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 零配置进入会话循环的入口。放在环头右侧：环空不空都能点到。 */
+.ringWrite {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ringEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 记录条按仪表盘其余卡片的网格排布：记忆环会随记录数向下长，
+   放在滚动区里正好，不必压缩不滚动的仪表盘头部。 */
+.handoffList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.handoffItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.handoffItem:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+}
+
+.handoffTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handoffMeta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.handoffProject {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「自动」徽标：会话结束自动捕捉的记录，与手写记录区分开。 */
+.autoBadge {
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+}
+
+.handoffItem:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .handoffList {
+    grid-template-columns: 1fr;
+  }
+}

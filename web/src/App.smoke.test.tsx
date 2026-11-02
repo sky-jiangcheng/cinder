@@ -35,12 +35,12 @@ function installWailsBindings() {
   // against.
   const bindings: Record<string, (...args: unknown[]) => Promise<unknown>> = {
     Health: () => Promise.resolve({ status: 'ok' }),
-    // First screen (D25): Home calls the memory ring; the embedded Dashboard
-    // panel calls its own summary/heatmap/status endpoints on mount.
-    ListRecentHandoffs: () => Promise.resolve([]),
+    // First screen (ADR-0038): Home is the console — it loads the project list
+    // for the scope selector and the hot-project recommendation, and the
+    // console itself loads the config and the tag list.
     ListProjects: () => Promise.resolve([]),
     GetProjects: () => Promise.resolve([]),
-    GetSummary: () => Promise.resolve(null),
+    ListAllTags: () => Promise.resolve([]),
     GetTodoCounts: () => Promise.resolve([]),
     GetNoteCounts: () => Promise.resolve([]),
     GetHeatmapData: () => Promise.resolve([]),
@@ -99,13 +99,13 @@ describe('App desktop shell', () => {
     // The left rail is icon-only, so the item's name lives in its accessible
     // name (aria-label), not in a text node. It must never read "nav.knowledge".
     await waitFor(
-      () => expect(screen.getAllByRole('link', { name: /^(Knowledge|知识库)$/ }).length).toBeGreaterThan(0),
+      () => expect(screen.getAllByRole('link', { name: /^(Knowledge|知识)$/ }).length).toBeGreaterThan(0),
       { timeout: LAZY_CHUNK_TIMEOUT },
     )
-    // The lazy Home page resolves next; the memory ring heading comes from
-    // home.ringTitle (ADR-0017 first screen).
+    // The lazy Home page resolves next; the console's own title comes from
+    // home.consoleTitle (ADR-0038 decision 2).
     await waitFor(
-      () => expect(screen.getAllByText(/^(记忆环|Memory Ring)$/).length).toBeGreaterThan(0),
+      () => expect(screen.getAllByText(/^(知识库对话台|Knowledge Console)$/).length).toBeGreaterThan(0),
       { timeout: LAZY_CHUNK_TIMEOUT },
     )
     const body = document.body.textContent ?? ''
@@ -116,14 +116,14 @@ describe('App desktop shell', () => {
   it('routes backend calls through the Wails binding, not HTTP fetch', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     await mountApp()
-    await waitFor(() => expect(wailsCalls).toContain('ListRecentHandoffs'), { timeout: LAZY_CHUNK_TIMEOUT })
+    await waitFor(() => expect(wailsCalls).toContain('GetProjects'), { timeout: LAZY_CHUNK_TIMEOUT })
     expect(fetchSpy).not.toHaveBeenCalled()
     fetchSpy.mockRestore()
   }, LAZY_CHUNK_TIMEOUT)
 
   it('shows no error banner', async () => {
     await mountApp()
-    await waitFor(() => expect(wailsCalls).toContain('ListRecentHandoffs'), { timeout: LAZY_CHUNK_TIMEOUT })
+    await waitFor(() => expect(wailsCalls).toContain('GetProjects'), { timeout: LAZY_CHUNK_TIMEOUT })
     const body = document.body.textContent ?? ''
     expect(body).not.toMatch(/did not match the expected pattern/)
     // 断言的是「不该出现的连接横幅」——缺席的元素没有可查语义，只能按 class 判空。

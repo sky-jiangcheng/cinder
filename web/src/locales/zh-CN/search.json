@@ -1,8 +1,4 @@
 {
-  "navLabel": "打开全局搜索",
-  "homeEntry": "全局搜索",
-  "homeEntryHint": "笔记 · 待办 · 项目",
-  "title": "全局搜索",
   "placeholder": "搜索笔记、待办与项目…",
   "results": "搜索结果",
   "resultsCount": "{{count}} 条结果",
@@ -14,8 +10,7 @@
   "noResults": "没有匹配的结果",
   "tryHotTags": "试试从热门标签开始",
   "hotProjects": "热门项目",
-  "hotProjectsSub": "按近 7 天个人新增排序",
-  "recentAdded": "近 7 天 +{{count}}",
+  "hotProjectsSub": "最近有动静的",
   "noHotProjects": "还没有项目数据——先在设置里配置扫描目录",
   "hotTags": "热门标签",
   "hotTagsHint": "点击标签立即检索",

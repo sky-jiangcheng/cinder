@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import SummaryBar from '../components/SummaryBar'
 import GoalRing from '../components/GoalRing'
@@ -9,11 +10,16 @@ import ProjectCard from '../components/ProjectCard'
 import ProjectSearchDropdown from './dashboard/ProjectSearchDropdown'
 import ErrorBanner from '../components/ErrorBanner'
 import Icon from '../components/Icon'
+import HandoffComposer from '../components/HandoffComposer'
+import { listRecentHandoffs, type HandoffEntry } from '../api/client'
+import { useToast } from '../hooks/useToast'
 import { useDashboardData, type SortKey } from '../hooks/useDashboardData'
 import s from './Dashboard.module.css'
 
 function Dashboard() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const pushToast = useToast()
   const {
     summary, dailyGoal, date, sortKey, confirmScan, showStarredOnly,
     displayedError, scanning, scanMsg, scanDoneMsg, loading,
@@ -23,6 +29,23 @@ function Dashboard() {
     handleScan, handleToggleStar, handleRefreshHistory, fetchSummary,
     refetchProjects, setError, setSummaryError,
   } = useDashboardData()
+
+  // 记忆环（ADR-0038 决策 5）：最近交接记录 + 「写一条交接记录」。
+  // 它讲的是「我上次干到哪儿了」，属于「我的状态」，不属于首页对话台回答的
+  // 「我要答案」；而且「写一条交接记录」是零配置进入会话循环的唯一入口，
+  // 仪表盘同样是首屏可达。
+  const [entries, setEntries] = useState<HandoffEntry[] | null>(null)
+  const [composerOpen, setComposerOpen] = useState(false)
+
+  const loadHandoffs = useCallback(() => {
+    listRecentHandoffs(10)
+      .then(r => setEntries(r ?? []))
+      .catch(() => setEntries([]))
+  }, [])
+
+  useEffect(() => {
+    loadHandoffs()
+  }, [loadHandoffs])
 
   return (
     <div className={s.page}>
@@ -96,6 +119,59 @@ function Dashboard() {
       </div>
 
       <div className={s.scroll}>
+        {/* 记忆环放在滚动区的最上面，而不是 s.fixed 仪表盘头部里。
+            s.fixed 是「永远不滚动」的头部区，把一块会增长的记录列表塞进去，
+            窄窗口下会把整个头部顶爆；放在滚动区顶部，记忆环仍然是仪表盘的
+            第一屏第一块（「上次的会话」）。首页已是整页对话台，这里是记忆环
+            的唯一一处。 */}
+        <section className={s.ring} aria-label={t('handoff.ringTitle', { defaultValue: '记忆环' })}>
+          <div className={s.ringHead}>
+            <div>
+              <h2>{t('handoff.ringTitle', { defaultValue: '记忆环' })}</h2>
+              <p className={s.ringSub}>{t('handoff.ringSub', { defaultValue: '最近的会话交接记录' })}</p>
+            </div>
+            {/* 零配置进入会话循环的入口：手写一条交接记录。agent 那一半需要
+                MCP 客户端、模型和「记得调用工具」的客户端——第一次用的人一样
+                都没有，所以手写这条路是唯一能立刻试起来的。 */}
+            <button
+              type="button"
+              className={`${s.ringWrite} btn btn-secondary btn-sm`}
+              onClick={() => setComposerOpen(true)}
+            >
+              <Icon name="plus" size={12} />
+              {t('handoff.write', { defaultValue: '写一条交接记录' })}
+            </button>
+          </div>
+
+          {entries === null ? null : entries.length === 0 ? (
+            <p className={s.ringEmpty}>
+              {t('handoff.empty', { defaultValue: '还没有交接记录——写一条，或等会话结束后出现在这里' })}
+            </p>
+          ) : (
+            <ul className={s.handoffList}>
+              {entries.map(e => (
+                <li key={e.note_id}>
+                  <button
+                    type="button"
+                    className={s.handoffItem}
+                    onClick={() => navigate(`/project/${e.project_id}`)}
+                    title={t('handoff.openProject', { defaultValue: '打开项目 {{name}}', name: e.project_name })}
+                  >
+                    <span className={s.handoffTitle}>{e.title}</span>
+                    <span className={s.handoffMeta}>
+                      <span className={s.handoffProject}>{e.project_name}</span>
+                      {e.auto_captured && (
+                        <span className={s.autoBadge}>{t('handoff.auto', { defaultValue: '自动' })}</span>
+                      )}
+                      <span>{e.updated_at.slice(0, 16)}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {loading ? (
           <div className={s.projectGrid}>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -186,6 +262,15 @@ function Dashboard() {
           </>
         )}
       </div>
+
+      <HandoffComposer
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        onCreated={() => {
+          loadHandoffs()
+          pushToast({ kind: 'success', title: t('handoff.saved', { defaultValue: '交接记录已写入' }) })
+        }}
+      />
 
       <StatusBar />
     </div>

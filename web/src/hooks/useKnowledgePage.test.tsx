@@ -22,11 +22,12 @@ vi.mock('react-i18next', () => ({
 }))
 
 import { useKnowledgePage } from './useKnowledgePage'
-import { getProjects, listAllNotes, listAllTags, type NoteWithProject, type Project } from '../api/client'
+import { getProjects, listAllNotes, listAllTags, searchAll, type NoteWithProject, type Project } from '../api/client'
 
 const mockListAllNotes = vi.mocked(listAllNotes)
 const mockListAllTags = vi.mocked(listAllTags)
 const mockGetProjects = vi.mocked(getProjects)
+const mockSearchAll = vi.mocked(searchAll)
 
 // The hook resolves through Promise microtasks; a nested act flush settles
 // them without relying on timers.
@@ -72,6 +73,7 @@ beforeEach(() => {
   mockListAllNotes.mockReset().mockResolvedValue([])
   mockListAllTags.mockReset().mockResolvedValue([])
   mockGetProjects.mockReset().mockResolvedValue([])
+  mockSearchAll.mockReset().mockResolvedValue([])
 })
 
 describe('useKnowledgePage', () => {
@@ -129,5 +131,47 @@ describe('useKnowledgePage', () => {
 
     expect(result.current.error).toBe('backend down')
     expect(result.current.loading).toBe(false)
+  })
+
+  it('narrows the notes to the project scope it is given', async () => {
+    // The notes view is cross-project by nature; the scope is what turns it
+    // into "this project's notes" (ADR-0038 decision 4).
+    mockListAllNotes.mockResolvedValue([note(1, 3, '.cargo'), note(2, 7, 'repotory')])
+    const { result } = renderHook(() => useKnowledgePage({ scopeProjectId: 7 }))
+    await flush()
+
+    expect(result.current.notes).toHaveLength(2)
+    expect(result.current.filtered.map(n => n.id)).toEqual([2])
+  })
+
+  it('keeps every note when no scope is picked', async () => {
+    mockListAllNotes.mockResolvedValue([note(1, 3, '.cargo'), note(2, 7, 'repotory')])
+    const { result } = renderHook(() => useKnowledgePage())
+    await flush()
+
+    expect(result.current.filtered.map(n => n.id)).toEqual([1, 2])
+  })
+
+  it('uses the project list it is handed instead of fetching a second one', async () => {
+    // The skeleton owns the project list (the scope dropdown lives there) —
+    // two copies of the same list could disagree.
+    mockGetProjects.mockResolvedValue([proj(9, 'fetched-anyway')])
+    const { result } = renderHook(() => useKnowledgePage({ projects: [proj(3, '.cargo')] }))
+    await flush()
+
+    expect(mockGetProjects).not.toHaveBeenCalled()
+    expect(result.current.projectNames).toEqual([['.cargo', 3]])
+  })
+
+  it('searches when the query is set', async () => {
+    const { result } = renderHook(() => useKnowledgePage())
+    await flush()
+
+    act(() => { result.current.setQuery('网关') })
+    // The search is debounced by 300ms: one request per pause in typing.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)) })
+
+    expect(mockSearchAll).toHaveBeenCalledWith('网关')
+    expect(result.current.hits).toEqual([])
   })
 })

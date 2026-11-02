@@ -2,12 +2,18 @@
 //
 // A persistent context rail, not another navigation surface: it answers
 // "what is waiting for me, and what changed" without leaving the page you
-// are on. Three blocks, each backed by an existing binding:
+// are on. Two blocks, each backed by an existing binding:
 //
-//   1. a global search entry (the search page is the top-level one, ADR-0024)
-//   2. the review queue — pages the local model compiled that only a human
+//   1. the review queue — pages the local model compiled that only a human
 //      may approve (ADR-0015)
-//   3. the knowledge pages that changed last (ADR-0032)
+//   2. the knowledge pages that changed last (ADR-0032)
+//
+// The global search input that used to sit on top of this rail is gone
+// (ADR-0038 决策 6): the home page is now a full-page conversation console
+// with its own input, and ⌘K still opens the command palette — a second
+// search box in the rail made "search" look like a rail feature when it is
+// a top-level action. What is left is exactly the context the rail is for:
+// things waiting for a decision, and things that just changed.
 //
 // It collapses to a handle on the right edge and stays that way until the
 // user opens it again; the state is remembered per machine.
@@ -46,7 +52,6 @@ interface Props {
 export default function ContextRail({ collapsed, onToggle }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [query, setQuery] = useState('')
   const [pending, setPending] = useState<{ id: number; title: string }[] | null>(null)
   const [recent, setRecent] = useState<WikiPageSummary[] | null>(null)
 
@@ -64,12 +69,6 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
     )
     return () => { cancelled = true }
   }, [])
-
-  const submitSearch = () => {
-    const q = query.trim()
-    if (!q) return
-    navigate(`/search?q=${encodeURIComponent(q)}`)
-  }
 
   if (collapsed) {
     return (
@@ -99,19 +98,6 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
           <Icon name="panel-right" size={15} />
         </button>
       </header>
-
-      <div className={s.searchRow}>
-        <Icon name="search" size={14} />
-        <input
-          type="search"
-          className={s.searchInput}
-          value={query}
-          placeholder={t('shell.contextSearchPlaceholder')}
-          aria-label={t('shell.contextSearchAria')}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') submitSearch() }}
-        />
-      </div>
 
       <section className={s.block}>
         <h3 className={s.blockTitle}>

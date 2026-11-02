@@ -123,7 +123,7 @@ export default function WikiDetail() {
   if (error || !page) {
     return (
       <div className={s.page}>
-        <Link to="/wiki" className={s.back}>
+        <Link to="/knowledge?view=pages" className={s.back}>
           <Icon name="arrow-up" size={14} className={s.backIcon} />
           {t('wiki.backToList')}
         </Link>
@@ -134,7 +134,7 @@ export default function WikiDetail() {
 
   return (
     <div className={s.page}>
-      <Link to="/wiki" className={s.back}>
+      <Link to="/knowledge?view=pages" className={s.back}>
         <Icon name="arrow-up" size={14} className={s.backIcon} />
         {t('wiki.backToList')}
       </Link>

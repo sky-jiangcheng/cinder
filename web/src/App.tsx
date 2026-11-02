@@ -1,5 +1,5 @@
 import { lazy, Suspense, type CSSProperties, type ReactNode, useEffect, useState } from 'react'
-import { BrowserRouter, HashRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Routes, Route, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import CommandPalette from './components/CommandPalette'
 import ToastHost, { type ToastItem } from './components/Toast'
@@ -15,20 +15,41 @@ import ContextRail from './components/ContextRail'
 import { ToastContext } from './hooks/useToast'
 import s from './App.module.css'
 
-// Lazy-loaded pages. The initial route (Home, the ADR-0024 single-column
-// workbench: dashboard panels + memory-ring strip on one flow) is still
-// eagerly loaded by the browser, but subsequent navigations only fetch the
-// chunks that are needed.
+// Lazy-loaded pages. The initial route (Home, the ADR-0038 full-page console:
+// one question box that also searches) is still eagerly loaded by the browser,
+// but subsequent navigations only fetch the chunks that are needed.
 const Home = lazy(() => import('./pages/Home'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const SearchPage = lazy(() => import('./pages/Search'))
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Knowledge = lazy(() => import('./pages/Knowledge'))
-const Wiki = lazy(() => import('./pages/Wiki'))
 const WikiDetail = lazy(() => import('./pages/wiki/WikiDetail'))
 const Review = lazy(() => import('./pages/Review'))
 const NotFound = lazy(() => import('./pages/NotFound'))
+
+/**
+ * The old top-level search page is now the console's "search" mode
+ * (ADR-0038 decision 1). The route stays as a redirect so the deep links
+ * `/search?q=x` keep working — the query travels along to `/?q=x`, where the
+ * console picks it up and runs the search.
+ */
+function SearchRedirect() {
+  const [searchParams] = useSearchParams()
+  const q = searchParams.get('q')
+  return <Navigate to={q ? `/?q=${encodeURIComponent(q)}` : '/'} replace />
+}
+
+/**
+ * The old top-level wiki page is now the "pages" view of the Knowledge tab
+ * (ADR-0038 decision 4). The route stays as a redirect: `/wiki?project=3`
+ * becomes `/knowledge?view=pages&project=3`, so the scope survives the jump.
+ */
+function WikiRedirect() {
+  const [searchParams] = useSearchParams()
+  const params = new URLSearchParams(searchParams)
+  params.set('view', 'pages')
+  return <Navigate to={`/knowledge?${params.toString()}`} replace />
+}
 
 // Minimal page loader shown while a lazy chunk is being fetched.
 function PageLoader() {
@@ -225,13 +246,16 @@ function RoutedApp() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/search" element={<SearchPage />} />
+          {/* Search and the wiki list are no longer top-level tabs (ADR-0038).
+              Both routes survive as redirects so old bookmarks and the IDE
+              plugins' deep links keep landing on the right content. */}
+          <Route path="/search" element={<SearchRedirect />} />
           <Route path="/project/:id" element={<ProjectDetail />} />
           <Route path="/knowledge" element={<Knowledge />} />
           {/* The approved knowledge layer, read by a person (ADR-0032). The
               detail route is separate so a page has an address of its own:
               /wiki/:id can be deep-linked and opened from the IDE plugins. */}
-          <Route path="/wiki" element={<Wiki />} />
+          <Route path="/wiki" element={<WikiRedirect />} />
           <Route path="/wiki/:id" element={<WikiDetail />} />
           <Route path="/review" element={<Review />} />
           <Route path="/settings" element={<Settings />} />

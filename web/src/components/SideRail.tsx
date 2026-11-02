@@ -7,9 +7,14 @@
 // It is an icon rail on purpose. The old navbar spent its width on seven text
 // labels plus a wordmark, three of which were the same word in two languages
 // ("搜索" appeared twice: as the nav entry and as the search pill). At 72px the
-// rail carries the brand mark, seven icons, and the theme/language switches —
-// and the label of every item moves to a tooltip, which costs nothing until
-// it is needed.
+// rail carries the brand mark, the section icons, and the theme/language
+// switches — and the label of every item moves to a tooltip, which costs
+// nothing until it is needed.
+//
+// The five entries are the whole top level (ADR-0038 decision 1): Home is the
+// console that both asks and searches, Knowledge holds notes and pages, and
+// the dashboard owns every number. The search page and the wiki list are not
+// entries any more — they are a mode and a view inside those two.
 
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
@@ -31,9 +36,7 @@ interface NavEntry {
 const NAV_ENTRIES: NavEntry[] = [
   { to: '/', labelKey: 'nav.home', icon: 'home', active: p => p === '/' },
   { to: '/dashboard', labelKey: 'nav.dashboard', icon: 'grid', active: p => p === '/dashboard' },
-  { to: '/search', labelKey: 'nav.search', icon: 'search', active: p => p.startsWith('/search') },
   { to: '/knowledge', labelKey: 'nav.knowledge', icon: 'book', active: p => p.startsWith('/knowledge') },
-  { to: '/wiki', labelKey: 'nav.wiki', icon: 'file-text', active: p => p.startsWith('/wiki') },
   { to: '/review', labelKey: 'nav.review', icon: 'check', active: p => p.startsWith('/review') },
   { to: '/settings', labelKey: 'nav.settings', icon: 'settings', active: p => p.startsWith('/settings') },
 ]

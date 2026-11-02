@@ -74,33 +74,6 @@
   background: var(--bg-tertiary);
 }
 
-.searchRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  height: 34px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  color: var(--text-tertiary);
-}
-
-.searchInput {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
-}
-
-.searchInput::placeholder {
-  color: var(--text-muted);
-}
-
 .block {
   display: flex;
   flex-direction: column;
@@ -195,8 +168,8 @@
 }
 
 @media (max-width: 1024px) {
-  /* Too narrow for three columns: the centre page keeps the space. The search
-     entry is still reachable from the left rail's search icon. */
+  /* Too narrow for three columns: the centre page keeps the space. The rail's
+     two blocks are still reachable from the review and knowledge tabs. */
   .rail,
   .handle {
     display: none;

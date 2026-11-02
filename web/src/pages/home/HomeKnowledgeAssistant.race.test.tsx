@@ -14,6 +14,7 @@ vi.mock('../../api/client', async (importOriginal) => {
     ...actual,
     getConfig: vi.fn(),
     searchAll: vi.fn(),
+    listAllTags: vi.fn(),
   }
 })
 
@@ -24,7 +25,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: mockT }),
 }))
 
-import { getConfig, searchAll, type SearchHit } from '../../api/client'
+import { getConfig, searchAll, listAllTags, type SearchHit } from '../../api/client'
 import HomeKnowledgeAssistant from './HomeKnowledgeAssistant'
 
 const mockGetConfig = vi.mocked(getConfig)
@@ -45,6 +46,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   // No AI endpoint configured → handleSend takes the fallback branch.
   mockGetConfig.mockResolvedValue({ config: {}, scan_roots: [] })
+  // The idle stage's hot tags. Unmocked it would reach the transport.
+  vi.mocked(listAllTags).mockResolvedValue([])
 })
 
 describe('HomeKnowledgeAssistant fallback race (stop vs in-flight searchAll)', () => {
