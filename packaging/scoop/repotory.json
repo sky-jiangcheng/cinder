@@ -4,7 +4,7 @@
   "homepage": "https://github.com/sky-jiangcheng/repotory",
   "license": "MIT",
   "url": "https://github.com/sky-jiangcheng/repotory/releases/download/v2.23.0/repotory-windows-amd64.zip",
-  "hash": "sha256:9224dab5b1c3acd0755f895ed2bb9459a4744d7ea02fed164c0d62d5de7a98da",
+  "hash": "sha256:3f2a5d6303129b84e52f5036c0ca96cb12c7aedce450b7eb258e6abf98d9366d",
   "bin": "repotory.exe",
   "checkver": {
     "url": "https://api.github.com/repos/sky-jiangcheng/repotory/releases/latest",
