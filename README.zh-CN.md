@@ -12,6 +12,14 @@
 </p>
 
 <p align="center">
+  <b>Agent 中立、协议中立、不需要账号。</b><br/>
+  任何会讲 MCP 的编程 Agent——Claude Code / Cursor / Codex / Copilot——都能读写同一份记忆。<br/>
+  Repotory 不是绑在某个 harness 上的插件，而是这些 Agent 共享的中立一层。<br/>
+  不需要账号、不需要云端：整份记忆就是本机的一个 SQLite 文件。<br/>
+  各家 IDE 的会话记录都锁在自家生态里，所以跨 agent 的那一层，需要一个中立的落点。
+</p>
+
+<p align="center">
   <a href="https://github.com/sky-jiangcheng/repotory/releases"><img src="https://img.shields.io/github/v/release/sky-jiangcheng/repotory?color=6366f1" alt="Release" /></a>
   <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml/badge.svg" alt="Install smoke test" /></a>

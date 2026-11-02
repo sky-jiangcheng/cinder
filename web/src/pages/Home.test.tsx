@@ -126,7 +126,7 @@ describe('Home workbench (ADR-0024 single-column first screen)', () => {
 
   it('shows the empty hint when no handoff exists', async () => {
     await renderHome()
-    expect(await screen.findByText('还没有 handoff——会话结束或手动捕捉后会出现在这里')).toBeTruthy()
+    expect(await screen.findByText('还没有交接记录——会话结束或手动捕捉后会出现在这里')).toBeTruthy()
   })
 
   it('links the strip search entry to the top-level /search page', async () => {

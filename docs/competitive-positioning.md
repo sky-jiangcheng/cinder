@@ -42,6 +42,7 @@
 3. **零依赖、可迁移、离线**。对方要 Node 22、Gateway 进程、LLM key 才能工作；Repotory 离线单文件跑起来，数据是自己手里一个 db 文件，不绑任何云或模型供应商。
 4. **克制的工程纪律**。语义检索默认关、等标注集过 A/B 门；分析工具走一次性副本；冻结标识保护用户数据迁移史；范围冻结防外部契约破坏。这种"不轻易打开功能"的纪律在对方 README 中看不到，但恰恰是**知识库产品可长期信任的前提**（错了能回滚、索引漂移能审计发现）。
 5. **跨 agent 交接是显式契约**。`repotory_handoff` 的五段结构（summary/changes/decisions/gotchas/next_steps）是稳定的、可检索的、跨工具的；对方的记忆提取是全自动黑盒，画像会漂移，且只在自己的插件体系内生效。
+6. **协议中立，不绑 harness**。任何会讲 MCP 的编码 agent（Claude Code / Cursor / Codex / Copilot 等）读写的是**同一份**记忆——记忆层不是某个插件的私有存储，而是这些 agent 共享的一层。**不需要账号、不需要云端**：整份记忆是本机一个 SQLite 文件。这一条是 2026-11-02 补上的（此前文档只讲「本地优先」，没讲「agent 中立」，而这正是各家 agent / IDE 自己的会话记录**够不着**的那一层——VS Code 的 session 索引扩展至今读不到，见第七节）。
 
 ## 四、对方更强、值得借鉴（不改变定位）
 
@@ -58,6 +59,23 @@
 | ADR-0014/0015（LLM wiki 编译） | 维持克制。全自动 LLM 提炼是对方的主场优势，我们在没有评测门之前不应正面跟随；先把手写知识+图谱做扎实。 |
 | 是否做"用户画像/Persona" | **不做**。画像属于运行时个性化层，与"项目知识库"定位冲突；坚持 project-centric。 |
 
+
+## 七、另一个易混淆的邻居：VS Code 的 session / memory（2026-11-02 补）
+
+> 完整调研见 [VS Code session 保存 / memory / handoff 与 Repotory handoff 的竞争关系](product-review/2026-11-02-vscode-session-memory.md)（VS Code 1.144 官方文档 2026-10-28）。本节只记**定位结论**。
+
+**它不是竞品，是邻居——而且是另一种邻居。** TencentDB Agent Memory 是**另一个产品**（可安装、可选型）；VS Code 的 session 能力是 **IDE 自带、默认开启、账号绑定**的产品级功能。后者的对手是「另一个 agent 记忆产品」，而**Repotory 连这一层的赛道都不在**。
+
+**VS Code 已经内建了什么**（本地 SQLite session 存储默认开 / session sync 实验性默认关、需 GitHub 账号 / Copilot Memory 云端、**28 天未用自动删** / `/chronicle:*` 把近期会话按分支与仓库分组）。**它在竞争「session 存储与检索」这一层，不在竞争「handoff 协议」这一层。**
+
+**关键的一处同名不同义**：VS Code 的 "Hand off a session" 是**运行时换 harness / 执行环境 / 角色并带走完整对话历史**；Repotory 的 `repotory_handoff` 是**持久化的交接记录**（一条 tag `handoff` 的知识笔记，下次由 `repotory_context` 读回）。已在 [ADR-0007](adr/0007-session-memory-protocol.md) 加注澄清，并落进 MCP 工具描述、两个 IDE 面板与桌面端文案——**协议名与工具名一律不改**（改名会破坏既有 agent 集成与自动捕捉 hook），消歧落在描述与措辞上。
+
+**为什么不打这场仗**：对手是 IDE 自带、默认开启、账号绑定的功能；扩展**读不到** VS Code 的 session（microsoft/vscode#318855 仍是提议，私有存储格式已在生产中弄坏过扩展）。**打不赢，也不该打。**
+
+**为什么它越强，我们的位置越清晰**：因为它把「会话记录」定义成了 **IDE 的内部实现细节**，而 Repotory 把它定义成**一份可被任意 agent 读取的知识资产**。区别在四个词上——**跨 agent**（VS Code 的能力全部锚在 Copilot 生态，Claude Code / Cursor 的用户在 VS Code 里得不到 Copilot Memory）、**协议中立**、**无账号**、**人在闸门**（Copilot Memory 由 agent 自动存、upvote/downvote 维护，28 天不用就删；Repotory 的知识有 project_id、有 kind、有 source、有人工审核）。
+
+**要真被重估的信号只有一个**：`/chronicle:standup` 若进一步做到「每个会话给出一段结构化总结」，那它就在向 Repotory 的形态靠拢——**那时才是需要认真重估的信号**。在此之前，唯一该做的是**别把词说混**。
+
 ## 六、边界条件：什么时候它才真变成竞品
 
 以下任一发生时，本文档需要重写：
@@ -65,5 +83,7 @@
 1. 对方开始支持 **MCP 通用接入**（不绑 OpenClaw/Hermes），把记忆开放给任意 coding agent；
 2. 对方加入 **多项目/仓库维度的结构化挖掘**（技术栈、依赖、commit 流）；
 3. 对方提供 **人可操作的产品界面**（GUI/CLI 之外的记忆审阅与回滚）。
+
+（VS Code 的 session 能力**不在**这张触发清单里：它不是竞品，是邻居，见第七节。它的重估信号另记——`/chronicle:*` 开始输出结构化总结。）
 
 在此之前，对它的正确姿态是：**分层互补 + 借鉴其评测方法 + 等它的 Hermes 数据格式成为我们的导入样例**。

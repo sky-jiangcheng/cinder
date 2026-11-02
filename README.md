@@ -12,6 +12,14 @@
 </p>
 
 <p align="center">
+  <b>Agent-neutral, protocol-neutral, account-free.</b><br/>
+  Every coding agent that speaks MCP — Claude Code, Cursor, Codex, Copilot — reads and writes the same memory.<br/>
+  Repotory is not a plugin bolted onto one harness: it is the neutral layer the agents share.<br/>
+  No account, no cloud: the whole store is one SQLite file on your machine.<br/>
+  Each IDE keeps its own session history inside its own ecosystem, so the cross-agent layer needs a neutral home of its own.
+</p>
+
+<p align="center">
   <a href="https://github.com/sky-jiangcheng/repotory/releases"><img src="https://img.shields.io/github/v/release/sky-jiangcheng/repotory?color=6366f1" alt="Release" /></a>
   <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml/badge.svg" alt="Install smoke test" /></a>

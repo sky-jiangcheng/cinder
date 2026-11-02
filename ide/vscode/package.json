@@ -24,7 +24,7 @@
       },
       {
         "command": "repotory.handoff",
-        "title": "Repotory: Write Session Handoff"
+        "title": "Repotory: Record Session Handoff"
       },
       {
         "command": "repotory.search",

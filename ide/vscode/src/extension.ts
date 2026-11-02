@@ -286,10 +286,10 @@ async function refreshLastHandoff(): Promise<void> {
     const at = handoff?.updated_at ? new Date(handoff.updated_at) : undefined;
     if (handoff && at && !Number.isNaN(at.getTime())) {
       statusItem.text = `$(repo) Repotory · ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-      statusItem.tooltip = `Last handoff: ${handoff.title ?? "session"}\n${at.toLocaleString()}\n\nClick to load the session context`;
+      statusItem.tooltip = `Last handoff record: ${handoff.title ?? "session"}\n${at.toLocaleString()}\n\nClick to load the session context`;
     } else {
       statusItem.text = "$(repo) Repotory";
-      statusItem.tooltip = "Repotory: no session handoff yet. Click to load the session context";
+      statusItem.tooltip = "Repotory: no session handoff record yet. Click to load the session context";
     }
   } catch {
     statusItem.text = "$(repo) Repotory";
@@ -330,12 +330,12 @@ async function writeHandoff(): Promise<void> {
   const dir = workspacePath();
   if (!dir) {
     void vscode.window.showErrorMessage(
-      "Repotory: open a folder — the handoff is attached to the project your workspace resolves to.",
+      "Repotory: open a folder — the handoff record is attached to the project your workspace resolves to.",
     );
     return;
   }
   const summary = await vscode.window.showInputBox({
-    prompt: "Repotory handoff — one paragraph: what was this session about?",
+    prompt: "Repotory session handoff record — one paragraph: what was this session about?",
     placeHolder: "e.g. Wired the FTS5 rebuild path; tests green",
     ignoreFocusOut: true,
   });
@@ -343,7 +343,7 @@ async function writeHandoff(): Promise<void> {
 
   const askList = async (label: string): Promise<string[]> => {
     const raw = await vscode.window.showInputBox({
-      prompt: `Repotory handoff — ${label} (comma-separated, empty to skip)`,
+      prompt: `Repotory session handoff record — ${label} (comma-separated, empty to skip)`,
       ignoreFocusOut: true,
     });
     return raw
@@ -366,10 +366,10 @@ async function writeHandoff(): Promise<void> {
     path: dir,
   };
 
-  const noteText = await withProgress("writing session handoff", () =>
+  const noteText = await withProgress("recording session handoff", () =>
     callTool("repotory_handoff", handoffArgs),
   );
-  showOutput("Handoff recorded", noteText);
+  showOutput("Handoff record saved", noteText);
   void refreshLastHandoff();
 }
 

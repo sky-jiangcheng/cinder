@@ -12,6 +12,10 @@ title: Repotory 文档
 
 Repotory 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记住的东西留在本机，让下一个 agent 接着用——核心价值是**让本地 Git 项目从'散落在终端和记忆里'变成'可检索、可复用的上下文'**。
 
+这一层是**agent 中立 / 协议中立**的：任何会讲 MCP 的编程 Agent（Claude Code / Cursor / Codex / Copilot 等）都能读写**同一份**记忆——Repotory 不是绑在某个 harness 上的插件，而是这些 Agent 共享的中立一层。**不需要账号、不需要云端**：整份记忆就是本机的一个 SQLite 文件。
+
+推论：各家 IDE / agent 自己的会话记录都是**各自生态内部的实现**（VS Code 的 session 索引，扩展至今读不到），跨 agent 的那一层因此需要一个**中立的落点**——这正是 Repotory 所在的位置。
+
 当前优先级声明：
 1. **本地项目理解与知识上下文** 是第一优先级
 2. 仪表盘与统计是支持能力，不作为产品主叙事

@@ -204,8 +204,8 @@ export default function CommandPalette({ open, onClose }: Props) {
               >
                 <span className={`${s.cmdkType} ${s.cmdkTypeNote}`}>{t('commandPalette.newHandoffMark', { defaultValue: '新建' })}</span>
                 <div className={s.cmdkItemBody}>
-                  <div className={s.cmdkItemTitle}>{t('commandPalette.newHandoff', { defaultValue: '新建 handoff' })}</div>
-                  <div className={s.cmdkItemSub}>{t('commandPalette.newHandoffHint', { defaultValue: '手动写下这次会话的交接' })}</div>
+                  <div className={s.cmdkItemTitle}>{t('commandPalette.newHandoff', { defaultValue: '写一条交接记录' })}</div>
+                  <div className={s.cmdkItemSub}>{t('commandPalette.newHandoffHint', { defaultValue: '手动写下这次会话的交接记录' })}</div>
                 </div>
               </button>
               <button
@@ -221,7 +221,7 @@ export default function CommandPalette({ open, onClose }: Props) {
                 <span className={`${s.cmdkType} ${s.cmdkTypeTodo}`}>{t('commandPalette.captureHandoffMark', { defaultValue: '捕捉' })}</span>
                 <div className={s.cmdkItemBody}>
                   <div className={s.cmdkItemTitle}>{t('commandPalette.captureHandoff', { defaultValue: '捕捉 Claude 会话' })}</div>
-                  <div className={s.cmdkItemSub}>{t('commandPalette.captureHandoffHint', { defaultValue: '把最近的 Claude 会话转成交接笔记' })}</div>
+                  <div className={s.cmdkItemSub}>{t('commandPalette.captureHandoffHint', { defaultValue: '把最近的 Claude 会话转成交接记录' })}</div>
                 </div>
               </button>
             </>

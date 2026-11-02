@@ -7,6 +7,8 @@ order: 2
 
 > 层级图例：**Core**（补完 发现 → 理解 → 沉淀 → 检索 → 交给 AI 闭环）｜ **Support**（让闭环可读）｜ **Experimental**（保留不再扩张）｜ **Paused**（不再投入）——见 [ADR-0006](adr/0006-scope-freeze.md)。本页是全量功能表；每个能力的深入手册见侧栏「功能手册」各页。
 
+**定位**：这一页列的是**本地优先、agent 中立**的记忆层。记忆层不绑 harness——任何会讲 MCP 的编程 Agent（Claude Code / Cursor / Codex / Copilot 等）读写的是同一份记忆，靠的是协议而不是某个插件。**无账号、无云端**：整份记忆落在本机一个 SQLite 文件里。之所以要有一层中立的：各家 IDE / agent 自己的会话记录都锁在自家生态内部（VS Code 的 session 索引扩展至今读不到），跨 agent 的那一层需要一个中立的落点。
+
 ## 功能
 
 > 分级图例：**Core**（完成「发现 → 理解 → 记录 → 检索 → AI」闭环）| **Support**（让闭环可读可感）| **Experimental**（保留但不扩展）| **Paused**（不再投入）。见 [ADR-0006](adr/0006-scope-freeze.md)。

@@ -325,7 +325,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		// supported flow; fixing the record itself stays a desktop-UI
 		// operation.
 		if service.IsHandoffNote(*note) {
-			return makeTextResult(fmt.Sprintf("refusing to update note %d: it is a session handoff (tagged 'handoff') — the protocol record between sessions, protected from plain overwrites. Write a new handoff with repotory_handoff; if this record itself is wrong, edit it from the desktop app.", note.ID)), nil
+			return makeTextResult(fmt.Sprintf("refusing to update note %d: it is a session handoff record (tagged 'handoff') — the persisted protocol record between sessions, protected from plain overwrites. Write a new handoff with repotory_handoff; if this record itself is wrong, edit it from the desktop app.", note.ID)), nil
 		}
 
 		// Merge omitted fields from the stored note and write everything back

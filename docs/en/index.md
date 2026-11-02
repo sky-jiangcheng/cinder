@@ -12,6 +12,10 @@ title: Repotory Documentation
 
 The core value of Repotory: it is **the local-first memory layer for AI coding agents** — it keeps what your agents learned on your machine so the next agent can pick it up, turning local Git projects from things scattered across terminals and memory into searchable, reusable context.
 
+That layer is **agent-neutral and protocol-neutral**: every coding agent that speaks MCP (Claude Code / Cursor / Codex / Copilot and others) reads and writes **the same** memory. Repotory is not a plugin bound to one harness — it is the neutral layer those agents share. **No account, no cloud**: the whole memory is one SQLite file on your machine.
+
+The consequence: each IDE's or agent's own session history lives **inside its own ecosystem** (VS Code's session index is still unreadable by extensions), so the cross-agent layer needs a **neutral home of its own** — which is exactly where Repotory sits.
+
 Current priorities:
 
 1. **Local project understanding and knowledge context** comes first

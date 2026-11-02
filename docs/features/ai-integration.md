@@ -141,7 +141,7 @@ sequenceDiagram
 |------|------|------|
 | `repotory_scan` | 冷启动：播种默认扫描根目录并同步扫描，发现本地 Git 仓库（纯 MCP 安装可用，无需桌面应用） | 写 |
 | `repotory_context` | 会话开始一次注入项目全上下文（技术栈 / README / 待办 / 高相关笔记，交接笔记置顶）。可选 `path`（绝对目录 / cwd）解析归属项目，见「工作区路径解析」 | 读 |
-| `repotory_handoff` | 会话结束结构化交接（summary/changes/decisions/gotchas/next_steps），落库并供下次 `repotory_context` 置顶读取；落库笔记带 `handoff` 标签，`repotory_notes_update` 拒绝覆盖。`project_id` 可选，缺省时由 `path` 解析 | 写 |
+| `repotory_handoff` | 会话结束结构化交接（summary/changes/decisions/gotchas/next_steps），落库并供下次 `repotory_context` 置顶读取；落库笔记带 `handoff` 标签，`repotory_notes_update` 拒绝覆盖。`project_id` 可选，缺省时由 `path` 解析。**注意**：这里的 handoff 是**持久化的交接记录**，不是「在 harness / 执行环境之间移交一场正在进行的对话」（那是 VS Code "Hand off a session" 的含义，见 [ADR-0007](adr/0007-session-memory-protocol.md)） | 写 |
 | `repotory_notes_list` | 全部笔记 | 读 |
 | `repotory_notes_search` | FTS5 搜索（query）。可选 `path`：命中仓库内的笔记排到前面——只排序，不过滤 | 读 |
 | `repotory_notes_read` | 按 ID 读笔记 | 读 |

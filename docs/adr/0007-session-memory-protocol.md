@@ -69,3 +69,28 @@ ADR-0006 将核心闭环定为「发现 → 理解 → 记录 → 检索 → AI 
 - 多源记忆导入：Cursor、Codex、OpenCode 的记忆格式
 - 语义检索：本地 embedding（评估 sqlite-vec），补充 FTS5 的字面匹配盲区
 - Claude Code hook 集成文档：SessionEnd hook 自动触发 `repotory_handoff`
+
+## 术语澄清：`handoff` = 持久化的会话交接记录（2026-11-02）
+
+本节是对既有决策的**加注，不改写**上面的原文。触发它的是一份 VS Code session/memory 调研（VS Code 1.144 官方文档 2026-10-28），那份调研里的术语与本协议同名不同义——不澄清，用户会把 Repotory 的 handoff 误当成 IDE 里那个同名按钮。
+
+**1. 本协议里的 `handoff` 专指「持久化的会话交接记录」。** 会话结束时写下的一条知识笔记（`kind=knowledge`、`source=mcp`、tags 含 `handoff`），落进项目知识库；下一次会话由 `repotory_context` 读回——**最新一条全文渲染，更早的折成一行时间线**。它是一份**存下来的记录**，读它的是任何一个 agent，不必是写它的那一个。
+
+**2. 它不是「在 harness / 执行环境之间移交一场正在进行的对话」。** 那是 VS Code 内建功能 "Hand off a session" 的含义（VS Code 1.144，官方文档 2026-10-28）：换一个 harness、执行环境或角色，并把完整对话历史带过去，是**运行时的续接**。二者**不构成竞争**——后者是单一 IDE 内的运行时续接，前者是跨 agent、协议中立、无账号、全本地的持久记录；两边做的是不同的事。
+
+**3. 协议名与 MCP 工具名 `repotory_handoff` 一律不改**，笔记标题模板 `Session Handoff <time>` 同样不改。理由是协议稳定性：重命名会破坏所有既有 agent 集成，也会破坏依赖它的 Claude Code SessionEnd 自动捕捉 hook（`scripts/repotory-init` 写出的 `.claude/hooks/repotory-handoff.sh`）。**歧义存在于描述与产品措辞，所以就在描述与产品措辞里修**——本节就是这个选择的落点。
+
+**4. 落地位置清单**（本轮同步改）：
+
+- MCP 工具描述：`cmd/mcp/tools_context.go` 的 `repotory_handoff`（写的是持久化记录、不是实时移交）与 `repotory_context`（上一轮的交接记录，最新一条全文 + 更早一条时间线）
+- MCP 拒绝文案：`cmd/mcp/main.go` 的 handoff 覆盖拒绝（明写「session handoff record」）
+- VS Code 面板文案：`ide/vscode/` 的命令标题、输入提示、输出通道与状态栏 tooltip
+- 桌面端文案：见对应的前端文案批次
+
+## 修订记录（2026-11-02，术语澄清）
+
+本 ADR 的决策原文保留，本次只追加澄清，不改写任何既有决策：
+
+- **追加「术语澄清」一节**（见上）——把本协议里的 `handoff` 钉死在「持久化的会话交接记录」上，并写明它与 VS Code "Hand off a session"（运行时换 harness / 执行环境 / 角色，带走完整对话历史）同名不同义、且不构成竞争。
+- **协议名、MCP 工具名 `repotory_handoff`、笔记标题模板 `Session Handoff <time>` 均不更名**——重命名会破坏既有 agent 集成与 Claude Code SessionEnd 自动捕捉 hook；歧义在描述里修，不在标识符里修。
+- **歧义清理落在描述与产品措辞**：MCP 工具描述、MCP 拒绝文案、VS Code 面板文案（命令标题 / 输入提示 / 输出通道 / 状态栏 tooltip）。`internal/service/handoff.go` 与 `internal/service/context.go` 的渲染逻辑与模板**不动**。

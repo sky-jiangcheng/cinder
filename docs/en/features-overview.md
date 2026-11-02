@@ -7,6 +7,8 @@ order: 2
 
 > Tier legend: **Core** (completes the discover → understand → record → retrieve → AI loop) | **Support** (makes the loop legible) | **Experimental** (kept, not expanded) | **Paused** (no further investment) — see [ADR-0006](adr/0006-scope-freeze.md). This page holds the full feature tables; per-capability manuals live in the sidebar under Features.
 
+**Positioning**: what this page lists is a **local-first, agent-neutral** memory layer. The memory layer is not bound to a harness — every coding agent that speaks MCP (Claude Code / Cursor / Codex / Copilot and others) reads and writes the same memory, through the protocol rather than through some plugin. **No account, no cloud**: the whole store is one SQLite file on your machine. A neutral layer is needed precisely because each IDE's or agent's own session history stays locked inside its own ecosystem (VS Code's session index is still unreadable by extensions) — the cross-agent layer needs a neutral landing point of its own.
+
 ## Features
 
 > Tier legend: **Core** (completes the discover → understand → record → retrieve → AI loop) | **Support** (makes the loop legible) | **Experimental** (kept, not expanded) | **Paused** (no further investment). See [ADR-0006](adr/0006-scope-freeze.md).

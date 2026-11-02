@@ -79,7 +79,7 @@ export default function Home() {
       <section className={s.ring} aria-label={t('home.ringTitle', { defaultValue: '记忆环' })}>
         <div className={s.ringHead}>
           <h2>{t('home.ringTitle', { defaultValue: '记忆环' })}</h2>
-          <p className={s.ringSub}>{t('home.ringSub', { defaultValue: '最近的会话交接' })}</p>
+          <p className={s.ringSub}>{t('home.ringSub', { defaultValue: '最近的会话交接记录' })}</p>
         </div>
 
         {/* The zero-config entry into the session loop: write one handoff by
@@ -92,12 +92,12 @@ export default function Home() {
           onClick={() => setComposerOpen(true)}
         >
           <Icon name="plus" size={12} />
-          {t('home.writeHandoff', { defaultValue: '写一条交接' })}
+          {t('home.writeHandoff', { defaultValue: '写一条交接记录' })}
         </button>
 
         {entries === null ? null : entries.length === 0 ? (
           <p className={s.ringEmpty}>
-            {t('home.noHandoffs', { defaultValue: '还没有 handoff——会话结束或手动捕捉后会出现在这里' })}
+            {t('home.noHandoffs', { defaultValue: '还没有交接记录——会话结束或手动捕捉后会出现在这里' })}
           </p>
         ) : (
           <ul className={s.handoffList}>
@@ -135,7 +135,7 @@ export default function Home() {
         onClose={() => setComposerOpen(false)}
         onCreated={() => {
           loadHandoffs()
-          pushToast({ kind: 'success', title: t('handoff.saved', { defaultValue: '交接已写入' }) })
+          pushToast({ kind: 'success', title: t('handoff.saved', { defaultValue: '交接记录已写入' }) })
         }}
       />
 

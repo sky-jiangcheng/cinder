@@ -420,7 +420,7 @@ export default function HomeKnowledgeAssistant({ projects, onToast, onGoToSettin
 
   const promptSuggestions = [
     { text: t('home.prompt1', { defaultValue: '梳理当前所有项目的核心架构与依赖' }), icon: 'lightbulb' as const },
-    { text: t('home.prompt2', { defaultValue: '最近有哪些会话交接 (Handoff) 记录与重点事项？' }), icon: 'refresh' as const },
+    { text: t('home.prompt2', { defaultValue: '最近有哪些会话交接记录与重点事项？' }), icon: 'refresh' as const },
     { text: t('home.prompt3', { defaultValue: '知识库中有哪些高频架构参考与最佳实践？' }), icon: 'file-text' as const },
     { text: t('home.prompt4', { defaultValue: '当前有哪些待处理的关键待办任务？' }), icon: 'check' as const },
   ]

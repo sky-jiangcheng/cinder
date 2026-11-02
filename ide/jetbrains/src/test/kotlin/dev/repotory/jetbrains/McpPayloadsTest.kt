@@ -118,8 +118,8 @@ class McpPayloadsTest {
         val failure = assertFailsWith<McpException> {
             McpPayloads.parseNote(
                 "repotory_notes_update",
-                "refusing to update note 7: it is a session handoff (tagged 'handoff') — " +
-                    "the protocol record between sessions, protected from plain overwrites. " +
+                "refusing to update note 7: it is a session handoff record (tagged 'handoff') — " +
+                    "the persisted protocol record between sessions, protected from plain overwrites. " +
                     "Write a new handoff with repotory_handoff; if this record itself is wrong, " +
                     "edit it from the desktop app.",
             )

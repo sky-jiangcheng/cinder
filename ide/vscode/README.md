@@ -9,7 +9,7 @@ One VSIX covers the whole fork family — **VS Code, Cursor and Windsurf**.
 | Surface | What it does |
 |---|---|
 | Command `Repotory: Load Session Context` | Pulls the working context for your project (tech stack, README excerpt, recent commits, open todos, the last session handoff) via `repotory_context`, sending the current workspace path so a subdirectory resolves to the repository it belongs to; shows it in the Repotory output channel |
-| Command `Repotory: Write Session Handoff` | Prompts for summary / changes / next steps, then records a structured handoff (`repotory_handoff`) — the project is resolved from the workspace path — the next session, yours or any agent's, starts from it |
+| Command `Repotory: Record Session Handoff` | Prompts for summary / changes / next steps, then records a structured handoff (`repotory_handoff`) — the project is resolved from the workspace path — the next session, yours or any agent's, starts from it |
 | Command `Repotory: Ask the Knowledge Base` | Asks `repotory_ask` and appends the answer — with its sources — to the chat console |
 | Command `Repotory: Search Knowledge` | Full-text search (FTS5) across every note you captured; the workspace path is sent so notes recorded in the matched repository rank first (ranking only, nothing filtered). The hits are appended to the chat console as a **Notes** turn |
 | Command `Repotory: Search Approved Knowledge Pages` | Searches the approved knowledge pages (`repotory_wiki_search`) and appends them as a **Pages** turn |
@@ -70,7 +70,7 @@ The tidy proposal is generated server-side by the shared service layer (`Organiz
 | Shortcut | Action |
 |---|---|
 | `Ctrl+Alt+R` `C` (`Ctrl+Cmd+R` `C` on macOS) | Load Session Context |
-| `Ctrl+Alt+R` `H` (`Ctrl+Cmd+R` `H` on macOS) | Write Session Handoff |
+| `Ctrl+Alt+R` `H` (`Ctrl+Cmd+R` `H` on macOS) | Record Session Handoff |
 | `Ctrl+Alt+R` `S` (`Ctrl+Cmd+R` `S` on macOS) | Search Knowledge |
 
 The sidebar's title bar also carries a search button. All commands remain in the Command Palette; rebind them in *Preferences → Keyboard Shortcuts* if the defaults collide with yours.
