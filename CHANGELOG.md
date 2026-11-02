@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.24.0] - 2026-11-02
+
 ### 变更
 
 - **页面内的平铺区块收成 tab——一次只看一个（ADR-0039，2026-11-02）**：用户指出「仪表盘、知识库、审核多处可以用 tab 但是没有使用」。ADR-0038 治的是**顶级入口之间**，**页面内部**同一类毛病没治：三个页面各自把若干**互不相干的同级区块**平铺进一个长滚动。逐条核对代码后的实况：**审核页六块平铺**（待审核队列 / 合并候选 / 页面作用域 / 编译任务 / 已否决 / 社区摘要报告），形状与动作完全不同（批准 / 合并 / 提升 / 指派 / 取消 / 删除），**不是一份列表的筛法，是六个地方**——而合并候选最多 20 行挡在审队列前面；**知识页的「待整理」在约 10,000px 页面的最底部**，只能靠一个「待整理 14」跳转按钮找到（**那个控件的存在本身就是「它在别处，而且不好找」的证据**）；**仪表盘的「记忆环」与「项目列表」是两种不相干的对象平级堆叠**——ADR-0038 决策 5 说记忆环属于「我的状态」却没给它独立容器，**正是 0038 要消灭的形状换了个位置复现**。**而 tab 就在隔壁**：项目页（`/project/:id?tab=notes`）、设置页、快捷录入 FAB 都已经是 `role="tablist"` + 方向键漫游焦点的真 tab，这三个页面**一次没用**，于是同一个产品里有两套切换语言。
@@ -674,7 +676,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.23.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.24.0...HEAD
+[2.24.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.23.0...v2.24.0
 [2.23.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.22.0...v2.23.0
 [2.22.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.21.0...v2.22.0
 [2.21.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.20.0...v2.21.0
