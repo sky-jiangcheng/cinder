@@ -97,7 +97,7 @@ go build -o /usr/local/bin/repotory-mcp ./cmd/mcp/
 | `repotory_notes_search` | FTS5 full-text search across notes | `query` (string, trigram + bm25) | `{ query: "react hooks" }` |
 | `repotory_notes_read` | Read one note by ID | `id` (number) | `{ id: 42 }` |
 | `repotory_notes_create` | Create a new note | `project_id`, `title`, `content`, `category?`, `tags?` | `{ project_id: 1, title: "API Design", content: "...", category: "knowledge" }` |
-| `repotory_notes_update` | Update note content/metadata (refuses notes tagged `handoff`) | `id`, `content?`, `title?`, `tags?`, `category?` | `{ id: 42, content: "updated text" }` |
+| `repotory_notes_update` | Update note content/metadata (refuses notes tagged `handoff`) | `id`, `content?`, `title?`, `tags?`, `category?`, `pinned?` | `{ id: 42, content: "updated text" }` |
 | `repotory_notes_list` | List all notes (paginated) | `limit?`, `offset?` | `{ limit: 20 }` |
 | `repotory_projects_list` | List all projects with stats | `starred_only?` | `{ starred_only: true }` |
 | `repotory_projects_stats` | Get stats for one project | `id` (number) | `{ id: 1 }` |

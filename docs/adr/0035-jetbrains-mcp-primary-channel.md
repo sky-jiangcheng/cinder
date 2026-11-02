@@ -159,3 +159,22 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 3. `ide/vscode/`：`openHit` 补 `servesWebUi` 预检。
 4. `packaging/README.md`：`repotory-server` 消费者一栏改为「手动获取（深链增强）」。
 5. `docs/adr/0009`、`docs/adr/0027`：补「AI」限定词（本决策 1）。
+
+## 落地时的更正（2026-11-01，实施记录）
+
+本 ADR 的**决策一条未改**；下面两处是实施时核对代码发现的**事实偏差**，按本仓「加注不改写」的惯例记在这里——照着原文去实施会写出错的代码。
+
+**更正一：两个搜索工具返回的是 JSON，不是文本。**
+
+「后果」一节写「`repotory_notes_search` / `repotory_wiki_search` 返回的是文本，需要各写一个解析器」。逐个核对 `cmd/mcp` 后确认**不成立**：两者都走 `makeJSONResult`，返回结构化 JSON（[main.go:135](file:///workspace/cmd/mcp/main.go#L135)、[tools_wiki.go:87](file:///workspace/cmd/mcp/tools_wiki.go#L87)）。**文本只出现在错误路径**（`makeTextResult`：`query is required` / `error: …` / `note not found: …` / `refusing to update note N: …`）。
+
+所以实现上**没有「两个文本解析器」，而是「一个 JSON 解析器 + 一条错误分支」**：解析不成 JSON 的文本 = 工具在拒绝，必须**报错**，绝不能当成空结果。空结果是用户唯一分不清「没匹配」和「调用失败」的答案——比报错更糟。落地时这条被钉成了 8 个工具映射各自的回归用例（`ide/jetbrains/src/test/kotlin/dev/repotory/jetbrains/McpPayloadsTest.kt`）。
+
+**更正二：要同步的是 MCP 工具目录，不是 `docs/api/reference.md`。**
+
+「落地清单」第 2 条与「后果」一节都写了「需同步 `docs/api/reference.md`（中英双份）」。核对后：`docs/api/reference.md` 记的是**绑定层**（`internal/app` 的绑定清单），其中 `UpdateNoteMeta(noteID, title, tags, kind, pinned)` **早已含 `pinned`**；MCP 工具面根本不在该文件里，而本 ADR 决策 8 又明确「不新增绑定」。所以该文件**本次无需改动**。真正要改的是：
+
+- `docs/features/ai-integration.md` 的 MCP 工具目录（中英双份）——工具参数在这里；
+- 随包分发的 skill 工具签名文档：`SKILL.md`、`skill/repotory/references/mcp-tools.md`、`skill/repotory/SKILL.md`（该文件自称签名「取自 `tools/list` 实际响应」，加参数后必须同步，否则就是漂移）。
+
+**落地记录（2026-11-01）**：① `cmd/mcp` 的 `repotory_notes_update` 加了可选布尔 `pinned`（省略 = 保持原值；`false` 与省略是两回事，按参数**是否存在**判定）；② `ide/jetbrains/` 新增 `McpStdioClient.kt`（协议层）、`McpPayloads.kt`（解析层）、`McpBinaryResolver.kt`（二进制查找）、`RepotoryMcp.kt`（8 项能力门面），八项数据调用改走 MCP，`MoveNote` 与 web UI 探测留在 HTTP；③ 设置页新增「MCP binary」栏与「Check MCP channel」诊断；④ VS Code 侧 `openHit` 补上 `servesWebUi` 预检；⑤ 插件新增 27 条 JVM 单测并进了 CI（`gradle test`）。

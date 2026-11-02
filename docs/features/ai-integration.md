@@ -146,7 +146,7 @@ sequenceDiagram
 | `repotory_notes_search` | FTS5 搜索（query）。可选 `path`：命中仓库内的笔记排到前面——只排序，不过滤 | 读 |
 | `repotory_notes_read` | 按 ID 读笔记 | 读 |
 | `repotory_notes_create` | 新建知识笔记 | 写 |
-| `repotory_notes_update` | 更新笔记内容与元数据（部分更新；拒绝覆盖 `handoff` 协议笔记） | 写 |
+| `repotory_notes_update` | 更新笔记内容与元数据（部分更新：**省略的字段保持原值**；拒绝覆盖 `handoff` 协议笔记）。可选 `pinned`：传 `true` 置顶到项目顶部、传 `false` 取消置顶，省略则保持原状态 | 写 |
 | `repotory_notes_organize` | 让已配置的 AI 把一篇笔记重排成干净 Markdown（同一批事实、更好的结构；长了给目录、是流程给 mermaid）。**只返回提案**（title/tags/content），不落库——审阅后自行用 `repotory_notes_update` 保存。需先配置 AI 端点 | 读（提案） |
 | `repotory_projects_list` | 全部项目 | 读 |
 | `repotory_projects_stats` | 项目统计（按 id） | 读 |

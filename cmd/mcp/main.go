@@ -245,7 +245,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 
 	mcpServer.AddTool(mcp.Tool{
 		Name:        "repotory_notes_update",
-		Description: "Update an existing note's content and/or metadata. Omitted fields keep their current value (there is deliberately no way to clear the title or tags — write a new note instead). Notes tagged 'handoff' are session-protocol records and cannot be updated here: write a new handoff with repotory_handoff instead.",
+		Description: "Update an existing note's content and/or metadata. Omitted fields keep their current value (there is deliberately no way to clear the title or tags — write a new note instead). Pass pinned=true to pin the note to the top of its project, pinned=false to unpin it; omitting it keeps the current state. Notes tagged 'handoff' are session-protocol records and cannot be updated here: write a new handoff with repotory_handoff instead.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]any{
@@ -269,6 +269,10 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 					"type":        "string",
 					"description": "New category: knowledge, log, idea, or other",
 				},
+				"pinned": map[string]any{
+					"type":        "boolean",
+					"description": "Pin the note to the top of its project (true) or unpin it (false). Omit to keep the current state.",
+				},
 			},
 			Required: []string{"id"},
 		},
@@ -280,8 +284,27 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		tags, _ := args["tags"].(string)
 		category, _ := args["category"].(string)
 
-		if content == "" && title == "" && tags == "" && category == "" {
-			return makeTextResult("nothing to update: provide at least one of content, title, tags, category"), nil
+		// pinned is a BOOLEAN, so "omitted" and "false" are two different
+		// requests that both arrive as a JSON value: presence has to be read
+		// from the argument map, never inferred from the value. Getting this
+		// wrong is silent in either direction — reading false as absent makes
+		// unpinning impossible, and reading absent as false unpins every note
+		// the tool touched (db.UpdateNoteFull replaces pinned wholesale).
+		pinnedValue := false
+		hasPinned := false
+		if raw, present := args["pinned"]; present && raw != nil {
+			pinned, ok := raw.(bool)
+			if !ok {
+				// A client that sends "pinned": "true" meant to set it. Saying
+				// so beats dropping the argument and reporting success.
+				return makeTextResult(fmt.Sprintf("pinned must be a boolean, got %T", raw)), nil
+			}
+			pinnedValue = pinned
+			hasPinned = true
+		}
+
+		if content == "" && title == "" && tags == "" && category == "" && !hasPinned {
+			return makeTextResult("nothing to update: provide at least one of content, title, tags, category, pinned"), nil
 		}
 
 		// Load the stored note first: this is a partial-update tool, so every
@@ -309,7 +332,8 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		// in ONE UpdateNoteFull. The old two-call path (UpdateNote then
 		// UpdateNoteMeta) was non-atomic: a metadata failure left the note
 		// with new content and old title/tags. Omitted-field semantics are
-		// unchanged ("keep what is there").
+		// unchanged ("keep what is there") — and `pinned` joins that rule: it
+		// is written from the stored value unless the caller named it.
 		mergedContent, mergedTitle, mergedTags, mergedKind := note.Content, note.Title, note.Tags, note.Kind
 		if content != "" {
 			mergedContent = content
@@ -323,7 +347,11 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		if category != "" {
 			mergedKind = category
 		}
-		if err := svc.UpdateNoteFull(note.ID, mergedContent, mergedTitle, mergedTags, mergedKind, note.Pinned); err != nil {
+		mergedPinned := note.Pinned
+		if hasPinned {
+			mergedPinned = pinnedValue
+		}
+		if err := svc.UpdateNoteFull(note.ID, mergedContent, mergedTitle, mergedTags, mergedKind, mergedPinned); err != nil {
 			return makeTextResult(fmt.Sprintf("error: %v", err)), nil
 		}
 		updated, err := svc.GetNote(note.ID)

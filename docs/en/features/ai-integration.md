@@ -144,7 +144,7 @@ A **fully offline local model** (ollama / LM Studio) speaks the same MCP; the wi
 | `repotory_notes_search` | FTS5 search (query). Optional `path`: notes recorded inside the matched repository rank first — ranking only, nothing filtered | Read |
 | `repotory_notes_read` | Read a note by ID | Read |
 | `repotory_notes_create` | Create a new knowledge note | Write |
-| `repotory_notes_update` | Update note content and metadata (partial update; refuses to overwrite `handoff` protocol notes) | Write |
+| `repotory_notes_update` | Update note content and metadata (partial update: **omitted fields keep their current value**; refuses to overwrite `handoff` protocol notes). Optional `pinned`: `true` pins the note to the top of its project, `false` unpins it, and omitting it keeps the current state | Write |
 | `repotory_notes_organize` | Ask the configured AI to restructure one note into clean Markdown (same facts, better structure; a table-of-contents when the note grew sections, a mermaid flowchart when the content is a process). **Returns a proposal only** (title/tags/content) — nothing is saved; review it, then persist with `repotory_notes_update`. Requires a configured AI endpoint | Read (proposal) |
 | `repotory_projects_list` | All projects | Read |
 | `repotory_projects_stats` | Project statistics (by id) | Read |

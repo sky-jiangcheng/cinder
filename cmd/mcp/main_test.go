@@ -349,6 +349,152 @@ func TestNotesUpdatePartialKeepsMetadata(t *testing.T) {
 	}
 }
 
+// TestNotesUpdatePinnedParameter covers the optional `pinned` argument
+// (ADR-0035 decision 3): the JetBrains plugin writes the pin state today, so
+// a migration to the MCP surface must not lose it.
+//
+// The point of the test is the OMISSION, not the set. `pinned` is a boolean, so
+// "not given" and "given as false" are different requests that both arrive as
+// a JSON value. A tool that reads the value without checking for presence
+// silently unpins every note it touches — the same wholesale-replacement trap
+// that once wiped titles and tags, recorded in the sibling test above.
+func TestNotesUpdatePinnedParameter(t *testing.T) {
+	ts := newTestServer(t)
+	pid := ts.seedProject("demo", "/tmp/demo")
+
+	created := ts.jsonPayload(ts.call("repotory_notes_create", map[string]any{
+		"project_id": float64(pid),
+		"title":      "pinning",
+		"content":    "a note whose pin state has to survive a partial update",
+		"category":   "knowledge",
+	}))
+	noteID, _ := created["id"].(float64)
+
+	pinnedOf := func() bool {
+		got := ts.jsonPayload(ts.call("repotory_notes_read", map[string]any{"id": noteID}))
+		pinned, _ := got["pinned"].(bool)
+		return pinned
+	}
+
+	// 1. Omitted → the current state is kept. This is the case that matters
+	//    most: it is what every other field-only update does.
+	ts.call("repotory_notes_update", map[string]any{
+		"id": noteID, "content": "first revision",
+	})
+	if pinnedOf() {
+		t.Error("a content-only update pinned an unpinned note")
+	}
+
+	// 2. pinned=true → pinned, and the title/tags ride along untouched.
+	ts.call("repotory_notes_update", map[string]any{
+		"id": noteID, "pinned": true,
+	})
+	if !pinnedOf() {
+		t.Error("pinned=true did not pin the note")
+	}
+	got := ts.jsonPayload(ts.call("repotory_notes_read", map[string]any{"id": noteID}))
+	if title, _ := got["title"].(string); title != "pinning" {
+		t.Errorf("a pin-only update wiped the title: %q", title)
+	}
+
+	// 3. pinned=false → unpinned. Reading false as "absent" would make this
+	//    the step that silently does nothing.
+	ts.call("repotory_notes_update", map[string]any{
+		"id": noteID, "pinned": false,
+	})
+	if pinnedOf() {
+		t.Error("pinned=false did not unpin the note")
+	}
+
+	// 4. pinned=false together with other fields → both land.
+	ts.call("repotory_notes_update", map[string]any{
+		"id": noteID, "pinned": true, "content": "second revision",
+	})
+	if !pinnedOf() {
+		t.Error("a mixed update lost the pin")
+	}
+	got = ts.jsonPayload(ts.call("repotory_notes_read", map[string]any{"id": noteID}))
+	if content, _ := got["content"].(string); content != "second revision" {
+		t.Errorf("a mixed update lost the content: %q", content)
+	}
+}
+
+// A client that sends pinned as a string meant to set it. Dropping the
+// argument and reporting success would be the worst outcome: the caller would
+// believe the note was pinned while nothing changed.
+func TestNotesUpdatePinnedRejectsNonBoolean(t *testing.T) {
+	ts := newTestServer(t)
+	pid := ts.seedProject("demo", "/tmp/demo")
+	created := ts.jsonPayload(ts.call("repotory_notes_create", map[string]any{
+		"project_id": float64(pid), "title": "t", "content": "body",
+	}))
+	noteID, _ := created["id"].(float64)
+
+	res := ts.call("repotory_notes_update", map[string]any{
+		"id": noteID, "pinned": "true",
+	})
+	if res.IsError {
+		t.Fatal("a bad argument should be a text result, not a protocol error")
+	}
+	if got := ts.text(res); !strings.Contains(got, "pinned must be a boolean") {
+		t.Errorf("message = %q, want it to say pinned must be a boolean", got)
+	}
+	got := ts.jsonPayload(ts.call("repotory_notes_read", map[string]any{"id": noteID}))
+	if pinned, _ := got["pinned"].(bool); pinned {
+		t.Error("a rejected argument still changed the note")
+	}
+}
+
+// TestNotesUpdateSchemaExposesOptionalPinned pins the agent-facing contract
+// of the `pinned` argument (ADR-0035 decision 3).
+//
+// The schema is what a client reads before it calls: an argument that is
+// missing from the schema is an argument no client can discover, and one that
+// lands in `required` would turn "omit it" into a protocol error instead of
+// "keep the current value" — which is the whole point of the partial-update
+// discipline.
+func TestNotesUpdateSchemaExposesOptionalPinned(t *testing.T) {
+	ts := newTestServer(t)
+	tool := ts.s.GetTool("repotory_notes_update")
+	if tool == nil {
+		t.Fatal("repotory_notes_update is not registered")
+	}
+
+	props, ok := tool.Tool.InputSchema.Properties["pinned"].(map[string]any)
+	if !ok {
+		t.Fatalf("pinned is not in the schema properties: %#v", tool.Tool.InputSchema.Properties)
+	}
+	if kind, _ := props["type"].(string); kind != "boolean" {
+		t.Errorf("pinned type = %q, want boolean", kind)
+	}
+	if desc, _ := props["description"].(string); desc == "" {
+		t.Error("pinned has no description — a client cannot know what false means")
+	}
+
+	for _, required := range tool.Tool.InputSchema.Required {
+		if required == "pinned" {
+			t.Error("pinned must be optional: requiring it breaks the keep-the-current-value rule")
+		}
+	}
+
+	// The documented property set, so the shipped reference docs
+	// (skill/repotory/references/mcp-tools.md) cannot drift from the server.
+	want := map[string]bool{
+		"id": true, "content": true, "title": true,
+		"tags": true, "category": true, "pinned": true,
+	}
+	for name := range want {
+		if _, present := tool.Tool.InputSchema.Properties[name]; !present {
+			t.Errorf("schema lost the %q property", name)
+		}
+	}
+	for name := range tool.Tool.InputSchema.Properties {
+		if !want[name] {
+			t.Errorf("schema gained an undocumented %q property", name)
+		}
+	}
+}
+
 func TestNotesUpdateMissingNote(t *testing.T) {
 	ts := newTestServer(t)
 	res := ts.call("repotory_notes_update", map[string]any{

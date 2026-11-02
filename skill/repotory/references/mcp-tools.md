@@ -18,8 +18,8 @@ repotory_notes_list(limit: number)
 repotory_notes_organize(id*: number)
 repotory_notes_read(id: number)
 repotory_notes_search(path: string, query: string)
-repotory_notes_update(category: string, content: string, id*: number, tags: string,
-                       title: string)
+repotory_notes_update(category: string, content: string, id*: number, pinned: boolean,
+                       tags: string, title: string)
 repotory_projects_list()
 repotory_projects_stats(id: number)
 repotory_scan()
@@ -144,11 +144,12 @@ FTS5 trigram + bm25 全文检索。
 
 > 参数叫 `category`，落库的列叫 `kind` —— MCP 层与存储层的命名差异，查库时注意。
 
-### `repotory_notes_update(id*, title?, content?, tags?, category?)`
+### `repotory_notes_update(id*, title?, content?, tags?, category?, pinned?)`
 
 - **省略的字段保持原值**（不是清空）
 - **没有「清空标题/标签」的方式** —— 想清就写新笔记
 - **`handoff` 标签的笔记会被拒绝更新** —— 交接是协议记录，写新的交接
+- **`pinned` 是可选布尔**：`true` 置顶、`false` 取消置顶、**省略则保持原状态** —— 省略与 `false` 是两回事（省略不动它，`false` 才取消置顶）
 
 ### `repotory_notes_organize(id*)`
 

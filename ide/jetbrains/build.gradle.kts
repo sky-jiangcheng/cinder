@@ -50,6 +50,12 @@ dependencies {
         // task silently has nothing to run.
         pluginVerifier()
     }
+
+    // Plain JVM unit tests (ADR-0035): the MCP protocol client and the
+    // payload parsers are deliberately free of IntelliJ APIs, so they are
+    // tested WITHOUT the platform's test fixtures — no IDE is downloaded for
+    // a test that only needs a JSON-RPC round trip.
+    testImplementation(kotlin("test"))
 }
 
 intellijPlatform {
@@ -136,5 +142,44 @@ tasks {
         // The plugin has no options that need to be indexed at runtime; the
         // search index build adds minutes to every packaging run.
         enabled = false
+    }
+
+    // Disabling buildSearchableOptions alone is not enough: the platform
+    // plugin's prepareJarSearchableOptions still declares the (now never
+    // created) build/tmp/buildSearchableOptions as its INPUT, and Gradle
+    // refuses to run a task whose input is missing. On a clean tree that
+    // failed `gradle buildPlugin` outright — the CI gate for this plugin
+    // was red before it could even reach the tests.
+    //
+    // So the whole searchable-options chain is switched off: there is no
+    // index to build, and there is nothing to put in the zip either.
+    prepareJarSearchableOptions {
+        enabled = false
+    }
+    jarSearchableOptions {
+        enabled = false
+    }
+
+    test {
+        // The unit tests are PLAIN JVM tests: they exercise the MCP protocol
+        // client and the payload parsers, neither of which touches an IDE
+        // API, and they deliberately use no platform test fixtures.
+        //
+        // The IntelliJ Platform plugin points the test JVM at the IDE's own
+        // class loader (`-Djava.system.class.loader=…PathClassLoader`), which
+        // only works together with the `--add-exports` the platform's
+        // argument provider supplies — and that provider crashes on this
+        // layout ("Index: 1, Size: 1") before a single test runs. These
+        // tests want no IDE at all, so both are removed: the provider, and
+        // the system property that asks for the IDE class loader.
+        jvmArgumentProviders.clear()
+        doFirst {
+            systemProperties.remove("java.system.class.loader")
+            systemProperties.remove("idea.force.use.core.classloader")
+            systemProperties.remove("idea.use.core.classloader.for.plugin.path")
+        }
+        testLogging {
+            events("passed", "failed", "skipped")
+        }
     }
 }

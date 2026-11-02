@@ -197,14 +197,14 @@ class RepotoryPanel : JPanel(), Disposable {
     private var detailSeq = 0
 
     /**
-     * True once the panel has tried to bring the local service up by itself.
+     * True once the panel has offered to locate the `repotory-mcp` binary.
      *
-     * The automatic start happens at most once per outage: without this guard
-     * a service that cannot start (no binary, port taken) would be spawned
-     * again on every keystroke, each attempt waiting 30 seconds for a
-     * health check that never comes.
+     * The offer is a MODAL dialog, and a modal nobody asked for interrupts
+     * the work. It is made once: after the user declines, the panel keeps
+     * working and keeps saying what is missing — without asking again on
+     * every keystroke.
      */
-    private var autoStartAttempted = false
+    private var mcpHelpOffered = false
 
     /** True while a start is in flight, so a second click cannot double-spawn. */
     private var starting = false
@@ -306,10 +306,13 @@ class RepotoryPanel : JPanel(), Disposable {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
             override fun update(e: AnActionEvent) {
-                e.presentation.isEnabled = !starting && pill.state != LinkState.ONLINE
+                // Always available: the local service is an OPTIONAL
+                // enhancement (deep links, moving a note between projects),
+                // not the panel's data channel.
+                e.presentation.isEnabled = !starting
             }
 
-            override fun actionPerformed(e: AnActionEvent) = startLocalService(auto = false)
+            override fun actionPerformed(e: AnActionEvent) = startLocalService()
         },
     )
 
@@ -578,17 +581,18 @@ class RepotoryPanel : JPanel(), Disposable {
         val query = search.text.trim()
         if (query.isEmpty()) return
         val seq = ++searchSeq
-        val serverUrl = RepotorySettings.serverUrl()
         // Captured before the request goes out: the answer belongs to the
         // space it was asked for, and a switch in between must not relabel it.
         val space = source
         status.text = "Searching \"$query\"…"
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
+            // MCP is the plugin's data channel (ADR-0035): searching does
+            // not need a running service at all.
             val outcome = if (space == Source.WIKI) {
-                repotoryClient.searchWiki(serverUrl, query)
+                repotoryMcp.searchWiki(query)
             } else {
-                repotoryClient.search(serverUrl, query)
+                repotoryMcp.search(query)
             }
             app.invokeLater {
                 // A newer keystroke (or a cleared box) supersedes this response.
@@ -609,18 +613,14 @@ class RepotoryPanel : JPanel(), Disposable {
                     }
                     is SearchOutcome.Failure -> {
                         model.clear()
-                        if (outcome.offline) {
-                            // Nothing answered at the address. This is the
-                            // commonest state by far (the plugin is installed,
-                            // no service is running), so the panel brings the
-                            // local one up by itself — once.
+                        // The CHANNEL is down (ADR-0035). The usual cause is a
+                        // missing repotory-mcp binary, and that has a fix: a
+                        // path. The local service is not involved any more —
+                        // searching never needed it.
+                        if (repotoryMcp.problem != null) {
                             pill.state = LinkState.OFFLINE
-                            if (!autoStartAttempted) {
-                                autoStartAttempted = true
-                                startLocalService(auto = true)
-                            } else {
-                                status.text = "${outcome.message} — press the status pill to try again."
-                            }
+                            status.text = outcome.message
+                            offerMcpBinaryOnce()
                         } else {
                             status.text = outcome.message
                         }
@@ -652,10 +652,9 @@ class RepotoryPanel : JPanel(), Disposable {
         detail.caretPosition = 0
         if (hit.type == "wiki") {
             // An approved page: the body plus the graph around it (ADR-0032).
-            val serverUrl = RepotorySettings.serverUrl()
             val app = ApplicationManager.getApplication()
             app.executeOnPooledThread {
-                val page = repotoryClient.wikiPage(serverUrl, hit.id)
+                val page = repotoryMcp.wikiPage(hit.id)
                 app.invokeLater {
                     if (disposed || seq != detailSeq) return@invokeLater
                     detail.text = if (page != null) wikiPageHtml(page) else excerptHtml(hit, full = true)
@@ -668,10 +667,9 @@ class RepotoryPanel : JPanel(), Disposable {
             detail.text = excerptHtml(hit)
             return
         }
-        val serverUrl = RepotorySettings.serverUrl()
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
-            val note = repotoryClient.note(serverUrl, hit.id)
+            val note = repotoryMcp.note(hit.id)
             app.invokeLater {
                 if (disposed || seq != detailSeq) return@invokeLater
                 detail.text = if (note != null) noteHtml(note) else excerptHtml(hit, full = true)
@@ -691,18 +689,20 @@ class RepotoryPanel : JPanel(), Disposable {
     private fun probeConnection() {
         if (disposed) return
         pill.state = LinkState.CHECKING
-        val serverUrl = RepotorySettings.serverUrl()
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
-            val up = repotoryClient.ping(serverUrl)
+            // The channel the panel actually depends on is MCP (ADR-0035),
+            // not the local service: search, read, write and organize all
+            // work with no server running. The probe asks whether the MCP
+            // binary is there — cheap, and it spawns nothing.
+            val resolution = McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
             app.invokeLater {
                 if (disposed) return@invokeLater
-                if (up) {
+                if (resolution.found) {
                     pill.state = LinkState.ONLINE
-                    autoStartAttempted = false
                 } else {
                     pill.state = LinkState.OFFLINE
-                    status.text = "No Repotory service at $serverUrl."
+                    status.text = resolution.problem ?: "repotory-mcp was not found."
                 }
             }
         }
@@ -715,41 +715,82 @@ class RepotoryPanel : JPanel(), Disposable {
     private fun reconnect() {
         if (disposed) return
         pill.state = LinkState.CHECKING
-        val serverUrl = RepotorySettings.serverUrl()
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
-            val up = repotoryClient.ping(serverUrl)
+            val resolution = McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
             app.invokeLater {
                 if (disposed) return@invokeLater
-                if (up) {
+                if (resolution.found) {
                     pill.state = LinkState.ONLINE
-                    autoStartAttempted = false
                     val query = search.text.trim()
-                    if (query.isNotEmpty()) runSearch() else status.text = "Connected to $serverUrl"
+                    if (query.isNotEmpty()) runSearch() else status.text = "Repotory MCP channel ready."
                 } else {
                     pill.state = LinkState.OFFLINE
-                    status.text = "No Repotory service at $serverUrl."
-                    if (!autoStartAttempted) {
-                        autoStartAttempted = true
-                        startLocalService(auto = true)
-                    }
+                    status.text = resolution.problem ?: "repotory-mcp was not found."
+                    offerMcpBinaryOnce()
                 }
             }
         }
     }
 
     /**
+     * Offer to locate the `repotory-mcp` binary — once per panel.
+     *
+     * The MCP channel is the plugin's primary dependency since ADR-0035, so a
+     * missing binary is the one failure the user can fix by pointing at a
+     * file. The notice lists every directory that was tried: "not found"
+     * without the list is not actionable.
+     *
+     * A BALLOON, not a modal dialog: the channel can be down on every
+     * keystroke while the user types, and a dialog nobody asked for would
+     * interrupt that work. This is the same posture the VS Code extension
+     * takes — a notification with buttons, not a blocking dialog.
+     */
+    private fun offerMcpBinaryOnce() {
+        if (mcpHelpOffered) return
+        mcpHelpOffered = true
+        val manager = NotificationGroupManager.getInstance()
+        if (!manager.isGroupRegistered(NOTIFICATION_GROUP)) return
+        val resolution = McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
+        val notification = manager.getNotificationGroup(NOTIFICATION_GROUP).createNotification(
+            "Repotory: no MCP binary",
+            "The plugin could not find repotory-mcp — it is what the panel talks to.\n" +
+                resolution.attempts.take(8).joinToString("\n"),
+            NotificationType.WARNING,
+        )
+        notification.addAction(
+            NotificationAction.createSimple("Locate…") {
+                chooseMcpBinary()?.let {
+                    RepotorySettings.setMcpBinaryPath(it.absolutePath)
+                    // The client points at the old path (or never started):
+                    // a new setting has to take effect now, not at the next
+                    // IDE restart.
+                    repotoryMcp.shutdown()
+                    reconnect()
+                }
+            },
+        )
+        notification.addAction(
+            NotificationAction.createSimple("Open settings") {
+                ShowSettingsUtil.getInstance().showSettingsDialog(null, "dev.repotory.jetbrains.settings")
+            },
+        )
+        notification.notify(null)
+    }
+
+    /**
      * Starts the local Repotory service and retries the query.
+     *
+     * The local service is an OPTIONAL enhancement since ADR-0035 decision 6:
+     * the panel's data comes over MCP, and the service is only needed for the
+     * two things that stay on HTTP — deep links into the web UI, and moving a
+     * note between projects.
      *
      * The spawn waits on the binary and on /health, so it runs on a pooled
      * thread; the EDT only gets the outcome. Nothing is downloaded: when no
      * binary exists, the user is offered the file picker or the release page.
-     *
-     * [auto] marks the attempt the panel made by itself: it never opens a
-     * modal dialog on its own, because a dialog nobody asked for interrupts
-     * the work; it posts a notification instead.
      */
-    private fun startLocalService(auto: Boolean) {
+    private fun startLocalService() {
         if (disposed || starting) return
         starting = true
         pill.state = LinkState.STARTING
@@ -776,7 +817,6 @@ class RepotoryPanel : JPanel(), Disposable {
                                 "click the status pill to retry."
                         } else {
                             pill.state = LinkState.ONLINE
-                            autoStartAttempted = false
                             status.text = if (outcome.webUi) {
                                 "Service on port ${outcome.port}. Searching again…"
                             } else {
@@ -788,18 +828,19 @@ class RepotoryPanel : JPanel(), Disposable {
                     }
                     StartOutcome.AlreadyRunning -> {
                         pill.state = LinkState.ONLINE
-                        autoStartAttempted = false
                         status.text = "The service is already running. Searching again…"
                         runSearch()
                     }
                     is StartOutcome.BinaryMissing -> {
                         pill.state = LinkState.OFFLINE
-                        if (auto) {
-                            status.text = "No repotory-server binary found — set its path in " +
-                                "Settings | Tools | Repotory."
-                            notifyMissingBinary(outcome.searched)
-                        } else if (offerServerBinaryHelp(outcome.searched)) {
-                            startLocalService(auto = false)
+                        status.text = "No repotory-server binary found — set its path in " +
+                            "Settings | Tools | Repotory."
+                        // The user PRESSED the button, so a dialog is welcome
+                        // here — this is not the panel interrupting itself. It
+                        // offers the file picker and the release page, the
+                        // same two ways out the VS Code extension gives.
+                        if (offerServerBinaryHelp(outcome.searched)) {
+                            startLocalService()
                         }
                     }
                     is StartOutcome.Failed -> {
@@ -811,30 +852,6 @@ class RepotoryPanel : JPanel(), Disposable {
         }
     }
 
-    /** Posts the "there is no server binary" balloon, with the two ways out. */
-    private fun notifyMissingBinary(searched: String) {
-        val manager = NotificationGroupManager.getInstance()
-        if (!manager.isGroupRegistered(NOTIFICATION_GROUP)) return
-        val notification = manager.getNotificationGroup(NOTIFICATION_GROUP).createNotification(
-            "Repotory: no local service binary",
-            "The plugin could not find a repotory-server executable.\n$searched",
-            NotificationType.WARNING,
-        )
-        notification.addAction(
-            NotificationAction.createSimple("Locate…") {
-                chooseServerBinary()?.let {
-                    RepotorySettings.setServerBinaryPath(it.absolutePath)
-                    reconnect()
-                }
-            },
-        )
-        notification.addAction(
-            NotificationAction.createSimple("Open settings") {
-                ShowSettingsUtil.getInstance().showSettingsDialog(null, "dev.repotory.jetbrains.settings")
-            },
-        )
-        notification.notify(null)
-    }
 
     // ------------------------------------------------------------- actions
 
@@ -843,14 +860,13 @@ class RepotoryPanel : JPanel(), Disposable {
 
     private fun copySelected() {
         val hit = list.selectedValue ?: return
-        val serverUrl = RepotorySettings.serverUrl()
         val app = ApplicationManager.getApplication()
         // The full body is one loopback call away, but the EDT must not wait
         // for it: copy on a pooled thread, then report on the EDT.
         app.executeOnPooledThread {
             val body = when (hit.type) {
-                "note" -> repotoryClient.note(serverUrl, hit.id)?.body
-                "wiki" -> repotoryClient.wikiPage(serverUrl, hit.id)?.content
+                "note" -> repotoryMcp.note(hit.id)?.body
+                "wiki" -> repotoryMcp.wikiPage(hit.id)?.content
                 else -> null
             }
             val text = buildString {
@@ -876,12 +892,11 @@ class RepotoryPanel : JPanel(), Disposable {
      */
     private fun editSelected() {
         val hit = selectedNote() ?: return
-        val serverUrl = RepotorySettings.serverUrl()
         status.text = "Loading note #${hit.id}…"
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
-            val note = repotoryClient.note(serverUrl, hit.id)
-            val projects = repotoryClient.projects(serverUrl)
+            val note = repotoryMcp.note(hit.id)
+            val projects = repotoryMcp.projects()
             app.invokeLater {
                 if (disposed) return@invokeLater
                 if (note == null) {
@@ -907,10 +922,9 @@ class RepotoryPanel : JPanel(), Disposable {
     /** New note under the SAME project as the selected note. */
     private fun newNoteUnderSelectedProject() {
         val hit = selectedNote() ?: return
-        val serverUrl = RepotorySettings.serverUrl()
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
-            val projects = repotoryClient.projects(serverUrl)
+            val projects = repotoryMcp.projects()
             app.invokeLater {
                 if (disposed) return@invokeLater
                 openEditor(
@@ -929,7 +943,6 @@ class RepotoryPanel : JPanel(), Disposable {
      */
     private fun organizeSelected() {
         val hit = selectedNote() ?: return
-        val serverUrl = RepotorySettings.serverUrl()
         status.text = "AI tidying note #${hit.id}… (this can take a while)"
         val app = ApplicationManager.getApplication()
         val reportFailure = { message: String ->
@@ -940,16 +953,16 @@ class RepotoryPanel : JPanel(), Disposable {
         }
         app.executeOnPooledThread {
             val proposal = try {
-                repotoryClient.organizeNote(serverUrl, hit.id)
-            } catch (e: RepotoryRpcException) {
+                repotoryMcp.organizeNote(hit.id)
+            } catch (e: McpException) {
                 reportFailure(e.message ?: "整理失败")
                 return@executeOnPooledThread
             } catch (e: Exception) {
                 reportFailure("整理失败：${e.message ?: e.javaClass.simpleName}")
                 return@executeOnPooledThread
             }
-            val note = repotoryClient.note(serverUrl, hit.id)
-            val projects = repotoryClient.projects(serverUrl)
+            val note = repotoryMcp.note(hit.id)
+            val projects = repotoryMcp.projects()
             app.invokeLater {
                 if (disposed) return@invokeLater
                 openEditor(
@@ -995,7 +1008,7 @@ class RepotoryPanel : JPanel(), Disposable {
         app.executeOnPooledThread {
             if (edited.id == 0L) {
                 val created = try {
-                    repotoryClient.createNote(serverUrl, edited)
+                    repotoryMcp.createNote(edited)
                 } catch (e: Exception) {
                     app.invokeLater {
                         if (disposed) return@invokeLater
@@ -1013,8 +1026,8 @@ class RepotoryPanel : JPanel(), Disposable {
                 }
                 return@executeOnPooledThread
             }
-            try {
-                repotoryClient.updateNote(serverUrl, edited)
+            val updated = try {
+                repotoryMcp.updateNote(edited)
             } catch (e: Exception) {
                 app.invokeLater {
                     if (disposed) return@invokeLater
@@ -1022,6 +1035,11 @@ class RepotoryPanel : JPanel(), Disposable {
                 }
                 return@executeOnPooledThread
             }
+            // MoveNote stays on HTTP on purpose (ADR-0035 decision 2): moving
+            // a note between projects is a human decision, not an agent's. It
+            // is the ONE write that still needs the local service — and when
+            // the service is down the fields ARE saved, so the wording must
+            // say "the move failed", never "the save failed".
             val moveError = if (original.projectId != 0L && edited.projectId != original.projectId) {
                 try {
                     repotoryClient.moveNote(serverUrl, edited.id, edited.projectId)
@@ -1032,15 +1050,28 @@ class RepotoryPanel : JPanel(), Disposable {
             } else {
                 null
             }
-            val fresh = repotoryClient.note(serverUrl, edited.id)
+            // The MCP tool answers with the note as stored, so the pane is
+            // repainted from what was actually written — one round trip less
+            // than reading it back.
+            val fresh = updated
+            // The MCP surface cannot CLEAR a title (an empty value means
+            // "keep what is there"), so a title the user emptied survives the
+            // write. Saying so beats reporting a success that did not do
+            // what was asked.
+            val titleKept = edited.title.isEmpty() && updated.title.isNotEmpty()
             app.invokeLater {
                 if (disposed) return@invokeLater
-                status.text = moveError?.let { "Fields saved, but the project move failed: $it" }
-                    ?: "Saved note #${edited.id}"
-                if (fresh != null) {
-                    detail.text = noteHtml(fresh)
-                    detail.caretPosition = 0
+                status.text = when {
+                    moveError != null ->
+                        "Fields saved, but the project move failed: $moveError " +
+                            "(moving a note between projects needs the local Repotory service)."
+                    titleKept ->
+                        "Saved note #${edited.id}, but the title could not be cleared — " +
+                            "the MCP write path keeps the old title."
+                    else -> "Saved note #${edited.id}"
                 }
+                detail.text = noteHtml(fresh)
+                detail.caretPosition = 0
             }
         }
     }
@@ -1145,12 +1176,15 @@ private class ConnectionPill : JPanel(BorderLayout(JBUI.scale(5), 0)) {
             LinkState.ONLINE -> Triple(
                 JBColor(Color(0x3F, 0x8F, 0x4E), Color(0x73, 0xBD, 0x79)),
                 "online",
-                "The Repotory service is reachable. Click to re-check.",
+                "The Repotory MCP channel is ready — searching, reading and writing work now. " +
+                    "The local service is only needed for deep links and moving a note between projects. " +
+                    "Click to re-check.",
             )
             LinkState.OFFLINE -> Triple(
                 JBColor(Color(0xC0, 0x3A, 0x2B), Color(0xE8, 0x6C, 0x5A)),
                 "offline",
-                "No Repotory service answered. Click to try again (the local one is started for you).",
+                "The Repotory MCP channel is not available — repotory-mcp was not found. " +
+                    "Click to locate it.",
             )
             LinkState.STARTING -> Triple(
                 JBColor(Color(0xB4, 0x8A, 0x2F), Color(0xE2, 0xC0, 0x6A)),
@@ -1160,7 +1194,7 @@ private class ConnectionPill : JPanel(BorderLayout(JBUI.scale(5), 0)) {
             LinkState.CHECKING -> Triple(
                 JBColor.foreground(),
                 "checking…",
-                "Asking the Repotory service whether it is there.",
+                "Checking whether repotory-mcp is available.",
             )
         }
         dotIcon.color = color

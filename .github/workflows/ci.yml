@@ -592,6 +592,7 @@ jobs:
       - name: Bundled repotory-init is in sync
         run: git diff --exit-code -- repotory-init/index.mjs
 
+
   # ------------------------------------------------------ JetBrains plugin ----
   # Same reasoning as the VS Code job above: release.yml does not build the
   # JetBrains plugin at all, so a Kotlin compile error in ide/jetbrains could
@@ -643,3 +644,15 @@ jobs:
       # plugin.xml that references a class that does not exist.
       - name: Build plugin (gradle buildPlugin)
         run: gradle buildPlugin
+
+      # The plugin's own unit tests (ADR-0035): the MCP stdio client, the
+      # payload parsers and the binary lookup. They are plain JVM tests with
+      # no IDE fixtures, so they need nothing from the platform — but they do
+      # need a JDK, which the step above already put in place.
+      #
+      # The parsers are the reason this step exists: a parser that accepts
+      # the wrong shape turns a refused tool call into an EMPTY result, and
+      # an empty result is the one answer a user cannot tell apart from
+      # "nothing matched". Every tool mapping has its own case.
+      - name: Plugin unit tests (gradle test)
+        run: gradle test

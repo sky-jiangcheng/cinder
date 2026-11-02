@@ -20,6 +20,7 @@ import javax.swing.JPanel
 class RepotoryConfigurable : Configurable {
     private var serverUrlField: JBTextField? = null
     private var binaryField: JBTextField? = null
+    private var mcpBinaryField: JBTextField? = null
     private var statusLabel: JBLabel? = null
 
     override fun getDisplayName(): String = "Repotory"
@@ -29,6 +30,8 @@ class RepotoryConfigurable : Configurable {
         serverUrlField = url
         val binary = JBTextField(RepotorySettings.serverBinaryPath(), 32)
         binaryField = binary
+        val mcpBinary = JBTextField(RepotorySettings.mcpBinaryPath(), 32)
+        mcpBinaryField = mcpBinary
         val status = JBLabel(" ")
         statusLabel = status
 
@@ -39,6 +42,32 @@ class RepotoryConfigurable : Configurable {
         val binaryRow = JPanel(BorderLayout(6, 0))
         binaryRow.add(binary, BorderLayout.CENTER)
         binaryRow.add(locate, BorderLayout.EAST)
+
+        val locateMcp = JButton("Locate…")
+        locateMcp.addActionListener {
+            chooseMcpBinary()?.let {
+                mcpBinary.text = it.absolutePath
+                // The MCP client is a long-lived process: a new binary path
+                // only takes effect after it is restarted.
+                repotoryMcp.shutdown()
+                status.text = "MCP binary set. It will be used on the next call."
+            }
+        }
+        val mcpRow = JPanel(BorderLayout(6, 0))
+        mcpRow.add(mcpBinary, BorderLayout.CENTER)
+        mcpRow.add(locateMcp, BorderLayout.EAST)
+
+        // The MCP channel is the plugin's PRIMARY dependency since ADR-0035:
+        // every data call goes through it. "Is it there?" is therefore the
+        // first question the settings page answers — and it answers it with
+        // the LIST of places it looked, because "not found" is only
+        // actionable when the user can see where it looked.
+        val checkMcp = JButton("Check MCP channel")
+        checkMcp.addActionListener {
+            status.text = describeMcpResolution(
+                McpBinaryResolver.resolveHere(mcpBinary.text?.trim().orEmpty()),
+            )
+        }
 
         val test = JButton("Test connection")
         test.addActionListener {
@@ -74,6 +103,8 @@ class RepotoryConfigurable : Configurable {
         }
 
         return FormBuilder.createFormBuilder()
+            .addLabeledComponent(JBLabel("MCP binary:"), mcpRow, 1, false)
+            .addComponent(checkMcp)
             .addLabeledComponent(JBLabel("Server address:"), url, 1, false)
             .addLabeledComponent(JBLabel("Server binary:"), binaryRow, 1, false)
             .addComponent(test)
@@ -85,23 +116,50 @@ class RepotoryConfigurable : Configurable {
 
     override fun isModified(): Boolean =
         serverUrlField?.text?.trim() != RepotorySettings.serverUrl() ||
-            binaryField?.text?.trim().orEmpty() != RepotorySettings.serverBinaryPath()
+            binaryField?.text?.trim().orEmpty() != RepotorySettings.serverBinaryPath() ||
+            mcpBinaryField?.text?.trim().orEmpty() != RepotorySettings.mcpBinaryPath()
 
     override fun apply() {
         RepotorySettings.setServerUrl(serverUrlField?.text?.trim().orEmpty())
         RepotorySettings.setServerBinaryPath(binaryField?.text?.trim().orEmpty())
+        val mcpPath = mcpBinaryField?.text?.trim().orEmpty()
+        if (mcpPath != RepotorySettings.mcpBinaryPath()) {
+            RepotorySettings.setMcpBinaryPath(mcpPath)
+            // The running MCP client points at the OLD binary; a changed
+            // setting has to take effect, not wait for the next IDE restart.
+            repotoryMcp.shutdown()
+        }
     }
 
     override fun reset() {
         serverUrlField?.text = RepotorySettings.serverUrl()
         binaryField?.text = RepotorySettings.serverBinaryPath()
+        mcpBinaryField?.text = RepotorySettings.mcpBinaryPath()
         statusLabel?.text = " "
     }
 
     override fun disposeUIResources() {
         serverUrlField = null
         binaryField = null
+        mcpBinaryField = null
         statusLabel = null
+    }
+
+    /**
+     * The MCP resolution, spelled out.
+     *
+     * The found case says WHERE it found it (the source matters: a PATH hit
+     * can be shadowed by an older install). The missing case lists every
+     * directory that was tried — the same shape as the VS Code extension's
+     * diagnostics, so the two IDEs answer the same question identically.
+     */
+    private fun describeMcpResolution(resolution: McpBinaryResolution): String {
+        if (resolution.found) {
+            return "repotory-mcp found at ${resolution.path} (via ${resolution.source})."
+        }
+        val tried = resolution.attempts.take(12).joinToString("\n")
+        val more = if (resolution.attempts.size > 12) "\n… and ${resolution.attempts.size - 12} more" else ""
+        return (resolution.problem ?: "repotory-mcp not found") + "\nLooked in:\n" + tried + more
     }
 
     private fun describeStart(outcome: StartOutcome, target: String): String = when (outcome) {
@@ -152,6 +210,24 @@ object RepotorySettings {
             .getService(RepotorySettingsState::class.java)
             .serverBinaryPath = value.trim()
     }
+
+    /**
+     * The `repotory-mcp` binary, empty when it should be auto-detected.
+     *
+     * This is the plugin's primary dependency since ADR-0035: the MCP
+     * channel carries every data call, so this path decides whether the
+     * panel works at all.
+     */
+    fun mcpBinaryPath(): String =
+        com.intellij.openapi.application.ApplicationManager.getApplication()
+            .getService(RepotorySettingsState::class.java)
+            .mcpBinaryPath.orEmpty()
+
+    fun setMcpBinaryPath(value: String) {
+        com.intellij.openapi.application.ApplicationManager.getApplication()
+            .getService(RepotorySettingsState::class.java)
+            .mcpBinaryPath = value.trim()
+    }
 }
 
 /** The state bean behind [RepotorySettings]; IntelliJ persists it. */
@@ -165,4 +241,5 @@ class RepotorySettingsState : com.intellij.openapi.components.BaseState() {
     // RepotorySettings.serverUrl() falls back to the default.
     var serverUrl: String? by string(RepotoryClient.DEFAULT_SERVER_URL)
     var serverBinaryPath: String? by string("")
+    var mcpBinaryPath: String? by string("")
 }

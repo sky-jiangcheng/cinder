@@ -1,21 +1,24 @@
-// Repotory for JetBrains — thin client over the Repotory headless service.
+// Repotory for JetBrains — the thin HTTP half of the plugin.
 //
 // ADR-0027 (Accepted 2026-10-22): the plugin is a THIN SHELL. Everything it
-// shows comes from the shared service layer over the loopback HTTP API
-// (`/api/rpc`); the plugin holds no retrieval logic of its own. That is the
-// whole point of the thin-client discipline (ADR-0009, ADR-0017): the desktop
-// app, the VS Code extension and this plugin must not drift apart, because
-// none of them owns the search implementation.
+// shows comes from the shared service layer, and the plugin holds no retrieval
+// logic of its own. That is the whole point of the thin-client discipline
+// (ADR-0009, ADR-0017): the desktop app, the VS Code extension and this
+// plugin must not drift apart, because none of them owns the search
+// implementation.
 //
-// MVP scope (ADR-0027 decision 2):
-//   ① knowledge-search tool window — notes + todos, via SearchAll
-//   ② result jump — open the Repotory SPA in the system browser, deep-linked
-//   ③ settings page — server address + a health check
+// ADR-0035 (Accepted 2026-10-30) decision 2 moved the EIGHT data calls onto
+// MCP (see RepotoryMcp.kt), which is the same switch the VS Code extension
+// made long ago: "MCP primary, HTTP filling the gaps". Two things stay here
+// on purpose:
 //
-// Explicitly NOT in the MVP (per the 2026-10-22 decisions): session capture.
-// Server lifecycle: connect to a running instance, or start a LOCAL one with
-// one click (2026-10-22 usability revision of decision 4); this plugin never
-// manages a remote server and never auto-downloads anything.
+//   ① MoveNote — re-filing knowledge between projects is a human decision an
+//      agent must not make, so it never enters MCP.
+//   ② the web-UI probe and the deep links — a deep link needs a server that
+//      actually serves the UI, which is a property of the HTTP deployment.
+//
+// Everything else the plugin used to fetch over /api/rpc now goes through the
+// MCP channel, so the panel works with no `repotory-server` running at all.
 package dev.repotory.jetbrains
 
 import com.google.gson.Gson
@@ -110,7 +113,7 @@ class RepotoryRpcException(message: String) : Exception(message)
  *
  * A search hit carries only the matched excerpt (SearchHit.snippet); the
  * detail pane expands a hit into the note itself, which is what the
- * GetNote binding returns. `kind` and `pinned` ride along because the
+ * notes_read tool returns. `kind` and `pinned` ride along because the
  * editor round-trips them: a draft that lost the kind would silently
  * re-file a knowledge note as "other" on the next save, and one that lost
  * `pinned` would unpin it — data loss disguised as a metadata default.
@@ -160,8 +163,7 @@ data class NoteDraft(
  *
  * Two endpoints only:
  *   GET  /health    — liveness (the settings page "test connection" button)
- *   POST /api/rpc   — the generic binding bridge, the SAME one the web
- *                      frontend and the VS Code extension use
+ *   POST /api/rpc   — the generic binding bridge, for MoveNote only
  *
  * The service is loopback-only by design, so the address is a loopback URL and
  * no authentication is involved. The timeouts are deliberately short: the
@@ -173,14 +175,6 @@ class RepotoryClient {
         const val DEFAULT_SERVER_URL = "http://127.0.0.1:18765"
         private const val CONNECT_TIMEOUT_MS = 1500
         private const val READ_TIMEOUT_MS = 4000
-        // The AI tidy call is the one RPC that legitimately takes minutes
-        // (the service allows the model up to five), so it opts into a long
-        // read timeout. Every other call keeps the short one: the plugin
-        // must never hang the IDE on a service that is not answering.
-        private const val READ_TIMEOUT_AI_MS = 330_000
-        // The page search's ceiling, the same one the MCP tool uses: one call
-        // must not be able to dump the whole knowledge base over the wire.
-        private const val WIKI_SEARCH_LIMIT = 20
         private val GSON = Gson()
     }
 
@@ -224,68 +218,6 @@ class RepotoryClient {
     }
 
     /**
-     * Searches notes AND todos in one call.
-     *
-     * `SearchAll` is the binding the web frontend's knowledge search uses
-     * (web/src/api/endpoints.ts), so the plugin inherits exactly the ranking
-     * the desktop app serves — FTS5 bm25 with a LIKE fallback
-     * (internal/db/search.go) — and reimplements none of it (ADR-0027
-     * decision 2①). Its scope is notes + todos: wiki pages are not reachable
-     * through this binding, and the plugin does not pretend they are.
-     *
-     * Returns [SearchOutcome], never a bare list: a transport failure and an
-     * empty result set must stay distinguishable all the way to the UI.
-     */
-    fun search(serverUrl: String, query: String): SearchOutcome {
-        if (query.isBlank()) return SearchOutcome.Hits(emptyList())
-        return try {
-            val result = rpc(serverUrl, "SearchAll", listOf(query))
-            val array = result as? JsonArray
-                ?: return SearchOutcome.Failure("Repotory returned an unexpected SearchAll payload")
-            SearchOutcome.Hits(array.mapNotNull { parseHit(it) })
-        } catch (e: RepotoryRpcException) {
-            SearchOutcome.Failure(e.message ?: "SearchAll failed")
-        } catch (e: Exception) {
-            // IOException and friends: the service is not running, or not answering.
-            SearchOutcome.Failure(
-                "Cannot reach ${serverUrl.trimEnd('/')} — ${e.message ?: e.javaClass.simpleName}",
-                offline = true,
-            )
-        }
-    }
-
-    /**
-     * Searches the APPROVED knowledge pages (ADR-0032).
-     *
-     * `SearchWikiPages` is the same binding the desktop `/wiki` surface uses,
-     * so the plugin inherits the service's own ranking and — more important —
-     * the service's own visibility: a page a human has not approved does not
-     * come back, and a project scope means "this project's pages plus the
-     * global ones" (ADR-0031).
-     *
-     * The scope is 0 (no project filter) on purpose: the notes path above is
-     * unscoped too, and a scope here would FILTER pages rather than re-rank
-     * them, so the plugin would show fewer pages than the desktop app does
-     * for the same query.
-     */
-    fun searchWiki(serverUrl: String, query: String): SearchOutcome {
-        if (query.isBlank()) return SearchOutcome.Hits(emptyList())
-        return try {
-            val result = rpc(serverUrl, "SearchWikiPages", listOf(0, query, WIKI_SEARCH_LIMIT))
-            val array = result as? JsonArray
-                ?: return SearchOutcome.Failure("Repotory returned an unexpected SearchWikiPages payload")
-            SearchOutcome.Hits(array.mapNotNull { parseWikiHit(it) })
-        } catch (e: RepotoryRpcException) {
-            SearchOutcome.Failure(e.message ?: "SearchWikiPages failed")
-        } catch (e: Exception) {
-            SearchOutcome.Failure(
-                "Cannot reach ${serverUrl.trimEnd('/')} — ${e.message ?: e.javaClass.simpleName}",
-                offline = true,
-            )
-        }
-    }
-
-    /**
      * Calls one binding over the generic JSON-RPC bridge.
      *
      * The bridge is the same one the desktop Wails app is bound to, so the
@@ -305,10 +237,6 @@ class RepotoryClient {
     /**
      * Calls one binding over the generic JSON-RPC bridge, with an explicit
      * read timeout for calls that legitimately take minutes (the AI tidy).
-     *
-     * The bridge is the same one the desktop Wails app is bound to, so the
-     * plugin can reach ANY binding without a hand-written REST route per
-     * method — and without the plugin growing its own API surface.
      *
      * Throws [RepotoryRpcException] when the call produced no payload: a
      * non-200 status, an `error` envelope, or a body that is not an object.
@@ -369,222 +297,15 @@ class RepotoryClient {
     }
 
     /**
-     * Reads one note by ID over the RPC bridge (the GetNote binding).
+     * Re-files a note under a different project (the project change).
      *
-     * Returns null when the note does not exist or the call fails: the
-     * caller falls back to the matched excerpt, because a pane that shows
-     * nothing is worse than one that shows the excerpt and says so.
-     * Todos have no note row — their excerpt IS the whole item the search
-     * contract returns.
+     * The ONE write that deliberately stays on HTTP (ADR-0035 decision 2):
+     * re-filing knowledge is a human decision an agent must not make, so it
+     * never enters the MCP tool surface.
      */
-    fun note(serverUrl: String, id: Long): NoteDetail? {
-        return try {
-            val result = rpc(serverUrl, "GetNote", listOf(id)) as? JsonObject ?: return null
-            NoteDetail(
-                id = result.get("id")?.takeIf { it.isJsonPrimitive }?.asLong ?: id,
-                title = result.get("title")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                body = result.get("content")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                updatedAt = result.get("updated_at")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                tags = result.get("tags")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                kind = result.get("kind")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                projectId = result.get("project_id")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0,
-                pinned = result.get("pinned")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false,
-            )
-        } catch (e: RepotoryRpcException) {
-            Logger.getInstance(LOG).debug("repotory GetNote($id) failed: ${e.message}")
-            null
-        } catch (e: Exception) {
-            Logger.getInstance(LOG).debug("repotory GetNote($id) failed", e)
-            null
-        }
-    }
-
-    /**
-     * Reads one approved knowledge page by ID over the RPC bridge
-     * (the GetWikiPage binding).
-     *
-     * Returns null when the page does not exist, is not approved, or the call
-     * fails: the caller falls back to the matched excerpt, because a pane that
-     * shows nothing is worse than one that shows the excerpt and says so.
-     *
-     * The service is the gate here — GetWikiPage refuses anything that is not
-     * approved — so the plugin never has to ask whether a page may be read.
-     */
-    fun wikiPage(serverUrl: String, id: Long): WikiPageDetail? {
-        return try {
-            val result = rpc(serverUrl, "GetWikiPage", listOf(id)) as? JsonObject ?: return null
-            WikiPageDetail(
-                id = result.get("id")?.takeIf { it.isJsonPrimitive }?.asLong ?: id,
-                slug = result.get("slug")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                title = result.get("title")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                kind = result.get("kind")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                projectId = result.get("project_id")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0,
-                updatedAt = result.get("updated_at")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                content = result.get("content")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                source = result.get("source")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                outLinks = parseEdges(result.get("out_links")),
-                inLinks = parseEdges(result.get("in_links")),
-                sourceNoteIds = (result.get("source_note_ids") as? JsonArray)
-                    ?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asLong }
-                    ?: emptyList(),
-            )
-        } catch (e: RepotoryRpcException) {
-            Logger.getInstance(LOG).debug("repotory GetWikiPage($id) failed: ${e.message}")
-            null
-        } catch (e: Exception) {
-            Logger.getInstance(LOG).debug("repotory GetWikiPage($id) failed", e)
-            null
-        }
-    }
-
-    // ------------------------------------------------------------- writes
-    //
-    // The maintenance actions of the reader. All of them are human-pressed
-    // button paths over the same RPC bridge the reads use — the plugin holds
-    // no write logic of its own, exactly as it holds no search logic.
-
-    /** The project list for the editor's project dropdown. */
-    fun projects(serverUrl: String): List<ProjectOption> {
-        return try {
-            val result = rpc(serverUrl, "GetProjects", listOf("", false)) as? JsonArray ?: return emptyList()
-            result.mapNotNull { el ->
-                if (!el.isJsonObject) return@mapNotNull null
-                val obj = el.asJsonObject
-                val id = obj.get("id")?.takeIf { it.isJsonPrimitive }?.asLong ?: return@mapNotNull null
-                val name = obj.get("name")?.takeIf { it.isJsonPrimitive }?.asString ?: "project $id"
-                ProjectOption(id, name)
-            }
-        } catch (e: Exception) {
-            Logger.getInstance(LOG).debug("repotory GetProjects failed: ${e.message}")
-            emptyList()
-        }
-    }
-
-    /**
-     * Runs the AI tidy over one note and returns the PROPOSAL.
-     *
-     * The service writes nothing; the caller opens the editor with the
-     * result and the user's save lands it. Throws [RepotoryRpcException]
-     * with a user-presentable message (including the "configure the endpoint
-     * in Settings → AI" case) so the pane can say why it did not run.
-     */
-    @Throws(RepotoryRpcException::class)
-    fun organizeNote(serverUrl: String, id: Long): NoteOrganizeResult {
-        val result = rpc(serverUrl, "OrganizeNote", listOf(id), READ_TIMEOUT_AI_MS) as? JsonObject
-            ?: throw RepotoryRpcException("整理失败：服务未返回提案")
-        val content = result.get("content")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
-        if (content.isBlank()) {
-            throw RepotoryRpcException("整理失败：提案为空")
-        }
-        return NoteOrganizeResult(
-            noteId = result.get("note_id")?.takeIf { it.isJsonPrimitive }?.asLong ?: id,
-            title = result.get("title")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            content = content,
-            tags = result.get("tags")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            warning = result.get("warning")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-        )
-    }
-
-    /** Saves one existing note's content and metadata in a single call. */
-    @Throws(RepotoryRpcException::class)
-    fun updateNote(serverUrl: String, draft: NoteDraft) {
-        rpc(
-            serverUrl,
-            "UpdateNoteFull",
-            listOf(draft.id, draft.content, draft.title, draft.tags, draft.kind, draft.pinned),
-        )
-    }
-
-    /** Creates a note under a project and returns it as stored. */
-    @Throws(RepotoryRpcException::class)
-    fun createNote(serverUrl: String, draft: NoteDraft): NoteDetail {
-        val result = rpc(
-            serverUrl,
-            "CreateNoteWithMeta",
-            listOf(draft.projectId, draft.title, draft.content, draft.tags, draft.kind, "jetbrains"),
-        ) as? JsonObject ?: throw RepotoryRpcException("创建失败：服务未返回新笔记")
-        return NoteDetail(
-            id = result.get("id")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0,
-            title = result.get("title")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            body = result.get("content")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            updatedAt = result.get("updated_at")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            tags = result.get("tags")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            kind = result.get("kind")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            projectId = result.get("project_id")?.takeIf { it.isJsonPrimitive }?.asLong ?: draft.projectId,
-            pinned = result.get("pinned")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false,
-        )
-    }
-
-    /** Re-files a note under a different project (the project change). */
     @Throws(RepotoryRpcException::class)
     fun moveNote(serverUrl: String, noteId: Long, projectId: Long) {
         rpc(serverUrl, "MoveNote", listOf(noteId, projectId))
-    }
-
-    private fun parseHit(raw: Any?): RepotoryHit? {
-        if (raw !is com.google.gson.JsonElement || !raw.isJsonObject) return null
-        val obj = raw.asJsonObject
-        val type = obj.get("type")?.takeIf { it.isJsonPrimitive }?.asString ?: return null
-        val id = obj.get("id")?.takeIf { it.isJsonPrimitive }?.asLong ?: return null
-        val projectId = obj.get("project_id")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0
-        val title = obj.get("title")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        val snippet = obj.get("snippet")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        // The SPA routes (web/src/App.tsx): a note opens the project page on
-        // the notes tab with ?noteId= (ProjectDetail reads `noteId`, not
-        // `note`); a todo opens the project's todo tab. The route vocabulary
-        // belongs to the frontend, so it is read from the frontend's contract
-        // rather than invented here.
-        val route = when (type) {
-            "note" -> "/project/$projectId?noteId=$id"
-            "todo" -> "/project/$projectId?tab=todos"
-            else -> "/project/$projectId"
-        }
-        return RepotoryHit(type, id, projectId, title, snippet, route)
-    }
-
-    /**
-     * One approved page as a list row.
-     *
-     * The route is the SPA's own `/wiki/:id` (web/src/App.tsx), so "Open in
-     * Repotory" lands on the page the desktop app shows — the same route the
-     * web surface links to.
-     */
-    private fun parseWikiHit(raw: Any?): RepotoryHit? {
-        if (raw !is com.google.gson.JsonElement || !raw.isJsonObject) return null
-        val obj = raw.asJsonObject
-        val id = obj.get("id")?.takeIf { it.isJsonPrimitive }?.asLong ?: return null
-        val projectId = obj.get("project_id")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0
-        val title = obj.get("title")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        val snippet = obj.get("snippet")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        val slug = obj.get("slug")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        val kind = obj.get("kind")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
-        return RepotoryHit(
-            type = "wiki",
-            id = id,
-            projectId = projectId,
-            title = title,
-            snippet = snippet,
-            route = "/wiki/$id",
-            kind = kind,
-            slug = slug,
-        )
-    }
-
-    /** The page graph edges, skipping anything that is not an edge object. */
-    private fun parseEdges(raw: com.google.gson.JsonElement?): List<PageEdge> {
-        val array = raw as? JsonArray ?: return emptyList()
-        return array.mapNotNull { el ->
-            if (!el.isJsonObject) return@mapNotNull null
-            val obj = el.asJsonObject
-            val pageId = obj.get("page_id")?.takeIf { it.isJsonPrimitive }?.asLong ?: return@mapNotNull null
-            PageEdge(
-                pageId = pageId,
-                slug = obj.get("slug")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                title = obj.get("title")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                kind = obj.get("kind")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-                relation = obj.get("relation")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty(),
-            )
-        }
     }
 
     private fun open(serverUrl: String, path: String, method: String, readTimeoutMs: Int = READ_TIMEOUT_MS): HttpURLConnection {

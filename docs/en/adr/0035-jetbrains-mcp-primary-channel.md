@@ -159,3 +159,22 @@ This ADR swaps a transport and adds one optional parameter to an existing tool. 
 3. `ide/vscode/`: add the `servesWebUi` pre-check to `openHit`.
 4. `packaging/README.md`: change `repotory-server`'s consumer to "obtained manually (deep-link enhancement)".
 5. `docs/adr/0009`, `docs/adr/0027`: add the "AI" qualifier (decision 1).
+
+## Corrections found while landing this (2026-11-01, implementation record)
+
+**Not one decision of this ADR changed.** What follows are two FACTUAL discrepancies found by checking the code while implementing — recorded here, per this repository's "annotate, do not rewrite" practice, because implementing the text as written would have produced the wrong code.
+
+**Correction one: the two search tools return JSON, not text.**
+
+The "Consequences" section says "`repotory_notes_search` / `repotory_wiki_search` return text, so each needs its own parser". Checking `cmd/mcp` one by one shows **this does not hold**: both go through `makeJSONResult` and return structured JSON ([main.go:135](file:///workspace/cmd/mcp/main.go#L135), [tools_wiki.go:87](file:///workspace/cmd/mcp/tools_wiki.go#L87)). **Text appears only on the error path** (`makeTextResult`: `query is required` / `error: …` / `note not found: …` / `refusing to update note N: …`).
+
+So there are no "two text parsers" — there is **one JSON parser plus an error branch**: text that does not parse as JSON means the tool refused, and it must **fail loudly** rather than be read as an empty result. An empty result is the one answer a user cannot tell apart from "nothing matched", which is worse than an error. While landing this, that rule was pinned as a regression case per tool mapping (`ide/jetbrains/src/test/kotlin/dev/repotory/jetbrains/McpPayloadsTest.kt`).
+
+**Correction two: what needs syncing is the MCP tool catalog, not `docs/api/reference.md`.**
+
+Both the landing checklist (item 2) and the "Consequences" section say "sync `docs/api/reference.md` (both language versions)". Checking it: that file documents the **binding layer** (the `internal/app` binding list), where `UpdateNoteMeta(noteID, title, tags, kind, pinned)` **already carries `pinned`**. The MCP tool surface is not in that file at all, and decision 8 explicitly adds no binding. So that file **needs no change here**. What does need changing:
+
+- the MCP tool catalog in `docs/features/ai-integration.md` (both languages) — that is where the tool parameters live;
+- the shipped skill's tool-signature references: `SKILL.md`, `skill/repotory/references/mcp-tools.md`, `skill/repotory/SKILL.md` (the latter claims its signatures are "taken from the actual `tools/list` response", so a new parameter makes them stale — that is drift).
+
+**Landing record (2026-11-01)**: ① `cmd/mcp`'s `repotory_notes_update` gained an optional boolean `pinned` (omission keeps the current value; `false` and omission are different requests, told apart by whether the argument is PRESENT); ② `ide/jetbrains/` gained `McpStdioClient.kt` (protocol), `McpPayloads.kt` (parsers), `McpBinaryResolver.kt` (binary lookup) and `RepotoryMcp.kt` (the eight capabilities); the eight data calls moved onto MCP, `MoveNote` and the web-UI probe stayed on HTTP; ③ the settings page gained an "MCP binary" field and a "Check MCP channel" diagnostic; ④ the VS Code side's `openHit` gained the `servesWebUi` pre-check; ⑤ the plugin gained 27 JVM unit tests, now run in CI (`gradle test`).

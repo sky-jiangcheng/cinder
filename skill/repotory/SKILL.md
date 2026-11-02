@@ -154,7 +154,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 | 工具 | 什么时候用 | 注意 |
 |------|-----------|------|
 | `repotory_notes_create` | 记一条新知识 | 必填 `project_id` / `title` / `content`；`category` ∈ knowledge / log / idea / other |
-| `repotory_notes_update` | 改已有笔记 | **省略字段保持原值**；故意没有「清空标题/标签」的方式 —— 要清就写新笔记 |
+| `repotory_notes_update` | 改已有笔记 | **省略字段保持原值**；故意没有「清空标题/标签」的方式 —— 要清就写新笔记；可选 `pinned`（`true` 置顶 / `false` 取消置顶 / 省略保持原状态） |
 | `repotory_handoff` | 写会话交接 | 见上 |
 
 ### 自检

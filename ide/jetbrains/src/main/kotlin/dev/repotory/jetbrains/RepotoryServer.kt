@@ -344,3 +344,19 @@ fun offerServerBinaryHelp(searched: String): Boolean {
         else -> false
     }
 }
+
+/**
+ * File picker for the `repotory-mcp` executable.
+ *
+ * The plugin never downloads it (ADR-0035 decision 7): `repotory-mcp` has
+ * three distribution channels already (install.sh, Homebrew, Scoop), and the
+ * plugin's job is to find the one the user installed.
+ */
+fun chooseMcpBinary(): File? {
+    // Files only (not directories): the plugin needs an existing executable.
+    val descriptor = FileChooserDescriptor(true, false, false, false, false, false)
+        .withTitle("Select the repotory-mcp executable")
+    val chosen = FileChooser.chooseFile(descriptor, null, null) ?: return null
+    return File(chosen.path)
+}
+
