@@ -69,7 +69,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           # go.mod declares `go 1.26.0`; setup-go resolves the newest 1.26.x.
-          go-version: '1.26'
+          go-version: '1.26.10'
           # Cache GOMODCACHE keyed on go.sum, so unchanged deps are not
           # re-downloaded on every run.
           cache: true
@@ -132,7 +132,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version: '1.26.10'
           cache: true
 
       # Same reason as in go-test: the root package's `//go:embed all:web/dist`
@@ -155,10 +155,24 @@ jobs:
   # Bump this line deliberately when you want the newer database/analysis.
   #
   # What a red result usually means: a standard-library advisory whose fix is
-  # in a NEWER PATCH of the same minor Go version. `go-version: '1.26'` resolves
-  # the newest 1.26.x, so the job heals itself on the next runner update; if it
-  # stays red, the fix is a Go patch bump, not a code change. Module findings
-  # (the ones this repository can actually fix) are the other, rarer case.
+  # in a NEWER PATCH of the same minor Go version. The fix is then a Go patch
+  # bump — not a code change. Module findings (the ones this repository can
+  # actually fix) are the other, rarer case.
+  #
+  # `go-version` is pinned to an EXACT patch on purpose. It used to say
+  # `'1.26'`, which resolves to whatever the runner image happens to carry —
+  # and the runner image can move BACKWARDS: on 2026-11-03 the same tree
+  # resolved to go1.26.10 on one run and go1.26.9 on the next, and 1.26.9
+  # still carries GO-2026-6809 (crypto/x509) — so the same code was green at
+  # 04:21 and red at 06:40 with nothing changed in between. A security gate
+  # whose verdict depends on the runner image is not a gate, it is a coin toss.
+  # Pinning also means the toolchain that builds the RELEASE is the one that
+  # was scanned — every workflow uses the same version, and
+  # scripts/check-version-drift.mjs fails CI if any of them drifts apart.
+  #
+  # Bumping it is a deliberate act: a newer patch is a deliberate upgrade, and
+  # a new advisory against the pinned patch shows up as a red gate that says
+  # "bump Go".
   govulncheck:
     name: Vulnerability scan (govulncheck)
     runs-on: ubuntu-latest
@@ -170,7 +184,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version: '1.26.10'
           cache: true
 
       - name: Stub web/dist for the embed directive
@@ -205,7 +219,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version: '1.26.10'
 
       - name: Check gofmt
         run: |

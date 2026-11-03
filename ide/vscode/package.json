@@ -141,7 +141,7 @@
     "compile": "tsc -p ./ && node scripts/sync-init.mjs",
     "sync-init": "node scripts/sync-init.mjs",
     "watch": "tsc -w -p ./",
-    "test": "tsc -p ./ && node --test out/__tests__/",
+    "test": "tsc -p ./ && node --test out/__tests__/*.test.js",
     "preview:console": "tsc -p ./ && node scripts/preview-console.mjs"
   },
   "devDependencies": {

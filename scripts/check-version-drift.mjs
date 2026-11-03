@@ -307,6 +307,40 @@ if (!existsSync(join(root, '.nvmrc'))) {
   }
 }
 
+// ------------------------------------------------------------ ⑦ Go 版本 ----
+
+// 每个工作流的 go-version 必须完全相同，理由有二：
+//
+// ① 安全基线不能由 runner 镜像决定。`'1.26'` 解析到镜像里恰好带的那个补丁
+//    版，而镜像**会往回走**：2026-11-03 同一棵树上 04:21 那次是 go1.26.10
+//    （绿），06:40 那次是 go1.26.9（红，因为 1.26.9 还带着 GO-2026-6809）。
+//    同一份代码在一小时里绿变红、中间什么都没改——这样的门不是门，是抛硬币。
+// ② 发布用的工具链必须是被扫过的那一个。CI 用 A 编、release 用 B 出货，
+//    意味着「绿」和「发出去」根本不是同一个工具链下的结论。
+//
+// 钉到确切补丁版之后，升级是一次有意识的动作；新补丁上的新公告会以「红」
+// 的形式出现，而红的那句话就是「升 Go」。
+
+const goVersions = new Set()
+for (const f of readdirSync(join(root, '.github/workflows')).filter((f) => f.endsWith('.yml'))) {
+  const rel = `.github/workflows/${f}`
+  for (const m of read(rel).matchAll(/go-version:\s*'?([^'\s]+)'?/g)) {
+    goVersions.add(m[1])
+  }
+}
+const goList = [...goVersions]
+if (goList.length === 0) {
+  issues.push('.github/workflows/: 读不到任何 go-version')
+} else if (goList.length > 1) {
+  issues.push(
+    `.github/workflows/: 出现了多个 go-version（${goList.join('、')}）——CI 测的工具链必须与 release 出货的同一个`
+  )
+} else if (!/^\d+\.\d+\.\d+$/.test(goList[0])) {
+  issues.push(
+    `.github/workflows/: go-version 写的是 "${goList[0]}"，不是确切补丁版——补丁版必须钉死，否则安全基线由 runner 镜像决定`
+  )
+}
+
 // ------------------------------------------------------------------ 结论 ----
 
 if (issues.length > 0) {
@@ -322,5 +356,6 @@ if (issues.length > 0) {
 console.log(
   `version drift OK: SSOT ${ssot}（10 处产物清单一致）、TODO 现状速查一致、` +
     `ADR ${adrFiles.length} 份中英索引对齐、扫描频率与 dependabot.yml 一致、` +
-    `MCP ${toolNames.length} 个工具与 skill 文档一致、Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致。`
+    `MCP ${toolNames.length} 个工具与 skill 文档一致、` +
+    `Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致、Go ${goList[0]} 各工作流一致。`
 )
