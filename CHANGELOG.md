@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.26.0] - 2026-11-03
+
 ### 变更
 
 - **悬浮按钮改成可拖拽的 agent 入口：机器人位置归用户，卡片先于输入框，仪表盘作用域成为共享单一真值（ADR-0041，2026-11-03）**：用户指出「悬浮按钮跟对话的发送按钮重叠了」，并要求「这块悬浮对话按钮需要改造为 DSH bot 或者 Trae 的小机器人一样的 agent 入口，可以移动的，并打通桌面 App 各个入口，比如可以问仪表盘的内容、今日代码提交量，直接扩展对话框并给一个卡片」。**三层问题**：① **两个控件抢同一块像素**——旧 FAB `fixed` 在右下角，正压在对话台输入框里的发送按钮上；② **悬浮按钮本来就不是 agent 入口**——它只会「记一笔」，**不知道用户在哪一页**，于是关于当前页面的每个问题都得从零打一遍字，**而答案就在页面上**；③ **最难的一条：补上问答之后两个数会互相打架**——仪表盘的「今日代码量」取决于**看哪一天**与**只算星标项目还是全部仓库**两个用户选择，实测同日 2026-11-02：星标口径 `my_added` **371**（与首屏「今日目标 371 / 500 行」同数）vs 全库口径 **10,327**，**差 28 倍**；agent 若按全库取数就会说 10,327，若按墙钟当天取数则早上显示「0 次提交」而旁边仪表盘显示 371 行——ADR-0038 决策 5 说「**数字只有一处权威**」，本篇要做的就是让这个 agent **不再成为第二处权威**。
@@ -718,7 +720,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.25.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.26.0...HEAD
+[2.26.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.25.0...v2.26.0
 [2.25.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.24.0...v2.25.0
 [2.24.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.23.0...v2.24.0
 [2.23.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.22.0...v2.23.0
