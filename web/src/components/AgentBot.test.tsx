@@ -155,7 +155,14 @@ describe('AgentBot', () => {
   it('answers a quick action with its own card', async () => {
     renderBot('/dashboard')
     clickBot()
-    fireEvent.click(await screen.findByRole('button', { name: '近 7 天' }))
+    const chip = await screen.findByRole('button', { name: '近 7 天' })
+    // The chips are disabled while a card is loading, and the panel loads its
+    // first card on open — so clicking before that load settles is a click on
+    // a disabled button, which the browser (and jsdom) drops. Wait for the
+    // chip to become clickable, or the test depends on how fast the first
+    // load resolved: green locally, red on a loaded CI machine.
+    await waitFor(() => expect((chip as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(chip)
     expect(await screen.findByText('近 7 天提交')).toBeTruthy()
   })
 
