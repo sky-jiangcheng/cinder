@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.25.0] - 2026-11-03
+
 ### 变更
 
 - **「配了外部 AI 却读不到本地项目」的三个断点，两个已修（ADR-0040，2026-11-02）**：用户问「为什么配置了外部的 AI，我们的 Agent 却完全读不到本地的项目呢」。逐层追下去得到三个**互相独立**的断点——前两个在代码里，第三个在分发状态里，三者叠加才凑出这个现象。① **默认作用域下，上下文整段消失**：「问」面板的作用域下拉默认是「全库知识与全部项目」（`projectID=0`），而 `evidenceMessages` 把整段装配包在 `if projectID > 0` 里——实测 `LayeredProjectContext(0, "")` → **chars=0、blocks=[]**，而同一个接口指定项目（124）→ 1000 字符，**差一个数量级**；更荒唐的是 **L3 全局画像根本不依赖 projectID**，却被这个与它无关的条件挡掉了。② **交接记录没有 AI 入口**：交接记录是带 `handoff` 标签的笔记，唯一能让 agent 看到的是 MCP 的 `repotory_context`；`GatherEvidence` 只检索页 + 笔记，**没有「按时间 / 按类型」的通道**，而交接记录标题是英文的 `Session Handoff`——实测中文问句「最近有哪些会话交接记录与重点事项？」命中 4 条 ADR 笔记、**交接记录 0 条**，换英文 `handoff` 才命中 3 条：**不是检索能力不足，是这条通道压根不存在**。③ **IDE 侧还是旧二进制**：`~/.claude.json` 注册 `command="repotory-mcp"` 走 PATH，本机 v2.11.1 实际只暴露 13 个工具（源码 v2.24.0 / 18 个，缺 ai_audit / ai_review_rules / notes_organize / wiki_read / wiki_search 五个）——**这一条不是「读不到本地项目」的原因**（MCP 路径纯本地读库，与 AI 端点无关），但 IDE 恰是用户最以为「Agent 在读我的项目」的地方。
@@ -692,7 +694,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.24.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.25.0...HEAD
+[2.25.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.24.0...v2.25.0
 [2.24.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.23.0...v2.24.0
 [2.23.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.22.0...v2.23.0
 [2.22.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.21.0...v2.22.0
