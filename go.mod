@@ -2,6 +2,15 @@ module repotory
 
 go 1.26.0
 
+// SSOT for the toolchain this repository is built with. `go 1.26.0` alone is
+// only a MINIMUM, so a developer machine follows its package manager (Homebrew
+// carried 1.26.7 here while every workflow was pinned to 1.26.10), and
+// govulncheck then reports the vulnerabilities of the LOCAL patch rather than
+// of the shipped one. With this line, GOTOOLCHAIN=auto resolves 1.26.10
+// everywhere. scripts/check-version-drift.mjs fails when it drifts from the
+// workflows or from the Dockerfile.
+toolchain go1.26.10
+
 require (
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/minio/minio-go/v7 v7.4.1

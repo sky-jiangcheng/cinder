@@ -320,6 +320,12 @@ if (!existsSync(join(root, '.nvmrc'))) {
 //
 // 钉到确切补丁版之后，升级是一次有意识的动作；新补丁上的新公告会以「红」
 // 的形式出现，而红的那句话就是「升 Go」。
+//
+// 抄写不掉的就不抄（与 ⑥ Node 同一形状）：本地开发机读不到工作流文件，所以
+// SSOT 落在 go.mod 的 `toolchain` 行——没有它，`go 1.26.0` 只是**下限**，
+// 开发机跟着包管理器走。实测踩过：Homebrew 装 1.26.7 时，本机 govulncheck 扫出
+// 11 个 stdlib 漏洞（1.26.9 之前修的），而 CI 全绿——两边说的不是同一个工具链。
+// Dockerfile 的 FROM 读不了 go.mod，所以那里留一份 ARG GO_VERSION 默认值。
 
 const goVersions = new Set()
 for (const f of readdirSync(join(root, '.github/workflows')).filter((f) => f.endsWith('.yml'))) {
@@ -339,6 +345,32 @@ if (goList.length === 0) {
   issues.push(
     `.github/workflows/: go-version 写的是 "${goList[0]}"，不是确切补丁版——补丁版必须钉死，否则安全基线由 runner 镜像决定`
   )
+}
+
+const pinnedGo = goList.length === 1 ? goList[0] : null
+
+// go.mod 的 toolchain 行 = 本地开发机那一份（GOTOOLCHAIN=auto 读它）。
+const toolchainLine = read('go.mod').match(/^toolchain\s+go(\d+\.\d+\.\d+)\s*$/m)?.[1]
+if (!toolchainLine) {
+  issues.push(
+    'go.mod: 缺 `toolchain goX.Y.Z`——`go 1.26.0` 只是下限，开发机跟着包管理器的补丁版走，' +
+      '本地 govulncheck 与 CI 扫的就不是同一个工具链'
+  )
+} else if (pinnedGo && toolchainLine !== pinnedGo) {
+  report('go.mod · toolchain', pinnedGo, toolchainLine)
+}
+
+// Dockerfile 的 ARG GO_VERSION = 出货镜像那一份（FROM 读不了 go.mod）。
+const dockerGo = read('Dockerfile').match(/ARG\s+GO_VERSION=([^\s]+)/)?.[1]
+if (!dockerGo) {
+  issues.push(
+    'Dockerfile: 读不到 ARG GO_VERSION——`FROM golang:1.26-alpine` 这类浮动标签跟着镜像缓存走，' +
+      '出货二进制可能带着没人扫过的补丁版'
+  )
+} else if (!/^\d+\.\d+\.\d+$/.test(dockerGo)) {
+  issues.push(`Dockerfile: ARG GO_VERSION="${dockerGo}" 不是确切补丁版——补丁版必须钉死`)
+} else if (pinnedGo && dockerGo !== pinnedGo) {
+  report('Dockerfile · ARG GO_VERSION', pinnedGo, dockerGo)
 }
 
 // ------------------------------------------------------------------ 结论 ----

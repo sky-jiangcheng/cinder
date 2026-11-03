@@ -20,7 +20,13 @@ COPY scripts/prune-web-dist.mjs /src/scripts/prune-web-dist.mjs
 RUN npm run build:server
 
 # --- server binary (zero CGO, matches the repo's pure-Go SQLite) -------------
-FROM golang:1.26-alpine AS build
+# Same shape as NODE_VERSION above: the patch level is pinned, because
+# `golang:1.26-alpine` floats to whatever the builder's image cache happens to
+# hold — an image can move BACKWARDS, and a shipped binary would then carry a
+# Go patch nobody scanned. go.mod's `toolchain` line and every workflow use the
+# same version; scripts/check-version-drift.mjs fails CI when they drift apart.
+ARG GO_VERSION=1.26.10
+FROM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
