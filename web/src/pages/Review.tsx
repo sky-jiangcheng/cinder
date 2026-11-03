@@ -14,6 +14,7 @@ import type {
 import DiffViewer from '../components/DiffViewer'
 import ErrorBanner from '../components/ErrorBanner'
 import Icon from '../components/Icon'
+import PageShell from '../components/PageShell'
 import TabStrip from '../components/TabStrip'
 import type { TabItem } from '../components/TabStrip'
 import { useConfirmClick } from '../hooks/useConfirmClick'
@@ -125,15 +126,16 @@ function ReviewPage() {
   const written = useRef<ReviewView>(urlView)
   // Only a history navigation (back / forward) may overwrite the local state.
   const navType = useNavigationType()
-  const tabStripRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   // Switching tabs returns the reader to the top of the new panel: the rows
   // of the previous tab are gone, and staying at the old scroll offset makes
-  // the switch look like it did nothing. The scroller is .mainContent, not the
-  // window, so the strip itself is scrolled into view — its CSS
-  // scroll-margin-top keeps it clear of the pinned toolbar above.
-  const scrollToStrip = useCallback(() => {
-    tabStripRef.current?.scrollIntoView({ block: 'start' })
+  // the switch look like it did nothing. The scroller is the page's own
+  // scrolling region (PageShell), not the window — the tab strip is chrome
+  // pinned above that region and never scrolls away, so the offset that
+  // matters is the region's own.
+  const resetScroll = useCallback(() => {
+    scrollRef.current?.scrollTo?.({ top: 0 })
   }, [])
 
   const switchView = useCallback((next: string) => {
@@ -148,16 +150,16 @@ function ReviewPage() {
     // The default view stays out of the URL (same convention as the knowledge
     // page's ?view=): "/review" says "the queue", "?view=merge" says which.
     setSearchParams(key === 'pending' ? {} : { view: key }, { replace: false })
-    scrollToStrip()
-  }, [view, setSearchParams, scrollToStrip])
+    resetScroll()
+  }, [view, setSearchParams, resetScroll])
 
   useEffect(() => {
     if (navType !== 'POP') return
     if (urlView === written.current) return
     written.current = urlView
     setView(urlView)
-    scrollToStrip()
-  }, [navType, urlView, scrollToStrip])
+    resetScroll()
+  }, [navType, urlView, resetScroll])
 
   const [projects, setProjects] = useState<Project[]>([])
   const [projectFilter, setProjectFilter] = useState<number>(0) // 0 = all
@@ -358,76 +360,85 @@ function ReviewPage() {
   const activeView: ReviewView = tabs.some(tab => tab.key === view) ? view : 'pending'
 
   return (
-    <div className={s.page}>
-      {/* The nav bar already names this tab ("审核"), so a visible title would
-          be duplication — it stays for screen readers and the document outline
-          (same call as the knowledge page). */}
-      <h1 className="visually-hidden">{t('review.title')}</h1>
+    <PageShell
+      bodyRef={scrollRef}
+      header={
+        <>
+          {/* The nav bar already names this tab ("审核"), so a visible title would
+              be duplication — it stays for screen readers and the document outline
+              (same call as the knowledge page). */}
+          <h1 className="visually-hidden">{t('review.title')}</h1>
 
-      <div className={s.toolbar}>
-        <select
-          className={s.select}
-          value={projectFilter}
-          onChange={e => setProjectFilter(Number(e.target.value))}
-          aria-label={t('review.projectFilter')}
-        >
-          <option value={0}>{t('review.allProjects')}</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <div className={s.toolbarActions}>
-          <button className="btn btn-sm" onClick={reload}>{t('review.reload')}</button>
-          <button
-            className="btn btn-sm btn-primary"
-            onClick={onStart}
-            disabled={busy || projectFilter === 0}
-            title={projectFilter === 0 ? t('review.projectRequired') : undefined}
-          >
-            {t('review.startCompile')}
-          </button>
-          {/* Not a primary button: two primaries on one toolbar compete, and
-              this one is off by default anyway (wiki_lint_llm). */}
-          <button
-            className="btn btn-sm"
-            onClick={onStartLint}
-            disabled={busy || projectFilter === 0}
-            title={projectFilter === 0 ? t('review.lintNeedsProject') : t('review.startLintHint')}
-          >
-            {t('review.startLint')}
-          </button>
-          {/* Community synthesis (ADR-0020). Same project rule as lint, same
-              reason: project_id 0 is the GLOBAL tier on the backend, not
-              "every project" — running it there would synthesise a topic out of
-              cross-project pages and say nothing about the project the reviewer
-              picked, so the button is disabled with that stated, not silently
-              aimed at tier 0. */}
-          <button
-            className="btn btn-sm"
-            onClick={onRunCommunity}
-            disabled={busy || communityBusy || projectFilter === 0}
-            title={projectFilter === 0 ? t('review.communityNeedsProject') : t('review.communityHint')}
-          >
-            {communityBusy ? t('review.communityRunning') : t('review.startCommunity')}
-          </button>
-        </div>
-      </div>
+          <div className={s.toolbar}>
+            <select
+              className={s.select}
+              value={projectFilter}
+              onChange={e => setProjectFilter(Number(e.target.value))}
+              aria-label={t('review.projectFilter')}
+            >
+              <option value={0}>{t('review.allProjects')}</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <div className={s.toolbarActions}>
+              <button className="btn btn-sm" onClick={reload}>{t('review.reload')}</button>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={onStart}
+                disabled={busy || projectFilter === 0}
+                title={projectFilter === 0 ? t('review.projectRequired') : undefined}
+              >
+                {t('review.startCompile')}
+              </button>
+              {/* Not a primary button: two primaries on one toolbar compete, and
+                  this one is off by default anyway (wiki_lint_llm). */}
+              <button
+                className="btn btn-sm"
+                onClick={onStartLint}
+                disabled={busy || projectFilter === 0}
+                title={projectFilter === 0 ? t('review.lintNeedsProject') : t('review.startLintHint')}
+              >
+                {t('review.startLint')}
+              </button>
+              {/* Community synthesis (ADR-0020). Same project rule as lint, same
+                  reason: project_id 0 is the GLOBAL tier on the backend, not
+                  "every project" — running it there would synthesise a topic out of
+                  cross-project pages and say nothing about the project the reviewer
+                  picked, so the button is disabled with that stated, not silently
+                  aimed at tier 0. */}
+              <button
+                className="btn btn-sm"
+                onClick={onRunCommunity}
+                disabled={busy || communityBusy || projectFilter === 0}
+                title={projectFilter === 0 ? t('review.communityNeedsProject') : t('review.communityHint')}
+              >
+                {communityBusy ? t('review.communityRunning') : t('review.startCommunity')}
+              </button>
+            </div>
+          </div>
 
+          {/* One switcher for the five queues (ADR-0039 decision 2). The tab
+              label IS the heading, so no panel repeats it. The strip is chrome,
+              not content: it lives in the pinned header, so the scrolling
+              region starts UNDER it — the strip never scrolls away and the
+              scrollbar's top edge is the strip's bottom edge. */}
+          <div className={s.tabRow}>
+            <div className={s.tabStrip}>
+              <TabStrip
+                items={tabs}
+                active={activeView}
+                onChange={switchView}
+                ariaLabel={t('review.tablistLabel')}
+                idPrefix="review"
+              />
+            </div>
+          </div>
+        </>
+      }
+    >
       <div className={s.content}>
         <p className={s.lead}>{t('review.subtitle')}</p>
 
         {loadError && <ErrorBanner message={loadError} onRetry={reload} />}
-
-        {/* One switcher for the five queues (ADR-0039 decision 2). The tab
-            label IS the heading, so no panel repeats it. The strip is the
-            scroll target of a tab switch, which is why it carries the ref. */}
-        <div className={s.tabStrip} ref={tabStripRef}>
-          <TabStrip
-            items={tabs}
-            active={activeView}
-            onChange={switchView}
-            ariaLabel={t('review.tablistLabel')}
-            idPrefix="review"
-          />
-        </div>
 
         {activeView === 'pending' && (
           <div
@@ -554,7 +565,7 @@ function ReviewPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }
 

@@ -11,6 +11,7 @@ import ProjectSearchDropdown from './dashboard/ProjectSearchDropdown'
 import ErrorBanner from '../components/ErrorBanner'
 import Icon from '../components/Icon'
 import HandoffComposer from '../components/HandoffComposer'
+import PageShell from '../components/PageShell'
 import TabStrip from '../components/TabStrip'
 import { listRecentHandoffs, type HandoffEntry } from '../api/client'
 import { useToast } from '../hooks/useToast'
@@ -115,93 +116,110 @@ function Dashboard() {
   }, [switchView])
 
   return (
-    <div className={s.page}>
-      <h1 className="visually-hidden">{t('dashboard.title')}</h1>
-      <div className="visually-hidden" role="status" aria-live="polite">
-        {scanning ? (scanMsg || t('dashboard.scanning', { defaultValue: 'Scanning…' })) : scanDoneMsg}
-      </div>
-      <div className={s.fixed}>
-        <div className={s.heroRow}>
-          <div className={s.heroCard}>
-            <GoalRing
-              value={myAdded}
-              goal={isWorkday ? dailyGoal : 0}
-              label={isWorkday ? t('dashboard.todayGoal', { defaultValue: "Today's Goal" }) : t('dashboard.notWorkday', { defaultValue: 'Not a workday' })}
-              sublabel={isWorkday ? `${myAdded} / ${dailyGoal} ${t('dashboard.linesUnit')}` : `${myAdded} ${t('dashboard.linesUnit')}`}
-            />
-            <div className={s.heroText}>
-              <div className={s.heroEyebrow}>{date} · {isWorkday ? t('dashboard.workday', { defaultValue: 'Workday' }) : t('dashboard.weekendShort')}</div>
-              <div className={s.heroTitle}>
-                {isWorkday
-                  ? (myAdded >= dailyGoal ? t('dashboard.goalReached', { defaultValue: "Today's goal reached" }) : t('dashboard.goalRemaining', { count: Math.max(dailyGoal - myAdded, 0) }))
-                  : t('dashboard.weekend', { defaultValue: 'Happy weekend' })}
+    <PageShell
+      bodyRef={scrollRef}
+      header={
+        <>
+          <h1 className="visually-hidden">{t('dashboard.title')}</h1>
+          <div className="visually-hidden" role="status" aria-live="polite">
+            {scanning ? (scanMsg || t('dashboard.scanning', { defaultValue: 'Scanning…' })) : scanDoneMsg}
+          </div>
+          <div className={s.heroRow}>
+            <div className={s.heroCard}>
+              <GoalRing
+                value={myAdded}
+                goal={isWorkday ? dailyGoal : 0}
+                label={isWorkday ? t('dashboard.todayGoal', { defaultValue: "Today's Goal" }) : t('dashboard.notWorkday', { defaultValue: 'Not a workday' })}
+                sublabel={isWorkday ? `${myAdded} / ${dailyGoal} ${t('dashboard.linesUnit')}` : `${myAdded} ${t('dashboard.linesUnit')}`}
+              />
+              <div className={s.heroText}>
+                <div className={s.heroEyebrow}>{date} · {isWorkday ? t('dashboard.workday', { defaultValue: 'Workday' }) : t('dashboard.weekendShort')}</div>
+                <div className={s.heroTitle}>
+                  {isWorkday
+                    ? (myAdded >= dailyGoal ? t('dashboard.goalReached', { defaultValue: "Today's goal reached" }) : t('dashboard.goalRemaining', { count: Math.max(dailyGoal - myAdded, 0) }))
+                    : t('dashboard.weekend', { defaultValue: 'Happy weekend' })}
+                </div>
+                <div className={s.heroSub}>
+                  {t('dashboard.personalAdded')}{' '}
+                  <strong className={myAdded > 0 ? 'green' : 'muted-num'}>
+                    {myAdded > 0 ? `+${myAdded}` : '0'}
+                  </strong>{' · '}
+                  {t('dashboard.filesShort')} <strong>{summary?.my_files || 0}</strong> ·
+                  {t('dashboard.reposInvolved', { count: summary?.repo_count || 0 })}
+                </div>
               </div>
-              <div className={s.heroSub}>
-                {t('dashboard.personalAdded')}{' '}
-                <strong className={myAdded > 0 ? 'green' : 'muted-num'}>
-                  {myAdded > 0 ? `+${myAdded}` : '0'}
-                </strong>{' · '}
-                {t('dashboard.filesShort')} <strong>{summary?.my_files || 0}</strong> ·
-                {t('dashboard.reposInvolved', { count: summary?.repo_count || 0 })}
+            </div>
+
+            <SummaryBar summary={summary} globalTodoCount={globalTodoCount} />
+          </div>
+
+          <Heatmap onDayClick={setDate} />
+
+          <div className={s.controls}>
+            <DatePicker value={date} onChange={setDate} />
+            <div className={s.actions}>
+              <ProjectSearchDropdown onToggleStar={handleToggleStar} />
+              <div className="filter-toggle">
+                <button className={`filter-btn ${!showStarredOnly ? 'active' : ''}`} onClick={() => setShowStarredOnly(false)}>{t('dashboard.all', { defaultValue: 'All' })}</button>
+                <button className={`filter-btn ${showStarredOnly ? 'active' : ''}`} onClick={() => setShowStarredOnly(true)}>{t('dashboard.starred', { defaultValue: 'Starred' })}</button>
               </div>
+              <div className={s.sortControl}>
+                <label htmlFor="dashboard-sort">{t('dashboard.sortBy')}</label>
+                <select id="dashboard-sort" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="form-input sort-select">
+                  {sortOptions.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                </select>
+              </div>
+              {confirmScan ? (
+                <div className={`${s.confirmGroup}`}>
+                  <span className={`${s.confirmText}`}>{t('dashboard.confirmRescan')}</span>
+                  <button className="btn btn-primary btn-sm" onClick={handleScan} disabled={scanning}>{t('common.confirm')}</button>
+                  <button className="btn btn-sm" onClick={() => setConfirmScan(false)}>{t('common.cancel')}</button>
+                </div>
+              ) : (
+                <button className="btn btn-primary" onClick={() => setConfirmScan(true)} disabled={scanning}>
+                  {scanning ? (scanMsg || t('dashboard.scanning', { defaultValue: 'Processing...' })) : t('dashboard.rescan', { defaultValue: 'Rescan' })}
+                </button>
+              )}
             </div>
           </div>
 
-          <SummaryBar summary={summary} globalTodoCount={globalTodoCount} />
-        </div>
+          {displayedError && (
+            <ErrorBanner message={displayedError} onRetry={() => { setError(''); setSummaryError(''); void fetchSummary(date); void refetchProjects() }} />
+          )}
+          {/* tab 条是 chrome，不是内容：它住在固定头部里，滚动区从它下面开始，
+              所以 tab 条不会被卷走，滚动条的顶边也不会跑到 tab 条上方。 */}
+          <TabStrip
+            items={[
+              { key: 'projects', label: t('dashboard.tabProjects', { defaultValue: '项目' }), count: sorted.length },
+              // 徽标是「有 3 条没看」一眼可见的唯一手段（ADR-0038 决策 5 要的是
+              // 首屏可达）：埋进 tab 而不加徽标，就把那个落点改弱了。
+              { key: 'sessions', label: t('dashboard.tabSessions', { defaultValue: '会话' }), count: entries?.length ?? 0 },
+            ]}
+            active={view}
+            onChange={onTabChange}
+            ariaLabel={t('dashboard.tablistLabel', { defaultValue: '仪表盘视图' })}
+            idPrefix="dashboard"
+            className={s.tabBar}
+          />
+        </>
+      }
+      footer={
+        <>
+          {/* 弹窗是全局的：它不属于任何一个 tab，所以挂在页面这一层，切 tab 不会
+              把它卸载掉。 */}
+          <HandoffComposer
+            open={composerOpen}
+            onClose={() => setComposerOpen(false)}
+            onCreated={() => {
+              loadHandoffs()
+              pushToast({ kind: 'success', title: t('handoff.saved', { defaultValue: '交接记录已写入' }) })
+            }}
+          />
 
-        <Heatmap onDayClick={setDate} />
-
-        <div className={s.controls}>
-          <DatePicker value={date} onChange={setDate} />
-          <div className={s.actions}>
-            <ProjectSearchDropdown onToggleStar={handleToggleStar} />
-            <div className="filter-toggle">
-              <button className={`filter-btn ${!showStarredOnly ? 'active' : ''}`} onClick={() => setShowStarredOnly(false)}>{t('dashboard.all', { defaultValue: 'All' })}</button>
-              <button className={`filter-btn ${showStarredOnly ? 'active' : ''}`} onClick={() => setShowStarredOnly(true)}>{t('dashboard.starred', { defaultValue: 'Starred' })}</button>
-            </div>
-            <div className={s.sortControl}>
-              <label htmlFor="dashboard-sort">{t('dashboard.sortBy')}</label>
-              <select id="dashboard-sort" value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="form-input sort-select">
-                {sortOptions.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
-              </select>
-            </div>
-            {confirmScan ? (
-              <div className={`${s.confirmGroup}`}>
-                <span className={`${s.confirmText}`}>{t('dashboard.confirmRescan')}</span>
-                <button className="btn btn-primary btn-sm" onClick={handleScan} disabled={scanning}>{t('common.confirm')}</button>
-                <button className="btn btn-sm" onClick={() => setConfirmScan(false)}>{t('common.cancel')}</button>
-              </div>
-            ) : (
-              <button className="btn btn-primary" onClick={() => setConfirmScan(true)} disabled={scanning}>
-                {scanning ? (scanMsg || t('dashboard.scanning', { defaultValue: 'Processing...' })) : t('dashboard.rescan', { defaultValue: 'Rescan' })}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {displayedError && (
-          <ErrorBanner message={displayedError} onRetry={() => { setError(''); setSummaryError(''); void fetchSummary(date); void refetchProjects() }} />
-        )}
-      </div>
-
-      {/* tab 条在滚动区的最上面，固定头部（hero / summary / heatmap / controls）
-          不动：它讲的是「今天的状态」，与「看哪一块」无关。 */}
-      <div className={s.scroll} ref={scrollRef}>
-        <TabStrip
-          items={[
-            { key: 'projects', label: t('dashboard.tabProjects', { defaultValue: '项目' }), count: sorted.length },
-            // 徽标是「有 3 条没看」一眼可见的唯一手段（ADR-0038 决策 5 要的是
-            // 首屏可达）：埋进 tab 而不加徽标，就把那个落点改弱了。
-            { key: 'sessions', label: t('dashboard.tabSessions', { defaultValue: '会话' }), count: entries?.length ?? 0 },
-          ]}
-          active={view}
-          onChange={onTabChange}
-          ariaLabel={t('dashboard.tablistLabel', { defaultValue: '仪表盘视图' })}
-          idPrefix="dashboard"
-          className={s.tabBar}
-        />
-
+          <StatusBar />
+        </>
+      }
+    >
         {view === 'projects' ? (
           <div role="tabpanel" id="dashboard-panel-projects" aria-labelledby="dashboard-tab-projects">
             {loading ? (
@@ -350,21 +368,7 @@ function Dashboard() {
             </section>
           </div>
         )}
-      </div>
-
-      {/* 弹窗是全局的：它不属于任何一个 tab，所以挂在页面这一层，切 tab 不会
-          把它卸载掉。 */}
-      <HandoffComposer
-        open={composerOpen}
-        onClose={() => setComposerOpen(false)}
-        onCreated={() => {
-          loadHandoffs()
-          pushToast({ kind: 'success', title: t('handoff.saved', { defaultValue: '交接记录已写入' }) })
-        }}
-      />
-
-      <StatusBar />
-    </div>
+    </PageShell>
   )
 }
 

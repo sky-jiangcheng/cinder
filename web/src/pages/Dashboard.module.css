@@ -3,26 +3,15 @@
    Knowledge and shared components consume them. The sort wrapper is owned here
    (P35 follow-up): `.sort-control` was only ever used by this page, while the
    select it wraps (`.sort-select`) is a shared input primitive and stays global. */
-.page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
 
-.fixed {
-  flex-shrink: 0;
-}
+/* The page skeleton (pinned header + scrolling body) is the shared
+   PageShell component — see components/PageShell.module.css. This module
+   only owns what is exclusive to the dashboard. */
 
-.scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-/* tab 条（ADR-0039 决策 4）——滚动区里的第一个元素。
+/* tab 条（ADR-0039 决策 4）——固定头部的最后一块：它讲的是「看哪一块」，
+   上面那些（hero / summary / heatmap / controls）讲的是「今天的状态」。
    按钮本身用设计系统已有的全局 .tab-btn / .tab-active，徽标用
-   TabStrip.module.css 里那一个：这里只补滚动区里 tab 条与面板之间的间距，
+   TabStrip.module.css 里那一个：这里只补 tab 条与下方滚动区之间的间距，
    不另造第二套 tab 外观。 */
 .tabBar {
   margin-bottom: 16px;

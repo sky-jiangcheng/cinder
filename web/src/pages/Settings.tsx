@@ -12,6 +12,7 @@ import PluginsTab from './settings/PluginsTab'
 import ActionsTab from './settings/ActionsTab'
 import UpdatesTab from './settings/UpdatesTab'
 import ErrorBanner from '../components/ErrorBanner'
+import PageShell from '../components/PageShell'
 import s from './Settings.module.css'
 
 // 预留钩子类：`settings` —— 目前全站没有对应样式定义（P35 复核确认），
@@ -88,42 +89,48 @@ function Settings() {
   }
 
   return (
-    <div className="settings">
-      {/* The nav bar already says "设置" and the strip below says which
-          section is open, so a page title would be the same words twice. The
-          h1 stays for screen readers and the document outline. */}
-      <h1 className="visually-hidden">{t('settings.title')}</h1>
+    <PageShell
+      header={
+        <>
+          {/* The nav bar already says "设置" and the strip below says which
+              section is open, so a page title would be the same words twice. The
+              h1 stays for screen readers and the document outline. */}
+          <h1 className="visually-hidden">{t('settings.title')}</h1>
 
-      {message && <div className="message-banner" role="status">{message}</div>}
+          {message && <div className="message-banner" role="status">{message}</div>}
 
-      {/* Tabs are a real tablist: arrow-key roving focus + aria wiring, so the
-          section switch is navigable without a pointer. */}
-      <div className={`${s.settingsTabs}`} role="tablist" aria-label={t('settings.title')}>
-        {TAB_KEYS.map((key) => (
-          <button
-            key={key}
-            role="tab"
-            id={`settings-tab-${key}`}
-            aria-selected={tab === key}
-            aria-controls={`settings-panel-${key}`}
-            tabIndex={tab === key ? 0 : -1}
-            className={`tab-btn ${tab === key ? 'tab-active' : ''}`}
-            onClick={() => selectTab(key)}
-            onKeyDown={(e) => {
-              const i = TAB_KEYS.indexOf(key)
-              if (e.key === 'ArrowRight') selectTab(TAB_KEYS[(i + 1) % TAB_KEYS.length])
-              else if (e.key === 'ArrowLeft') selectTab(TAB_KEYS[(i - 1 + TAB_KEYS.length) % TAB_KEYS.length])
-              else if (e.key === 'Home') selectTab(TAB_KEYS[0])
-              else if (e.key === 'End') selectTab(TAB_KEYS[TAB_KEYS.length - 1])
-              else return
-              e.preventDefault()
-            }}
-          >
-            {t(`settings.tabs.${key}`)}
-          </button>
-        ))}
-      </div>
-
+          {/* Tabs are a real tablist: arrow-key roving focus + aria wiring, so the
+              section switch is navigable without a pointer. The strip is chrome:
+              it lives in the pinned header, so the section it switches stays
+              reachable while a long panel scrolls underneath it. */}
+          <div className={`${s.settingsTabs}`} role="tablist" aria-label={t('settings.title')}>
+            {TAB_KEYS.map((key) => (
+              <button
+                key={key}
+                role="tab"
+                id={`settings-tab-${key}`}
+                aria-selected={tab === key}
+                aria-controls={`settings-panel-${key}`}
+                tabIndex={tab === key ? 0 : -1}
+                className={`tab-btn ${tab === key ? 'tab-active' : ''}`}
+                onClick={() => selectTab(key)}
+                onKeyDown={(e) => {
+                  const i = TAB_KEYS.indexOf(key)
+                  if (e.key === 'ArrowRight') selectTab(TAB_KEYS[(i + 1) % TAB_KEYS.length])
+                  else if (e.key === 'ArrowLeft') selectTab(TAB_KEYS[(i - 1 + TAB_KEYS.length) % TAB_KEYS.length])
+                  else if (e.key === 'Home') selectTab(TAB_KEYS[0])
+                  else if (e.key === 'End') selectTab(TAB_KEYS[TAB_KEYS.length - 1])
+                  else return
+                  e.preventDefault()
+                }}
+              >
+                {t(`settings.tabs.${key}`)}
+              </button>
+            ))}
+          </div>
+        </>
+      }
+    >
       {/* Only the active panel is mounted; the wrapper carries the a11y wiring
           for the tablist above. The one line under the strip says what the
           open section is for — the tab label names it, this explains it, and
@@ -167,7 +174,7 @@ function Settings() {
           <UpdatesTab initialConfig={data.config} showMessage={showMessage} />
         )}
       </div>
-    </div>
+    </PageShell>
   )
 }
 

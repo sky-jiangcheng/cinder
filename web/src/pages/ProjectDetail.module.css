@@ -1,21 +1,16 @@
 /* ProjectDetail — page shell and compact head.
-   .detail-section / .section-header stay global: child sections consume both. */
-.page {
+   .detail-section / .section-header stay global: child sections consume both.
+
+   The page skeleton (pinned header + scrolling body) is the shared PageShell
+   component — see components/PageShell.module.css. This module only owns what
+   is exclusive to the project page. */
+
+.head {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.fixed {
-  flex-shrink: 0;
-  padding-bottom: 4px;
-}
-
-.scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 4px;
+  gap: 10px;
+  /* The bottom padding is the old .fixed's 4px, moved here with it. */
+  padding: 10px 0 4px;
 }
 
 .backButton {
@@ -40,13 +35,6 @@
   align-items: center;
   min-width: 84px;
   text-align: center;
-}
-
-.head {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 0 0;
 }
 
 .headLine {

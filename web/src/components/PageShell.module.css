@@ -1,0 +1,54 @@
+/* ============================================
+   PageShell — 固定头部 + 独立滚动区（页面骨架）
+   跨页面共用：仪表盘 / 项目详情 / 知识库 / 审核 / 设置。
+   ============================================ */
+
+/* The page owns the column's side gutters.
+
+   It pulls itself out to the column edge and puts the gutters back as
+   padding. Two things depend on that:
+     - a header that BLEEDS (the pinned toolbar / tab strip, whose hairline
+       spans the whole column) reaches the column edge without being clipped;
+     - the content's measure stays exactly what it was — the gutter is the
+       same width, only the owner changed (the page instead of the shell).
+
+   The gutter is a VARIABLE, not a literal: ADR-0034 changed the shell's
+   padding from 32px to 24px/28px while the pages' hard-coded offsets kept
+   saying 32px, and that drift is what put the pinned bars out of alignment.
+   One number, set by the shell (App.module.css), read by everybody. */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  margin: 0 calc(-1 * var(--main-gutter, 28px));
+  padding: 0 var(--main-gutter, 28px);
+}
+
+/* The pinned chrome: toolbar + tab strip. It does not scroll, so the
+   scrolling region below starts UNDER the tab strip — the scrollbar's track
+   begins at the strip's bottom edge instead of at the top of the column. */
+.fixed {
+  flex: none;
+}
+
+/* The scrolling body.
+
+   The scrollbar is pulled out to the column edge (where the shell's own
+   scrollbar used to sit) and the gutter is put back as padding, so the
+   scrollbar never covers the content and the content's width does not
+   change. */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-right: calc(-1 * var(--main-gutter, 28px));
+  padding-right: var(--main-gutter, 28px);
+}
+
+/* Page-level content below the scrolling region (a status bar). It does not
+   scroll — the body scrolls above it. */
+.footer {
+  flex: none;
+}

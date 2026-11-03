@@ -242,10 +242,12 @@ async function pickProject(id: number, name: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // jsdom has no layout engine, so scrollIntoView is missing. The page calls
+  // jsdom has no layout engine and no scrollTo of its own, so the page calls
   // it when a tab switch returns the reader to the top of the new panel — a
   // no-op is enough for the test.
   Element.prototype.scrollIntoView = vi.fn()
+  const proto = Element.prototype as unknown as { scrollTo?: unknown }
+  proto.scrollTo = vi.fn()
   // The three promises ADR-0026 names as this page's load path. Under
   // REPO_TEST_LAG_MS they land late on purpose — that is the promotion-criterion-1
   // probe, and it is a no-op on every ordinary run.
@@ -369,17 +371,14 @@ describe('Review tabs (ADR-0039 decision 2)', () => {
   it('returns the reader to the top of the new panel', async () => {
     await renderReview()
     await screen.findByText('review.emptyPendingTitle')
-    const scroll = vi.mocked(Element.prototype.scrollIntoView)
+    // The tab strip is chrome now: it sits in the pinned header and never
+    // scrolls, so the offset that matters is the page's own scrolling
+    // region's — a tab switch sends it back to the top.
+    const proto = Element.prototype as unknown as { scrollTo?: ReturnType<typeof vi.fn> }
+    const scroll = proto.scrollTo as ReturnType<typeof vi.fn>
     scroll.mockClear()
     fireEvent.click(tab('merge'))
-    await waitFor(() => expect(scroll).toHaveBeenCalled())
-    expect(scroll).toHaveBeenCalledWith({ block: 'start' })
-    // The scrolled element is the strip, not the panel: the strip is what the
-    // reader should see, and its CSS scroll-margin-top keeps it clear of the
-    // pinned toolbar.
-    const ctx = scroll.mock.contexts[0] as HTMLElement | undefined
-    expect(ctx).toBeTruthy()
-    expect(within(ctx as HTMLElement).getByRole('tablist')).toBeTruthy()
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ top: 0 }))
   })
 
   it('wires the tabs to their panels for assistive tech', async () => {

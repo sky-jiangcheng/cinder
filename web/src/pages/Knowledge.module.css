@@ -29,24 +29,16 @@
 
   /* Frozen header: the toolbar stays pinned while the note list scrolls, so
      search/filtering is always one glance away no matter how far down the
-     list the user has read. Same mechanics as .settings-tabs (see the essay
-     there): sticky measures `top` from the scrollport edge, but the toolbar's
-     normal-flow position starts below .main-content's 32px padding-top, so a
-     plain `top: 0` would park it 32px down with content visibly scrolling
-     through the band. `top: -32px` pins it flush; the matching negative
-     margin-top pulls the unpinned position back up, and the padding-top
-     restores the space the negative margin removed, so the resting layout is
-     unchanged. Full-bleed margins make the hairline span the gutter; the
-     opaque background is load-bearing — a translucent bar lets scrolled
-     content read through it. */
-  position: sticky;
-  top: -32px;
-  margin-top: -32px;
-  padding-top: 32px;
-  margin-left: -32px;
-  margin-right: -32px;
-  padding-left: 32px;
-  padding-right: 32px;
+     list the user has read. It is pinned by BEING the page's header (see
+     PageShell), not by `position: sticky` — the toolbar sits outside the
+     scrolling region, so the scrollbar's track starts under the tab strip
+     instead of at the top of the column. Full-bleed margins make the
+     hairline span the gutter; the opaque background is load-bearing — a
+     translucent bar lets scrolled content read through it. */
+  margin-left: calc(-1 * var(--main-gutter, 28px));
+  margin-right: calc(-1 * var(--main-gutter, 28px));
+  padding-left: var(--main-gutter, 28px);
+  padding-right: var(--main-gutter, 28px);
   background: var(--bg-primary);
   z-index: 5;
 }
@@ -143,13 +135,25 @@
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-family: inherit;
-  background-color: var(--bg-secondary);
   color: var(--text-primary);
   outline: none;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
   max-width: 220px;
+
+  /* The dropdown arrow, drawn ONCE.
+
+     One shorthand on purpose. `appearance: none` removes the native arrow,
+     so the control has to draw its own — and a partial override is how
+     that goes wrong: the light rule used to set no image at all (so the
+     light theme showed NO arrow), and the dark rule below set only
+     `background-image` (so `background-repeat` stayed at its default,
+     `repeat`, and the 11×11 arrow was tiled across the whole control —
+     the grid of chevrons). Writing colour + image + repeat + position +
+     size in ONE declaration means a later theme rule can only swap the
+     image; nothing can leave the repeat at `repeat`. */
+  background: var(--bg-secondary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8a8a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center / 11px 11px;
 }
 
 .select:hover {
@@ -161,6 +165,8 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* Dark theme: the same arrow, drawn in the light ink. Only the image
+   changes — the repeat/position/size above stay as they are. */
 [data-theme='dark'] .select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a8a8a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
@@ -198,26 +204,13 @@
   padding-right: 16px;
 }
 
-/* Note: this breakpoint intentionally tracks layouts/main.css's 768px (where
-   the gutter drops to 20px), not the 640px used elsewhere in this file — the
-   sticky offsets must follow the padding change, not the toolbar's own wrap
-   point. (settings-tabs has the same 640/768 mismatch; left alone there.) */
+/* This breakpoint intentionally tracks layouts/main.css's 768px (where the
+   main-content gutter drops), not the 640px used elsewhere in this file. The
+   toolbar's full-bleed margins follow the gutter through --main-gutter, so
+   they need no copy of their own here. */
 @media (max-width: 768px) {
   .toolbar {
     gap: 10px;
-  }
-
-  /* The layout gutter drops to 20px at this breakpoint (layouts/main.css),
-     so the sticky offsets must track it or the pinned bar parks off-edge —
-     same arithmetic as .settings-tabs. */
-  .toolbar {
-    top: -20px;
-    margin-top: -20px;
-    padding-top: 20px;
-    margin-left: -20px;
-    margin-right: -20px;
-    padding-left: 20px;
-    padding-right: 20px;
   }
 
   /* Actions take the full width on a phone: two 13px labels plus a search

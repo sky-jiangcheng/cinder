@@ -5,27 +5,21 @@
    .markdown-body, .visually-hidden, .empty-hint.
    ============================================ */
 
-.page {
-  display: flex;
-  flex-direction: column;
-}
+/* The page's own chrome lives in PageShell's pinned header; this module only
+   owns what is exclusive to the review page. The toolbar and the tab strip are
+   NOT sticky any more — they are pinned by being outside the scrolling
+   region, which is why the scrollbar's track starts under the tab strip
+   instead of at the top of the column. */
 
-/* Frozen toolbar, same mechanics as .knowledge-toolbar (the full essay lives
-   there): sticky measures `top` from the scrollport edge, but the toolbar's
-   normal-flow position starts below .main-content's 32px padding-top, so
-   `top: -32px` + the matching negative margin / restored padding pins it flush
-   while leaving the resting layout unchanged. Full-bleed margins make the
-   hairline span the gutter; the opaque background is load-bearing — content
-   must not read through the bar. */
+/* Frozen toolbar. The full-bleed margins make the hairline span the whole
+   column (the page pulls itself out to the column edge and puts the gutter
+   back as padding — see PageShell.module.css); the opaque background is
+   load-bearing — content must not read through the bar. */
 .toolbar {
-  position: sticky;
-  top: -32px;
-  margin-top: -32px;
-  padding-top: 32px;
-  margin-left: -32px;
-  margin-right: -32px;
-  padding-left: 32px;
-  padding-right: 32px;
+  margin-left: calc(-1 * var(--main-gutter, 28px));
+  margin-right: calc(-1 * var(--main-gutter, 28px));
+  padding-left: var(--main-gutter, 28px);
+  padding-right: var(--main-gutter, 28px);
   background: var(--bg-primary);
   z-index: 5;
   display: flex;
@@ -55,16 +49,14 @@
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-family: inherit;
-  background-color: var(--bg-secondary);
   color: var(--text-primary);
   outline: none;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8a8a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 11px 11px;
+  /* The dropdown arrow, drawn ONCE — see the same rule on the knowledge
+     page for why this is one shorthand and not four longhands. */
+  background: var(--bg-secondary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8a8a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center / 11px 11px;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -110,11 +102,16 @@
    the design system's global .tab-btn / .tab-active (TabStrip renders them),
    so only the box around the strip belongs to this module. */
 .tabStrip {
-  /* Switching tabs scrolls the strip back to the top of the scrollport.
-     .mainContent is the scroller (not the window), and the pinned toolbar
-     above covers roughly the first 43px of it — the offset leaves the strip
-     clear of that bar instead of tucking it underneath. */
-  scroll-margin-top: 56px;
+  width: 100%;
+}
+
+/* The strip keeps the reading column's measure: it sits in the pinned
+   header, but it still lines up with the cards below it (both are the same
+   920px column, centred). */
+.tabRow {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto 20px;
 }
 
 /* One panel = one tab's content. The tab label is the heading, so a panel
@@ -705,19 +702,10 @@
 }
 
 /* Breakpoint tracks layouts/main.css's 768px (where the main-content gutter
-   drops to 20px) — the sticky offsets must follow the padding change, not the
-   toolbar's own wrap point. */
+   drops) — the toolbar's full-bleed margins follow the gutter through
+   --main-gutter, so only the layout rules that are genuinely about the
+   narrow viewport live here. */
 @media (max-width: 768px) {
-  .toolbar {
-    top: -20px;
-    margin-top: -20px;
-    padding-top: 20px;
-    margin-left: -20px;
-    margin-right: -20px;
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-
   /* One thumb-width target per action instead of a cramped right-aligned row. */
   .actions > :global(.btn) {
     flex: 1;

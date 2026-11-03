@@ -136,3 +136,5 @@ ADR-0038 把顶级入口从 7 收到 5，做的是「同一动作一个入口」
 - 新增 `web/src/components/TabStrip.test.tsx`（8 例）；改写 `Review.test.tsx`（33 例）/ `Knowledge.test.tsx`（18 例）/ `Dashboard.test.tsx`（18 例）。`web/` 全量 **45 文件 / 367 例通过**，`npm run build` / `npm run lint`（0 error 0 warning）、`go test ./...`、`check-docs-mirror` / `check-version-drift` / `check-i18n-keys` / `check-agent-init-contract` / `generate-icons --check --tracked-only` 全绿。
 
 一条代价，记在案里：**tab 条不做 sticky**。三个页面的 tab 条都在各自滚动区的顶部（入口就在第一屏，与旧的「待整理 N」跳转按钮同位置，可达性没有退化）。Review 与 Knowledge 上方已有 sticky toolbar，要再叠一层 sticky 就得靠魔数偏移或者重构 toolbar，收益不足——**但这是本决策明确接受的代价，不是遗漏**。
+
+> **修订（2026-11-03）**：这条代价**已被 [ADR-0042](0042-page-shell-pinned-header-and-scrolling-body.md) 推翻**——「可达性没有退化」只在**首屏**成立：tab 条是这一页唯一的分区开关，它一旦被内容卷走，用户换一个区就得先滚回去（用户实测反馈：「知识库，审核，设置的 AI 等操作界面滚动条都滚动到 tab 顶部了」）。改法不是再叠一层 sticky，而是**把 tab 条挪出滚动区**：tab 条成为固定头部的一部分，滚动区从它**之下**开始，于是滚动条的顶边就是 tab 条的底边。原文保留在此，不删改。

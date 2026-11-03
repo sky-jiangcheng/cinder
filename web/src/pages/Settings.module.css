@@ -10,30 +10,29 @@
 /* The tab strip is the page's only section switcher, so it stays pinned while
    a long settings panel scrolls.
 
-   The subtlety is that `position: sticky` measures `top` from the scrollport's
-   top edge, while the strip's normal-flow position starts *below*
-   :global(.main-content)'s 32px padding-top. With a plain `top: 0` the pinned strip
-   parks 32px down from the scrollport edge and content scrolls visibly
-   through that band — the page looks torn apart mid-scroll.
+   It is pinned by BEING the page's header (PageShell), not by
+   `position: sticky`: the strip sits outside the scrolling region, so the
+   scrolling region starts under the strip — the scrollbar's track begins at
+   the strip's bottom edge instead of at the top of the column, and the strip
+   itself never scrolls away.
 
-   `top: -32px` pins it flush instead. The matching negative margin-top pulls
-   the *unpinned* position back up by the same amount and `:global(.settings-head)`'s
-   padding-bottom pushes the panel below back down, so the resting layout is
-   identical to having no sticky rule at all.
-*/
+   The full-bleed margins make the strip's rule span the full content width,
+   not just the text column; the inset on the left puts the tab labels on the
+   same left rule as the panel text (.settings-section's own 28px of internal
+   padding). The background is fully opaque — a translucent bar lets the
+   scrolling content read through it, which is the other half of the "broken
+   while scrolling" symptom. */
 .settingsTabs  {
 display: flex;
   gap: 0;
   border-bottom: 1px solid var(--border-subtle);
-  position: sticky;
-  top: -32px;
   /* Bleed to the layout gutter so the strip's rule spans the full content
      width, not just the text column. */
-  margin: -32px -32px 20px;
-  /* 60px, not the gutter's 32px: .settings-section has 28px of internal
-     padding, so its text starts 60px in. Matching that puts the tab labels
-     and the panel text on one left rule instead of two offset ones. */
-  padding: 32px 60px 0;
+  margin: 0 calc(-1 * var(--main-gutter, 28px)) 20px;
+  /* The gutter plus .settings-section's 28px of internal padding: matching
+     that puts the tab labels and the panel text on one left rule instead of
+     two offset ones. */
+  padding: 0 calc(var(--main-gutter, 28px) + 28px);
   z-index: 5;
   /* Fully opaque. A translucent bar (color-mix + backdrop-filter) lets the
      scrolling content read through it, which is the other half of the
@@ -45,12 +44,11 @@ display: flex;
   /* Six tabs overflow a phone width; let the strip scroll rather than letting
      the labels wrap onto two ragged rows. :global(.settings-section)'s padding also
      drops to 20px at this breakpoint (layouts/main.css), so the labels track
-     it — and the negative margins / top offset shrink with it to stay flush
-     against the scrollport edge. */
+     it — and the bleed shrinks with it to stay flush against the column
+     edge. */
   .settingsTabs {
-  top: -20px;
-    margin: -20px -20px 20px;
-    padding: 20px 20px 0;
+    margin: 0 calc(-1 * var(--main-gutter, 28px)) 20px;
+    padding: 0 calc(var(--main-gutter, 28px) + 20px);
     overflow-x: auto;
     scrollbar-width: none;
   }

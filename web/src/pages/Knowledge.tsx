@@ -7,6 +7,7 @@ import KnowledgeCard from './knowledge/KnowledgeCard'
 import KnowledgeOrganize from './knowledge/KnowledgeOrganize'
 import ErrorBanner from '../components/ErrorBanner'
 import Icon from '../components/Icon'
+import PageShell from '../components/PageShell'
 import TabStrip, { type TabItem } from '../components/TabStrip'
 import { useKnowledgePage } from '../hooks/useKnowledgePage'
 import WikiPagesView from './Wiki'
@@ -214,91 +215,96 @@ export default function Knowledge() {
   ]
 
   return (
-    <div className="knowledge">
-      {/* The nav bar already names this section ("知识"), so repeating it as a
-          page title is pure duplication. The h1 stays for screen readers and
-          for the document outline, but visually the page now opens on its
-          actual content: the view switch and the search field. */}
-      <h1 className="visually-hidden">{t('knowledge.hubTitle', { defaultValue: '知识' })}</h1>
+    <PageShell
+      header={
+        <>
+          {/* The nav bar already names this section ("知识"), so repeating it as a
+              page title is pure duplication. The h1 stays for screen readers and
+              for the document outline, but visually the page now opens on its
+              actual content: the view switch and the search field. */}
+          <h1 className="visually-hidden">{t('knowledge.hubTitle', { defaultValue: '知识' })}</h1>
 
-      <div className={s.toolbar}>
-        {/* One object, two states: a segmented control says "same thing,
-            two faces", where two tabs would say "two places". */}
-        <div className={s.viewSwitch} role="group" aria-label={t('knowledge.viewLabel', { defaultValue: '视图' })}>
-          <button
-            type="button"
-            className={`${s.viewTab} ${view === 'notes' ? s.viewTabActive : ''}`}
-            aria-pressed={view === 'notes'}
-            data-view="notes"
-            onClick={() => switchView('notes')}
-          >
-            {t('knowledge.viewNotes', { defaultValue: '笔记' })}
-          </button>
-          <button
-            type="button"
-            className={`${s.viewTab} ${view === 'pages' ? s.viewTabActive : ''}`}
-            aria-pressed={view === 'pages'}
-            data-view="pages"
-            onClick={() => switchView('pages')}
-          >
-            {t('knowledge.viewPages', { defaultValue: '知识页' })}
-          </button>
-        </div>
+          <div className={s.toolbar}>
+            {/* One object, two states: a segmented control says "same thing,
+                two faces", where two tabs would say "two places". */}
+            <div className={s.viewSwitch} role="group" aria-label={t('knowledge.viewLabel', { defaultValue: '视图' })}>
+              <button
+                type="button"
+                className={`${s.viewTab} ${view === 'notes' ? s.viewTabActive : ''}`}
+                aria-pressed={view === 'notes'}
+                data-view="notes"
+                onClick={() => switchView('notes')}
+              >
+                {t('knowledge.viewNotes', { defaultValue: '笔记' })}
+              </button>
+              <button
+                type="button"
+                className={`${s.viewTab} ${view === 'pages' ? s.viewTabActive : ''}`}
+                aria-pressed={view === 'pages'}
+                data-view="pages"
+                onClick={() => switchView('pages')}
+              >
+                {t('knowledge.viewPages', { defaultValue: '知识页' })}
+              </button>
+            </div>
 
-        {/* One field, two views — but the placeholder says what is actually
-            being searched. "搜索笔记与待办…" would be a lie in the pages
-            view, which retrieves approved pages. */}
-        <div className={s.search} role="search" aria-label={view === 'pages' ? t('wiki.searchAria') : t('knowledge.searchAria')}>
-          <Icon name="search" size={15} className={s.searchIcon} />
-          <input
-            type="search"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder={view === 'pages' ? t('wiki.searchPlaceholder') : t('knowledge.searchPlaceholder')}
-            aria-label={view === 'pages' ? t('wiki.searchAria') : t('knowledge.searchAria')}
-            className={`form-input ${s.searchInput}`}
-            autoFocus
-          />
-        </div>
+            {/* One field, two views — but the placeholder says what is actually
+                being searched. "搜索笔记与待办…" would be a lie in the pages
+                view, which retrieves approved pages. */}
+            <div className={s.search} role="search" aria-label={view === 'pages' ? t('wiki.searchAria') : t('knowledge.searchAria')}>
+              <Icon name="search" size={15} className={s.searchIcon} />
+              <input
+                type="search"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder={view === 'pages' ? t('wiki.searchPlaceholder') : t('knowledge.searchPlaceholder')}
+                aria-label={view === 'pages' ? t('wiki.searchAria') : t('knowledge.searchAria')}
+                className={`form-input ${s.searchInput}`}
+                autoFocus
+              />
+            </div>
 
-        {/* The scope selector used to live only on the pages view, even
-            though the notes search was cross-project all along — the uneven
-            pair was the clearest sign that these were one thing split in
-            two. Now both views narrow by the same scope. */}
-        <label className={s.scope}>
-          <span className={s.scopeLabel}>{t('knowledge.scopeLabel', { defaultValue: '作用域' })}</span>
-          <select
-            className={s.select}
-            value={scope}
-            onChange={e => setScope(Number(e.target.value))}
-          >
-            <option value={0}>{t('knowledge.scopeAll', { defaultValue: '全部项目' })}</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </label>
-      </div>
+            {/* The scope selector used to live only on the pages view, even
+                though the notes search was cross-project all along — the uneven
+                pair was the clearest sign that these were one thing split in
+                two. Now both views narrow by the same scope. */}
+            <label className={s.scope}>
+              <span className={s.scopeLabel}>{t('knowledge.scopeLabel', { defaultValue: '作用域' })}</span>
+              <select
+                className={s.select}
+                value={scope}
+                onChange={e => setScope(Number(e.target.value))}
+              >
+                <option value={0}>{t('knowledge.scopeAll', { defaultValue: '全部项目' })}</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          </div>
 
-      {/* The notes drawer's own two views (ADR-0039 decision 3). This is a
-          level IN, not a level OUT: the segmented control above is the
-          knowledge base's two drawers ("one object, two faces"), this strip
-          is the notes drawer's two workbenches ("two places"). Different
-          shapes — a pill switcher and an underlined tab strip — so the two
-          levels never read as one control.
+          {/* The notes drawer's own two views (ADR-0039 decision 3). This is a
+              level IN, not a level OUT: the segmented control above is the
+              knowledge base's two drawers ("one object, two faces"), this strip
+              is the notes drawer's two workbenches ("two places"). Different
+              shapes — a pill switcher and an underlined tab strip — so the two
+              levels never read as one control.
 
-          It sits directly under the toolbar, above the body: the strip is
-          chrome, and chrome that moves down while the body loads reads as
-          "the page shifted under me". */}
-      {view === 'notes' && (
-        <TabStrip
-          items={subItems}
-          active={sub}
-          onChange={key => switchSub(key === 'organize' ? 'organize' : 'notes')}
-          ariaLabel={t('knowledge.subTablistLabel', { defaultValue: '笔记视图' })}
-          idPrefix="knowledge-notes"
-          className={s.subTabs}
-        />
-      )}
-
+              It sits directly under the toolbar, above the body: the strip is
+              chrome, and chrome that moves down while the body loads reads as
+              "the page shifted under me". Being chrome, it belongs to the
+              pinned header — so the scrolling region starts under it. */}
+          {view === 'notes' && (
+            <TabStrip
+              items={subItems}
+              active={sub}
+              onChange={key => switchSub(key === 'organize' ? 'organize' : 'notes')}
+              ariaLabel={t('knowledge.subTablistLabel', { defaultValue: '笔记视图' })}
+              idPrefix="knowledge-notes"
+              className={s.subTabs}
+            />
+          )}
+        </>
+      }
+    >
       {bodyError ? (
         <ErrorBanner message={bodyError} onRetry={() => retryRef.current?.()} />
       ) : bodyLoading ? (
@@ -341,7 +347,7 @@ export default function Knowledge() {
           onLoading={handleLoading}
         />
       )}
-    </div>
+    </PageShell>
   )
 }
 
