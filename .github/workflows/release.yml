@@ -594,6 +594,14 @@ jobs:
       # .github/workflows/* at all (that needs the `workflow` scope). Kept at
       # job level so the steps' `if` can see whether it is set.
       PACKAGING_PUSH_TOKEN: ${{ secrets.PACKAGING_PUSH_TOKEN }}
+      # The sync script reads THIS repository's release through the API to
+      # verify the digests before publishing them. That read must be
+      # authenticated: an anonymous request shares the 60 req/hour budget of
+      # the runner's IP, and GitHub's shared runner IPs exhaust it — the read
+      # answers 403 and the script refuses to push anything unverified, so
+      # the release goes out while the tap keeps serving the old version.
+      # (Seen for real on v2.26.0.) This job only needs `contents: read`.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout master
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

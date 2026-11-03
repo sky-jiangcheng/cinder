@@ -207,7 +207,29 @@ if [ "$PUSH" -eq 1 ]; then
   echo "==> checking the manifests against the v${VERSION} release"
   SUMS="$(mktemp)"
   trap 'cd "$ROOT" && rm -rf "$WORK" && rm -f "$SUMS"' EXIT
-  if ! curl -fsSL --max-time 60 -H "Accept: application/vnd.github+json" \
+  # Authenticate the API read.
+  #
+  # An ANONYMOUS request shares the 60 requests/hour budget of the runner's
+  # IP, and GitHub's shared runner IPs exhaust it — the read then answers 403
+  # and the script refuses to push anything it cannot verify. The release
+  # itself is already out at that point, so the failure mode is the worst
+  # kind: the tap keeps serving the previous version and the release looks
+  # complete. (Seen for real on v2.26.0: the release published, the tap sync
+  # died on exactly this.)
+  #
+  # The read needs a token that can read THIS repository's releases — the
+  # push token may be scoped to the tap and the bucket only — so the two
+  # credentials are deliberately separate: GITHUB_TOKEN/GH_TOKEN reads,
+  # PACKAGING_PUSH_TOKEN writes.
+  API_AUTH=()
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    API_AUTH=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  elif [ -n "${GH_TOKEN:-}" ]; then
+    API_AUTH=(-H "Authorization: Bearer ${GH_TOKEN}")
+  elif [ -n "${PACKAGING_PUSH_TOKEN:-}" ]; then
+    API_AUTH=(-H "Authorization: Bearer ${PACKAGING_PUSH_TOKEN}")
+  fi
+  if ! curl -fsSL --max-time 60 -H "Accept: application/vnd.github+json" "${API_AUTH[@]}" \
        "https://api.github.com/repos/sky-jiangcheng/repotory/releases/tags/v${VERSION}" \
      | python3 -c "
 import json, sys
@@ -222,6 +244,9 @@ for a in assets:
 " > "$SUMS"; then
     echo "ERROR: could not read the v${VERSION} release from the GitHub API." >&2
     echo "       Refusing to push unverified manifests." >&2
+    echo "       If this is a 403, the request went out unauthenticated and the" >&2
+    echo "       shared runner IP had exhausted the anonymous rate limit — set" >&2
+    echo "       GITHUB_TOKEN (a token that can read this repo's releases)." >&2
     exit 1
   fi
   stale=0
