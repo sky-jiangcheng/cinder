@@ -2,7 +2,7 @@
   "name": "repotory-vscode",
   "displayName": "Repotory",
   "publisher": "sky-jiangcheng",
-  "version": "2.26.0",
+  "version": "2.27.0",
   "description": "The local-first memory layer for AI coding agents. Browse, search and hand off your local knowledge base without leaving the editor. One VSIX covers VS Code, Cursor and Windsurf.",
   "license": "MIT",
   "engines": {

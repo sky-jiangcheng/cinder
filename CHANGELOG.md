@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.27.0] - 2026-11-03
+
 ### 变更
 
 - **CI 与 Dockerfile 的 Node 版本终于对上，并顺带把 jsdom 升到 30（TODO 3.6，2026-11-03）**：`Dockerfile` 早在用 `node:24-alpine`，而 `ci.yml` / `release.yml` / `pages.yml` **十四个地方各写一遍** `node-version: '20'`——同一个仓库两套 Node，而且 node 20 已于 **2026-04 结束支持（EOL）**，CI 跑的是一个不再收安全更新的运行时。这个不一致有实实在在的代价：**jsdom@30 升不上去**。它依赖的 `undici@8.12.3` 要求 `node >= 22.19.0`，装得上，但在 node 20 上**每个测试文件加载时都崩**（`undici/lib/interceptor/decompress.js` 对 `createZstdDecompress` 调用 `.bind`，node 20 没有这个函数），48 个测试文件全红——看起来像仓库坏了，其实只动了一个包。**按 TODO 3.6 写下的判据「应当由同一个来源决定，而不是两处各写一遍」**：新增 `.nvmrc` 作 SSOT（nvm 读它、`actions/setup-node` 的 `node-version-file` 读它），十四个工作流步骤一律改成读文件、**连抄写的机会都不给**；`Dockerfile` 的 `FROM` 读不了文件，所以那里留一份 `ARG NODE_VERSION=24` 默认值，由 `scripts/check-version-drift.mjs` 新增的**第六道检查**兜住（**负例验过**：改 Dockerfile 的 ARG、把某一步改回字面量 `node-version`，两道都报红、退出码 1）。`web/package.json` 补 `engines.node: ">=24"`，让开发者在本地就看到要求。**这次抬升的收益是可验的**：jsdom 30 在 node 24 上装得上也跑得动——48 文件 410 例全绿（含 300ms 时序探针档）。`dependabot.yml` 相应调整：**jsdom 的主版本从「按住不升」改成「排除出组、单独出 PR」**（它现在装得上了，而主版本升级本来就该单独一个 PR、单独被审）；**typescript 继续按住——但这次的理由不再是政策，而是它装不上**：`typescript-eslint@8.72.1` 的 peer 范围 `>=4.8.4 <6.1.0` 不接受 TS 7，`npm ci` 直接 ERESOLVE，连安装都走不到测试。
@@ -733,7 +735,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.26.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.27.0...HEAD
+[2.27.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.26.0...v2.27.0
 [2.26.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.25.0...v2.26.0
 [2.25.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.24.0...v2.25.0
 [2.24.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.23.0...v2.24.0
