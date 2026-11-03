@@ -46,6 +46,9 @@ const PRODUCED = [
   '.cursor/mcp.json',
   '.vscode/mcp.json',
   '.claude/settings.json',
+  // ADR-0043: the managed instruction block lands in both instruction files.
+  'AGENTS.md',
+  'CLAUDE.md',
 ];
 const HOOK_SCRIPT = '.claude/hooks/repotory-handoff.sh';
 
@@ -78,7 +81,16 @@ function checkScript(script) {
 
     execFileSync(
       process.execPath,
-      [script.path, '--client', 'claude,cursor,vscode', '--bin', bin, '--with-hook', '--yes'],
+      [
+        script.path,
+        '--client',
+        'claude,cursor,vscode',
+        '--bin',
+        bin,
+        '--with-hook',
+        '--with-instructions',
+        '--yes',
+      ],
       { cwd: dir, stdio: 'pipe' },
     );
 
@@ -87,6 +99,12 @@ function checkScript(script) {
       const file = join(dir, rel);
       if (!existsSync(file)) {
         fail(`${script.label}: the script did not produce ${rel}`);
+        continue;
+      }
+      // The instruction files are Markdown, not JSON — compared as exact text,
+      // the same way the hook script is.
+      if (rel === 'AGENTS.md' || rel === 'CLAUDE.md') {
+        actual[rel] = readFileSync(file, 'utf8');
         continue;
       }
       try {

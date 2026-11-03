@@ -106,6 +106,9 @@ type Report struct {
 	Hook *FileResult `json:"hook,omitempty"`
 	// HookSettings is the .claude/settings.json entry that points at the hook.
 	HookSettings *FileResult `json:"hook_settings,omitempty"`
+	// Instructions lists the project instruction files the managed block was
+	// written to, one entry per file (ADR-0043). nil when not requested.
+	Instructions []FileResult `json:"instructions,omitempty"`
 	// Warnings collects per-file failures. A registration that half-succeeded
 	// is reported, not hidden behind one boolean.
 	Warnings []string `json:"warnings,omitempty"`
@@ -125,6 +128,13 @@ type Options struct {
 	Clients []Client
 	// WithHook installs the Claude Code SessionEnd handoff hook.
 	WithHook bool
+	// WithInstructions writes the managed repotory_* instruction block into the
+	// project's instruction files (AGENTS.md, CLAUDE.md) — ADR-0043. The zero
+	// value is deliberately NOT the default here: this field is set explicitly
+	// by every caller (service.SetupAgentClients passes the user's checkbox),
+	// because writing into the user's own tracked files is not a decision to
+	// make for them.
+	WithInstructions bool
 }
 
 // ErrBinaryNotFound means the repotory-mcp binary is not on this machine. The
@@ -190,6 +200,16 @@ func Register(opts Options) (*Report, error) {
 		} else {
 			report.Hook = &hook
 			report.HookSettings = &settings
+		}
+	}
+
+	if opts.WithInstructions {
+		instr := installInstructions(abs)
+		report.Instructions = instr
+		for _, f := range instr {
+			if f.Status == StatusFailed {
+				report.Warnings = append(report.Warnings, f.Note)
+			}
 		}
 	}
 	return report, nil

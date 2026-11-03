@@ -318,6 +318,7 @@
     "agentClientsPickProject": "Pick a project…",
     "agentClientsPick": "Pick the clients",
     "agentClientsHook": "Also install the Claude Code session-end handoff hook (writes the handoff note when a session ends)",
+    "agentClientsInstructions": "Also write the \"read context at the start / hand off at the end\" instructions into the project's AGENTS.md and CLAUDE.md (every agent that reads those files will follow them; both files show up in your git changes)",
     "agentClientsScanAfter": "Run a scan right after connecting (so the knowledge base is not empty)",
     "agentClientsConnect": "Connect",
     "agentClientsConnecting": "Connecting…",

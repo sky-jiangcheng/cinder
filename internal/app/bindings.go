@@ -406,7 +406,11 @@ func (a *App) ListAgentClients() []string { return service.AgentClientNames() }
 
 // SetupAgentClients registers Repotory's MCP server with the AI clients the
 // user picked, for one project, and optionally installs the Claude Code
-// SessionEnd hook that writes the handoff note when a session ends.
+// SessionEnd hook that writes the handoff note when a session ends and writes
+// the managed repotory_* instruction block into the project's AGENTS.md /
+// CLAUDE.md (ADR-0043 — the protocol-neutral half: the hook exists only for
+// Claude Code, while every agent that reads an instruction file gets both
+// sentences).
 //
 // This is the desktop twin of the CLI's `repotory-init`: same files, same
 // bytes (the two are pinned to one golden fixture by
@@ -415,8 +419,8 @@ func (a *App) ListAgentClients() []string { return service.AgentClientNames() }
 // The report carries a machine-readable code, not a sentence: the UI renders
 // it in the user's language. A refusal — a container project, a missing
 // directory, a client that does not exist — is a code, not an error.
-func (a *App) SetupAgentClients(projectID int64, clients []string, withHook bool) (service.AgentSetupReport, error) {
-	return a.svc.SetupAgentClients(projectID, clients, withHook)
+func (a *App) SetupAgentClients(projectID int64, clients []string, withHook, withInstructions bool) (service.AgentSetupReport, error) {
+	return a.svc.SetupAgentClients(projectID, clients, withHook, withInstructions)
 }
 
 // --- Plugins / knowledge sources ----------------------------------------------

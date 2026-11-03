@@ -30,6 +30,7 @@ Options:
                    Default: every supported client (config files land only where the client dir exists)
   --bin <path>     Explicit path to the repotory-mcp binary (skips detection)
   --with-hook      Also install the Claude Code SessionEnd handoff hook
+  --with-instructions  Also write the repotory block into AGENTS.md / CLAUDE.md
   --yes            Non-interactive: assume yes where a prompt would appear
   --dry-run        Show what would be written, change nothing
   -h, --help       Show this help
@@ -258,9 +259,94 @@ function installHook() {
   }
 }
 
+// ------------------------------------------------- instructions (ADR-0043)
+
+const INSTRUCTIONS_BEGIN = "<!-- repotory:begin -->";
+const INSTRUCTIONS_END = "<!-- repotory:end -->";
+
+// Both, always — not one chosen per client. An instruction file nobody reads is
+// inert: it produces no behaviour and no error. Writing both costs one extra
+// file; picking per client costs a silent break the first time the user switches
+// agent. The bytes MUST match internal/agentinit/instructions.go exactly —
+// scripts/check-agent-init-contract.mjs compares the two against one fixture.
+const INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md"];
+
+const INSTRUCTIONS_BODY = `## Repotory memory layer
+
+This project's knowledge and session memory live in Repotory, a local SQLite
+database, reachable through the repotory_* MCP tools.
+
+- At the start of work, call repotory_context with the current repository path
+  and read what it returns before you plan. Its first entry is the most recent
+  session handoff, so the previous session's conclusions come first.
+- Before you finish, call repotory_handoff for this project with the fields
+  gotchas, decisions, changes, next_steps and a short summary.
+- Record what a later session would otherwise re-learn the hard way \u2014 a
+  constraint that is not visible in the code, a decision and the alternative
+  it rejected, a trap you just hit. Do not record what the commit log already
+  shows: a list of files touched is not a handoff, and the notes that bury the
+  useful signal are the ones that stop the next session from reading them.
+
+Installed by Repotory. To remove, delete everything between the repotory:begin
+and repotory:end markers (this block is plain text in your repository, and it
+will show up in git status until you commit or delete it).
+`;
+
+const INSTRUCTIONS_BLOCK = INSTRUCTIONS_BEGIN + "\n" + INSTRUCTIONS_BODY + INSTRUCTIONS_END + "\n";
+
+/**
+ * Place the managed block in one file's content without touching anything
+ * outside it. Three shapes, in order: our block is already there (replace in
+ * place, so running twice is byte-identical), the file has other content
+ * (append after a blank line), there is no file (the block is the whole file).
+ */
+function upsertInstructions(content, hadFile) {
+  const begin = content.indexOf(INSTRUCTIONS_BEGIN);
+  let end = content.indexOf(INSTRUCTIONS_END);
+  if (begin >= 0 && end > begin) {
+    end += INSTRUCTIONS_END.length;
+    // Keep whatever trailing newline the old block had, so an idempotent second
+    // run does not shift the bytes after the marker.
+    const tail = content.slice(end);
+    let nl = 0;
+    while (nl < tail.length && (tail[nl] === "\n" || tail[nl] === "\r")) nl += 1;
+    return content.slice(0, begin) + INSTRUCTIONS_BLOCK + tail.slice(nl);
+  }
+  if (!hadFile || content.trim() === "") return INSTRUCTIONS_BLOCK;
+  return content.replace(/\n+$/, "") + "\n\n" + INSTRUCTIONS_BLOCK;
+}
+
+function installInstructions() {
+  console.log("\nAgent instructions (ADR-0043):");
+  for (const rel of INSTRUCTION_FILES) {
+    let hadFile = true;
+    let raw = "";
+    try {
+      raw = fs.readFileSync(rel, "utf8");
+    } catch (err) {
+      if (err.code !== "ENOENT") die(`${rel} cannot be read (${err.message})`);
+      hadFile = false;
+    }
+    const next = upsertInstructions(raw, hadFile);
+    if (hadFile && raw === next) {
+      console.log(`  ${rel}: already contains the repotory block, no change`);
+      continue;
+    }
+    if (options.dryRun) {
+      console.log(`  ${rel}: would ${hadFile ? "update" : "create"} (dry-run)`);
+      continue;
+    }
+    if (hadFile) fs.copyFileSync(rel, rel + BACKUP_SUFFIX);
+    fs.writeFileSync(rel, next);
+    console.log(
+      `  ${rel}: ${hadFile ? VERB.updated.replace("<file>", rel) : VERB.created} -> ${rel}`,
+    );
+  }
+}
+
 // --------------------------------------------------------------------- main
 
-const options = { client: null, bin: null, withHook: false, yes: false, dryRun: false };
+const options = { client: null, bin: null, withHook: false, withInstructions: false, yes: false, dryRun: false };
 
 function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
@@ -278,6 +364,9 @@ function parseArgs(argv) {
         break;
       case "--with-hook":
         options.withHook = true;
+        break;
+      case "--with-instructions":
+        options.withInstructions = true;
         break;
       case "--yes":
         options.yes = true;
@@ -334,6 +423,10 @@ function main() {
     console.log(
       "\nTip: also install the Claude Code SessionEnd hook so handoffs happen\nautomatically at session end. Re-run with --with-hook to install it.",
     );
+  }
+
+  if (options.withInstructions) {
+    installInstructions();
   }
 
   console.log(`\nDone. Reload the client window, then start a session with

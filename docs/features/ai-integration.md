@@ -202,7 +202,7 @@ repository 层（1、2）压过 project 层（3、4），因为命中 repository
 
 ### 桌面端一键接入（不用开终端）
 
-装了桌面 App 的人不必去终端跑脚本：**设置 → 操作 → 接入 AI 客户端**（见[设置](settings.md)）里选一个项目、勾选要接的客户端、点一次「接入」，桌面端就会写好 `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`，可选装上 Claude Code 的 SessionEnd hook，并顺手触发一次扫描。装完直接开 Claude Code，`repotory_context` 就有内容可返回，不用再手动 rescan。
+装了桌面 App 的人不必去终端跑脚本：**设置 → 操作 → 接入 AI 客户端**（见[设置](settings.md)）里选一个项目、勾选要接的客户端、点一次「接入」，桌面端就会写好 `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`，可选装上 Claude Code 的 SessionEnd hook，**可选把「开局读 / 收尾写」那两句写进项目的 `AGENTS.md` 与 `CLAUDE.md`**（[ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)），并顺手触发一次扫描。装完直接开 Claude Code，`repotory_context` 就有内容可返回，不用再手动 rescan。
 
 （Windsurf 是个例外：它的 MCP 配置是**用户级**的，落在 `~/.codeium/windsurf/mcp_config.json`，与项目无关。其余三个客户端的配置写在**项目目录**里，跟着仓库走。）
 
@@ -238,6 +238,7 @@ node scripts/repotory-init/index.mjs --with-hook
 
 - 自动探测 `repotory-mcp`（`--bin` 可显式指定），向 Claude Code（`.mcp.json`）、Cursor（`.cursor/mcp.json`）、VS Code（`.vscode/mcp.json`）、Windsurf 写入注册（配置只落在对应客户端目录已存在的地方），JetBrains 打印手动指引
 - `--with-hook` 同时安装下方的 SessionEnd hook（脚本 + `settings.json` 合并，改前备份）
+- `--with-instructions` 同时把交接指令写进项目的 `AGENTS.md` 与 `CLAUDE.md`（ADR-0043；已有同名区块则原地替换，**区块之外的内容一律不动**，改前备份）
 - `--dry-run` 预览全部写入动作；找不到二进制时给出安装引导，`--yes` 以裸命令名 `repotory-mcp` 写入配置（装好即生效）
 
 ### 手动接入 Claude Code（备选）
@@ -302,6 +303,28 @@ claude -p --mcp-config .mcp.json \
 - **降级路径**：没有 `claude` CLI 时直接跳过；MCP 未注册时 headless 调用失败并被吞掉——协议要求交接必须由 `repotory_handoff` 写入，hook 只负责「必定触发」，从不绕过协议直写数据库。
 - **协议保护**：交接笔记带 `handoff` 标签，`repotory_notes_update` 拒绝覆盖它们（防误覆盖），下一次会话由 `repotory_context` 置顶完整渲染。
 - hook 的事件名与配置字段随 Claude Code 版本演进，接入前以 `claude --help` 和官方 hooks 文档为准。
+
+### 交接指令进项目指令文件（受管区块，ADR-0043）
+
+SessionEnd hook 只存在于 Claude Code。**换任何一个别的 agent，那条路就断了**——而本产品立的正是「跨 agent 的持久记忆」，所以补上另一条不挑客户端的路：把那两句指令写进项目自己就有的指令文件。
+
+`repotory-init --with-instructions`（或桌面端设置 → 操作 → 接入 AI 客户端里那个勾选）会往 **`AGENTS.md` 与 `CLAUDE.md` 各写一段**被标记夹住的文本：
+
+```markdown
+<!-- repotory:begin -->
+## Repotory memory layer
+…开局调用 repotory_context…收尾调用 repotory_handoff…
+<!-- repotory:end -->
+```
+
+- **两个文件都写，不按客户端选**。一份没人读的指令文件是**惰性的**——它既不产生行为，也不产生错误。写两份的代价只是多一个文件；按客户端挑的代价是**用户一换 agent 就悄悄失效**。`AGENTS.md` 是跨 agent 的事实标准（Codex / opencode / Cursor / Amp 都读），`CLAUDE.md` 是 Claude Code 自己那份。
+- **标记之外一律不动**。已有区块 → 原地替换（所以点两次不会叠出两个区块）；文件已存在 → 追加到末尾；文件不存在 → 创建。**区块之前是你自己的内容，我们拥有那一段，不拥有那个文件**；改动前照旧留 `.repotory-init.bak` 备份，报告逐文件列出「新建 / 已改 / 未变」。
+- **它进你的 git**。第一次点完，`git status` 会多出（或改动）这两个文件——这是「接入」这件事本来的形状，不是副作用被藏起来了。不想被提交的目录可以只装 hook。
+- **区块里第三句是重点**：「记那些下一次会话会重新踩一遍的东西，**不要记 commit log 已经显示的东西**」。少了这句，指令只会让 agent 写活动流水——那正是本项目上游枯竭的形状（`idea` 类笔记 0 条）。
+
+**诚实的边界**：指令文件让「收尾记一笔」从一个**必定发生**的事件（hook）变成一个**大概率发生**的事件（模型读到了，但服从不保证）。所以两条路**并存、不互斥**：hook 兜住「用户忘了收尾」，指令文件兜住「用户根本不用 Claude Code」，而两条路都走同一个 `repotory_handoff` 落库路径，**交接记录不会出现两种形状**。
+
+卸载就是删掉那两行标记之间的内容——区块对用户是一段可读可改的纯文本，不是一个需要产品代管的隐藏状态，所以不提供 `--remove` 开关。
 
 ### 接入 Cursor / 其他 MCP 客户端
 

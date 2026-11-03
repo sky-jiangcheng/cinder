@@ -318,10 +318,11 @@ func TestContractFixture(t *testing.T) {
 	}
 
 	if _, err := Register(Options{
-		TargetDir: dir,
-		BinPath:   bin,
-		Clients:   []Client{ClientClaude, ClientCursor, ClientVSCode},
-		WithHook:  true,
+		TargetDir:        dir,
+		BinPath:          bin,
+		Clients:          []Client{ClientClaude, ClientCursor, ClientVSCode},
+		WithHook:         true,
+		WithInstructions: true,
 	}); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -371,6 +372,16 @@ func canonicalize(t *testing.T, dir, bin string) map[string]any {
 		t.Fatalf("read hook script: %v", err)
 	}
 	out[HookScriptRel] = string(script)
+
+	// ADR-0043: the instruction files are Markdown, compared as exact text —
+	// a changed word in the block is a changed contract.
+	for _, rel := range InstructionFiles {
+		raw, err := os.ReadFile(filepath.Join(dir, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		out[rel] = string(raw)
+	}
 	return out
 }
 

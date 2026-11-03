@@ -17,7 +17,7 @@ flowchart TB
     class B rec
 ```
 
-0. **First run**: on a fresh install call `repotory_scan` once — it seeds the default scan roots and scans them synchronously, so the knowledge base is populated without ever opening the desktop app. Call it again any time `repotory_context` reports no projects. (Humans: `node scripts/repotory-init/index.mjs --with-hook` registers the MCP server and the SessionEnd handoff hook in one command — see ADR-0009.)
+0. **First run**: on a fresh install call `repotory_scan` once — it seeds the default scan roots and scans them synchronously, so the knowledge base is populated without ever opening the desktop app. Call it again any time `repotory_context` reports no projects. (Humans: `node scripts/repotory-init/index.mjs --with-instructions --with-hook` registers the MCP server, writes the start-with-`repotory_context` / end-with-`repotory_handoff` instructions into the project's `AGENTS.md` and `CLAUDE.md`, and installs the Claude Code SessionEnd handoff hook in one command — see ADR-0009 and ADR-0043.)
 1. **Start**: call `repotory_context` once — it returns tech stack, README excerpt, dependencies, recent commits, open todos and the most relevant notes (previous session handoffs lead). This replaces chaining `projects_list` → `notes_search` → `notes_read`.
 2. **End**: call `repotory_handoff` with `summary` (required) plus any of `changes` / `decisions` / `gotchas` / `next_steps`. The note is tagged `handoff` and the next session reads it first — regardless of which agent wrote it.
    - Handoff notes are protocol records: `repotory_notes_update` refuses to overwrite them (write a new handoff instead), and `repotory_context` renders the latest one in full.

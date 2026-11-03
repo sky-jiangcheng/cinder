@@ -728,10 +728,11 @@ export function setupAgentClients(
   projectId: number,
   clients: string[],
   withHook: boolean,
+  withInstructions: boolean,
 ): Promise<AgentSetupReport> {
   return call<AgentSetupReport>({
     method: 'SetupAgentClients',
-    args: [projectId, clients, withHook],
+    args: [projectId, clients, withHook, withInstructions],
   }).then(d => d ?? { code: '', blocking: false, binary: '', files: [] })
 }
 

@@ -71,8 +71,10 @@ Repotory is engineered as a modular local knowledge suite. Choose the artifact t
 # 1. Install repotory-mcp (macOS / Linux)
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
 
-# 2. Automatically register MCP with your installed agents + install SessionEnd hook
-node scripts/repotory-init/index.mjs --with-hook
+# 2. Register MCP with your installed agents, write the read-at-start /
+#    hand-off-at-end instructions into AGENTS.md and CLAUDE.md, and install the
+#    Claude Code SessionEnd hook
+node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # Or register manually in Claude Code:
 claude mcp add repotory -- "$(which repotory-mcp)"

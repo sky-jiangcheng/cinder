@@ -200,7 +200,7 @@ This resolution lives **server-side** and is shared by the MCP tools and the VS 
 
 ### Desktop one-click connect (no terminal)
 
-If you installed the desktop app, you never need to open a terminal: under **Settings → Actions → Connect AI clients** (see [Settings](settings.md)) pick a project, tick the clients you want, and press "Connect" once. The desktop app then writes `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`, optionally installs the Claude Code SessionEnd hook, and kicks off a scan. Open Claude Code afterwards and `repotory_context` already has content to return — no manual rescan.
+If you installed the desktop app, you never need to open a terminal: under **Settings → Actions → Connect AI clients** (see [Settings](settings.md)) pick a project, tick the clients you want, and press "Connect" once. The desktop app then writes `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`, optionally installs the Claude Code SessionEnd hook, **optionally writes the "read at the start / hand off at the end" instructions into the project's `AGENTS.md` and `CLAUDE.md`** ([ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)), and kicks off a scan. Open Claude Code afterwards and `repotory_context` already has content to return — no manual rescan.
 
 (Windsurf is the exception: its MCP config is **user-level**, at `~/.codeium/windsurf/mcp_config.json`, and has nothing to do with the project. The other three clients get their config inside the **project directory**, so it travels with the repository.)
 
@@ -236,6 +236,7 @@ node scripts/repotory-init/index.mjs --with-hook
 
 - Detects `repotory-mcp` (override with `--bin`) and registers it with Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), VS Code (`.vscode/mcp.json`) and Windsurf (configs land only where the client's directory exists); JetBrains gets printed manual guidance
 - `--with-hook` also installs the SessionEnd hook below (script + merged `settings.json`, backed up before changes)
+- `--with-instructions` also writes the handoff instructions into the project's `AGENTS.md` and `CLAUDE.md` (ADR-0043; an existing block is replaced in place, **nothing outside the markers is touched**, and the file is backed up before changes)
 - `--dry-run` previews every write; when the binary is missing it prints install guidance, and `--yes` writes the bare command name `repotory-mcp` (works once installed)
 
 ### Connect Claude Code manually (alternative)
@@ -300,6 +301,28 @@ Design points and costs (stated plainly, so the narrative doesn't oversell):
 - **Fallback path**: skipped outright when the `claude` CLI is missing; when MCP is not registered, the headless call fails and is swallowed — the protocol requires handoffs to be written through `repotory_handoff`; the hook only guarantees "it always fires" and never bypasses the protocol to write the database directly.
 - **Protocol protection**: handoff notes carry the `handoff` tag and `repotory_notes_update` refuses to overwrite them (guarding against accidental clobbering); in the next session, `repotory_context` renders them in full, pinned to the top.
 - The hook's event name and configuration fields evolve with Claude Code versions; before wiring it up, defer to `claude --help` and the official hooks documentation.
+
+### Handoff instructions in the project's instruction files (the managed block, ADR-0043)
+
+The SessionEnd hook exists only in Claude Code. **Switch to any other agent and that path is gone** — while this product's whole claim is a persistent memory across agents. So there is a second path that does not care which client you use: write the two instructions into the instruction files the project already has.
+
+`repotory-init --with-instructions` (or that checkbox under Settings → Actions → Connect AI clients) writes **one block into each of `AGENTS.md` and `CLAUDE.md`**, wrapped in markers:
+
+```markdown
+<!-- repotory:begin -->
+## Repotory memory layer
+...call repotory_context at the start...call repotory_handoff before finishing...
+<!-- repotory:end -->
+```
+
+- **Both files, always — not one chosen per client.** An instruction file nobody reads is **inert**: it produces neither behaviour nor error. Writing both costs one extra file; choosing per client costs a silent break the first time the user switches agent. `AGENTS.md` is the de facto cross-agent standard (Codex / opencode / Cursor / Amp all read it), `CLAUDE.md` is Claude Code's own.
+- **Nothing outside the markers is touched.** An existing block is replaced in place (so clicking twice does not stack two blocks), an existing file gets the block appended at the end, a missing file is created. **The content before the block is yours — we own that paragraph, not the file.** A `.repotory-init.bak` backup is taken before any edit and the report lists each file as created / updated / unchanged.
+- **It lands in your git.** After the first click, those two files appear in `git status` (or are modified) — that is the shape of the thing called "connect", not a hidden side effect. For a directory where you do not want them committed, install only the hook.
+- **The third sentence is the point**: record what the next session would otherwise re-learn the hard way, **not what the commit log already shows**. Without it the instruction just makes agents log activity — the exact shape this product's upstream starved on (0 `idea` notes).
+
+**The honest boundary**: the instruction file turns "write it down at the end" from an event that **must happen** (the hook) into one that **probably happens** — the model reads it, but obeying is not guaranteed. So the two paths **coexist and neither replaces the other**: the hook catches "the user forgot to wrap up", the instruction file catches "the user is not in Claude Code", and both write through the same `repotory_handoff` path, **so a handoff never comes in two shapes**.
+
+Uninstalling means deleting what sits between the two marker lines — the block is readable, editable plain text for the user, not hidden state the product has to babysit, which is why there is no `--remove` flag.
 
 ### Connect Cursor / other MCP clients
 

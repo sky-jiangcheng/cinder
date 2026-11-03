@@ -71,8 +71,9 @@ Repotory 不仅是一个应用，而是一套模块化的本地项目知识套�
 # 1. 下载 / 安装 repotory-mcp（macOS / Linux）
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
 
-# 2. 一键注册到已安装的 Agent (Claude Code / Cursor / Windsurf / VS Code) 并启用 SessionEnd 钩子
-node scripts/repotory-init/index.mjs --with-hook
+# 2. 一键注册到已安装的 Agent (Claude Code / Cursor / Windsurf / VS Code)，
+#    把「开局读上下文 / 收尾写交接」写进 AGENTS.md 与 CLAUDE.md，并启用 SessionEnd 钩子
+node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # 或仅为 Claude Code 单独添加：
 claude mcp add repotory -- "$(which repotory-mcp)"

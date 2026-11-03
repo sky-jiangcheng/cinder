@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"repotory/internal/agentinit"
@@ -59,7 +60,7 @@ func TestSetupAgentClientsWritesTheClientConfig(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -105,10 +106,10 @@ func TestSetupAgentClientsIsIdempotent(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	if _, err := s.SetupAgentClients(pid, []string{"claude"}, false); err != nil {
+	if _, err := s.SetupAgentClients(pid, []string{"claude"}, false, false); err != nil {
 		t.Fatalf("first setup: %v", err)
 	}
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
 	if err != nil {
 		t.Fatalf("second setup: %v", err)
 	}
@@ -122,7 +123,7 @@ func TestSetupAgentClientsInstallsTheHook(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, true)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, true, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestSetupAgentClientsRefusesAutoGroupedProject(t *testing.T) {
 	containerDir := t.TempDir()
 	pid := seedProject(t, s.db, "container", containerDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -174,7 +175,7 @@ func TestSetupAgentClientsRefusesTheVirtualProject(t *testing.T) {
 		t.Skipf("no default project in this database: %v", err)
 	}
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -188,7 +189,7 @@ func TestSetupAgentClientsRefusesAnUnknownClient(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"emacs"}, false)
+	report, err := s.SetupAgentClients(pid, []string{"emacs"}, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -208,7 +209,7 @@ func TestSetupAgentClientsRefusesAnEmptySelection(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, nil, false)
+	report, err := s.SetupAgentClients(pid, nil, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -224,7 +225,7 @@ func TestSetupAgentClientsReportsAMissingDirectory(t *testing.T) {
 	s, _ := setupAgentService(t)
 	pid := seedManualProject(t, s, "gone", filepath.Join(t.TempDir(), "deleted"))
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -239,7 +240,7 @@ func TestSetupAgentClientsReportsAMissingDirectory(t *testing.T) {
 func TestSetupAgentClientsReportsAnUnknownProject(t *testing.T) {
 	s, _ := setupAgentService(t)
 
-	report, err := s.SetupAgentClients(99999, []string{"claude"}, false)
+	report, err := s.SetupAgentClients(99999, []string{"claude"}, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -263,5 +264,90 @@ func TestAgentClientNamesMatchesTheRegistry(t *testing.T) {
 		if n != want[i] {
 			t.Fatalf("names = %v, want %v", names, want)
 		}
+	}
+}
+
+// ADR-0043: the instruction block is the protocol-neutral half of the fix for
+// "zero handoffs while the tools were registered". The hook only exists for
+// Claude Code; AGENTS.md is read by every agent that reads it. This test goes
+// through the real SetupAgentClients path — the binding, not the package —
+// because the earlier defect in this area (UpdateConfig blocking free-text
+// config keys) lived exactly at that seam.
+func TestSetupAgentClientsWritesInstructionFiles(t *testing.T) {
+	s, _ := setupAgentService(t)
+	projectDir := t.TempDir()
+	pid := seedManualProject(t, s, "demo", projectDir)
+
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, true)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if report.Code != AgentSetupOK {
+		t.Fatalf("code = %q, want empty", report.Code)
+	}
+	if len(report.Instructions) != len(agentinit.InstructionFiles) {
+		t.Fatalf("instructions = %d, want %d", len(report.Instructions), len(agentinit.InstructionFiles))
+	}
+	for i, rel := range agentinit.InstructionFiles {
+		got := report.Instructions[i]
+		if got.Status != "created" {
+			t.Errorf("%s: status = %q, want created (%s)", rel, got.Status, got.Note)
+		}
+		raw, err := os.ReadFile(filepath.Join(projectDir, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if !strings.Contains(string(raw), "repotory_handoff") {
+			t.Errorf("%s: the block must name the tool the agent is being asked to call", rel)
+		}
+	}
+
+	// Clicking the button twice must not stack two blocks: an agent reading the
+	// same instruction twice every session is a bug the user cannot see.
+	again, err := s.SetupAgentClients(pid, []string{"claude"}, false, true)
+	if err != nil {
+		t.Fatalf("second setup: %v", err)
+	}
+	for i, rel := range agentinit.InstructionFiles {
+		if got := again.Instructions[i]; got.Status != "unchanged" {
+			t.Errorf("%s: second run status = %q, want unchanged", rel, got.Status)
+		}
+	}
+}
+
+// The two switches stay independent (ADR-0043 decision 5): a user who installs
+// the hook must not silently get their repository's AGENTS.md rewritten, and a
+// user who only wants the instruction file must not get a Claude Code hook.
+// Writing into tracked files is a setup act on the user's machine.
+func TestSetupAgentClientsInstructionAndHookAreIndependent(t *testing.T) {
+	s, _ := setupAgentService(t)
+	projectDir := t.TempDir()
+	pid := seedManualProject(t, s, "demo", projectDir)
+
+	hookOnly, err := s.SetupAgentClients(pid, []string{"claude"}, true, false)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if hookOnly.Hook == nil {
+		t.Fatal("the hook was asked for and must be reported")
+	}
+	if hookOnly.Instructions != nil {
+		t.Errorf("instructions requested off, got %v", hookOnly.Instructions)
+	}
+	for _, rel := range agentinit.InstructionFiles {
+		if _, err := os.Stat(filepath.Join(projectDir, rel)); err == nil {
+			t.Errorf("%s was written although withInstructions was false", rel)
+		}
+	}
+
+	instrOnly, err := s.SetupAgentClients(pid, []string{"claude"}, false, true)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if instrOnly.Hook != nil {
+		t.Error("the hook was not asked for and must not be reported")
+	}
+	if len(instrOnly.Instructions) != len(agentinit.InstructionFiles) {
+		t.Errorf("instructions = %d, want %d", len(instrOnly.Instructions), len(agentinit.InstructionFiles))
 	}
 }

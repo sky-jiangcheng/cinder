@@ -84,7 +84,12 @@ Before starting work, call repotory_context (path = the current repo directory) 
 Before finishing work, call repotory_handoff and record what you did, what tripped you up, and what comes next.
 ```
 
-If you'd rather not rely on the model's cooperation, use a client-side hook (the SessionEnd hook section of [AI Integration](ai-integration.md)); for clients like opencode with no hook mechanism, put the two lines into `AGENTS.md` or the system prompt.
+If you would rather not rely on the model's cooperation, there are two routes, and both are product features now ([ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)):
+
+- **The Claude Code SessionEnd hook** (see the "Automatic handoff at session end" section of [AI Integration](ai-integration.md)) — it fires when the session ends, **in that client only**.
+- **Write the two lines above into the project's `AGENTS.md` and `CLAUDE.md`** — that is what `repotory-init --with-instructions`, or that checkbox in "Connect AI clients", does; any agent that reads those files (opencode / Codex / Cursor…) follows them.
+
+The two coexist: the hook catches "forgot to wrap up", the instruction file catches "does not use Claude Code at all". The instruction file turns "write it down" from something that must happen into something that probably happens — the model reads it, obeying is not guaranteed.
 
 ## Verified on a real machine (2026-10-29)
 

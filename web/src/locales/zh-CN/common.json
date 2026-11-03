@@ -317,6 +317,7 @@
     "agentClientsPickProject": "选择项目…",
     "agentClientsPick": "选择客户端",
     "agentClientsHook": "同时安装 Claude Code 会话结束交接钩子（会话结束时自动写下交接笔记）",
+    "agentClientsInstructions": "同时把「开局读上下文 / 收尾写交接」写进项目的 AGENTS.md 与 CLAUDE.md（任何读这两个文件的 agent 都会照做；这两个文件会出现在你的 git 改动里）",
     "agentClientsScanAfter": "接入后立即扫描一次（免得知识库还是空的）",
     "agentClientsConnect": "接入",
     "agentClientsConnecting": "接入中…",

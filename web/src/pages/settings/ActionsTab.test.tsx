@@ -235,8 +235,52 @@ describe('ActionsTab AI client wiring', () => {
     await pickDemoAndConnect()
 
     await waitFor(() =>
-      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true),
+      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true, true),
     )
+  })
+
+  // ADR-0043: the instruction block is a separate switch from the hook, because
+  // the two cover different agents. Unticking either must change only its own
+  // argument — a UI that sends the same flag for both would silently write into
+  // the user's tracked AGENTS.md when they only asked for a Claude Code hook.
+  it('sends the instruction switch independently of the hook switch', async () => {
+    renderTab()
+
+    const instructionsBox = await screen.findByRole('checkbox', {
+      name: 'settings.agentClientsInstructions',
+    })
+    fireEvent.click(instructionsBox) // default is on; this turn it off
+    await pickDemoAndConnect()
+
+    await waitFor(() =>
+      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true, false),
+    )
+  })
+
+  it('reports every instruction file it wrote, per file', async () => {
+    vi.mocked(setupAgentClients).mockResolvedValue({
+      code: '',
+      blocking: false,
+      binary: '/usr/local/bin/repotory-mcp',
+      files: [{ client: 'claude', path: '/code/demo/.mcp.json', status: 'created' }],
+      instructions: [
+        { client: '', path: '/code/demo/AGENTS.md', status: 'updated', note: 'backup: /code/demo/AGENTS.md.repotory-init.bak' },
+        { client: '', path: '/code/demo/CLAUDE.md', status: 'created' },
+      ],
+    })
+    renderTab()
+
+    await pickDemoAndConnect()
+
+    // Both files listed, and "updated" is distinguishable from "created": the
+    // user is entitled to know their tracked file was edited, not just touched.
+    expect(await screen.findByText('/code/demo/AGENTS.md')).toBeTruthy()
+    expect(screen.getByText('/code/demo/CLAUDE.md')).toBeTruthy()
+    expect(screen.getByText('settings.agentStatusUpdated')).toBeTruthy()
+    // Two files were created here (the client config and CLAUDE.md), so the
+    // status label legitimately appears twice — asserting the count rather than
+    // getByText is what keeps this from being an accident waiting to break.
+    expect(screen.getAllByText('settings.agentStatusCreated')).toHaveLength(2)
   })
 
   it('shows the refusal in the user language, not the backend code', async () => {

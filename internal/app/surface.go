@@ -176,7 +176,7 @@ var bindingSurfaces = map[string]BindingSurface{
 	// offer, so these stay desktop-only (the CLI's repotory-init is the
 	// terminal twin of the same work).
 	"ListAgentClients":  {SurfaceDesktopOnly, "", "the client list behind the settings picker; it exists so the UI cannot offer a client the backend would reject"},
-	"SetupAgentClients": {SurfaceDesktopOnly, "", "writes MCP config files and a SessionEnd hook into the user's project directory; that is a setup act on the user's machine, and an agent performing it would edit configuration the user owns without being asked (the CLI's repotory-init is the terminal twin)"},
+	"SetupAgentClients": {SurfaceDesktopOnly, "", "writes MCP config files, a SessionEnd hook and the repotory block in AGENTS.md/CLAUDE.md into the user's project directory; that is a setup act on the user's machine, and an agent performing it would edit configuration — and instruction files it will later read — without being asked (the CLI's repotory-init is the terminal twin)"},
 
 	// ---- knowledge sources / memory -----------------------------------------
 	"GetKnowledgeSources":        {SurfaceDesktopOnly, "", "plugins settings tab"},

@@ -835,7 +835,11 @@ export type AgentSetupCode =
 
 /** What happened to one file the registration touched. */
 export interface AgentFileResult {
-  /** The client the file belongs to ('claude', 'cursor', 'vscode', 'windsurf'). */
+  /**
+   * The client the file belongs to ('claude', 'cursor', 'vscode', 'windsurf').
+   * Empty for the instruction files of ADR-0043: AGENTS.md is read by every
+   * agent, so naming one client would misreport what the file is for.
+   */
   client: string
   /** The absolute path of the file. */
   path: string
@@ -864,6 +868,11 @@ export interface AgentSetupReport {
   hook?: AgentFileResult
   /** The .claude/settings.json entry pointing at the hook. */
   hook_settings?: AgentFileResult
+  /**
+   * The project instruction files that received the managed repotory block
+   * (ADR-0043), one entry per file. Undefined when not requested.
+   */
+  instructions?: AgentFileResult[]
   /** Per-file failures; a half-succeeded registration is reported, not hidden. */
   warnings?: string[]
 }

@@ -114,6 +114,12 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
   const [pickedClients, setPickedClients] = useState<string[]>([])
   const [targetProject, setTargetProject] = useState('')
   const [withHook, setWithHook] = useState(true)
+  // ADR-0043: the managed repotory block in AGENTS.md / CLAUDE.md. On by
+  // default alongside the hook — the two are independent halves of the same
+  // problem (the hook only exists for Claude Code; the instruction file is what
+  // every other agent reads). Both write into files the user tracks in git, so
+  // both are reported per file below and neither is silent.
+  const [withInstructions, setWithInstructions] = useState(true)
   const [scanAfter, setScanAfter] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [agentReport, setAgentReport] = useState<AgentSetupReport | null>(null)
@@ -282,7 +288,7 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
     if (!targetProject || pickedClients.length === 0) return
     setConnecting(true)
     try {
-      const report = await setupAgentClients(Number(targetProject), pickedClients, withHook)
+      const report = await setupAgentClients(Number(targetProject), pickedClients, withHook, withInstructions)
       setAgentReport(report)
       if (report.code) return
       if (scanAfter) {
@@ -471,6 +477,14 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
           <label className={s.agentCheck}>
             <input
               type="checkbox"
+              checked={withInstructions}
+              onChange={(e) => setWithInstructions(e.target.checked)}
+            />
+            <span>{t('settings.agentClientsInstructions')}</span>
+          </label>
+          <label className={s.agentCheck}>
+            <input
+              type="checkbox"
               checked={scanAfter}
               onChange={(e) => setScanAfter(e.target.checked)}
             />
@@ -510,6 +524,13 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
                     <code>{agentReport.hook_settings.path}</code>
                   </li>
                 )}
+                {(agentReport.instructions ?? []).map((f, i) => (
+                  <li key={`instr-${f.path}-${i}`} className={f.status === 'failed' ? s.agentStatusError : undefined}>
+                    <span className={s.agentFileStatus}>{t(AGENT_STATUS_KEYS[f.status])}</span>
+                    <code>{f.path}</code>
+                    {f.note && <span className={s.agentFileNote}>{f.note}</span>}
+                  </li>
+                ))}
               </ul>
               {(agentReport.warnings ?? []).map((w, i) => (
                 <p key={i} className={s.agentStatusError} role="status">{w}</p>

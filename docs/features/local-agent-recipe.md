@@ -84,7 +84,12 @@ opencode 的服务器名会成为工具前缀，所以你看到的工具名是 `
 结束工作前调用 repotory_handoff，写清这次做了什么、踩了什么坑、下一步该做什么。
 ```
 
-不依赖模型自觉的做法是客户端侧的 hook（Claude Code 的 SessionEnd hook，见 [AI 集成](ai-integration.md) 的「会话结束自动交接」一节）；opencode 这类没有 hook 机制的客户端，把上面两句写进 `AGENTS.md` 或系统提示词。
+不依赖模型自觉的做法有两条，且都已经是产品能力（[ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)）：
+
+- **Claude Code 的 SessionEnd hook**（见 [AI 集成](ai-integration.md) 的「会话结束自动交接」一节）——会话一结束必定触发，**只有这一家客户端有**。
+- **把上面那两句写进项目的 `AGENTS.md` 与 `CLAUDE.md`**——`repotory-init --with-instructions` 或桌面端「接入 AI 客户端」里那个勾选就是干这件事的，任何读这两个文件的 agent（opencode / Codex / Cursor…）都会照做。
+
+两条并存：hook 兜住「忘了收尾」，指令文件兜住「根本不用 Claude Code」。指令文件把「记一笔」从必定发生变成大概率发生——模型读到了，服从不保证。
 
 ## 真机验证记录（2026-10-29）
 

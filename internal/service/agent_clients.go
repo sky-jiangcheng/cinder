@@ -81,6 +81,9 @@ type AgentSetupReport struct {
 	Hook *agentinit.FileResult `json:"hook,omitempty"`
 	// HookSettings is the .claude/settings.json entry pointing at the hook.
 	HookSettings *agentinit.FileResult `json:"hook_settings,omitempty"`
+	// Instructions lists the project instruction files that received the managed
+	// block, one entry per file (ADR-0043). nil when not requested.
+	Instructions []agentinit.FileResult `json:"instructions,omitempty"`
 	// Warnings collects the per-file failures. A registration that half
 	// succeeded is reported, not hidden behind one boolean.
 	Warnings []string `json:"warnings,omitempty"`
@@ -105,13 +108,20 @@ func AgentClientNames() []string {
 // projectID names the project whose directory receives the client-local
 // configuration. clients are the client names ("claude", "cursor", "vscode",
 // "windsurf"); withHook additionally installs the Claude Code SessionEnd hook
-// that writes the handoff note when a session ends.
+// that writes the handoff note when a session ends; withInstructions writes the
+// managed repotory_* block into the project's instruction files (ADR-0043) —
+// the protocol-neutral half, since the hook only exists for Claude Code.
+//
+// The two are independent switches and neither replaces the other: the hook
+// catches "the user forgot to wrap up", the instruction file catches "the user
+// is not in Claude Code". Both land in the same CreateHandoffNote path, so a
+// handoff never comes in two shapes.
 //
 // A refusal is returned as a code in the report, not as an error: "the project
 // is a container, not a project" is an answer the UI can render, and it must
 // not look like a crash. An error is reserved for the service failing to look
 // at all (an unreadable database row).
-func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook bool) (AgentSetupReport, error) {
+func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook, withInstructions bool) (AgentSetupReport, error) {
 	var report AgentSetupReport
 
 	selected, err := parseAgentClients(clients)
@@ -150,9 +160,10 @@ func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook 
 	}
 
 	res, err := agentinit.Register(agentinit.Options{
-		TargetDir: dir,
-		Clients:   selected,
-		WithHook:  withHook,
+		TargetDir:        dir,
+		Clients:          selected,
+		WithHook:         withHook,
+		WithInstructions: withInstructions,
 	})
 	if err != nil {
 		if errors.Is(err, agentinit.ErrBinaryNotFound) {
@@ -167,6 +178,7 @@ func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook 
 	report.Files = res.Files
 	report.Hook = res.Hook
 	report.HookSettings = res.HookSettings
+	report.Instructions = res.Instructions
 	report.Warnings = res.Warnings
 	return report, nil
 }

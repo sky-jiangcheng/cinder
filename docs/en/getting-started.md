@@ -23,8 +23,12 @@ If your daily development revolves around Claude Code, Cursor, or Windsurf in th
 # 1. Download and install repotory-mcp (macOS / Linux)
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
 
-# 2. Automatically register MCP with installed agents + configure session auto-capture hooks
-node scripts/repotory-init/index.mjs --with-hook
+# 2. Register MCP with the installed agents and write the
+#    "read context at the start / hand off at the end" instructions into the
+#    project's AGENTS.md and CLAUDE.md (any agent that reads them will follow);
+#    --with-hook additionally installs the Claude Code session-end hook (that
+#    mechanism exists in Claude Code only)
+node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # Or add manually to Claude Code:
 claude mcp add repotory -- "$(which repotory-mcp)"

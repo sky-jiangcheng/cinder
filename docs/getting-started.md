@@ -23,8 +23,10 @@ Repotory 是面向 AI 编程 Agent 的本地优先记忆层与工作台。其核
 # 1. 下载并安装 repotory-mcp（macOS / Linux）
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
 
-# 2. 一键注册 MCP 到所有已安装 Agent 并配置会话自动交接钩子
-node scripts/repotory-init/index.mjs --with-hook
+# 2. 一键注册 MCP 到所有已安装 Agent，并把「开局读上下文 / 收尾写交接」
+#    写进项目的 AGENTS.md 与 CLAUDE.md（任何读它们的 agent 都会照做）；
+#    --with-hook 再额外装 Claude Code 的会话结束钩子（只有这一家有）
+node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # 或者在 Claude Code 中手动添加：
 claude mcp add repotory -- "$(which repotory-mcp)"
