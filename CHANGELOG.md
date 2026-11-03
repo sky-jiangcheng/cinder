@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **dev 依赖的 high 全部清零，剩一项按主版本政策按住（2026-11-03）**：`web/` 的 `npm audit` **22 项（12 moderate / 10 high）→ 13 项（13 moderate / 0 high）**。前提先说清：`npm audit --omit=dev` 一直是 **0 漏洞**——**运行时依赖（react / dompurify / marked / katex / mermaid / chart.js 等 12 项）没有一条带漏洞，且这些都不随桌面应用与两个 IDE 插件分发**，本轮打到的是本地构建 / lint / 测试链。`audit fix` 自动收掉 5 个直接病灶：`brace-expansion` 5.0.9 → 5.0.12（两条 DoS：嵌套大括号的无界递归、`{a},b}` 重写的平方时间）、`browserslist` 4.28.5 → 4.29.5（无界内存增长 + 不受信输入致原型写入/崩溃）、`baseline-browser-mapping` 2.10.42 → 2.11.35（无效输入致进程终止）、`zod` 4.4.3 → **4.6.7**（`audit` 对它写的是「No fix available」，实际 `fix` 找到了升法——**不把工具的一句话当结论**），`caniuse-lite` / `electron-to-chromium` / `node-releases` / `update-browserslist-db` 随动。**`web/package.json` 一字未改**，只动锁文件——全是传递依赖。**剩一项 `minimatch <11.0.1`（globparts 放大 DoS）故意不修**：eslint 自己声明 `minimatch: ^10.2.6`，而 minimatch 11 是**主版本跳跃**，与本仓对 typescript / jsdom 主版本的既有政策同族，留给 dependabot 单独出 PR（已记入 TODO「用户动作 / 外部依赖」）。**验收**：`npm test` 49 文件 413 例全绿、`npm run lint`（0 error 0 warning）、`npm run build`、`check-i18n-keys`、`check-version-drift` 全绿。**两条环境坑记一笔**：① 本机 `node` 默认 v20.19.5 而 `.nvmrc` 钉 24，用 v20 跑 `npm test` 会让 49 个文件全报 `undici … createZstdDecompress .bind`——**看起来像仓库坏了，正是 3.6 那条**；② `~/.npm/_cacache` 里有 root 属主文件（npm 旧版 bug 的遗留），本轮把 `--cache` 指到仓外绕过，**没有跑 `sudo chown`**——那是本机环境改动，不属于仓库该管的事，也不该由一次依赖升级顺手做掉
+
 ## [2.28.0] - 2026-11-03
 
 ### 变更
