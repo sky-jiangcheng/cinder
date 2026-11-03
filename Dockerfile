@@ -7,7 +7,15 @@
 # Docker cannot read a file into FROM, so the ARG default is a copy of it —
 # scripts/check-version-drift.mjs fails CI when the two drift apart, which is
 # the same SSOT-plus-a-gate shape as the app version in wails.json.
+#
+# Both ARGs below MUST stay ABOVE the first FROM: an ARG declared before any
+# FROM is a global ARG and can be referenced by a FROM line, while one declared
+# inside a stage is stage-scoped and invisible to the next FROM. Getting this
+# wrong fails the build with "UndefinedArgInFrom" and an empty base image
+# name (golang:-alpine) — and the local `docker build` is the only place it
+# shows up, so it was caught by CI on the first push.
 ARG NODE_VERSION=24
+ARG GO_VERSION=1.26.10
 FROM node:${NODE_VERSION}-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
@@ -25,7 +33,8 @@ RUN npm run build:server
 # hold — an image can move BACKWARDS, and a shipped binary would then carry a
 # Go patch nobody scanned. go.mod's `toolchain` line and every workflow use the
 # same version; scripts/check-version-drift.mjs fails CI when they drift apart.
-ARG GO_VERSION=1.26.10
+# GO_VERSION itself is declared above the first FROM (it must be global to be
+# usable in a FROM line).
 FROM golang:${GO_VERSION}-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
