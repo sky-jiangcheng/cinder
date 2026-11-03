@@ -31,6 +31,33 @@ updates:
     labels:
       - "dependencies"
       - "npm"
+    # Two dependencies are held at their major version on purpose.
+    #
+    # A grouped PR that mixes a major bump with a dozen patch bumps is
+    # unmergeable the moment the major turns out to be incompatible — and
+    # the incompatibility surfaces as a red CI on the WHOLE group, which
+    # reads like "the repo is broken" when in fact one package moved.
+    #
+    #   typescript  the compiler is a toolchain migration, not a dependency
+    #               update. typescript-eslint's peer range (>=4.8.4 <6.1.0)
+    #               does not admit TypeScript 7 yet, so `npm ci` fails to
+    #               resolve at all — the install never reaches the tests.
+    #   jsdom       a major of jsdom pulls a newer undici, whose engines
+    #               floor is node >= 22.19.0 — above the node 20 CI runs.
+    #               It installs, then every test file dies loading:
+    #               undici/lib/interceptor/decompress.js calls
+    #               createZstdDecompress.bind(...) on a function node 20
+    #               does not have.
+    #
+    # Both become their own PR once the ecosystem catches up, which is
+    # where a reviewer can actually look at them.
+    ignore:
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "jsdom"
+        update-types:
+          - "version-update:semver-major"
     groups:
       web-deps:
         patterns:
