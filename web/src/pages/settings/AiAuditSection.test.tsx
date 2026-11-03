@@ -209,7 +209,13 @@ describe('AiAuditSection the call list', () => {
     // panel's first paint), so waiting for the status CALL to happen is not
     // the same as waiting for the text to be on screen. On a slow machine
     // the two are far enough apart to fail the assertion.
-    expect(await screen.findByText(/还没有调用记录/)).toBeTruthy()
+    //
+    // The 2s wait is the same one the other slow-wait assertions in this
+    // suite use: findBy* defaults to 1s, which is not "the text never
+    // appears", it is "the machine took longer than a second". That
+    // default is what reddened CI on 2026-11-01 — the assertion was
+    // correct, the clock was short.
+    expect(await screen.findByText(/还没有调用记录/, undefined, { timeout: 2000 })).toBeTruthy()
     expect(screen.queryByTestId('ai-audit-table')).toBeNull()
   })
 })
