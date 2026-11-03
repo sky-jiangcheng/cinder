@@ -19,6 +19,7 @@ vi.mock('react-i18next', () => ({
 
 import { createHandoff, getProjects } from '../api/client'
 import HandoffComposer from './HandoffComposer'
+import { lagged } from '../test/renderReady' // ADR-0026 probe: REPO_TEST_LAG_MS re-opens the window
 
 const mockProjects = vi.mocked(getProjects)
 const mockCreate = vi.mocked(createHandoff)
@@ -30,7 +31,7 @@ const projects = [
 beforeEach(() => {
   mockProjects.mockReset()
   mockCreate.mockReset()
-  mockProjects.mockResolvedValue(projects)
+  mockProjects.mockImplementation(() => lagged(projects))
   mockCreate.mockResolvedValue({ note_id: 42, title: 'Session Handoff', tags: 'handoff' })
 })
 
@@ -42,12 +43,18 @@ describe('HandoffComposer', () => {
 
   it('keeps the save button disabled until a summary and one section are filled', async () => {
     render(<HandoffComposer open onClose={() => {}} />)
-    await waitFor(() => expect(mockProjects).toHaveBeenCalled())
+    // The summary textarea only renders once the project list has landed, so
+    // waiting for it IS waiting for the data. Waiting for the mock CALL
+    // instead is a race: the promise resolves in a microtask and React
+    // flushes the state update a tick later, so the synchronous
+    // getByPlaceholderText below could run before the textarea exists.
+    // That is what reddened CI on 2026-11-03.
+    const summary = await screen.findByPlaceholderText('handoff.summaryPlaceholder', undefined, { timeout: 2000 })
 
     const save = screen.getByRole('button', { name: 'handoff.save' }) as HTMLButtonElement
     expect(save.disabled).toBe(true)
 
-    fireEvent.change(screen.getByPlaceholderText('handoff.summaryPlaceholder'), {
+    fireEvent.change(summary, {
       target: { value: 'shipped the composer' },
     })
     expect(save.disabled).toBe(true) // summary alone is not enough
@@ -62,9 +69,9 @@ describe('HandoffComposer', () => {
     const onClose = vi.fn()
     const onCreated = vi.fn()
     render(<HandoffComposer open onClose={onClose} onCreated={onCreated} />)
-    await waitFor(() => expect(mockProjects).toHaveBeenCalled())
+    const summary = await screen.findByPlaceholderText('handoff.summaryPlaceholder', undefined, { timeout: 2000 })
 
-    fireEvent.change(screen.getByPlaceholderText('handoff.summaryPlaceholder'), {
+    fireEvent.change(summary, {
       target: { value: 'shipped the composer' },
     })
     // The first section textarea is Changes, the second Decisions.
@@ -89,9 +96,9 @@ describe('HandoffComposer', () => {
     mockCreate.mockRejectedValue(new Error('summary is required'))
     const onClose = vi.fn()
     render(<HandoffComposer open onClose={onClose} />)
-    await waitFor(() => expect(mockProjects).toHaveBeenCalled())
+    const summary = await screen.findByPlaceholderText('handoff.summaryPlaceholder', undefined, { timeout: 2000 })
 
-    fireEvent.change(screen.getByPlaceholderText('handoff.summaryPlaceholder'), {
+    fireEvent.change(summary, {
       target: { value: 'shipped the composer' },
     })
     fireEvent.change(screen.getAllByPlaceholderText('handoff.sectionPlaceholder')[0], {

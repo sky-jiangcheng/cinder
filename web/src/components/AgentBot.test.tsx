@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import i18n from '../i18n' // real i18next instance — otherwise t() returns raw keys
+import { lagged } from '../test/renderReady' // ADR-0026 probe: REPO_TEST_LAG_MS re-opens the window
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
@@ -52,18 +53,18 @@ beforeEach(() => {
   vi.clearAllMocks()
   window.localStorage.clear()
   resetDashboardScope()
-  vi.mocked(getConfig).mockResolvedValue({
+  vi.mocked(getConfig).mockImplementation(() => lagged({
     config: { ai_chat_base_url: 'http://localhost:11434', ai_chat_model: 'qwen' },
     scan_roots: [],
-  })
-  vi.mocked(getSummary).mockResolvedValue({
+  }))
+  vi.mocked(getSummary).mockImplementation(() => lagged({
     date: Y, repo_count: 5, total_files: 12, total_added: 340,
     total_deleted: 90, my_added: 120, my_deleted: 30, my_files: 4, is_workday: true,
-  })
-  vi.mocked(getHeatmapData).mockResolvedValue({
+  }))
+  vi.mocked(getHeatmapData).mockImplementation(() => lagged({
     days: [{ date: Y, lines_added: 30, lines_deleted: 6, commits: 7 }],
-  })
-  vi.mocked(getProjects).mockResolvedValue([])
+  }))
+  vi.mocked(getProjects).mockImplementation(() => lagged([]))
 })
 
 function renderBot(path = '/dashboard') {

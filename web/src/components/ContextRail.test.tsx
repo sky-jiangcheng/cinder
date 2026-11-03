@@ -16,6 +16,7 @@ import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
 import { screen, waitFor, render, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import i18n from '../i18n' // real i18next instance — otherwise t() returns raw keys
+import { lagged } from '../test/renderReady' // ADR-0026 probe: REPO_TEST_LAG_MS re-opens the window
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
@@ -80,8 +81,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockBrowse.mockResolvedValue([])
-  mockPending.mockResolvedValue([])
+  mockBrowse.mockImplementation(() => lagged([]))
+  mockPending.mockImplementation(() => lagged([]))
 })
 
 describe('ContextRail (ADR-0038 decision 6 — the global search box is gone)', () => {
@@ -96,15 +97,17 @@ describe('ContextRail (ADR-0038 decision 6 — the global search box is gone)', 
   })
 
   it('still shows the review queue and the recently updated pages', async () => {
-    mockPending.mockResolvedValue([pendingPage()])
-    mockBrowse.mockResolvedValue([pageSummary()])
+    mockPending.mockImplementation(() => lagged([pendingPage()]))
+    mockBrowse.mockImplementation(() => lagged([pageSummary()]))
     renderRail()
     await waitFor(() => expect(mockBrowse).toHaveBeenCalled())
 
     expect(screen.getByText('待审核')).toBeTruthy()
     expect(await screen.findByText('待审核页 A')).toBeTruthy()
     expect(screen.getByText('最近更新')).toBeTruthy()
-    expect(screen.getByText('网关设计')).toBeTruthy()
+    // The page title comes from the fetched list, so it waits for the data
+    // instead of relying on the findBy above to have flushed the render.
+    expect(await screen.findByText('网关设计')).toBeTruthy()
   })
 
   it('keeps the collapsed handle working', async () => {

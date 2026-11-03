@@ -22,6 +22,7 @@ vi.mock('react-i18next', () => ({
 
 import { getAIAuditStatus, listAICallAudit, updateConfig } from '../../api/client'
 import AiAuditSection from './AiAuditSection'
+import { lagged } from '../../test/renderReady' // ADR-0026 probe: REPO_TEST_LAG_MS re-opens the window
 
 const baseStatus = {
   audit_enabled: false,
@@ -44,8 +45,8 @@ function renderSection(config: Record<string, string> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(getAIAuditStatus).mockResolvedValue({ ...baseStatus })
-  vi.mocked(listAICallAudit).mockResolvedValue([])
+  vi.mocked(getAIAuditStatus).mockImplementation(() => lagged({ ...baseStatus }))
+  vi.mocked(listAICallAudit).mockImplementation(() => lagged([]))
 })
 
 describe('AiAuditSection defaults', () => {
@@ -223,11 +224,10 @@ describe('AiAuditSection the call list', () => {
 describe('AiAuditSection the honest-limits copy', () => {
   it('states that the trail keeps a hash, not the text', async () => {
     renderSection()
-    await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
-
-    // The copy is the contract: if this ever stops being shown, the panel
-    // would imply it stores prompts.
-    expect(screen.getByText(/SHA-256/)).toBeTruthy()
+    // The copy renders inside `{status && …}` — it appears only once the
+    // status has landed. Waiting for the mock CALL is not waiting for the
+    // text; the text is what we mean to wait for.
+    expect(await screen.findByText(/SHA-256/, undefined, { timeout: 2000 })).toBeTruthy()
   })
 
   it('states that streaming output review cannot recall what was shown', async () => {
@@ -249,15 +249,18 @@ describe('AiAuditSection the honest-limits copy', () => {
     // ships a sentence instead, the English UI would show that sentence
     // verbatim — so the panel must be the only place the wording lives.
     renderSection()
-    await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
-
-    expect(screen.getByText(/只增不删/)).toBeTruthy()
+    expect(await screen.findByText(/只增不删/, undefined, { timeout: 2000 })).toBeTruthy()
   })
 
   it('says nothing about retention when the policy is unknown', async () => {
     vi.mocked(getAIAuditStatus).mockResolvedValue({ ...baseStatus, retention: 'something_else' })
     renderSection()
-    await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
+    // Wait for the stats block, which renders exactly when the status has
+    // landed. Without this anchor the absence assertion below would pass
+    // VACUOUSLY: before the status arrives the retention wording is not on
+    // screen either, so "not there" would be true whether or not the panel
+    // would have said it.
+    await screen.findByTestId('ai-audit-stats', undefined, { timeout: 2000 })
 
     // An unrecognised policy must not be papered over with the append-only
     // wording — that would claim a guarantee the backend did not make.
