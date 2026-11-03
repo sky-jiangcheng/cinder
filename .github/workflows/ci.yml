@@ -273,7 +273,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Check version & count drift
         run: node scripts/check-version-drift.mjs
@@ -303,7 +303,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Install sharp
         run: npm install --no-save sharp
@@ -337,7 +337,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Check ZH/EN mirror
         run: node scripts/check-docs-mirror.mjs
@@ -358,7 +358,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Check interpolation syntax
         run: node scripts/check-i18n-interpolation.mjs
@@ -383,7 +383,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Check key coverage
         run: node scripts/check-i18n-keys.mjs
@@ -406,7 +406,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Check skill package
         run: node scripts/check-skill-package.mjs
@@ -430,7 +430,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       # Runs the wiring script inside a temp directory; the user's real client
       # configuration is never touched.
@@ -463,7 +463,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: npm
           # The plugin has its own lockfile; the default lookup would key on the
           # repo root one instead.
@@ -524,7 +524,7 @@ jobs:
         with:
           # web deps require Node >= 20.19; the bare '20' major resolves to the
           # newest 20.x, which satisfies that. Matches release.yml / pages.yml.
-          node-version: '20'
+          node-version-file: '.nvmrc'
           # npm cache keyed on web/package-lock.json. cache-dependency-path is
           # required because the default lookup stops at the repo root and
           # would key on the stray 87-byte root lockfile instead.
@@ -574,7 +574,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: ide/vscode/package-lock.json
 

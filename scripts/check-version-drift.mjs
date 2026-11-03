@@ -17,6 +17,8 @@
 //   ③ ADR 集合 —— docs/adr/ 的文件集合 = 中英两份索引列出的集合，且两份索引逐条对应
 //   ④ 扫描频率 —— SECURITY.md 承诺的扫描频率必须与 .github/dependabot.yml 一致
 //   ⑤ 工具数量 —— 随包分发的 skill 参考文档声称的工具数 = cmd/mcp 测试钉死的工具数
+//   ⑥ Node 版本 —— .nvmrc 是 SSOT，Dockerfile 的 ARG 默认值必须与它相等，
+//      且所有 setup-node 步骤必须读 .nvmrc 而不是各写一份字面量
 //
 // 运行：node scripts/check-version-drift.mjs
 // 结果：全过 → exit 0；发现漂移 → 打印清单并 exit 1。
@@ -253,6 +255,58 @@ if (toolNames.length === 0) {
   }
 }
 
+// ------------------------------------------------------------ ⑥ Node 版本 ----
+
+// .nvmrc 是 Node 版本的 SSOT：nvm 读它、actions/setup-node 的 node-version-file
+// 读它、Dockerfile 的 ARG NODE_VERSION 抄它。这三处曾经各写一遍——CI 与 release
+// 写着 node 20，而 Dockerfile 已经是 node:24-alpine。node 20 又已于 2026-04
+// 结束支持（EOL），于是 CI 跑的是一个不再收安全更新的运行时。
+//
+// 抄写不掉的就不抄：Dockerfile 的 FROM 读不了文件，所以那里留一份 ARG 默认值，
+// 由本检查兜住漂移；工作流则一律改成 node-version-file，连抄写的机会都不给。
+
+const nodeMajor = (v) => Number(String(v).trim().replace(/^v/, '').split('.')[0])
+
+if (!existsSync(join(root, '.nvmrc'))) {
+  issues.push('.nvmrc: 不存在——它是 Node 版本的 SSOT')
+} else {
+  const nodeSSOT = read('.nvmrc').trim()
+  if (!/^\d+(\.\d+)*$/.test(nodeSSOT)) {
+    issues.push(`.nvmrc: 读不出版本号（读到 "${nodeSSOT}"）`)
+  } else {
+    const wantMajor = nodeMajor(nodeSSOT)
+    const dockerArg = read('Dockerfile').match(/ARG\s+NODE_VERSION=([^\s]+)/)?.[1]
+    if (!dockerArg) {
+      issues.push('Dockerfile: 读不到 ARG NODE_VERSION')
+    } else if (nodeMajor(dockerArg) !== wantMajor) {
+      report('Dockerfile · ARG NODE_VERSION', `主版本 ${wantMajor}（.nvmrc = ${nodeSSOT}）`, dockerArg)
+    }
+
+    const wfDir = join(root, '.github/workflows')
+    for (const f of readdirSync(wfDir).filter((f) => f.endsWith('.yml'))) {
+      const rel = `.github/workflows/${f}`
+      const lines = read(rel).split('\n')
+      lines.forEach((line, i) => {
+        if (!line.includes('actions/setup-node@')) return
+        // 这一步的 with 块：从 uses: 往下读到下一个列表项为止
+        const scope = []
+        for (let j = i + 1; j < lines.length && j < i + 8; j++) {
+          if (/^\s*-\s/.test(lines[j])) break
+          scope.push(lines[j])
+        }
+        const block = scope.join('\n')
+        if (/^\s*node-version\s*:/m.test(block)) {
+          issues.push(
+            `${rel}:${i + 1} 的 setup-node 还写着字面量 node-version —— 改成 node-version-file: '.nvmrc'`
+          )
+        } else if (!/node-version-file\s*:/.test(block)) {
+          issues.push(`${rel}:${i + 1} 的 setup-node 既没有 node-version 也没有 node-version-file`)
+        }
+      })
+    }
+  }
+}
+
 // ------------------------------------------------------------------ 结论 ----
 
 if (issues.length > 0) {
@@ -268,5 +322,5 @@ if (issues.length > 0) {
 console.log(
   `version drift OK: SSOT ${ssot}（10 处产物清单一致）、TODO 现状速查一致、` +
     `ADR ${adrFiles.length} 份中英索引对齐、扫描频率与 dependabot.yml 一致、` +
-    `MCP ${toolNames.length} 个工具与 skill 文档一致。`
+    `MCP ${toolNames.length} 个工具与 skill 文档一致、Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致。`
 )

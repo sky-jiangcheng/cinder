@@ -3,7 +3,12 @@
 # want `repotory-server` (same-origin web UI) on a volume they can back up.
 
 # --- web dist (server build: base /, output web/dist-server) -----------------
-FROM node:24-alpine AS web
+# The Node version comes from .nvmrc (the single source for the whole repo).
+# Docker cannot read a file into FROM, so the ARG default is a copy of it —
+# scripts/check-version-drift.mjs fails CI when the two drift apart, which is
+# the same SSOT-plus-a-gate shape as the app version in wails.json.
+ARG NODE_VERSION=24
+FROM node:${NODE_VERSION}-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci

@@ -7,8 +7,10 @@ Repotory（仓库与包标识 `repotory`）是本地优先的 Git 知识库桌�
 | 依赖 | 版本 | 用途 |
 |------|------|------|
 | Go | 1.25+ | 后端（零 CGO，内嵌 SQLite） |
-| Node.js | 20+ | 前端构建与测试 |
+| Node.js | 24+（见 `.nvmrc`） | 前端构建与测试 |
 | Wails CLI | v2.13+（可选） | `wails dev` 开发模式 |
+
+> Node 版本以仓库根的 `.nvmrc` 为准（`nvm use` 会自动读它，CI 的 `actions/setup-node` 也读它）。这是本仓库 Node 版本的**唯一来源**——`Dockerfile` 里有一份同值默认，`scripts/check-version-drift.mjs` 会在两者漂移时报红。node 20 已于 2026-04 结束支持（EOL），所以下限是 24 而不是 20。
 
 ## 本地开发
 

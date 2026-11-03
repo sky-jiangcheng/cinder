@@ -3,6 +3,9 @@
   "private": true,
   "version": "2.26.0",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node ../scripts/prune-web-dist.mjs web/dist",

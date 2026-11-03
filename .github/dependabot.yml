@@ -31,7 +31,7 @@ updates:
     labels:
       - "dependencies"
       - "npm"
-    # Two dependencies are held at their major version on purpose.
+    # Two dependencies are handled on purpose, each for its own reason.
     #
     # A grouped PR that mixes a major bump with a dozen patch bumps is
     # unmergeable the moment the major turns out to be incompatible — and
@@ -42,26 +42,27 @@ updates:
     #               update. typescript-eslint's peer range (>=4.8.4 <6.1.0)
     #               does not admit TypeScript 7 yet, so `npm ci` fails to
     #               resolve at all — the install never reaches the tests.
+    #               A major here is not merely unwanted, it is UNINSTALLABLE,
+    #               so it is ignored outright until the peer range opens.
     #   jsdom       a major of jsdom pulls a newer undici, whose engines
-    #               floor is node >= 22.19.0 — above the node 20 CI runs.
-    #               It installs, then every test file dies loading:
-    #               undici/lib/interceptor/decompress.js calls
-    #               createZstdDecompress.bind(...) on a function node 20
-    #               does not have.
-    #
-    # Both become their own PR once the ecosystem catches up, which is
-    # where a reviewer can actually look at them.
+    #               floor is node >= 22.19.0. It used to sit above the node
+    #               20 that CI ran — and then every test file died loading
+    #               (undici/lib/interceptor/decompress.js calls
+    #               createZstdDecompress.bind(...) on a function node 20 does
+    #               not have). CI now runs the node 24 that .nvmrc pins, so
+    #               jsdom majors are installable again — they are excluded
+    #               from the GROUP so they arrive as their own PR, which is
+    #               where a reviewer can look at them.
     ignore:
       - dependency-name: "typescript"
-        update-types:
-          - "version-update:semver-major"
-      - dependency-name: "jsdom"
         update-types:
           - "version-update:semver-major"
     groups:
       web-deps:
         patterns:
           - "*"
+        exclude-patterns:
+          - "jsdom"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

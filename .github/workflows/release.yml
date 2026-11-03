@@ -140,7 +140,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -390,7 +390,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: ide/vscode/package-lock.json
 
@@ -648,7 +648,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: '20'
+          node-version-file: '.nvmrc'
           cache: npm
           cache-dependency-path: ide/vscode/package-lock.json
 
