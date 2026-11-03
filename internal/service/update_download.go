@@ -139,6 +139,9 @@ type updateDownloader struct {
 	// to persist the state, so a finished download survives a restart. It
 	// runs OUTSIDE the lock: it does file I/O.
 	onTerminal func(DownloadState)
+	// settled is closed when the current attempt has fully finished, terminal
+	// hook included. Created per attempt; nil when nothing has been started.
+	settled chan struct{}
 }
 
 // newUpdateDownloader returns a downloader in the idle state.
@@ -177,6 +180,9 @@ func (d *updateDownloader) begin(ctx context.Context, version, fileName string, 
 		RemainingSeconds: -1,
 	}
 	d.running = true
+	// The signal this attempt ends with — closed once the terminal hook has
+	// run, so a waiter knows the download's last write is behind it.
+	d.settled = make(chan struct{})
 	return reqCtx, nil
 }
 
@@ -200,12 +206,42 @@ func (d *updateDownloader) finish(phase, errMsg string) {
 	}
 	snap := d.state
 	hook := d.onTerminal
+	settled := d.settled
 	d.mu.Unlock()
 
 	// The hook persists the snapshot to disk, so it runs after the lock is
 	// released — a slow disk must not block a progress read.
 	if hook != nil {
 		hook(snap)
+	}
+	// Only now is the attempt really over: the hook's write is behind us.
+	if settled != nil {
+		close(settled)
+	}
+}
+
+// waitSettled blocks until the current attempt has fully finished, terminal
+// hook included.
+//
+// "Not running" is not the same as "done": the downloader clears its running
+// flag BEFORE the terminal hook persists the state, so a caller that tears
+// down the files the download writes — a test removing its temp directory —
+// would race that last write and fail with "directory not empty". Waiting
+// for the attempt to settle is what makes that teardown deterministic.
+func (d *updateDownloader) waitSettled(timeout time.Duration) bool {
+	d.mu.Lock()
+	ch := d.settled
+	d.mu.Unlock()
+	if ch == nil {
+		return true
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-ch:
+		return true
+	case <-timer.C:
+		return false
 	}
 }
 

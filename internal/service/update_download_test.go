@@ -106,6 +106,18 @@ func TestStartUpdateDownloadRejectsSecondConcurrentDownload(t *testing.T) {
 		t.Fatalf("error should say a download is in progress, got: %v", err)
 	}
 	_ = dir
+
+	// Stop the in-flight download and WAIT for the attempt to settle.
+	//
+	// The download is still writing into the temp directory this test is
+	// about to tear down; a goroutine still running when the temp dir is
+	// removed fails the test at random with "directory not empty". Waiting
+	// for the attempt to settle (terminal hook included) makes the teardown
+	// deterministic instead of a coin flip.
+	_ = svc.CancelUpdateDownload()
+	if !svc.updates.waitSettled(5 * time.Second) {
+		t.Fatal("the download did not settle within 5s")
+	}
 }
 
 func TestDownloadUpdateVerifiesDigestAndKeepsFile(t *testing.T) {
