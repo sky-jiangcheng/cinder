@@ -5,11 +5,13 @@ import DOMPurify from 'dompurify'
 import {
   beginUpdateDownload,
   getAppVersion,
+  getInstallInfo,
   getUpdateState,
   openBrowserURL,
   runUpdateCheck,
   subscribeUpdateState,
   updateConfig,
+  type InstallInfo,
   type UpdateState,
 } from '../../api/client'
 import s from './UpdatesTab.module.css'
@@ -55,10 +57,16 @@ export default function UpdatesTab({ initialConfig, showMessage }: Props) {
   // that cannot reach it — which is exactly the machine that needs the proxy
   // field below.
   const [currentVersion, setCurrentVersion] = useState('')
+  // Where this build is installed and where update bundles are written.
+  // Both questions used to have no answer inside the app.
+  const [installInfo, setInstallInfo] = useState<InstallInfo | null>(null)
 
   useEffect(() => subscribeUpdateState(setState), [])
   useEffect(() => {
     getAppVersion().then(setCurrentVersion)
+  }, [])
+  useEffect(() => {
+    getInstallInfo().then(setInstallInfo).catch(() => undefined)
   }, [])
 
   const checking = state.phase === 'checking'
@@ -114,7 +122,10 @@ export default function UpdatesTab({ initialConfig, showMessage }: Props) {
     }
     setStartingDownload(true)
     try {
-      await beginUpdateDownload(info.download_url, info.download_name, info.download_sha256 ?? '')
+      // The version travels with the request: it goes into the file name
+      // (so the bundle in Downloads says which release it is) and into the
+      // progress snapshot (so the dialog names it too).
+      await beginUpdateDownload(info.download_url, info.download_name, info.download_sha256 ?? '', info.latest)
       showMessage(t('settings.updates.downloadStarted'))
     } catch (e: unknown) {
       showMessage(t('settings.updates.downloadStartFailed', { msg: e instanceof Error ? e.message : t('common.unknownError') }))
@@ -234,6 +245,23 @@ export default function UpdatesTab({ initialConfig, showMessage }: Props) {
             </button>
           </div>
           <p className="form-hint">{t('settings.updates.proxyHint')}</p>
+        </div>
+      </section>
+
+      {/* Where this build lives and where bundles are written. A user who
+          installed from a DMG and then asked "where did it install?" had no
+          answer to look at; the app knew and never said. */}
+      <section className="settings-group">
+        <h2 className="settings-group-title">{t('settings.updates.installInfoTitle')}</h2>
+        <div className={s.pathList}>
+          <div className={s.pathItem}>
+            <span className={s.pathLabel}>{t('settings.updates.installPathLabel')}</span>
+            <span className={s.pathValue}>{installInfo?.install_path || t('settings.updates.pathUnknown')}</span>
+          </div>
+          <div className={s.pathItem}>
+            <span className={s.pathLabel}>{t('settings.updates.downloadDirLabel')}</span>
+            <span className={s.pathValue}>{installInfo?.download_dir || t('settings.updates.pathUnknown')}</span>
+          </div>
         </div>
       </section>
     </div>

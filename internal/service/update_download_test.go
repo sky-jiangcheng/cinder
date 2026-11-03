@@ -61,15 +61,15 @@ func waitForPhase(t *testing.T, d *updateDownloader, timeout time.Duration, phas
 func stubDownloadDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	prev := downloadDirForTest
-	downloadDirForTest = func() (string, error) { return dir, nil }
-	t.Cleanup(func() { downloadDirForTest = prev })
+	prev := downloadDirOverride()
+	setDownloadDirForTest(func() (string, error) { return dir, nil })
+	t.Cleanup(func() { setDownloadDirForTest(prev) })
 	return dir
 }
 
 func TestStartUpdateDownloadRejectsNonHTTPS(t *testing.T) {
 	svc, _ := setupService(t)
-	err := svc.StartUpdateDownload("http://example.com/x.dmg", "x.dmg", "")
+	err := svc.StartUpdateDownload("http://example.com/x.dmg", "x.dmg", "", "")
 	if err == nil {
 		t.Fatal("expected an error for a non-https URL")
 	}
@@ -93,12 +93,12 @@ func TestStartUpdateDownloadRejectsSecondConcurrentDownload(t *testing.T) {
 	newUpdateHTTPClient = func(proxy string) (*http.Client, error) { return srv.Client(), nil }
 	t.Cleanup(func() { newUpdateHTTPClient = prevClient })
 
-	if err := svc.StartUpdateDownload(srv.URL+"/x.dmg", "x.dmg", ""); err != nil {
+	if err := svc.StartUpdateDownload(srv.URL+"/x.dmg", "x.dmg", "", ""); err != nil {
 		t.Fatalf("first start: %v", err)
 	}
 	waitForPhase(t, svc.updates, 2*time.Second, DownloadRunning)
 
-	err := svc.StartUpdateDownload(srv.URL+"/y.dmg", "y.dmg", "")
+	err := svc.StartUpdateDownload(srv.URL+"/y.dmg", "y.dmg", "", "")
 	if err == nil {
 		t.Fatal("expected the second concurrent download to be rejected")
 	}
@@ -122,7 +122,7 @@ func TestDownloadUpdateVerifiesDigestAndKeepsFile(t *testing.T) {
 	newUpdateHTTPClient = func(proxy string) (*http.Client, error) { return srv.Client(), nil }
 	t.Cleanup(func() { newUpdateHTTPClient = prevClient })
 
-	if err := svc.StartUpdateDownload(srv.URL+"/repotory-test.dmg", "repotory-test.dmg", "sha256:"+digest); err != nil {
+	if err := svc.StartUpdateDownload(srv.URL+"/repotory-test.dmg", "repotory-test.dmg", "sha256:"+digest, ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	st := waitForPhase(t, svc.updates, 5*time.Second, DownloadDone)
@@ -168,7 +168,7 @@ func TestDownloadUpdateDeletesFileOnDigestMismatch(t *testing.T) {
 	t.Cleanup(func() { newUpdateHTTPClient = prevClient })
 
 	wrong := strings.Repeat("ab", 32)
-	if err := svc.StartUpdateDownload(srv.URL+"/repotory-test.dmg", "repotory-test.dmg", wrong); err != nil {
+	if err := svc.StartUpdateDownload(srv.URL+"/repotory-test.dmg", "repotory-test.dmg", wrong, ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	st := waitForPhase(t, svc.updates, 5*time.Second, DownloadFailed)
@@ -200,7 +200,7 @@ func TestDownloadUpdateRejectsFileNameWithPathTraversal(t *testing.T) {
 	newUpdateHTTPClient = func(proxy string) (*http.Client, error) { return srv.Client(), nil }
 	t.Cleanup(func() { newUpdateHTTPClient = prevClient })
 
-	if err := svc.StartUpdateDownload(srv.URL+"/x", "../../escape.dmg", ""); err != nil {
+	if err := svc.StartUpdateDownload(srv.URL+"/x", "../../escape.dmg", "", ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	st := waitForPhase(t, svc.updates, 5*time.Second, DownloadDone)
@@ -229,7 +229,7 @@ func TestCancelUpdateDownloadStopsIt(t *testing.T) {
 	newUpdateHTTPClient = func(proxy string) (*http.Client, error) { return srv.Client(), nil }
 	t.Cleanup(func() { newUpdateHTTPClient = prevClient })
 
-	if err := svc.StartUpdateDownload(srv.URL+"/x.dmg", "x.dmg", ""); err != nil {
+	if err := svc.StartUpdateDownload(srv.URL+"/x.dmg", "x.dmg", "", ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	waitForPhase(t, svc.updates, 2*time.Second, DownloadRunning)

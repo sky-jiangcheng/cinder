@@ -503,7 +503,16 @@
       "downloadCancel": "Cancel download",
       "downloadLater": "Later",
       "downloadOpenInstaller": "Open installer",
-      "downloadExpand": "Expand the download progress"
+      "downloadExpand": "Expand the download progress",
+      "downloadSavedAt": "Installer saved to {{path}}",
+      "downloadReveal": "Show in file manager",
+      "downloadEject": "Eject installer volume",
+      "downloadEjected": "The installer volume was ejected. Restart Repotory to use the new version.",
+      "installInfoTitle": "Installation",
+      "installPathLabel": "Install path",
+      "downloadDirLabel": "Download folder",
+      "pathUnknown": "Unknown",
+      "downloadEjectNone": "No mounted installer volume was found."
     },
     "audit": {
       "title": "AI call audit and content review",

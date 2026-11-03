@@ -140,10 +140,24 @@
   color: var(--success);
 }
 
+/* Where the bundle landed. The path is long and the folder is not obvious
+   ("Downloads" is, but the full path is what the user can copy), so it wraps
+   instead of being truncated. */
+.pathLine {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  user-select: text;
+}
+
 .modalActions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  /* The finished state carries four actions; on a narrow window they wrap
+     onto a second row instead of overflowing the dialog. */
+  flex-wrap: wrap;
   margin-top: 18px;
 }
 

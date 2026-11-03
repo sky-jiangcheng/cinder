@@ -9,8 +9,11 @@ vi.mock('../api/client', async (importOriginal) => {
   return {
     ...actual,
     abortUpdateDownload: vi.fn(),
+    ejectInstallerVolume: vi.fn(),
+    getInstallInfo: vi.fn(),
     openDownloadedUpdate: vi.fn(),
     openDownloadModal: vi.fn(),
+    revealDownloadedUpdate: vi.fn(),
     minimizeDownloadModal: vi.fn(),
     subscribeDownloadState: vi.fn(),
     syncDownloadState: vi.fn(),
@@ -20,15 +23,21 @@ vi.mock('../api/client', async (importOriginal) => {
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
-      const parts = key.split('.')
-      return opts && 'version' in opts ? `${parts[parts.length - 1]}:${opts.version}` : key
+      // The path and the version are interpolated so the tests can assert
+      // that the dialog actually SHOWS them, not just that a label exists.
+      if (opts && 'version' in opts) return `${key}:${opts.version}`
+      if (opts && 'path' in opts) return `${key}:${opts.path}`
+      return key
     },
   }),
 }))
 
 import {
   abortUpdateDownload,
+  ejectInstallerVolume,
+  getInstallInfo,
   openDownloadedUpdate,
+  revealDownloadedUpdate,
   subscribeDownloadState,
   syncDownloadState,
   type DownloadSnapshot,
@@ -48,6 +57,7 @@ const running: DownloadSnapshot = {
     path: '',
     error: '',
     checksum_verified: false,
+    installer_ejected: false,
   },
 }
 
@@ -76,6 +86,7 @@ const idle: DownloadSnapshot = {
     path: '',
     error: '',
     checksum_verified: false,
+    installer_ejected: false,
   },
 }
 
@@ -89,6 +100,15 @@ beforeEach(() => {
     return () => {}
   })
   vi.mocked(syncDownloadState).mockResolvedValue(idle.state)
+  vi.mocked(getInstallInfo).mockResolvedValue({
+    version: '2.13.1',
+    platform: 'darwin',
+    install_path: '/Applications/Repotory.app',
+    executable_path: '/Applications/Repotory.app/Contents/MacOS/repotory',
+    download_dir: '/Users/me/Downloads',
+  })
+  vi.mocked(ejectInstallerVolume).mockResolvedValue(true)
+  vi.mocked(revealDownloadedUpdate).mockResolvedValue(undefined)
 })
 
 describe('UpdateDownloadUI', () => {
@@ -140,6 +160,73 @@ describe('UpdateDownloadUI', () => {
     // visible, just without the modal taking over the screen.
     expect(screen.getByRole('button', { name: 'settings.updates.downloadExpand' })).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  // The finished state used to say "download complete" and nothing else, so
+  // the user could not tell where the file went, which version it was, or
+  // how to get rid of the mounted installer volume.
+  it('shows the full path of the finished bundle', () => {
+    current = done
+    render(<UpdateDownloadUI />)
+    expect(screen.getByText(/repotory-darwin-arm64\.dmg/)).toBeTruthy()
+  })
+
+  it('names the version in the finished dialog', () => {
+    current = done
+    render(<UpdateDownloadUI />)
+    expect(screen.getByText(/2\.13\.1/)).toBeTruthy()
+  })
+
+  it('reveals the bundle in the file manager', () => {
+    current = done
+    render(<UpdateDownloadUI />)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.updates.downloadReveal' }))
+    expect(revealDownloadedUpdate).toHaveBeenCalledWith('/tmp/repotory-darwin-arm64.dmg')
+  })
+
+  it('offers to eject the installer volume on macOS', async () => {
+    current = done
+    render(<UpdateDownloadUI />)
+    const button = await screen.findByRole('button', { name: 'settings.updates.downloadEject' })
+    fireEvent.click(button)
+    await waitFor(() => expect(ejectInstallerVolume).toHaveBeenCalled())
+  })
+
+  it('does not offer the eject action where no image is mounted', async () => {
+    vi.mocked(getInstallInfo).mockResolvedValue({
+      version: '2.13.1',
+      platform: 'linux',
+      install_path: '/usr/bin/repotory',
+      executable_path: '/usr/bin/repotory',
+      download_dir: '/home/me/Downloads',
+    })
+    current = done
+    render(<UpdateDownloadUI />)
+    // The platform arrives asynchronously; wait for the dialog to settle.
+    await waitFor(() => expect(getInstallInfo).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'settings.updates.downloadEject' })).toBeNull()
+  })
+
+  it('reports when there was no installer volume to eject', async () => {
+    vi.mocked(ejectInstallerVolume).mockResolvedValue(false)
+    current = done
+    render(<UpdateDownloadUI />)
+    const button = await screen.findByRole('button', { name: 'settings.updates.downloadEject' })
+    fireEvent.click(button)
+    await waitFor(() => expect(ejectInstallerVolume).toHaveBeenCalled())
+    // "Nothing was mounted" is a real answer, and it is not the same answer
+    // as "the volume is gone".
+    expect(await screen.findByText('settings.updates.downloadEjectNone')).toBeTruthy()
+  })
+
+  it('confirms the eject when a volume was actually unmounted', async () => {
+    vi.mocked(ejectInstallerVolume).mockResolvedValue(true)
+    current = done
+    render(<UpdateDownloadUI />)
+    const button = await screen.findByRole('button', { name: 'settings.updates.downloadEject' })
+    fireEvent.click(button)
+    await waitFor(() => expect(ejectInstallerVolume).toHaveBeenCalled())
+    expect(await screen.findByText('settings.updates.downloadEjected')).toBeTruthy()
   })
 })
 

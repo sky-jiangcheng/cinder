@@ -39,6 +39,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -96,6 +97,11 @@ type DownloadState struct {
 	// release published. False for a download whose release shipped no
 	// digest (never for a verified one).
 	ChecksumVerified bool `json:"checksum_verified"`
+	// InstallerEjected reports whether the mounted installer disk image has
+	// been unmounted. A mounted DMG shows up as a second "Repotory" in the
+	// Finder sidebar, so the app ejects it once the install is detected (or
+	// when the user asks for it).
+	InstallerEjected bool `json:"installer_ejected"`
 }
 
 // Percent returns the completion percentage, 0 when the total size is
@@ -128,6 +134,11 @@ type updateDownloader struct {
 	// running marks an active download (as opposed to a finished one whose
 	// state is still worth showing).
 	running bool
+	// onTerminal is called with the final snapshot whenever a download
+	// reaches a terminal phase (done, failed, canceled). The service uses it
+	// to persist the state, so a finished download survives a restart. It
+	// runs OUTSIDE the lock: it does file I/O.
+	onTerminal func(DownloadState)
 }
 
 // newUpdateDownloader returns a downloader in the idle state.
@@ -180,7 +191,6 @@ func (d *updateDownloader) setState(fn func(*DownloadState)) {
 // cancel) and records the terminal phase.
 func (d *updateDownloader) finish(phase, errMsg string) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	d.running = false
 	d.state.Phase = phase
 	d.state.Error = errMsg
@@ -188,6 +198,45 @@ func (d *updateDownloader) finish(phase, errMsg string) {
 		d.state.Speed = 0
 		d.state.RemainingSeconds = -1
 	}
+	snap := d.state
+	hook := d.onTerminal
+	d.mu.Unlock()
+
+	// The hook persists the snapshot to disk, so it runs after the lock is
+	// released — a slow disk must not block a progress read.
+	if hook != nil {
+		hook(snap)
+	}
+}
+
+// setTerminalHook installs the callback run when a download reaches a
+// terminal phase.
+//
+// It is installed when the download STARTS, not when the downloader is built:
+// the callback carries the state file's path, and that path must be resolved
+// while the caller still holds the context that decides where it is.
+func (d *updateDownloader) setTerminalHook(fn func(DownloadState)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onTerminal = fn
+}
+
+// restore installs a persisted snapshot as the current state.
+//
+// It is how a download that finished before the last restart stays reachable:
+// the bundle is still on disk, and the app remembers where it put it.
+func (d *updateDownloader) restore(st DownloadState) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.state = st
+}
+
+// setInstallerEjected records that the mounted installer disk image has been
+// unmounted.
+func (d *updateDownloader) setInstallerEjected(ejected bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.state.InstallerEjected = ejected
 }
 
 // cancelCurrent aborts the in-flight download, if any.
@@ -270,35 +319,107 @@ func (r *downloadProgressReporter) remaining(now time.Time) int64 {
 
 // updateDownloadDir returns the directory the downloaded bundles land in.
 //
-// It lives under the platform config dir rather than the system temp dir:
-// the file must survive the app's restart (the user may close the app
-// mid-download and come back to it), and it must not be swept by the OS
-// while the user is deciding whether to install it.
+// It is the operating system's "Downloads" folder — the same place a browser
+// drops a file the user asked for, and the same place the user will look for
+// one afterwards. The previous home was the app's own config directory, which
+// is the right place for state but the wrong place for a file the user is
+// meant to find, drag and install by hand; a bundle hidden under
+// "~/Library/Application Support" is a bundle the user never finds.
+//
+// The Downloads folder also survives a restart and is not swept by the OS,
+// which is why it is a better home for an installer than a temp directory.
 //
 // The result is resolved once, synchronously, when the download starts —
 // the directory is then passed to the download goroutine by value. That
 // keeps the lookup off the goroutine, where a test that swaps the
 // directory would race with the swap.
 func resolveDownloadDir() (string, error) {
-	configDir, err := os.UserConfigDir()
+	downloadDir, err := userDownloadsDir()
 	if err != nil {
-		return "", fmt.Errorf("无法定位用户数据目录：%w", err)
+		return "", err
 	}
-	downloadDir := filepath.Join(configDir, "repotory", "updates")
 	if err := os.MkdirAll(downloadDir, 0750); err != nil {
-		return "", fmt.Errorf("无法创建更新目录：%w", err)
+		return "", fmt.Errorf("无法创建下载目录：%w", err)
 	}
 	return downloadDir, nil
 }
 
+// userDownloadsDir resolves the platform's Downloads folder.
+//
+// It is a best-effort resolution, not a guarantee of the user's configured
+// location: Windows can relocate Downloads into OneDrive and macOS can
+// relocate it into iCloud, and neither exposes the relocated path without
+// platform-specific APIs this project does not depend on. The home
+// directory's "Downloads" is the location every platform defaults to, and
+// it is where the user will look.
+func userDownloadsDir() (string, error) {
+	// Linux's XDG session exports the configured directory when it has one.
+	if runtime.GOOS == "linux" {
+		if dir := strings.TrimSpace(os.Getenv("XDG_DOWNLOAD_DIR")); dir != "" {
+			return dir, nil
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("无法定位用户主目录：%w", err)
+	}
+	return filepath.Join(home, "Downloads"), nil
+}
+
+// versionedFileName inserts the release version into the bundle's file name,
+// so the file the user finds in Downloads says which version it is:
+// "repotory-2.25.0-darwin-arm64.dmg" instead of a name that is byte-for-byte
+// identical for every release ever published.
+//
+// Without it, "is this download the current version?" is unanswerable by
+// looking at the file — the name never changes, so an old bundle sitting in
+// Downloads looks exactly like a fresh one.
+func versionedFileName(base, version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return base
+	}
+	// Only the shapes CI actually publishes are decorated; anything else
+	// (including a name that already carries a version) is left alone.
+	if !appAssetPattern.MatchString(base) {
+		return base
+	}
+	return "repotory-" + version + "-" + strings.TrimPrefix(base, "repotory-")
+}
+
+// updateOverridesMu guards the test-only path overrides below.
+//
+// They are package-level so a test can point them at a temp dir, but the
+// download runs on its OWN goroutine and the terminal hook persists the state
+// from there: a plain variable would then be a data race — the test's cleanup
+// restoring the default while that goroutine reads the override. Both sides
+// take this lock, so the read and the write are ordered.
+var updateOverridesMu sync.RWMutex
+
 // downloadDirForTest overrides the download directory in tests, so a test
-// never writes into the real user data directory. Nil at runtime.
+// never writes into the real user's Downloads folder. Nil at runtime.
 var downloadDirForTest func() (string, error)
+
+// setDownloadDirForTest installs (or, with nil, removes) the download
+// directory override.
+func setDownloadDirForTest(fn func() (string, error)) {
+	updateOverridesMu.Lock()
+	defer updateOverridesMu.Unlock()
+	downloadDirForTest = fn
+}
+
+// downloadDirOverride returns the current download directory override, or nil
+// when there is none.
+func downloadDirOverride() func() (string, error) {
+	updateOverridesMu.RLock()
+	defer updateOverridesMu.RUnlock()
+	return downloadDirForTest
+}
 
 // downloadDirectory resolves the directory the bundles land in.
 func downloadDirectory() (string, error) {
-	if downloadDirForTest != nil {
-		return downloadDirForTest()
+	if override := downloadDirOverride(); override != nil {
+		return override()
 	}
 	return resolveDownloadDir()
 }
@@ -319,7 +440,7 @@ func downloadDirectory() (string, error) {
 // The file is written to a ".part" sibling first and renamed only after the
 // digest matches, so a half-written file is never mistaken for a complete
 // one (a killed app, a full disk, a cancel).
-func (s *Service) downloadUpdate(ctx context.Context, d *updateDownloader, downloadDir string, client *http.Client, url, fileName, expectedSHA256 string) {
+func (s *Service) downloadUpdate(ctx context.Context, d *updateDownloader, downloadDir string, client *http.Client, url, fileName, version, expectedSHA256 string) {
 	// The file name comes from the release API, but it reaches a filesystem
 	// path here — so it is reduced to its base name and any path separator is
 	// stripped rather than trusted.
@@ -328,6 +449,9 @@ func (s *Service) downloadUpdate(ctx context.Context, d *updateDownloader, downl
 		d.finish(DownloadFailed, "下载文件名无效")
 		return
 	}
+	// The version goes INTO the name, so the file the user finds in
+	// Downloads says which release it is.
+	safeName = versionedFileName(safeName, version)
 	finalPath := filepath.Join(downloadDir, safeName)
 	partPath := finalPath + ".part"
 
@@ -465,11 +589,16 @@ func (s *Service) downloadUpdate(ctx context.Context, d *updateDownloader, downl
 // assets GitHub's own release API reported; a caller cannot point it at an
 // arbitrary URL.
 //
+// version is the release tag the bundle belongs to ("2.25.0"). It goes into
+// the file name, so the bundle the user finds in Downloads says which
+// release it is — and it is reported in the progress state, so the progress
+// dialog can name the version instead of leaving the user to guess.
+//
 // The download runs in the background: the binding returns as soon as it has
 // started, and the frontend polls UpdateDownloadState for progress. That is
 // the same shape as the check itself (one HTTP call, one verdict) and avoids
 // a second transport for progress events.
-func (s *Service) StartUpdateDownload(url, fileName, sha256 string) error {
+func (s *Service) StartUpdateDownload(url, fileName, sha256, version string) error {
 	if !strings.HasPrefix(url, "https://") {
 		return fmt.Errorf("拒绝非 https 下载地址：%q", url)
 	}
@@ -484,15 +613,26 @@ func (s *Service) StartUpdateDownload(url, fileName, sha256 string) error {
 	if err != nil {
 		return err
 	}
+	// The state file's path is resolved here for the same reason — and with it
+	// the terminal hook that writes the finished download's snapshot. The hook
+	// runs on the download goroutine, so it must carry the path rather than
+	// look it up there.
+	statePath, err := downloadStatePath()
+	if err != nil {
+		statePath = ""
+	}
+	s.updates.setTerminalHook(func(st DownloadState) {
+		s.persistDownloadStateAt(statePath, st)
+	})
 	client, err := newUpdateHTTPClient(strings.TrimSpace(proxy))
 	if err != nil {
 		return err
 	}
-	reqCtx, err := s.updates.begin(s.bgContext(), "", fileName, 0)
+	reqCtx, err := s.updates.begin(s.bgContext(), version, fileName, 0)
 	if err != nil {
 		return err
 	}
-	go s.downloadUpdate(reqCtx, s.updates, downloadDir, client, url, fileName, normalizeDigest(sha256))
+	go s.downloadUpdate(reqCtx, s.updates, downloadDir, client, url, fileName, version, normalizeDigest(sha256))
 	return nil
 }
 
@@ -554,8 +694,177 @@ func (s *Service) OpenDownloadedUpdate(path string) error {
 	if path != "" && path != st.Path {
 		return fmt.Errorf("打开失败：路径与当前下载不一致")
 	}
-	return openDownloadedBundle(st.Path)
+	if err := openDownloadedBundle(st.Path); err != nil {
+		return err
+	}
+	// The installer is on screen now; watch for the install so the mounted
+	// disk image can be ejected afterwards (a mounted DMG is the second
+	// "Repotory" icon the user is left with).
+	s.watchInstallerInstall(st.Version)
+	return nil
 }
+
+// RevealDownloadedUpdate shows the downloaded bundle in the OS file manager.
+//
+// It is the answer to "where did that download go?": the bundle sits in the
+// Downloads folder, and this puts the file manager on it — selected, so the
+// name is visible — instead of making the user go and look.
+func (s *Service) RevealDownloadedUpdate(path string) error {
+	st := s.updates.snapshot()
+	if st.Phase != DownloadDone {
+		return fmt.Errorf("没有已完成的下载可显示")
+	}
+	if path != "" && path != st.Path {
+		return fmt.Errorf("显示失败：路径与当前下载不一致")
+	}
+	return revealPath(st.Path)
+}
+
+// revealPath selects a file in the OS file manager.
+func revealPath(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("找不到下载文件：%v", err)
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return runDetached("open", "-R", path)
+	case "windows":
+		return runDetached("explorer", "/select,"+path)
+	default:
+		return runDetached("xdg-open", filepath.Dir(path))
+	}
+}
+
+// EjectInstallerVolume unmounts the installer disk image on macOS.
+//
+// It reports whether a volume was ejected: "nothing was mounted" is a normal
+// answer, not an error, and it is the answer on every platform that has no
+// mounted image at all.
+//
+// Only a volume that actually holds THIS app's bundle is ejected, so a disk
+// image the user mounted themselves is never touched.
+func (s *Service) EjectInstallerVolume() (bool, error) {
+	vol := installerVolume()
+	if vol == "" {
+		return false, nil
+	}
+	if err := runCommand("hdiutil", "detach", vol); err != nil {
+		return false, fmt.Errorf("推出安装包卷失败：%v", err)
+	}
+	s.updates.setInstallerEjected(true)
+	return true, nil
+}
+
+// installerVolume returns the mounted volume that holds this app's
+// installer bundle, or "" when none is mounted.
+//
+// macOS keeps a mounted DMG in /Volumes until it is ejected, and that volume
+// shows up as a second "Repotory" in the Finder sidebar — the "two app
+// icons" a user sees after installing. Nothing unmounts it on its own:
+// closing the DMG window does not eject the volume.
+func installerVolume() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	return installerVolumeIn("/Volumes", installerBundleName())
+}
+
+// installerVolumeIn returns the mounted volume under root that holds the
+// bundle named bundleName, or "" when none is mounted.
+//
+// The root and the bundle name are parameters so the rule can be tested
+// without a real /Volumes and without a real installed app: the rule that
+// matters is "only a volume holding THIS app's bundle", and a test can
+// neither mount a disk image nor install the app to prove it.
+func installerVolumeIn(root, bundleName string) string {
+	if bundleName == "" {
+		return ""
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		p := filepath.Join(root, e.Name())
+		if info, err := os.Stat(filepath.Join(p, bundleName+".app")); err == nil && info.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+// watchInstallerInstall waits for the new build to land in the install path
+// and ejects the installer volume once it does.
+//
+// The user installs by dragging the app out of the mounted DMG onto
+// /Applications. The DMG stays mounted afterwards, so the Finder shows the
+// installed app AND the still-mounted installer. Closing the DMG window does
+// not unmount it, and no other program will.
+//
+// The watcher reads the INSTALLED bundle's version, not the running process:
+// the running process keeps the old code in memory after the bundle is
+// replaced, so the version on disk is the honest signal.
+func (s *Service) watchInstallerInstall(target string) {
+	target = strings.TrimSpace(target)
+	if runtime.GOOS != "darwin" || target == "" {
+		return
+	}
+	bundle := appBundlePath(runningExecutable())
+	if bundle == "" {
+		return
+	}
+	deadline := time.Now().Add(installerWatchWindow)
+	s.bgGo("update-install-watch", func(ctx context.Context) {
+		ticker := time.NewTicker(installerWatchInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			if bundleVersion(bundle) == target {
+				if _, err := s.EjectInstallerVolume(); err == nil {
+					s.updates.setInstallerEjected(true)
+				}
+				return
+			}
+			if time.Now().After(deadline) {
+				return
+			}
+		}
+	})
+}
+
+// installerWatchInterval is how often the installed bundle's version is
+// checked while an installer is open.
+const installerWatchInterval = 3 * time.Second
+
+// installerWatchWindow is how long the watcher keeps looking. The user may
+// take a while to drag the app across, but not ten minutes.
+const installerWatchWindow = 10 * time.Minute
+
+// bundleVersion reads CFBundleShortVersionString from an app bundle's
+// Info.plist. Empty when the bundle has no readable version.
+func bundleVersion(bundle string) string {
+	buf, err := os.ReadFile(filepath.Join(bundle, "Contents", "Info.plist"))
+	if err != nil {
+		return ""
+	}
+	m := plistVersionRE.FindSubmatch(buf)
+	if m == nil {
+		return ""
+	}
+	return string(m[1])
+}
+
+// plistVersionRE pulls the version string out of an Info.plist. The file is
+// a small XML plist, and matching the key/value pair directly avoids
+// depending on a plist parser for one field.
+var plistVersionRE = regexp.MustCompile(`CFBundleShortVersionString</key>\s*<string>([^<]*)</string>`)
 
 // openDownloadedBundle shows a downloaded bundle to the user in the way that
 // platform expects.
@@ -594,5 +903,26 @@ func runDetached(name string, args ...string) error {
 	// Releasing the process handle without waiting keeps it from becoming a
 	// zombie on Unix.
 	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// helperCommandTimeout bounds a helper process that IS waited on.
+const helperCommandTimeout = 30 * time.Second
+
+// runCommand runs a helper process to completion, with a timeout.
+//
+// Unlike runDetached it waits, because the caller needs the exit status:
+// "did the installer volume actually unmount?" is the whole question.
+//
+// It is a var so a test can stub the helper out instead of really ejecting
+// something.
+var runCommand = func(name string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), helperCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s %s: %w（%s）", name, strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }

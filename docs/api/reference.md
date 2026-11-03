@@ -203,6 +203,13 @@ cd .. && go build -o repotory-server ./cmd/server
 |------|------|
 | `CheckUpdate()` | 查 GitHub Releases 的 `latest`，返回 `{current, latest, has_update, release_url, published_at, notes, assets[], download_url, download_name}`。`download_url` 指向与当前平台匹配的 app bundle（MCP server / IDE 插件产物已排除），该 release 无本平台产物时为空，前端回落发布页 |
 | `OpenBrowserURL(url)` | 用系统浏览器打开 URL（仅允许 https），供更新卡片的下载按钮使用；不下载、不替换二进制 |
+| `StartUpdateDownload(url, fileName, sha256, version)` | 把本平台的 release bundle 下载到系统下载目录并校验 SHA256。`url` 必须是 https；`version` 写进文件名（`repotory-2.25.0-darwin-arm64.dmg`）。下载在后台跑，绑定的 `UpdateDownloadState` 轮询进度 |
+| `UpdateDownloadState()` | 下载进度快照 `{phase, version, file_name, downloaded, total, speed, remaining_seconds, path, error, checksum_verified, installer_ejected}`。应用重启后仍会恢复上一次完成的下载（文件已不在则不恢复） |
+| `CancelUpdateDownload()` | 中断正在进行的下载 |
+| `OpenDownloadedUpdate(path)` | 把已下载的 bundle 交给系统安装器（macOS 挂载 dmg，Windows/Linux 在文件管理器中定位它）。不替换正在运行的程序 |
+| `RevealDownloadedUpdate(path)` | 在系统文件管理器中选中该文件（macOS `open -R`、Windows `explorer /select,`、Linux `xdg-open`）——回答「下载到哪了」 |
+| `EjectInstallerVolume()` | 推出 macOS 上挂载的安装包卷，返回是否真的推出了。只推出装着本应用 bundle 的卷 |
+| `GetInstallInfo()` | 返回 `{version, platform, install_path, executable_path, download_dir}`——安装路径与下载目录，由运行中的二进制自报 |
 
 ## AI 导出与插件
 

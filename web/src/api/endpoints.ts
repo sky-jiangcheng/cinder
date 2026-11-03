@@ -47,6 +47,7 @@ import type {
   WikiPendingPage,
   WikiPageSummary,
   WikiPageDetail,
+  InstallInfo,
 } from './types'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -933,12 +934,14 @@ export function checkUpdate(): Promise<UpdateInfo> {
 /**
  * Start downloading the release bundle for this platform.
  *
- * url / fileName / sha256 come straight from the UpdateInfo the check
- * returned; the backend rejects anything that is not https. The download
- * runs in the background — poll updateDownloadState for progress.
+ * url / fileName / sha256 / version come straight from the UpdateInfo the
+ * check returned; the backend rejects anything that is not https. The version
+ * goes into the file name, so the bundle the user finds in Downloads says
+ * which release it is. The download runs in the background — poll
+ * updateDownloadState for progress.
  */
-export function startUpdateDownload(url: string, fileName: string, sha256: string): Promise<void> {
-  return call<void>({ method: 'StartUpdateDownload', args: [url, fileName, sha256] })
+export function startUpdateDownload(url: string, fileName: string, sha256: string, version: string): Promise<void> {
+  return call<void>({ method: 'StartUpdateDownload', args: [url, fileName, sha256, version] })
 }
 
 /** The progress of the current (or last) update download. */
@@ -958,6 +961,41 @@ export function cancelUpdateDownload(): Promise<void> {
  */
 export function openDownloadedUpdate(path: string): Promise<void> {
   return call<void>({ method: 'OpenDownloadedUpdate', args: [path] })
+}
+
+/**
+ * Show the downloaded bundle in the OS file manager, selected.
+ *
+ * It is the answer to "where did that download go?": the bundle sits in the
+ * Downloads folder, and this puts the file manager on it instead of making
+ * the user go and look for it.
+ */
+export function revealDownloadedUpdate(path: string): Promise<void> {
+  return call<void>({ method: 'RevealDownloadedUpdate', args: [path] })
+}
+
+/**
+ * Unmount the installer disk image on macOS.
+ *
+ * A mounted DMG shows up as a second "Repotory" in the Finder sidebar, and
+ * closing its window does not unmount it. The app ejects it automatically once
+ * it detects the install; this is the manual way to do the same thing.
+ *
+ * Resolves to whether a volume was actually ejected — "nothing was mounted"
+ * is a normal answer, not an error.
+ */
+export function ejectInstallerVolume(): Promise<boolean> {
+  return call<boolean>({ method: 'EjectInstallerVolume', args: [] })
+}
+
+/**
+ * Where this build is installed, and where update bundles are written.
+ *
+ * Both questions used to have no answer inside the app: the bundle landed in
+ * a hidden config directory, and the install path appeared nowhere.
+ */
+export function getInstallInfo(): Promise<InstallInfo> {
+  return call<InstallInfo>({ method: 'GetInstallInfo', args: [] })
 }
 
 /**

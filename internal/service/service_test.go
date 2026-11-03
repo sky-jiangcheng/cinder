@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"testing"
 
 	"repotory/internal/core/git"
@@ -53,6 +54,15 @@ func setupService(t *testing.T) (*Service, *fakeGit) {
 		t.Fatalf("failed to init db: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
+	// The last update download is persisted in the user's data dir at
+	// runtime. A test must never read (or write) the real one — so the path
+	// points at a temp file for the whole test.
+	stateDir := t.TempDir()
+	prevStatePath := downloadStatePathOverride()
+	setDownloadStatePathForTest(func() (string, error) {
+		return filepath.Join(stateDir, "update-download.json"), nil
+	})
+	t.Cleanup(func() { setDownloadStatePathForTest(prevStatePath) })
 	fg := &fakeGit{ranges: map[string][]stats.DailyEntry{}}
 	return NewWithDeps(database, fg, nil, "me"), fg
 }

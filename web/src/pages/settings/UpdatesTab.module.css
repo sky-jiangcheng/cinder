@@ -108,6 +108,37 @@
   color: var(--text-tertiary);
 }
 
+/* ---- install info ---- */
+
+/* The two paths the user needs after an install: where the app lives, and
+   where update bundles are written. Both wrap — a long path is better on two
+   lines than cut off at the end. */
+.pathList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pathItem {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.pathLabel {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.pathValue {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  word-break: break-all;
+  user-select: text;
+}
+
 /* ---- toggle (same shape as PluginsTab's) ---- */
 .toggle {
   width: 42px;

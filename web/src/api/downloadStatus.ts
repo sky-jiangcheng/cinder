@@ -42,6 +42,7 @@ const emptyState: DownloadState = {
   path: '',
   error: '',
   checksum_verified: false,
+  installer_ejected: false,
 }
 
 let snapshot: DownloadSnapshot = { state: emptyState, modalOpen: false }
@@ -132,13 +133,17 @@ async function refreshDownloadState(): Promise<DownloadState> {
 /**
  * Start a download and begin polling its progress.
  *
+ * The version travels with the request so the backend can put it in the file
+ * name — the bundle the user finds in Downloads says which release it is —
+ * and report it in the progress snapshot.
+ *
  * Rejects when the backend refuses (a download already in flight, a proxy
  * misconfiguration), so the caller can show the reason.
  */
-export async function beginUpdateDownload(url: string, fileName: string, sha256: string): Promise<void> {
-  await startUpdateDownload(url, fileName, sha256)
+export async function beginUpdateDownload(url: string, fileName: string, sha256: string, version: string): Promise<void> {
+  await startUpdateDownload(url, fileName, sha256, version)
   publish({
-    state: { ...emptyState, phase: 'running', file_name: fileName },
+    state: { ...emptyState, phase: 'running', file_name: fileName, version },
     modalOpen: true,
   })
   await refreshDownloadState()

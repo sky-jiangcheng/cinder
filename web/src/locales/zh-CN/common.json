@@ -502,7 +502,16 @@
       "downloadCancel": "取消下载",
       "downloadLater": "稍后",
       "downloadOpenInstaller": "打开安装包",
-      "downloadExpand": "展开下载进度"
+      "downloadExpand": "展开下载进度",
+      "downloadSavedAt": "安装包已保存到 {{path}}",
+      "downloadReveal": "在文件管理器中显示",
+      "downloadEject": "推出安装包卷",
+      "downloadEjected": "安装包卷已推出，重启 Repotory 即可使用新版本。",
+      "installInfoTitle": "安装信息",
+      "installPathLabel": "安装路径",
+      "downloadDirLabel": "下载目录",
+      "pathUnknown": "未知",
+      "downloadEjectNone": "没有找到已挂载的安装包卷。"
     },
     "audit": {
       "title": "AI 调用审计与内容审查",

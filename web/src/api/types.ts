@@ -734,6 +734,26 @@ export interface DownloadState {
   error: string
   /** Whether the digest matched the one the release published. */
   checksum_verified: boolean
+  /** Whether the mounted installer disk image has been unmounted. */
+  installer_ejected: boolean
+}
+
+/**
+ * Where this build is installed and where update bundles are written.
+ *
+ * Mirrors internal/service.InstallInfo.
+ */
+export interface InstallInfo {
+  /** The running build's version. */
+  version: string
+  /** The OS this build runs on ("darwin" / "windows" / "linux"). */
+  platform: string
+  /** The application bundle this build runs from. */
+  install_path: string
+  /** The running binary itself. */
+  executable_path: string
+  /** The folder update bundles are written to. */
+  download_dir: string
 }
 
 /**

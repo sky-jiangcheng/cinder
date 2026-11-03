@@ -849,10 +849,12 @@ func (a *App) CheckUpdate() (*service.UpdateInfo, error) {
 // OpenDownloadedUpdate, so the user performs the install with the same
 // consent they give a browser download.
 //
-// url, fileName and sha256 come straight out of the UpdateInfo the check
-// returned; the backend rejects anything that is not https.
-func (a *App) StartUpdateDownload(url, fileName, sha256 string) error {
-	return a.svc.StartUpdateDownload(url, fileName, sha256)
+// url, fileName, sha256 and version come straight out of the UpdateInfo the
+// check returned; the backend rejects anything that is not https. The version
+// goes into the file name, so the bundle the user finds in Downloads says
+// which release it is.
+func (a *App) StartUpdateDownload(url, fileName, sha256, version string) error {
+	return a.svc.StartUpdateDownload(url, fileName, sha256, version)
 }
 
 // UpdateDownloadState returns the progress of the current (or last) update
@@ -870,6 +872,32 @@ func (a *App) CancelUpdateDownload() error {
 // install it (mounts the .dmg on macOS, reveals the folder elsewhere).
 func (a *App) OpenDownloadedUpdate(path string) error {
 	return a.svc.OpenDownloadedUpdate(path)
+}
+
+// RevealDownloadedUpdate shows the downloaded bundle in the OS file manager,
+// selected — the answer to "where did that download go?".
+func (a *App) RevealDownloadedUpdate(path string) error {
+	return a.svc.RevealDownloadedUpdate(path)
+}
+
+// EjectInstallerVolume unmounts the installer disk image on macOS.
+//
+// A mounted DMG shows up as a second "Repotory" in the Finder sidebar, and
+// closing its window does not unmount it. The app ejects it automatically
+// once it detects the install; this is the user's manual way to do the same
+// thing. It reports whether a volume was actually ejected.
+func (a *App) EjectInstallerVolume() (bool, error) {
+	return a.svc.EjectInstallerVolume()
+}
+
+// GetInstallInfo reports where this build is installed and where update
+// bundles are written.
+//
+// It exists because "where did it install?" and "where did the download
+// go?" used to have no answer inside the app: the bundle landed in a hidden
+// config directory, and the install path appeared nowhere.
+func (a *App) GetInstallInfo() *service.InstallInfo {
+	return a.svc.InstallInfo()
 }
 
 // OpenBrowserURL opens a URL in the system browser. Exists for the update

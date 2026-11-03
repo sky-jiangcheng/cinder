@@ -135,6 +135,10 @@ func NewWithDeps(database *sql.DB, provider git.Provider, runtime *pluginruntime
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	s := &Service{db: database, git: provider, rt: runtime, guser: gitUser, bgCtx: bgCtx, bgCancel: bgCancel}
 	s.updates = newUpdateDownloader()
+	// Every finished download is written to disk, so a bundle the user
+	// downloaded stays reachable after a restart (update_state.go). The hook
+	// itself is installed when a download STARTS: it carries the state file's
+	// path, which must be resolved on the caller's goroutine.
 	return s
 }
 
@@ -198,6 +202,11 @@ func (s *Service) SetImportEventHandler(fn func(ImportEventPayload)) {
 // Safe to call multiple times; only the first call has an effect.
 func (s *Service) Startup() {
 	s.startupOnce.Do(func() {
+		// The last update download is restored before anything else: a bundle
+		// the user already downloaded stays openable ("打开安装包" / "在文件
+		// 管理器中显示") across a restart, instead of the app forgetting it.
+		s.restorePersistedDownload()
+
 		// Incremental embedding (ADR-0012's 增删改即时生效) needs only the queue
 		// and a configured endpoint — never the plugin runtime — so it starts
 		// ahead of the rt guard below rather than being skipped by it.

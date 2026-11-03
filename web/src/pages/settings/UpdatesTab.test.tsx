@@ -8,6 +8,7 @@ vi.mock('../../api/client', async (importOriginal) => {
   return {
     ...actual,
     getAppVersion: vi.fn(),
+    getInstallInfo: vi.fn(),
     openBrowserURL: vi.fn(),
     updateConfig: vi.fn(),
     runUpdateCheck: vi.fn(),
@@ -28,8 +29,8 @@ vi.mock('react-i18next', () => ({
 }))
 
 import {
-  beginUpdateDownload, getAppVersion, getUpdateState, openBrowserURL, runUpdateCheck,
-  subscribeUpdateState, updateConfig,
+  beginUpdateDownload, getAppVersion, getInstallInfo, getUpdateState, openBrowserURL,
+  runUpdateCheck, subscribeUpdateState, updateConfig,
 } from '../../api/client'
 import UpdatesTab from './UpdatesTab'
 
@@ -61,6 +62,13 @@ const newerVersion = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getAppVersion).mockResolvedValue('2.12.3')
+  vi.mocked(getInstallInfo).mockResolvedValue({
+    version: '2.12.3',
+    platform: 'darwin',
+    install_path: '/Applications/Repotory.app',
+    executable_path: '/Applications/Repotory.app/Contents/MacOS/repotory',
+    download_dir: '/Users/me/Downloads',
+  })
   vi.mocked(getUpdateState).mockReturnValue({ phase: 'idle', info: null, error: '' })
   vi.mocked(subscribeUpdateState).mockReturnValue(() => {})
   vi.mocked(beginUpdateDownload).mockResolvedValue(undefined)
@@ -94,6 +102,9 @@ describe('UpdatesTab', () => {
         'https://example.invalid/repotory-darwin-arm64.dmg',
         'repotory-darwin-arm64.dmg',
         'sha256:abc',
+        // The version travels with the request: it goes into the file name
+        // and into the progress snapshot.
+        '2.13.0',
       ),
     )
     // The browser is NOT involved: the app fetches and verifies the bundle
@@ -110,6 +121,14 @@ describe('UpdatesTab', () => {
     renderTab()
     fireEvent.click(screen.getByRole('button', { name: 'settings.updates.download' }))
     await waitFor(() => expect(openBrowserURL).toHaveBeenCalledWith('https://example.invalid/release'))
+  })
+
+  it('shows where the app is installed and where bundles are written', async () => {
+    renderTab()
+    // The two questions a user has after an install: "where did it install?"
+    // and "where did the download go?". Both have an answer now.
+    expect(await screen.findByText('/Applications/Repotory.app')).toBeTruthy()
+    expect(await screen.findByText('/Users/me/Downloads')).toBeTruthy()
   })
 
   it('persists the auto-check switch under update_check_enabled', async () => {

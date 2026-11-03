@@ -151,12 +151,15 @@ var bindingSurfaces = map[string]BindingSurface{
 	"UpdateScanRoots": {SurfaceDesktopOnly, "", "granting new filesystem scope is a human decision"},
 
 	// ---- update check ----------------------------------------------------------
-	"CheckUpdate":          {SurfaceDesktopOnly, "", "desktop-app self-maintenance; headless and MCP users update through their own deployment channel"},
-	"OpenBrowserURL":       {SurfaceDesktopOnly, "", "opens the system browser for the update card's download button; an agent has no browser to open and no install to perform"},
-	"StartUpdateDownload":  {SurfaceDesktopOnly, "", "fetches a release bundle to a local file and verifies its digest; an agent has no installer to hand it to, and downloading on a user's behalf is a desktop-maintenance act"},
-	"UpdateDownloadState":  {SurfaceDesktopOnly, "", "progress of the desktop app's own update download; it is UI state for a download the agent cannot start"},
-	"CancelUpdateDownload": {SurfaceDesktopOnly, "", "abandons the desktop app's own update download; nothing else to cancel"},
-	"OpenDownloadedUpdate": {SurfaceDesktopOnly, "", "hands the downloaded bundle to the OS installer; an agent must not launch installers on the user's machine"},
+	"CheckUpdate":            {SurfaceDesktopOnly, "", "desktop-app self-maintenance; headless and MCP users update through their own deployment channel"},
+	"OpenBrowserURL":         {SurfaceDesktopOnly, "", "opens the system browser for the update card's download button; an agent has no browser to open and no install to perform"},
+	"StartUpdateDownload":    {SurfaceDesktopOnly, "", "fetches a release bundle to a local file and verifies its digest; an agent has no installer to hand it to, and downloading on a user's behalf is a desktop-maintenance act"},
+	"UpdateDownloadState":    {SurfaceDesktopOnly, "", "progress of the desktop app's own update download; it is UI state for a download the agent cannot start"},
+	"CancelUpdateDownload":   {SurfaceDesktopOnly, "", "abandons the desktop app's own update download; nothing else to cancel"},
+	"OpenDownloadedUpdate":   {SurfaceDesktopOnly, "", "hands the downloaded bundle to the OS installer; an agent must not launch installers on the user's machine"},
+	"RevealDownloadedUpdate": {SurfaceDesktopOnly, "", "shows the downloaded bundle in the OS file manager; a desktop affordance for a human holding the installer, and an agent has no file manager to show it in"},
+	"EjectInstallerVolume":   {SurfaceDesktopOnly, "", "unmounts the installer disk image on the user's machine; an agent must not change what the user's Finder shows"},
+	"GetInstallInfo":         {SurfaceDesktopOnly, "", "reports where the app is installed and where bundles are written; an agent asking this is asking about the human's machine layout, which it has no business doing"},
 
 	// ---- exports -------------------------------------------------------------
 	"GenerateLLMsTxt":       {SurfaceDesktopOnly, "", "the /api/ai_context REST twin serves agents and the dsh plugin; the binding feeds the UI preview"},

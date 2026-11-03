@@ -203,6 +203,13 @@ Desktop-only: headless and MCP users update through their own deployment channel
 |------|------|
 | `CheckUpdate()` | queries the GitHub Releases `latest` and returns `{current, latest, has_update, release_url, published_at, notes, assets[], download_url, download_name}`. `download_url` points at the app bundle matching the running platform (MCP server / IDE plugin archives are excluded) and is empty when the release ships no bundle for this platform, in which case the UI falls back to the release page |
 | `OpenBrowserURL(url)` | opens a URL in the system browser (https only), used by the update card's download button; it never downloads or replaces the binary |
+| `StartUpdateDownload(url, fileName, sha256, version)` | downloads the platform's release bundle into the system's download folder and verifies its SHA256. `url` must be https; `version` goes into the file name (`repotory-2.25.0-darwin-arm64.dmg`). The download runs in the background — poll `UpdateDownloadState` for progress |
+| `UpdateDownloadState()` | the download's progress snapshot `{phase, version, file_name, downloaded, total, speed, remaining_seconds, path, error, checksum_verified, installer_ejected}`. A finished download survives an app restart (unless the file has since been deleted) |
+| `CancelUpdateDownload()` | aborts an in-flight download |
+| `OpenDownloadedUpdate(path)` | hands the downloaded bundle to the OS installer (macOS mounts the dmg, Windows and Linux reveal it in the file manager). It never replaces the running program |
+| `RevealDownloadedUpdate(path)` | selects the file in the OS file manager (macOS `open -R`, Windows `explorer /select,`, Linux `xdg-open`) — the answer to "where did that download go?" |
+| `EjectInstallerVolume()` | unmounts the installer volume on macOS and reports whether one was actually ejected. Only a volume holding this app's own bundle is touched |
+| `GetInstallInfo()` | returns `{version, platform, install_path, executable_path, download_dir}` — the install path and the download folder, reported by the running binary itself |
 
 ## AI export and plugins
 
