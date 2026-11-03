@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **依赖更新不再连着主版本一起升（2026-11-03）**：Dependabot 的 `web-deps` 组按 `patterns: ["*"]` 把整棵前端依赖树打成一个 PR，16 项次要/补丁升级本来是安全的，但两个主版本升级被顺手带上了，而这两个都会让**整组**装不上——失败面是全组，信号却是「这个仓库坏了」，其实只动了一个包。① **typescript 7.0.2**：`typescript-eslint@8.72.1` 的 peer 范围是 `>=4.8.4 <6.1.0`，不接受 TS 7，`npm ci` 直接 `ERESOLVE could not resolve`，**连安装都走不到测试**；② **jsdom 30.1.3**：它依赖的 `undici@8.12.3` 要求 `node >= 22.19.0`，而 CI 跑的是 node 20——**装得上，但每个测试文件加载时都崩**（`undici/lib/interceptor/decompress.js` 对 `createZstdDecompress` 调用 `.bind`，node 20 没有这个函数），48 个测试文件全红。主版本升级是**工具链迁移**而不是依赖更新，应该单独一个 PR、单独被审，所以把这两个按在当前主版本上（`ignore` + `update-types: semver-major`），其余 16 项照常按月成组流动。**连带暴露的一件事**：`Dockerfile` 已经在用 `node:24-alpine`，CI 却还停在 node 20——jsdom 30 进不来的真正原因是**这个不一致**，不是 jsdom 本身有问题。
+
+### 修复
+
+- **agent 快捷 chip 的用例在 CI 上必红（2026-11-03）**：面板打开时会自动加载首张卡片，加载期间快捷 chip 处于 `disabled`，此时 `fireEvent.click` 打在禁用按钮上会被**浏览器与 jsdom 一起丢弃**——本机快、CI 慢时才现形，CI 上是必红。修法是先用 `waitFor` 等 chip 的 `disabled` 变 false 再点击，用例不再依赖首屏加载耗时的快慢。（本仓库没有 `@testing-library/jest-dom`，`toBeDisabled` 不可用，判断走 `(el as HTMLButtonElement).disabled`。）
+- **审计空状态的断言等不够久（2026-11-03）**：`AiAuditSection` 的「还没有调用记录」要等列表请求回来才渲染（比面板首屏晚一次 fetch），而 `findBy*` 的默认等待只有 1s——CI 机器一慢，**断言本身是对的、是钟太短**，2026-11-01 这条用例就把 CI 弄红过一次。改成用本套件其它慢等待断言同样的 2s。
+
 ## [2.26.0] - 2026-11-03
 
 ### 变更
