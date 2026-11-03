@@ -14,6 +14,7 @@
 
 - **agent 快捷 chip 的用例在 CI 上必红（2026-11-03）**：面板打开时会自动加载首张卡片，加载期间快捷 chip 处于 `disabled`，此时 `fireEvent.click` 打在禁用按钮上会被**浏览器与 jsdom 一起丢弃**——本机快、CI 慢时才现形，CI 上是必红。修法是先用 `waitFor` 等 chip 的 `disabled` 变 false 再点击，用例不再依赖首屏加载耗时的快慢。（本仓库没有 `@testing-library/jest-dom`，`toBeDisabled` 不可用，判断走 `(el as HTMLButtonElement).disabled`。）
 - **审计空状态的断言等不够久（2026-11-03）**：`AiAuditSection` 的「还没有调用记录」要等列表请求回来才渲染（比面板首屏晚一次 fetch），而 `findBy*` 的默认等待只有 1s——CI 机器一慢，**断言本身是对的、是钟太短**，2026-11-01 这条用例就把 CI 弄红过一次。改成用本套件其它慢等待断言同样的 2s。
+- **「等 mock 被调用」当成了「等数据落地」——三处同族竞态（2026-11-03）**：CI 在 2026-11-03 又抓出一处随机红灯（`HandoffComposer` 的「每行一条」用例），与本轮已修的两处同族，根子是同一个误解：**`await waitFor(() => expect(mockX).toHaveBeenCalled())` 等的是「函数被调用」，不是「数据已渲染」**。promise 在微任务里 resolve，React 在再下一个 tick 才 flush 状态更新，随后那句**同步**的 `getBy*` 就可能打在还不存在的元素上。三个文件同一形状：① **`HandoffComposer.test.tsx`**——summary 文本域只在 `projects.length > 0` 时渲染，而用例等的是 `mockProjects` 被调用，随后 `getByPlaceholderText` 直接抛 "Unable to find"；② **`ContextRail.test.tsx`**——「网关设计」是列表里来的标题，之前只靠前一句 `findBy` 顺带刷新渲染才**恰好**通过；③ **`AiAuditSection.test.tsx`**——SHA-256 与「只增不删」两段文案在 `{status && …}` 里，状态没到就不在屏幕上。修法统一为 ADR-0026 那条原则：**等「就是数据的那个元素」**。顺带补实一条**会空洞通过**的否定断言——「策略未知时不说只增不删」原本只查「不在」，而状态尚未加载时那行本来就不在屏幕上，断言于是无论面板会不会说都算通过；现在先等 `ai-audit-stats`（正好在状态落地那一刻出现）再查缺席。**另把 ADR-0026 的时序探针 `REPO_TEST_LAG_MS` 接到这四个文件的 mock 上**：探针此前只覆盖 `Review` / `Home`，探不到别处——接上后一跑就翻出上面那两条 `AiAuditSection` 隐藏用例，**探针不接进来，这些坑就一直在**。实测：探针 300 / 700 / 900ms 三档下四个文件 33 例全绿；全量 48 文件 410 例在探针 300ms 档与普通档均全绿。
 
 ## [2.26.0] - 2026-11-03
 
