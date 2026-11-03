@@ -48,6 +48,7 @@ import {
   type Summary,
 } from '../api/client'
 import { invalidateCache } from '../hooks/useApiData'
+import { resetDashboardScope } from '../state/dashboardScope'
 import Dashboard from './Dashboard'
 
 const mockGetProjects = vi.mocked(getProjects)
@@ -144,6 +145,10 @@ beforeEach(() => {
   // an earlier test in this file would otherwise serve its own projects to the
   // next one and the scope assertions below would never see a second fetch.
   invalidateCache()
+  // The scope (day + starred filter) lives in a module-level store, so it
+  // outlives the component: a test that switches it to "all" would otherwise
+  // hand the next test a scope it never asked for.
+  resetDashboardScope()
   mockGetProjects.mockResolvedValue([])
   mockGetSummary.mockResolvedValue(summary())
   mockGetTodoCounts.mockResolvedValue([])

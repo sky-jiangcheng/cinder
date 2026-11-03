@@ -1149,5 +1149,128 @@
     "recordGone": "这条记录已不存在，请刷新后重试",
     "pathTaken": "该目录已被其他项目占用",
     "mergeNeedsConfirmation": "该操作会合并并删除同级项目，需要明确确认"
+  },
+  "agent": {
+    "title": "Repotory Agent",
+    "open": "打开 Agent",
+    "scope": "当前上下文：{{scope}}",
+    "actionsTitle": "快捷问题",
+    "loading": "加载中…",
+    "questionPlaceholder": "问点什么…（Enter 发送，Shift+Enter 换行）",
+    "capture": "记一笔",
+    "backToAsk": "回到提问",
+    "openConsole": "打开对话台",
+    "error": {
+      "title": "出错了",
+      "load": "读取数据失败，稍后再试。"
+    },
+    "context": {
+      "home": "对话台",
+      "dashboard": "仪表盘",
+      "project": "项目页",
+      "knowledge": "知识库",
+      "wiki": "知识页",
+      "review": "审核",
+      "settings": "设置",
+      "other": "当前页面",
+      "library": "全库",
+      "thisProject": "当前项目"
+    },
+    "action": {
+      "todayCommits": "今日提交量",
+      "codeVolume": "代码提交量",
+      "weekCommits": "近 7 天",
+      "pending": "待办与笔记",
+      "lastCommit": "最近一次提交",
+      "handoff": "最近交接记录",
+      "pendingPages": "待审核页面",
+      "installInfo": "安装信息",
+      "projectOverview": "项目概览",
+      "projectToday": "该项目今日提交",
+      "projectVolume": "该项目提交量",
+      "projectCommits": "最近提交",
+      "projectStack": "技术栈",
+      "goDashboard": "去仪表盘",
+      "goProject": "去项目页",
+      "goSessions": "去会话",
+      "goReview": "去审核页"
+    },
+    "metric": {
+      "commits": "提交",
+      "commits7d": "7 天提交",
+      "repos": "仓库",
+      "myAdded": "我的新增行",
+      "myDeleted": "我的删除行",
+      "myFiles": "我的文件",
+      "added": "新增行",
+      "deleted": "删除行",
+      "activeDays": "活跃天数",
+      "todos": "待办",
+      "notes": "笔记",
+      "totalCommits": "总提交",
+      "commitRate30d": "30 天速率",
+      "techStack": "技术栈",
+      "pendingPages": "待审页面",
+      "version": "版本",
+      "platform": "平台"
+    },
+    "card": {
+      "today": {
+        "title": "今日提交量",
+        "subtitle": "{{date}}",
+        "footerStarred": "代码行与仪表盘「个人新增」同口径（星标项目）；提交数取自热力图，统计全部仓库。",
+        "footerAll": "代码行与仪表盘同口径（全部仓库）；提交数取自热力图。"
+      },
+      "codeVolume": {
+        "title": "代码提交量"
+      },
+      "week": {
+        "title": "近 7 天提交",
+        "subtitle": "{{from}} → {{to}}",
+        "day": "{{date}}",
+        "commits": "{{n}} 次提交"
+      },
+      "lastCommit": {
+        "title": "最近一次提交",
+        "empty": "库里还没有提交记录。"
+      },
+      "pending": {
+        "title": "待办与笔记",
+        "unknownProject": "未命名项目",
+        "todoCount": "{{n}} 条待办"
+      },
+      "project": {
+        "title": "项目概览",
+        "lastCommit": "最后提交：{{date}}"
+      },
+      "projectCommits": {
+        "title": "最近提交"
+      },
+      "projectStack": {
+        "title": "技术栈与语言"
+      },
+      "projectToday": {
+        "title": "该项目今日提交"
+      },
+      "projectVolume": {
+        "title": "该项目提交量"
+      },
+      "handoff": {
+        "title": "最近交接记录"
+      },
+      "review": {
+        "title": "待审核页面",
+        "projectScope": "项目层",
+        "globalScope": "全局层"
+      },
+      "install": {
+        "title": "安装信息",
+        "path": "安装路径",
+        "downloadDir": "下载目录"
+      },
+      "answer": {
+        "title": "回答"
+      }
+    }
   }
 }

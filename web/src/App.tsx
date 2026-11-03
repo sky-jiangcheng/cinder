@@ -8,7 +8,7 @@ import { applyTheme, getStoredTheme, listenSystemTheme, storeTheme, type ThemeMo
 import ErrorBoundary from './components/ErrorBoundary'
 import { getConnectionKind, subscribeConnection, startHealthPoll, isDesktopRuntime } from './api/transport'
 import { startUpdateCheck } from './api/updateStatus'
-import QuickCaptureFab from './components/QuickCaptureFab'
+import AgentBot from './components/AgentBot'
 import UpdateDownloadUI from './components/UpdateDownloadUI'
 import SideRail from './components/SideRail'
 import ContextRail from './components/ContextRail'
@@ -221,7 +221,10 @@ function App() {
           </div>
           <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
           <ToastHost toasts={toasts} onDismiss={(id) => setToasts(prev => prev.filter(x => x.id !== id))} />
-          <QuickCaptureFab onToast={pushToast} />
+          {/* The floating agent: a draggable bot that knows the page it is on.
+              It replaces the old capture button, which sat on top of the chat
+              page's send button. */}
+          <AgentBot onToast={pushToast} />
           {/* The update download's progress surfaces live at the app level:
               the download survives navigation, and a progress indicator that
               disappears when the user leaves the settings page is not a

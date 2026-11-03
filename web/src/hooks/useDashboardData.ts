@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   getProjects, getSummary, triggerScan, getTodoCounts, getNoteCounts, toggleStar,
@@ -6,7 +6,9 @@ import {
 } from '../api/client'
 import { useScanPolling } from './useScanPolling'
 import { useApiData, invalidateCache } from './useApiData'
-import { getYesterday } from '../utils/dates'
+import {
+  getDashboardScope, setDashboardScope, subscribeDashboardScope,
+} from '../state/dashboardScope'
 
 export type SortKey = 'name' | 'my_added' | 'my_files' | 'repo_count'
 
@@ -18,20 +20,24 @@ export function useDashboardData() {
   const { t } = useTranslation()
   const [summary, setSummary] = useState<Summary | null>(null)
   const [dailyGoal, setDailyGoal] = useState(500)
-  const [date, setDate] = useState(getYesterday())
   const [sortKey, setSortKey] = useState<SortKey>('my_added')
   const [confirmScan, setConfirmScan] = useState(false)
   const [todoCounts, setTodoCounts] = useState<TodoCount[]>([])
   const [noteCounts, setNoteCounts] = useState<NoteCount[]>([])
-  const [showStarredOnly, setShowStarredOnly] = useState(true)
+  const [starOverride, setStarOverride] = useState<Record<number, boolean>>({})
   const [error, setError] = useState('')
   const [summaryError, setSummaryError] = useState('')
   const fetchSeq = useRef(0)
 
+  // The day and the starred filter live in a shared store, not in this hook:
+  // the agent's cards answer "today's code" too, and the only way for the two
+  // to never contradict each other is for them to read the same two choices.
+  const scope = useSyncExternalStore(subscribeDashboardScope, getDashboardScope, getDashboardScope)
+  const { date, starredOnly: showStarredOnly } = scope
+
   const { data: projectsData, loading: projectsLoading, error: projectsError, refetch: refetchProjects } =
     useApiData(() => getProjects(date, showStarredOnly), [date, showStarredOnly], { cacheKey: 'dashProjects' })
 
-  const [starOverride, setStarOverride] = useState<Record<number, boolean>>({})
   const projects = useMemo(
     () => (projectsData ?? []).map(p =>
       starOverride[p.id] !== undefined ? { ...p, is_starred: starOverride[p.id] } : p
@@ -46,28 +52,23 @@ export function useDashboardData() {
   // Reset optimistic star overrides whenever the project list is re-scoped
   // (date or starred-only filter changes). Done in the setters instead of an
   // effect to avoid a synchronous setState-in-effect.
-  const setDateScoped = useCallback((d: string) => { setStarOverride({}); setDate(d) }, [setDate])
+  const setDateScoped = useCallback((d: string) => { setStarOverride({}); setDashboardScope({ date: d }) }, [])
   const setShowStarredOnlyScoped = useCallback(
-    (v: boolean) => { setStarOverride({}); setShowStarredOnly(v) },
-    [setShowStarredOnly]
+    (v: boolean) => { setStarOverride({}); setDashboardScope({ starredOnly: v }) },
+    []
   )
 
   // The summary strip must aggregate the SAME scope the list filters by:
   // passing the starred filter through to GetSummary keeps header and rows in
-  // lockstep (they read as two different products otherwise). A ref keeps
-  // fetchSummary's identity stable for the polling hook while staying fresh.
-  const starredScopeRef = useRef(showStarredOnly)
-  useEffect(() => {
-    starredScopeRef.current = showStarredOnly
-  }, [showStarredOnly])
-
+  // lockstep (they read as two different products otherwise). The scope is
+  // read from the store at call time, so it is never stale.
   const fetchSummary = useCallback(async (selectedDate: string, silent = false) => {
     const seq = ++fetchSeq.current
     if (!silent) setSummaryLoading(true)
     setSummaryError('')
     try {
       const [sumData, counts, noteCountsData] = await Promise.all([
-        getSummary(selectedDate, starredScopeRef.current),
+        getSummary(selectedDate, getDashboardScope().starredOnly),
         getTodoCounts(),
         getNoteCounts(),
       ])

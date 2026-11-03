@@ -1150,5 +1150,128 @@
     "recordGone": "That record no longer exists — refresh and try again",
     "pathTaken": "That directory is already owned by another project",
     "mergeNeedsConfirmation": "This merges and deletes sibling projects and needs an explicit confirmation"
+  },
+  "agent": {
+    "title": "Repotory Agent",
+    "open": "Open the agent",
+    "scope": "Context: {{scope}}",
+    "actionsTitle": "Quick questions",
+    "loading": "Loading…",
+    "questionPlaceholder": "Ask anything… (Enter to send, Shift+Enter for a new line)",
+    "capture": "Capture",
+    "backToAsk": "Back to asking",
+    "openConsole": "Open the console",
+    "error": {
+      "title": "Something went wrong",
+      "load": "Could not read the data. Try again in a moment."
+    },
+    "context": {
+      "home": "Console",
+      "dashboard": "Dashboard",
+      "project": "Project",
+      "knowledge": "Knowledge base",
+      "wiki": "Wiki page",
+      "review": "Review",
+      "settings": "Settings",
+      "other": "Current page",
+      "library": "Whole library",
+      "thisProject": "Current project"
+    },
+    "action": {
+      "todayCommits": "Today's commits",
+      "codeVolume": "Code volume",
+      "weekCommits": "Last 7 days",
+      "pending": "Todos and notes",
+      "lastCommit": "Latest commit",
+      "handoff": "Recent handoffs",
+      "pendingPages": "Pages to review",
+      "installInfo": "Installation",
+      "projectOverview": "Project overview",
+      "projectToday": "Today's commits here",
+      "projectVolume": "Code volume here",
+      "projectCommits": "Recent commits",
+      "projectStack": "Tech stack",
+      "goDashboard": "Open the dashboard",
+      "goProject": "Open the project",
+      "goSessions": "Open sessions",
+      "goReview": "Open the review page"
+    },
+    "metric": {
+      "commits": "Commits",
+      "commits7d": "Commits (7d)",
+      "repos": "Repos",
+      "myAdded": "My lines added",
+      "myDeleted": "My lines deleted",
+      "myFiles": "My files",
+      "added": "Lines added",
+      "deleted": "Lines deleted",
+      "activeDays": "Active days",
+      "todos": "Todos",
+      "notes": "Notes",
+      "totalCommits": "Total commits",
+      "commitRate30d": "Rate (30d)",
+      "techStack": "Tech stack",
+      "pendingPages": "To review",
+      "version": "Version",
+      "platform": "Platform"
+    },
+    "card": {
+      "today": {
+        "title": "Today's commits",
+        "subtitle": "{{date}}",
+        "footerStarred": "Line counts use the same scope as the dashboard's \"My lines added\" (starred projects); the commit count comes from the heatmap and covers every repository.",
+        "footerAll": "Line counts use the same scope as the dashboard (all repositories); the commit count comes from the heatmap."
+      },
+      "codeVolume": {
+        "title": "Code volume"
+      },
+      "week": {
+        "title": "Commits over 7 days",
+        "subtitle": "{{from}} → {{to}}",
+        "day": "{{date}}",
+        "commits": "{{n}} commits"
+      },
+      "lastCommit": {
+        "title": "Latest commit",
+        "empty": "No commits in the library yet."
+      },
+      "pending": {
+        "title": "Todos and notes",
+        "unknownProject": "Unnamed project",
+        "todoCount": "{{n}} todos"
+      },
+      "project": {
+        "title": "Project overview",
+        "lastCommit": "Last commit: {{date}}"
+      },
+      "projectCommits": {
+        "title": "Recent commits"
+      },
+      "projectStack": {
+        "title": "Tech stack and languages"
+      },
+      "projectToday": {
+        "title": "Today's commits in this project"
+      },
+      "projectVolume": {
+        "title": "Code volume in this project"
+      },
+      "handoff": {
+        "title": "Recent handoffs"
+      },
+      "review": {
+        "title": "Pages to review",
+        "projectScope": "Project tier",
+        "globalScope": "Global tier"
+      },
+      "install": {
+        "title": "Installation",
+        "path": "Install path",
+        "downloadDir": "Download folder"
+      },
+      "answer": {
+        "title": "Answer"
+      }
+    }
   }
 }

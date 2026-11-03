@@ -4,6 +4,7 @@ export type IconName =
   | 'arrow-down'
   | 'arrow-up'
   | 'book'
+  | 'bot'
   | 'check'
   | 'close'
   | 'download'
@@ -37,7 +38,11 @@ const paths: Record<IconName, string> = {
   'arrow-up': '<polyline points="6 15 12 9 18 15" />',
   // An open book — the knowledge base. Distinct from 'file-text' (a single
   // page) and 'layers' (a stack), so the rail reads as three distinct places.
-  book: '<path d="M2 4.5A2.5 2.5 0 0 1 4.5 2H11v18H4.5A2.5 2.5 0 0 0 2 22z" /><path d="M22 4.5A2.5 2.5 0 0 0 19.5 2H13v18h6.5a2.5 2.5 0 0 1 2.5 2z" />',
+  book: '<path d="M2 4.5A2.5 2.5 0 0 1 4.5 2H11v18H4.5A2.5 2.5 0 0 0 2 22z" /><path d="M22 4.5A2.5 2.5 0 0 0 19.5 2H13v18h6.5a2.5 2.5 0 0 0 2.5-2z" />',
+  // A robot head with an antenna — the floating agent entry. The eyes are
+  // dots (the "h.01" trick the help icon uses), because an outlined circle
+  // at 22px reads as a second ring rather than a pupil.
+  bot: '<rect x="3" y="8" width="18" height="13" rx="3" /><path d="M12 8V5" /><path d="M12 3.5h.01" /><path d="M9 14h.01" /><path d="M15 14h.01" /><path d="M9.5 18h5" /><path d="M1.5 13v4M22.5 13v4" />',
   // Confirms a completed action inline (copy-to-clipboard). The alternative —
   // swapping only the button's title attribute — is feedback the user never
   // sees, because the tooltip only renders on hover.

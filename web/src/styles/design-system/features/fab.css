@@ -1,12 +1,17 @@
 /* ============================================
-   Quick capture / AI panel — shared shell remnant
+   Agent panel — shared shell remnant
    ============================================ */
 
-/* P35: the fab-* rules moved to components/QuickCaptureFab.module.css and the
-   ai-* rules to components/AIAskPanel.module.css. What stays here is the one
-   class both components apply to their textarea - QuickCaptureFab's capture box
-   and AIAskPanel's question/answer boxes - so it cannot belong to either
-   component alone. `.form-input` (inputs.css) is applied alongside it. */
+/* P35 moved the fab-* rules to components/QuickCaptureFab.module.css and the
+   ai-* rules to components/AIAskPanel.module.css; both components are gone
+   now that the floating entry is the agent bot (components/AgentBot.tsx),
+   which owns its own styles.
+
+   What stays here is the one class the capture box still applies to its
+   textarea: `.fab-content`. It cannot belong to a single component — the
+   capture box and the agent's question box are different components with one
+   shared textarea treatment. `.form-input` (inputs.css) is applied
+   alongside it. */
 .fab-content {
   width: 100%;
   resize: vertical;
