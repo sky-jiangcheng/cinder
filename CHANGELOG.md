@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.28.0] - 2026-11-03
+
 ### 变更
 
 - **滚动条不再越过 tab 条：五个页面统一「固定头部 + 独立滚动区」（ADR-0042，2026-11-03）**：用户截图里红框标着滚动条的上半段，反馈「**我打红框的地方滚动条不应该滚动到那么高吧，知识库，审核，设置的 AI 等操作界面滚动条都滚动到 tab 顶部了**」。截图里那条竖直滚动条从内容列**最顶端**（实测 `y=28`）起算，而 tab 条在 `y=186`——**轨道比 tab 条高 158px**，那段轨道对应的是「工具栏 + 导语」，**它们是可以被卷走的**。根因是一件事：外壳的中栏 `.mainContent` 是滚动容器，**tab 条与内容都在它里面**——于是 ① **tab 条会随内容被卷走**（它是这一页唯一的分区开关，换区就得先滚回去），② **滚动条的顶边永远在 tab 条上方**。**顺带查出第二件事**：ADR-0034（`3204df2`）把 `.mainContent` 的 padding 从 `32px` 改成 `24px 28px`，而 Review / Knowledge / Settings 三处的 sticky 偏移仍按 **32px** 写死（768px 断点还按 20px 写死，实际是 16px）→ 固定条与滚动区顶边**错位 8px**，且同一个数字在三个文件各抄一份。**而仪表盘与项目详情页早就是另一种写法**（各有一份复制的 `.page`/`.fixed`/`.scroll`：**固定头部 + 独立滚动区**）——项目详情页本来就对，仪表盘把 tab 条放进了滚动区所以同样被卷走。**六项决策**（[ADR-0042](docs/adr/0042-page-shell-pinned-header-and-scrolling-body.md)，中英双份）：① **一套页面骨架**——新组件 `web/src/components/PageShell.tsx`（固定头部 + 独立滚动区 + 可选底部状态条），仪表盘 / 项目详情 / 知识库 / 审核 / 设置**五个页面统一用它**，各自复制的骨架样式删除：**「这一页往哪滚」从此全产品只有一个答案**；② **tab 条是 chrome，住在固定头部里**——**滚动区从 tab 条之下开始**，于是「**滚动条的顶边 = tab 条的底边**」，tab 条也不再需要 sticky；③ **不用魔数偏移来固定**——固定条靠「在滚动区之外」固定，左右留白改为变量 `--main-gutter`（28px / 16px），各页满幅偏移一律读它，ADR-0034 造成的漂移就此消失；④ **切 tab 回到面板顶部**——滚动区自己归零（原先是 `scrollIntoView` 到 tab 条，而 tab 条已经不动了，那个滚动目标已不存在）；⑤ **滚动条的位置与内容宽度一字不变**——滚动区把滚动条拉回内容列右缘（`margin-right` 与 `padding-right` 配对），滚动条不盖内容、内容宽度不变；⑥ **不动 schema / 后端 / MCP 工具 / 绑定 / ADR-0039 的任何决策 / 品牌三域 / 首页对话台 / ADR-0034 的三栏外壳**。**代价要说清**：**本篇推翻了 ADR-0039 明确接受的那条代价**（「tab 条不做 sticky」——那条推理说「可达性没有退化」，但它**只在首屏成立**：tab 条是这一页唯一的分区开关，被卷走之后换区就得先滚回去；ADR-0039 原文保留，只加指向本篇的修订说明）；审核页的顺序变了（tab 条从导语**下面**挪到**上面**，chrome 归 chrome）；固定头部占的高度不再随内容走（仪表盘头部本就很高）；这五个页面的滚动容器换了主人（外壳不再滚它们）。**实测**（桌面端 1360×860，与用户截图同尺寸，滚动条顶边取像素行）：审核页 **y=28 → y=150**（tab 条底边 y=131）、知识库 **y=28 → y=150**、设置·AI **y=28 → y=80**、仪表盘 **y=28 → y=505**；浏览器内滚动 600px 后 **tab 条仍在原位**、卡片从它下沿滚过、滚动条滑块随滚动下移而轨道顶边始终在 tab 条之下。**回归**：前端全量 `npm test` **49 文件 413 例**通过（Review 的滚动断言改为「滚动区归零」），`npm run build` / `npm run lint`（0 error 0 warning）/ `check-i18n-keys` / `check-docs-mirror` 全绿。
@@ -742,7 +744,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.27.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.28.0...HEAD
+[2.28.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.27.0...v2.28.0
 [2.27.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.26.0...v2.27.0
 [2.26.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.25.0...v2.26.0
 [2.25.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.24.0...v2.25.0

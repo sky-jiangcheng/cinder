@@ -5,4 +5,4 @@ package version
 // Version is the current Repotory version. The canonical value lives in
 // wails.json (info.productVersion); scripts/bump-version.sh propagates it
 // here. CI builds override this via ldflags at link time.
-const Version = "2.27.0"
+const Version = "2.28.0"

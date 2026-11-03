@@ -1,9 +1,9 @@
 {
-  "version": "2.27.0",
+  "version": "2.28.0",
   "description": "MCP stdio server exposing the Repotory local knowledge base to AI agents",
   "homepage": "https://github.com/sky-jiangcheng/repotory",
   "license": "MIT",
-  "url": "https://github.com/sky-jiangcheng/repotory/releases/download/v2.27.0/repotory-mcp-windows-amd64.zip",
+  "url": "https://github.com/sky-jiangcheng/repotory/releases/download/v2.28.0/repotory-mcp-windows-amd64.zip",
   "hash": "sha256:07bd43b4ec7d8b5f92ca59594ccfd6ee173c71dd4e613bdd7d0d0e63c72e1820",
   "bin": "repotory-mcp.exe",
   "checkver": {
