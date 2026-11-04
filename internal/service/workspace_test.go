@@ -526,9 +526,16 @@ func TestBindRepositoryToProject_MovesTheFolderInsteadOfDuplicating(t *testing.T
 	if err != nil {
 		t.Fatalf("load repositories: %v", err)
 	}
+	// Compare NORMALISED paths on both sides. The binding writes
+	// db.NormalizeMatchPath(path), which is filepath.Clean — on Windows that
+	// turns "/Users/dev/..." into "\Users\dev\...", so a raw string comparison
+	// against the fixture finds nothing there. Normalising both sides also
+	// makes the assertion catch the case it is really about: a SECOND row for
+	// the same folder written with a different separator.
+	want := db.NormalizeMatchPath(loose)
 	count := 0
 	for _, r := range repos {
-		if r.Path == loose {
+		if db.NormalizeMatchPath(r.Path) == want {
 			count++
 			if r.ProjectID == nil || *r.ProjectID != other {
 				t.Fatalf("the folder should now belong to %d, got %+v", other, r.ProjectID)
@@ -561,8 +568,12 @@ func TestBindRepositoryToProject_RefusesBadInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load repositories: %v", err)
 	}
+	// Normalised on both sides, for the same reason as above: the row a
+	// successful binding WOULD have written is the normalised path, so the
+	// refusal has to be checked against that form.
+	refused := db.NormalizeMatchPath(f.projectPt + "/x")
 	for _, r := range repos {
-		if r.Path == f.projectPt+"/x" {
+		if db.NormalizeMatchPath(r.Path) == refused {
 			t.Fatalf("a refused binding must not write a repository row")
 		}
 	}
