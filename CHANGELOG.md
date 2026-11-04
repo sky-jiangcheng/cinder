@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.29.0] - 2026-11-04
+
 ### 变更
 
 - **IDE 面板重画：按钮不再被裁切，UI 与文案按 Windsurf 的形状收紧，并补上外部 AI provider 与「项目没认出来」的出路（ADR-0044，2026-11-04）**：用户拿 Windsurf 的 Cascade 面板与 Repotory 的 VS Code 面板并排截图，提了六件事——**参考 Windsurf 优化设计**、**修掉红框里那个被切掉的按钮**、**简化 UI 与文案并调整按钮**、**加外部 AI provider 配置让对话能力追平桌面端**、**插件认不出项目时要能识别与设置**、**两个 IDE 插件与桌面机器人的能力对齐（只差项目范围）**。逐条查证后，四个缺口是真的，且**三个已经有底座、只是没接上**：① **红框那个按钮**是 `ide/vscode/package.json` 里 `contributes.menus["view/title"]` 注册的三条 `navigation` 项——**宿主把 `navigation` 组排在视图标题栏右上角并按面板宽度裁切**，而插件的 webview **画不到那块地**（webview 没有 `localResourceRoots`，引用 `media/` 的图标在 VS Code 里表现为空白方块）。**唯一能根治的解法是把动作搬进面板自绘**，`view/title` 一条不挂（命令全部保留在命令面板与快捷键里）；② **provider 配置**根本不用新建：`/api/rpc` 桥早已反射暴露 `GetConfig` / `UpdateConfig` / `ListAIModels` / `TestAIChat` 四个绑定，配置键 `ai_chat_base_url` / `ai_chat_model` / `ai_chat_api_key` 也已在 `config` 表里——**插件只要读服务端同一份，不建第二份**（VS Code 的 `contributes.configuration` 连一个 AI 键都不加：那会变成第三份真值）；③ **项目没认出来**时服务端本来就会回 `Candidates`（候选项目列表），且 `db.UpsertRepositoryTx` 就是登记仓库归属的底座——**缺的只是把「候选」接到「写入」的那一步**；④ 文案的问题是「讲产品不讲动作」，空状态四段营销文案把面板当成落地页。**七项决策**（[ADR-0044](docs/adr/0044-ide-panel-windsurf-shape.md)，中英双份）：① **动作条收进面板自绘**（VS Code 头部四个内联 SVG 图标：搜索笔记 / AI provider / 诊断 / 桌面端），`view/title` 整块删除——**红框那个重叠就此消失，不是靠调宽度调回来的**；② **头部 = 品牌 + 四个内联 SVG 图标**（不引用 `media/`：webview 取不到 `media/` 资源，404 的图标在 VS Code 里是空白方块）；③ **底部 = 输入框（发送键在框内）+ 工具行（模式组左 / 项目 chip 右）**；④ **文案只讲动作**（空状态改成「一句提问 + 三个可点示例」，删掉唯一那行宣传语）；⑤ **provider 读写服务端 `ai_chat_*`，不建第二份**，且**空 key 不覆盖已存密钥**（服务端把密钥掩码成 `********`，空提交等于删——所以空 = 不动）；⑥ **项目识别 = 候选项目 + `BindWorkspaceToProject`**（新增绑定，`UpsertRepository` 落库，下次解析直接命中 `repository-exact`）；⑦ **不新增 MCP 工具 / 不改 schema / 不改 `repotory_ask` 契约**。**两端同构**（ADR-0036 的尺子）：JetBrains 端同步改头部动作条、作用域 chip、空状态文案，**provider 表单在两端形态不同但字段/按钮/状态文案逐字相同**——VS Code 是面板内的浮层，JetBrains 是 `DialogWrapper` 对话框（Swing 没有行内表单表面，把 provider 配置摊进设置页会离「点图标就该配」太远），**差异只允许存在于「怎么把这张表单画出来」这一层**。**代价写清**：**Windows / Linux 没有托盘**——Wails v2 的 `TrayMenu` 是死类型（没有任何平台前端渲染它，也没有公开 API 能到达它），所以常驻靠 macOS 菜单栏 + Windows/Linux 最小化（见下条）；**插件不再往 VS Code 设置里写 AI 键**，想改端点必须先有本地服务在跑（没有服务时 provider 表单会说清而不是假装能存）；**「选一个项目」是一次真实写库**（把工作区目录归到某个项目下），不是窗口内的临时设置。**实测**：Playwright 实测 420px 与 280px 宽度下四个图标**完整可见、无裁切**；provider 浮层在浅色主题下遮罩正常（`rgba(0,0,0,.32)`）、空模型下拉框确实 `display:none`（`getComputedStyle` 验过 `pickerRect:[0,0]`）。**回归**：VS Code 插件 32 例全绿（新增 7 例：候选项目、绑定、provider 读/存/空 key 不写/写 key、模型列表、测试连通），JetBrains 插件 `gradle test` 全绿。
@@ -757,7 +759,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.28.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.29.0...HEAD
+[2.29.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.28.0...v2.29.0
 [2.28.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.27.0...v2.28.0
 [2.27.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.26.0...v2.27.0
 [2.26.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.25.0...v2.26.0
