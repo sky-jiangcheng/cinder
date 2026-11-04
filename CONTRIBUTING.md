@@ -106,9 +106,24 @@ node scripts/check-i18n-keys.mjs    # locale 词条覆盖守卫（key 缺失 / �
 - **计数型事实不要抄写**：ADR 份数、MCP 工具数这类会随开发变化的数字，写「见 `docs/adr/index.md`」这类指向事实源的链接，而不是把数字抄进正文——抄进去的那个数字下次就会过期
 - 面向用户的变更请同步更新 [CHANGELOG.md](CHANGELOG.md) 的 `[Unreleased]` 条目与对应手册页（`docs/**/*.md` 是唯一内容源，`docs/**/*.html` 是构建产物，**不要手改**）
 
+## CHANGELOG 条目要带可发布的标题
+
+GitHub Release 的正文是 **CHANGELOG 里那一节的条目标题**（`scripts/release-notes.mjs` 把该节压成标题清单，release workflow 把它前置到 GitHub 自动生成的 notes 前面）。自动生成的 notes 只有 commit subject 与 compare 链接——本仓的 commit 多是内部动作（`fix(test): …`、`chore(packaging): fill sha256`），读者看不出变了什么；而 CHANGELOG 每条开头的**加粗标题**才是写给人看的那一句。
+
+所以每条条目必须以加粗标题开头：
+
+```markdown
+- **标题写给读者看的一句话（ADR-XXXX，日期）**：正文是推导、决策与代价。
+```
+
+这条由 CI `release-notes` job 兜住（`node scripts/release-notes.mjs --check`），**发版前就会红**，不用等到打 tag。该 job 同时用 `scripts/testdata/release-notes/` 里的负例断言这道门**能红**——只绿的门不算门。
+
+标题之外的正文照旧写长：正文进的是仓库与发布页底部的 CHANGELOG 链接，不是发布页本身。
+
 ## PR 检查清单
 
 - [ ] `go test ./...`、`npm test`、`npm run build` 全绿；`node scripts/check-docs-mirror.mjs`（双语文档 1:1 镜像守卫，CI `docs-mirror` job）、`node scripts/check-i18n-keys.mjs`（locale 词条覆盖守卫，CI `i18n-keys` job）与 `node scripts/check-version-drift.mjs`（版本/计数漂移守卫，CI `version-drift` job）通过
+- [ ] CHANGELOG 每条新条目都以加粗标题开头（`node scripts/release-notes.mjs --check`，CI `release-notes` job）
 - [ ] 不触碰范围冻结与冻结标识（或已在 Issue/ADR 中说明理由）
 - [ ] 绑定面变更已同步 API 参考；用户可见变更已更新手册与 CHANGELOG
 - [ ] 新增依赖有明确理由（本项目依赖极简：wails、mcp-go、minio-go、chromem-go、modernc sqlite）

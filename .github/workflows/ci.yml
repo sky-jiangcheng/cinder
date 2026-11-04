@@ -292,6 +292,45 @@ jobs:
       - name: Check version & count drift
         run: node scripts/check-version-drift.mjs
 
+  # ------------------------------------------------------- Release notes ----
+  # The GitHub Release body is the CHANGELOG section for that version,
+  # reduced to its entry headlines (scripts/release-notes.mjs). The reduction
+  # is only trustworthy if every entry OPENS with a bold headline — that
+  # headline is what the release page shows, so an entry without one has
+  # nothing publishable in it.
+  #
+  # The second half of this job is the part that matters: it feeds the gate a
+  # deliberately broken changelog and asserts the gate REJECTS it. A gate that
+  # can only go green is not a gate — the negative cases live in
+  # scripts/testdata/release-notes/, and if someone "fixes" the script by
+  # accepting anything, this step goes red.
+  release-notes:
+    name: Release notes headlines
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Every changelog entry must carry a publishable headline
+        run: node scripts/release-notes.mjs --check
+
+      - name: The gate must reject a malformed changelog
+        run: |
+          set -euo pipefail
+          for f in scripts/testdata/release-notes/*.md; do
+            if node scripts/release-notes.mjs --check --changelog "$f" --version 9.9.9; then
+              echo "::error::$f should have been rejected, but it was accepted"
+              exit 1
+            fi
+            echo "rejected as expected: $f"
+          done
+
   # ------------------------------------------------------------- Icons ----
   # The brand mark lives once (build/icon.svg); every shipped icon — the
   # Wails appicon, the Windows .ico, the VS Code extension icon and the docs

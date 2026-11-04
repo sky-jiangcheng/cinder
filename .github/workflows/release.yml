@@ -481,9 +481,66 @@ jobs:
           path: repotory.skill
           if-no-files-found: error
 
+  # The human-written half of the release notes.
+  #
+  # GitHub's own generated notes are a list of commit subjects plus a compare
+  # link: every line says what a commit was CALLED, not what changed for the
+  # user — and this project's commits are small, incremental and heavily
+  # internal ("fix(test): 比对要归一化", "chore(packaging): fill sha256"). A
+  # reader landing on the release page learned nothing from them.
+  #
+  # The CHANGELOG already carries the opposite kind of text: every entry opens
+  # with a bold headline written for a reader ("IDE 面板重画：按钮不再被裁切…")
+  # and then continues into the reasoning, the decisions and the cost. That
+  # headline IS the release note; the rest is the design record, and the design
+  # record belongs in the repository. So this job reduces one version's section
+  # to its headlines and hands the result to create-release, which prepends it
+  # to GitHub's generated notes. Nothing is lost, the page just stops opening
+  # with a diffstat.
+  #
+  # A separate job rather than a step inside create-release, for one concrete
+  # reason: that job's workspace root holds the release artifacts, and its
+  # SHA256SUMS step hashes EVERY file in that root (install.sh verifies that
+  # list against what the user actually downloaded) — a stray CHANGELOG.md
+  # sitting there would break every install.
+  release-notes:
+    name: Build release notes
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Reduce the changelog to release headlines
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF#refs/tags/v}"
+          # The script refuses a section that is missing, empty, or has an
+          # entry without a bold headline. CI runs the same check on every
+          # push, so reaching this point means the changelog was already
+          # proven publishable — but a tag must never ship an empty body.
+          node scripts/release-notes.mjs --version "$VER" --out release-notes.md
+          cat release-notes.md
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
   create-release:
     name: Create GitHub Release
-    needs: [build, vscode-extension, jetbrains-plugin, skill-package]
+    needs: [build, vscode-extension, jetbrains-plugin, skill-package, release-notes]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -496,8 +553,18 @@ jobs:
           pattern: '{bundle-*,vsix-extension,jetbrains-plugin,skill-package}'
           merge-multiple: true
 
+      - name: Download the release notes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: release-notes
+          # Into a subdirectory on purpose: the SHA256SUMS step below hashes
+          # every FILE in the workspace root, and that list is what the
+          # installers verify against. The notes are not a downloadable
+          # artifact and must not end up in it.
+          path: notes
+
       - name: List release files
-        run: ls -lhR
+        run: ls -lh
 
       - name: Assert every expected asset is present
         run: |
@@ -540,6 +607,19 @@ jobs:
           fi
           echo "all expected assets present for ${VER}"
 
+      - name: Assert the release notes are there and non-empty
+        run: |
+          set -euo pipefail
+          # softprops/action-gh-release reads body_path with readFileSync and,
+          # if that fails, only WARNS and falls back to an empty body. A
+          # silent fallback would publish a release whose body is nothing but
+          # GitHub's commit list — the exact thing this job exists to prevent.
+          if [ ! -s notes/release-notes.md ]; then
+            echo "::error::notes/release-notes.md is missing or empty"
+            exit 1
+          fi
+          head -3 notes/release-notes.md
+
       - name: Generate SHA256SUMS
         run: |
           set -euo pipefail
@@ -566,6 +646,11 @@ jobs:
             *.tar.gz
             *.skill
             SHA256SUMS
+          # The human-written headlines from the CHANGELOG. The action
+          # PREPENDS this to GitHub's own generated notes (the commit list and
+          # the compare link), so the page opens with what changed for the
+          # reader and keeps the machine-made part below it.
+          body_path: notes/release-notes.md
           generate_release_notes: true
 
   # Push the manifests to the external tap and bucket.
