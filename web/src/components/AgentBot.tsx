@@ -27,6 +27,7 @@ import { useTranslation } from 'react-i18next'
 import Icon from './Icon'
 import QuickCapturePanel from './QuickCapturePanel'
 import { buildAgentContext, type AgentCard, type AgentContext } from './agent/agentContext'
+import { NAV_ENTRIES } from './navEntries'
 import {
   getDashboardScope,
   subscribeDashboardScope,
@@ -38,6 +39,7 @@ import {
   getConfig,
   getProjectDetail,
   getProjects,
+  listenAskBot,
   type Evidence,
 } from '../api/client'
 import type { PushToast } from '../hooks/useToast'
@@ -136,6 +138,15 @@ export default function AgentBot({ onToast }: Props) {
   // filing target. The first project is the home for a filed answer, the
   // same fallback the old ask panel used.
   const [filingProjectId, setFilingProjectId] = useState(0)
+  // The bot's own scope (ADR-0045 decision 4): the whole library by
+  // default, any project on request. It is deliberately NOT the page's
+  // scope — the desktop bot is a global assistant, the page is only its
+  // current topic.
+  const [scopeProjectId, setScopeProjectId] = useState(0)
+  // The scope picker is open.
+  const [scopeOpen, setScopeOpen] = useState(false)
+  // The projects the scope picker offers.
+  const [projects, setProjects] = useState<Array<{ id: number; name: string }>>([])
 
   const dragRef = useRef<{
     pointerId: number
@@ -160,6 +171,10 @@ export default function AgentBot({ onToast }: Props) {
   // CURRENT page can answer.
   const routeProjectId = Number(location.pathname.match(/^\/project\/(\d+)/)?.[1] || 0)
   const projectName = projectNames[routeProjectId] ?? ''
+  // The scope project's name — the chip's text and the question's scope.
+  const scopeProjectName = scopeProjectId > 0
+    ? (projects.find(p => p.id === scopeProjectId)?.name ?? '')
+    : ''
 
   // The dashboard's scope — the day it shows and whether it counts only the
   // starred projects. The cards that answer "today's code" are built from it,
@@ -167,9 +182,23 @@ export default function AgentBot({ onToast }: Props) {
   const scope = useSyncExternalStore(subscribeDashboardScope, getDashboardScope, getDashboardScope)
 
   const context: AgentContext = useMemo(
-    () => buildAgentContext(location.pathname, t, projectName, scope),
-    [location.pathname, t, projectName, scope]
+    () => buildAgentContext(location.pathname, t, projectName, scope, {
+      // The question's scope is the bot's OWN, not the page's: the desktop
+      // bot asks about the whole library unless it is told otherwise
+      // (ADR-0045 decision 4 — an explicit override of ADR-0041's
+      // "a project page asks about that project").
+      questionProjectId: scopeProjectId,
+      questionScopeLabel: scopeProjectId > 0
+        ? (scopeProjectName || t('agent.context.thisProject'))
+        : t('agent.context.library'),
+    }),
+    [location.pathname, t, projectName, scope, scopeProjectId, scopeProjectName]
   )
+
+  // What the cards on screen were read in. A card that outlives its
+  // context disagrees with the page — the exact thing the shared scope
+  // exists to prevent (ADR-0041 decision 5).
+  const contextKey = `${location.pathname}#${scopeProjectId}`
 
   // Direct mode needs a configured chat endpoint; without one the quick
   // actions still work (they are local) and the question box says so.
@@ -196,11 +225,16 @@ export default function AgentBot({ onToast }: Props) {
     return () => { cancelled = true }
   }, [location.pathname])
 
-  // The filing target: the first project, fetched once.
+  // The project list: the filing target is its first entry, and the scope
+  // picker offers the rest. One read serves both.
   useEffect(() => {
     let cancelled = false
     getProjects()
-      .then(ps => { if (!cancelled) setFilingProjectId(ps[0]?.id ?? 0) })
+      .then(ps => {
+        if (cancelled) return
+        setProjects(ps.map(p => ({ id: p.id, name: p.name })))
+        setFilingProjectId(ps[0]?.id ?? 0)
+      })
       .catch(() => { if (!cancelled) setFilingProjectId(0) })
     return () => { cancelled = true }
   }, [])
@@ -225,6 +259,14 @@ export default function AgentBot({ onToast }: Props) {
       .finally(() => setLoadingKey(null))
   }
 
+  // The desktop app's menu bar is its status bar: with the window closed
+  // the app keeps running, and "Ask Repotory…" brings the bot back
+  // (ADR-0045 decision 2). The event exists only in the desktop shell,
+  // so in a plain browser tab the listener is a no-op.
+  const openPanelRef = useRef<() => void>(() => {})
+  useEffect(() => { openPanelRef.current = openPanel })
+  useEffect(() => listenAskBot(() => { openPanelRef.current() }), [])
+
   const runAction = (key: string, load: () => Promise<AgentCard>) => {
     lastActionKeyRef.current = key
     setLoadingKey(key)
@@ -239,22 +281,29 @@ export default function AgentBot({ onToast }: Props) {
   // and a card that still shows the old scope's numbers would disagree with
   // the dashboard again — the exact thing the shared scope exists to prevent.
   const scopeRef = useRef(scope)
+  const contextKeyRef = useRef(contextKey)
   useEffect(() => {
-    const changed = scopeRef.current.date !== scope.date
+    const scopeChanged = scopeRef.current.date !== scope.date
       || scopeRef.current.starredOnly !== scope.starredOnly
+    const contextChanged = contextKeyRef.current !== contextKey
     scopeRef.current = scope
-    if (!changed || !open) return
+    contextKeyRef.current = contextKey
+    if ((!scopeChanged && !contextChanged) || !open) return
     const key = lastActionKeyRef.current
     const action = key ? context.actions.find(a => a.key === key) : undefined
-    if (!action) return
+    // A new context may not answer the old question: the module changed,
+    // so the action that was on screen is gone. The new context's own
+    // first action takes its place.
+    const next = action ?? context.actions[0]
+    if (!next) return
     // The re-read runs in a microtask rather than in the effect body: the
     // repo's react-hooks rule forbids a synchronous setState in an effect.
     Promise.resolve()
-      .then(() => { setLoadingKey(action.key); return action.load() })
-      .then(card => setCards(prev => [card, ...prev].slice(0, 5)))
+      .then(() => { setLoadingKey(next.key); return next.load() })
+      .then(card => setCards(prev => (contextChanged ? [card] : [card, ...prev].slice(0, 5))))
       .catch(() => {})
       .finally(() => setLoadingKey(null))
-  }, [scope, open, context])
+  }, [scope, open, context, contextKey])
 
   const ask = () => {
     const q = question.trim()
@@ -424,7 +473,70 @@ export default function AgentBot({ onToast }: Props) {
             </button>
           </div>
 
-          <div className={s.panelScope}>{t('agent.scope', { scope: context.scopeLabel })}</div>
+          {/* The module chips (ADR-0045 decision 3): the bot's own switch
+              between the app's five top-level modules. Clicking one moves
+              the main area there and the context follows — the bot leads
+              the way, it does not keep a private map. */}
+          <div className={s.modules} role="group" aria-label={t('agent.modulesTitle')}>
+            {NAV_ENTRIES.map(entry => (
+              <button
+                key={entry.to}
+                className={`${s.moduleChip} ${entry.active(location.pathname) ? s.moduleChipActive : ''}`}
+                onClick={() => { setScopeOpen(false); navigate(entry.to) }}
+              >
+                {t(entry.labelKey)}
+              </button>
+            ))}
+          </div>
+
+          {/* The scope chip (ADR-0045 decision 4): what a free-form
+              question is about. The whole library by default — the
+              desktop bot is a global assistant. */}
+          <div className={s.scopeRow}>
+            <button
+              className={`${s.scopeChip} ${scopeProjectId > 0 ? s.scopeChipLocked : ''}`}
+              onClick={() => setScopeOpen(v => !v)}
+              aria-expanded={scopeOpen}
+              aria-label={t('agent.scope', { scope: context.scopeLabel })}
+            >
+              <span className={s.scopeName}>{t('agent.scopeLabel')}</span>
+              <span className={s.scopeValue}>{context.scopeLabel}</span>
+              <Icon name="arrow-down" size={12} />
+            </button>
+            {scopeOpen && (
+              <div className={s.scopeMenu} role="menu">
+                <button
+                  role="menuitemradio"
+                  aria-checked={scopeProjectId === 0}
+                  className={`${s.scopeItem} ${scopeProjectId === 0 ? s.scopeItemActive : ''}`}
+                  onClick={() => { setScopeProjectId(0); setScopeOpen(false) }}
+                >
+                  {t('agent.context.library')}
+                </button>
+                {routeProjectId > 0 && (
+                  <button
+                    role="menuitemradio"
+                    aria-checked={scopeProjectId === routeProjectId}
+                    className={`${s.scopeItem} ${scopeProjectId === routeProjectId ? s.scopeItemActive : ''}`}
+                    onClick={() => { setScopeProjectId(routeProjectId); setScopeOpen(false) }}
+                  >
+                    {t('agent.context.thisProject')} · {projectName}
+                  </button>
+                )}
+                {projects.filter(p => p.id !== routeProjectId).map(p => (
+                  <button
+                    key={p.id}
+                    role="menuitemradio"
+                    aria-checked={scopeProjectId === p.id}
+                    className={`${s.scopeItem} ${scopeProjectId === p.id ? s.scopeItemActive : ''}`}
+                    onClick={() => { setScopeProjectId(p.id); setScopeOpen(false) }}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {mode === 'ask' ? (
             <>

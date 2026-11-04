@@ -117,6 +117,23 @@ The real power of Repotory comes from saving reusable insights:
 
 If you already have memory logs from Claude, Codex, OpenCode, OpenClaw, or Hermes, you can import them idempotently under **Settings → Plugins**. See [Knowledge Source Import](plugins/overview.md).
 
+### 7. After You Close the Window: The App Stays, the Bot Stays
+
+**Closing the window is not quitting the app.** The desktop app is resident by default: close the window and the process keeps running, ready to be summoned back.
+
+| Platform | After you close the window | How to get it back |
+| :--- | :--- | :--- |
+| **macOS** | the window hides and **the menu bar keeps a "Repotory" menu** | menu bar → **Repotory** → Show Repotory / Ask Repotory… |
+| **Windows / Linux** | the window minimises and **the taskbar keeps an icon** | click the taskbar icon |
+
+The menu has three items: **Show Repotory** (summon the window), **Ask Repotory…** (summon the window and open the bot panel straight away) and **Quit Repotory** (the one that really ends the process).
+
+> **There is no system tray icon.** Repotory runs on Wails v2, which has no tray (its `TrayMenu` type is never rendered by any platform frontend), so macOS relies on the **menu bar** and Windows / Linux on the **taskbar**. Stated plainly rather than pretending otherwise.
+
+**Starting the app again does not open a second process**: it wakes the one already running (and opens the bot), because only one process may own a given SQLite file.
+
+**The bot (the little draggable robot) now switches modules on its own**: a row of module chips sits at the top of its panel (Home / Dashboard / Knowledge / Review / Settings), and clicking one moves the main area there. **Its question scope is the whole library by default** — the desktop bot is a global assistant and the current page is only its current topic; use the **Scope** chip to lock it to one project when you want that.
+
 ---
 
 ## Core Capability Matrix

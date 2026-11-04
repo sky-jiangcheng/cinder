@@ -91,6 +91,7 @@ import java.awt.event.FocusEvent
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.image.BufferedImage
+import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
@@ -110,6 +111,9 @@ import kotlin.math.ceil
 
 /** The notification group the plugin posts its service problems to. */
 private const val NOTIFICATION_GROUP = "Repotory"
+
+/** Where the desktop app is downloaded from, when it is not installed. */
+private const val RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases"
 
 /**
  * The state of the connection to the Repotory service.
@@ -150,6 +154,17 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private val announcement = AnnouncementBar()
     private val pill = ConnectionPill()
     private val serviceToolbar: ActionToolbar
+
+    /**
+     * The panel's own action strip (ADR-0044 decision 2).
+     *
+     * The SAME four actions the VS Code panel draws in its header, in the
+     * same order. There the host's title bar cropped the third one off the
+     * panel edge, so the strip moved into the webview; Swing draws its own
+     * chrome, so here it was always the panel's — but it has to be the same
+     * four, or the two IDEs stop being the same product.
+     */
+    private val actionToolbar: ActionToolbar
 
     /** The composer's text field. */
     private val inputField = ChatTextArea()
@@ -199,6 +214,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         layout = BorderLayout(0, 0)
 
         serviceToolbar = buildToolbar("RepotoryService", serviceActions())
+        actionToolbar = buildToolbar("RepotoryActions", actionActions())
 
         add(headerStrip(), BorderLayout.NORTH)
         add(conversationArea(), BorderLayout.CENTER)
@@ -221,11 +237,19 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     // ------------------------------------------------------------- header strip
 
     /**
-     * The top band: the mark, the wordmark, the tagline and the two service
-     * actions.
+     * The top band: the mark, the wordmark, the panel's own action strip and
+     * the service actions.
      *
      * A slim native strip, not a printed card: every region has a flexible
      * width, so a narrow tool window reflows instead of clipping.
+     *
+     * The action strip is the SAME set the VS Code panel draws in its header
+     * (ADR-0044 decision 2): search, the AI provider sheet, diagnostics and
+     * the desktop app. The VS Code side had to move them out of the host's
+     * title bar, where the third one was cropped off the panel edge; Swing
+     * draws its own chrome, so here they were always the panel's own — but
+     * they have to be the same four, or the two IDEs stop being the same
+     * product.
      */
     private fun headerStrip(): JPanel {
         val header = JPanel(BorderLayout(JBUI.scale(8), 0))
@@ -237,26 +261,128 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         val brand = JPanel(BorderLayout(JBUI.scale(6), 0))
         brand.isOpaque = false
         markLabel(JBUI.scale(18))?.let { brand.add(it, BorderLayout.WEST) }
-        val wordmark = JPanel()
-        wordmark.isOpaque = false
-        wordmark.layout = BoxLayout(wordmark, BoxLayout.Y_AXIS)
+        // The slogan line is gone (ADR-0044 decision 4): the panel says what
+        // it does, not what the product is.
         val name = JLabel("Repotory")
         name.font = name.font.deriveFont(Font.BOLD)
-        val tagline = JLabel(ChatConsoleHtml.tagline())
-        tagline.font = tagline.font.deriveFont(JBUI.scaleFontSize(10f).toFloat())
-        tagline.foreground = UIUtil.getContextHelpForeground()
-        wordmark.add(name)
-        wordmark.add(tagline)
-        brand.add(wordmark, BorderLayout.CENTER)
+        brand.add(name, BorderLayout.CENTER)
 
-        val service = JPanel(BorderLayout(JBUI.scale(6), 0))
-        service.isOpaque = false
-        service.add(serviceToolbar.component, BorderLayout.WEST)
-        service.add(pill, BorderLayout.EAST)
+        // The right side of the strip: the service actions, the panel's own
+        // actions and the status pill, side by side. They share ONE panel so
+        // they stay together at the right edge — a BorderLayout.CENTER would
+        // stretch the action strip and push the buttons away from the pill.
+        val right = JPanel(BorderLayout(JBUI.scale(6), 0))
+        right.isOpaque = false
+        right.add(serviceToolbar.component, BorderLayout.WEST)
+        val actions = JPanel(BorderLayout())
+        actions.isOpaque = false
+        actions.add(actionToolbar.component, BorderLayout.WEST)
+        right.add(actions, BorderLayout.CENTER)
+        right.add(pill, BorderLayout.EAST)
 
         header.add(brand, BorderLayout.WEST)
-        header.add(service, BorderLayout.EAST)
+        header.add(right, BorderLayout.EAST)
         return header
+    }
+
+    /**
+     * The panel's own action strip.
+     *
+     * The four actions the VS Code panel shows in its header, in the same
+     * order, with the same wording in their tooltips.
+     */
+    private fun actionActions(): ActionGroup = DefaultActionGroup(
+        object : AnAction("Search notes", "Search notes and todos", AllIcons.Actions.Search), DumbAware {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun actionPerformed(e: AnActionEvent) {
+                switchMode(ChatMode.NOTES)
+                inputField.requestFocusInWindow()
+            }
+        },
+        object : AnAction("AI provider", "Configure the external AI provider", AllIcons.General.Settings), DumbAware {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun actionPerformed(e: AnActionEvent) = openProviderSheet()
+        },
+        object :
+            AnAction("Diagnostics", "Check the Repotory environment", AllIcons.General.InspectionsWarning),
+            DumbAware {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun actionPerformed(e: AnActionEvent) = openDiagnostics()
+        },
+        object : AnAction("Desktop app", "Open the Repotory desktop app", AllIcons.General.Web), DumbAware {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun actionPerformed(e: AnActionEvent) = openDesktopApp()
+        },
+    )
+
+    // ------------------------------------------------------- the header actions
+
+    /**
+     * The provider sheet (ADR-0044 decision 5).
+     *
+     * It is a dialog because Swing has no inline form surface, and it reads
+     * and writes the LOCAL SERVICE's settings — the plugin keeps no second
+     * copy, so the desktop app and this panel always use the same endpoint.
+     */
+    private fun openProviderSheet() {
+        ProviderDialog(project, session).show()
+    }
+
+    /**
+     * The environment report.
+     *
+     * It answers "why does this not work?" with facts: the MCP binary, the
+     * local service and the workspace's resolution — the three things that
+     * decide whether the panel can work at all.
+     */
+    private fun openDiagnostics() {
+        DiagnosticsDialog(project).show()
+    }
+
+    /**
+     * Open the Repotory desktop app.
+     *
+     * The desktop app is the FULL product; the panel is a thin client over
+     * it. Nothing is downloaded: when the app is not installed, the offer is
+     * the releases page.
+     */
+    private fun openDesktopApp() {
+        val os = System.getProperty("os.name", "").lowercase()
+        val command = when {
+            os.contains("mac") -> listOf("open", "-a", "Repotory")
+            os.contains("win") -> listOf("repotory.exe")
+            else -> listOf("repotory")
+        }
+        background({
+            try {
+                val process = ProcessBuilder(command).redirectErrorStream(true).start()
+                if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                    process.destroy()
+                    false
+                } else {
+                    process.exitValue() == 0
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }) { started ->
+            if (started) {
+                showAnnouncement(ChatLevel.INFO, "Repotory desktop app launched.")
+            } else {
+                val choice = Messages.showDialog(
+                    "The Repotory desktop app was not found. Install it from the releases page.",
+                    "Repotory: desktop app not found",
+                    arrayOf("Open the releases page", "Cancel"),
+                    0,
+                    Messages.getWarningIcon(),
+                )
+                if (choice == 0) BrowserUtil.browse(RELEASES_URL)
+            }
+        }
     }
 
     /** The brand mark as an ImageIcon, scaled from the bundled PNG (Swing has no SVG). */
@@ -412,9 +538,43 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         val panel = JPanel(BorderLayout())
         panel.isOpaque = false
         scopeChipButton.toolTipText = ""
-        scopeChipButton.addActionListener { session.toggleScope() }
+        scopeChipButton.addActionListener { onScopeChipClicked() }
         panel.add(scopeChipButton, BorderLayout.EAST)
         return panel
+    }
+
+    /**
+     * The chip was clicked.
+     *
+     * With a resolved project it toggles the lock. Without one it opens the
+     * project picker: the chip used to be DISABLED there, which left the
+     * reader with nothing to do at all (ADR-0044 decision 6). The candidates
+     * come from the server's own resolution, so the list is the projects the
+     * folder could plausibly belong to.
+     */
+    private fun onScopeChipClicked() {
+        if (session.currentScope().projectId > 0) {
+            session.toggleScope()
+            return
+        }
+        val candidates = session.candidates()
+        if (candidates.isEmpty()) {
+            session.toggleScope()
+            return
+        }
+        val names = candidates.map { it.name }.toTypedArray()
+        // showChooseDialog answers with the SELECTED INDEX (-1 when the
+        // reader cancels), not with the value.
+        val index = Messages.showChooseDialog(
+            project,
+            "Which project does this folder belong to?",
+            "Repotory: Choose a project",
+            null,
+            names,
+            names.first(),
+        )
+        if (index < 0 || index >= candidates.size) return
+        background { session.bindProject(candidates[index].id) }
     }
 
     /** The send button. */
@@ -456,6 +616,9 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             is ChatEvent.Announce -> showAnnouncement(event.level, event.message)
             is ChatEvent.Scope -> renderScope()
             is ChatEvent.Mode -> renderMode()
+            // The candidates arrived: the chip now has something to offer, so
+            // it says "choose a project" instead of "no project".
+            is ChatEvent.Candidates -> renderScope()
         }
     }
 
@@ -477,16 +640,25 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      * The lock is a default, not a restriction, so the chip says which of the
      * two it is — and a workspace that resolves to no project says so instead
      * of pretending it is scoped.
+     *
+     * The chip is NEVER disabled: an unresolved workspace used to disable it,
+     * which left the reader with nothing to do (ADR-0044 decision 6). It now
+     * offers the projects the folder could belong to.
      */
     private fun renderScope() {
         val chip = scopeChipButton
         val scope = session.currentScope()
         when {
             scope.projectId <= 0 -> {
-                chip.text = "No project"
-                chip.toolTipText = "This workspace does not resolve to a Repotory project yet — " +
-                    "the panel searches across all projects."
-                chip.isEnabled = false
+                val hasCandidates = session.candidates().isNotEmpty()
+                chip.text = if (hasCandidates) "Choose project" else "No project"
+                chip.toolTipText = if (hasCandidates) {
+                    "This workspace does not resolve to a Repotory project yet — click to pick one."
+                } else {
+                    "This workspace does not resolve to a Repotory project yet — " +
+                        "the panel searches across all projects."
+                }
+                chip.isEnabled = true
             }
             scope.locked -> {
                 chip.text = "🔒 " + scope.projectName
@@ -568,6 +740,19 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             "earlier" -> {
                 showEarlier = !showEarlier
                 renderFeed()
+            }
+            // The idle state's examples: they switch the knowledge face and
+            // put the cursor in the composer, so the reader's next move is
+            // one keystroke away.
+            "example" -> {
+                switchMode(
+                    when (parts.getOrNull(1)) {
+                        "notes" -> ChatMode.NOTES
+                        "pages" -> ChatMode.PAGES
+                        else -> ChatMode.ASK
+                    },
+                )
+                inputField.requestFocusInWindow()
             }
             "turn" -> {
                 val turnId = parts.getOrNull(1) ?: return

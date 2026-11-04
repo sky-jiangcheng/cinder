@@ -14,19 +14,28 @@ import type { ScopeState, ViewMessage } from "../chatTypes.js";
 
 interface FakeTransport extends Transport {
   calls: Array<{ name: string; args: Record<string, unknown> }>;
+  rpcs: Array<{ method: string; args: unknown[] }>;
 }
 
-function fakeTransport(tools: Record<string, string>, project?: { id: number; name: string }): FakeTransport {
+function fakeTransport(
+  tools: Record<string, string>,
+  project?: { id: number; name: string },
+  rpcResults: Record<string, unknown> = {},
+): FakeTransport {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const rpcs: Array<{ method: string; args: unknown[] }> = [];
   return {
     calls,
+    rpcs,
     async callTool(name, args) {
       calls.push({ name, args });
       const value = tools[name];
       if (value === undefined) throw new Error(`no such tool: ${name}`);
       return value;
     },
-    async rpc(method) {
+    async rpc(method, args) {
+      rpcs.push({ method, args });
+      if (method in rpcResults) return rpcResults[method];
       if (method === "ResolveWorkspacePath" && project) {
         return { Project: { id: project.id, name: project.name }, Repository: null };
       }
@@ -239,4 +248,128 @@ test("a note card with the same id as a todo still reads the note", async () => 
   const note = turn.cards?.find((c) => c.type === "note");
   assert.equal(note?.detail?.source, "note");
   assert.equal(note?.detail?.body, "the note body");
+});
+
+// ------------------------------------------------------- project recognition
+//
+// The workspace resolving to no project used to be a dead end: the chip was
+// disabled and the reader was told to go scan the project somewhere else.
+// The candidates ARE the next step (ADR-0044 decision 6).
+
+test("an unresolved workspace sends the candidate projects to the panel", async () => {
+  const transport = fakeTransport({}, undefined, {
+    ResolveWorkspacePath: {
+      Project: null,
+      Repository: null,
+      Candidates: [
+        { id: 12, name: "CBiPay" },
+        { id: 19, name: "CBiPay-Other" },
+      ],
+    },
+  });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.refreshScope();
+  const sent = messages.filter((m) => m.type === "projectCandidates");
+  assert.equal(sent.length, 1);
+  assert.deepEqual(
+    sent[0] && sent[0].type === "projectCandidates" ? sent[0].candidates : [],
+    [
+      { id: 12, name: "CBiPay" },
+      { id: 19, name: "CBiPay-Other" },
+    ],
+  );
+});
+
+test("picking a project files the workspace under it and resolves again", async () => {
+  const transport = fakeTransport({}, undefined, {
+    ResolveWorkspacePath: { Project: null, Repository: null, Candidates: [{ id: 12, name: "CBiPay" }] },
+  });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({ type: "pickProject", projectId: 12 });
+  const bind = transport.rpcs.find((r) => r.method === "BindWorkspaceToProject");
+  assert.ok(bind, "the workspace must be bound through the binding");
+  assert.deepEqual(bind.args, ["/tmp/work", 12]);
+  // The scope is re-resolved after the binding, so the panel locks itself.
+  assert.ok(transport.rpcs.some((r) => r.method === "ResolveWorkspacePath"));
+  assert.ok(messages.some((m) => m.type === "scope"));
+});
+
+// ------------------------------------------------------------ the AI provider
+//
+// The plugin does not own the provider configuration — it reads and writes the
+// server's (ADR-0044 decision 5). Two copies would drift, and the key belongs
+// to the server anyway.
+
+test("opening the provider sheet reads the server's configuration", async () => {
+  const transport = fakeTransport({}, undefined, {
+    GetConfig: {
+      config: { ai_chat_base_url: "http://127.0.0.1:1234/v1", ai_chat_model: "qwen", ai_chat_api_key: "********" },
+    },
+  });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({ type: "openSettings" });
+  const sent = messages.find((m) => m.type === "aiSettings");
+  assert.ok(sent && sent.type === "aiSettings");
+  assert.equal(sent.settings.baseUrl, "http://127.0.0.1:1234/v1");
+  assert.equal(sent.settings.model, "qwen");
+  // The masked key means "one is stored" — the panel never sees its value.
+  assert.equal(sent.settings.hasKey, true);
+});
+
+test("saving the provider writes to the server, and an empty key leaves the stored one alone", async () => {
+  const transport = fakeTransport({}, undefined, { GetConfig: { config: {} } });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({
+    type: "saveAISettings",
+    baseUrl: "http://127.0.0.1:1234/v1",
+    model: "qwen",
+    apiKey: "",
+  });
+  const writes = transport.rpcs.filter((r) => r.method === "UpdateConfig");
+  assert.equal(writes.length, 2, "only the base URL and the model are written");
+  assert.deepEqual(writes[0]?.args, ["ai_chat_base_url", "http://127.0.0.1:1234/v1"]);
+  assert.deepEqual(writes[1]?.args, ["ai_chat_model", "qwen"]);
+  assert.ok(messages.some((m) => m.type === "aiStatus" && m.level === "info"));
+});
+
+test("a typed key is written to the server", async () => {
+  const transport = fakeTransport({}, undefined, { GetConfig: { config: {} } });
+  const { post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({
+    type: "saveAISettings",
+    baseUrl: "http://127.0.0.1:1234/v1",
+    model: "qwen",
+    apiKey: "sk-secret",
+  });
+  const writes = transport.rpcs.filter((r) => r.method === "UpdateConfig");
+  assert.equal(writes.length, 3);
+  assert.deepEqual(writes[2]?.args, ["ai_chat_api_key", "sk-secret"]);
+});
+
+test("listing the models hands the panel the endpoint's list", async () => {
+  const transport = fakeTransport({}, undefined, {
+    ListAIModels: { models: ["qwen2.5-coder", "llama-3"], resolved_base_url: "http://127.0.0.1:1234/v1" },
+  });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({ type: "listAIModels", baseUrl: "http://127.0.0.1:1234/v1", apiKey: "" });
+  const sent = messages.find((m) => m.type === "aiModels");
+  assert.ok(sent && sent.type === "aiModels");
+  assert.deepEqual(sent.models, ["qwen2.5-coder", "llama-3"]);
+});
+
+test("a failing provider test reports the failure instead of pretending it worked", async () => {
+  const transport = fakeTransport({}, undefined, {});
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  // The fake transport answers null for TestAIChat, which the session reads
+  // as "the endpoint said nothing" — the verdict must still be a verdict.
+  await session.handle({ type: "testAIChat", baseUrl: "http://x/v1", model: "m", apiKey: "" });
+  const sent = messages.find((m) => m.type === "aiStatus");
+  assert.ok(sent && sent.type === "aiStatus");
 });

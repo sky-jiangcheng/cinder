@@ -233,13 +233,14 @@ var bindingSurfaces = map[string]BindingSurface{
 	"AssignWikiPageProject":   {SurfaceDesktopOnly, "", "the inverse of the promotion and what makes it reversible; scope is a human curation, not an agent's inference (ADR-0031)"},
 
 	// ---- knowledge graph (ADR-0019 / 0020 / 0021) ----------------------------
-	"FindMergeCandidates":  {SurfaceDesktopOnly, "", "read-only, but it is the surface a person looks at in order to decide — exposing it invites an agent to merge without the human"},
-	"SuggestWikiLinks":     {SurfaceDesktopOnly, "", "assists human authoring by suggesting [[wikilinks]] based on existing approved concept vocabulary"},
-	"MergeWikiPages":       {SurfaceDesktopOnly, "", "a merge destroys information and may only follow a human decision (ADR-0019 decision 1, pinned by TestMergeHasNoAutoPath)"},
-	"RunCommunitySummary":  {SurfaceDesktopOnly, "", "writes model output into the library; reachable by an agent it would defeat the review queue (ADR-0020 decision 9)"},
-	"ResolveWorkspacePath": {SurfaceDesktopOnly, "", "agents pass `path` to repotory_context instead; a second client-side matcher is the disagreement this avoids"},
-	"ListWikiPageVersions": {SurfaceDesktopOnly, "", "the page history panel (ADR-0021); snapshots exist so a HUMAN can notice stale approved content, not so an agent can act on it"},
-	"DiffWikiPageVersion":  {SurfaceDesktopOnly, "", "snapshot-vs-current diff on the review page; it supports a human approve/reject decision"},
+	"FindMergeCandidates":    {SurfaceDesktopOnly, "", "read-only, but it is the surface a person looks at in order to decide — exposing it invites an agent to merge without the human"},
+	"SuggestWikiLinks":       {SurfaceDesktopOnly, "", "assists human authoring by suggesting [[wikilinks]] based on existing approved concept vocabulary"},
+	"MergeWikiPages":         {SurfaceDesktopOnly, "", "a merge destroys information and may only follow a human decision (ADR-0019 decision 1, pinned by TestMergeHasNoAutoPath)"},
+	"RunCommunitySummary":    {SurfaceDesktopOnly, "", "writes model output into the library; reachable by an agent it would defeat the review queue (ADR-0020 decision 9)"},
+	"ResolveWorkspacePath":   {SurfaceDesktopOnly, "", "agents pass `path` to repotory_context instead; a second client-side matcher is the disagreement this avoids"},
+	"BindWorkspaceToProject": {SurfaceDesktopOnly, "", "filing a workspace folder under a project decides where that folder's sessions get their knowledge from; that is a human decision, and the write has no MCP twin for the same reason MoveNote has none"},
+	"ListWikiPageVersions":   {SurfaceDesktopOnly, "", "the page history panel (ADR-0021); snapshots exist so a HUMAN can notice stale approved content, not so an agent can act on it"},
+	"DiffWikiPageVersion":    {SurfaceDesktopOnly, "", "snapshot-vs-current diff on the review page; it supports a human approve/reject decision"},
 
 	// ---- organize (ADR-0023) -------------------------------------------------
 	"ListOrganizeGroups":   {SurfaceDesktopOnly, "", "read-only, but it is the surface a person looks at to decide where unfiled notes belong; an agent choosing for the user is the curation this feature deliberately leaves to a human"},

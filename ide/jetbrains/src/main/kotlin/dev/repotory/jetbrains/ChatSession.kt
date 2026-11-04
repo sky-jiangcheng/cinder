@@ -61,6 +61,13 @@ class ChatSession(
     private var mode: ChatMode = ChatMode.ASK
     private var scope: ScopeState = ScopeState()
 
+    /**
+     * The projects the workspace could belong to (ADR-0044 decision 6).
+     *
+     * The last resolution filled it; the chip's picker reads it.
+     */
+    private var candidates: List<ProjectOption> = emptyList()
+
     // ------------------------------------------------------------- the state
 
     /** Every turn so far, oldest first. The feed renders the tail of it. */
@@ -114,14 +121,21 @@ class ChatSession(
                 val repository = ((res["Repository"] as? Map<*, *>)?.get("path") as? String)
                     ?.let { path -> path.split('/', '\\').lastOrNull() ?: "" }
                     ?: ""
+                candidates = emptyList()
                 setScope(ScopeState(id, name, repository, locked = true))
                 return
             }
             setScope(ScopeState())
             announce(
                 ChatLevel.WARN,
-                "This folder is not in the knowledge base yet — the panel searches across all projects.",
+                "This folder is not in the knowledge base yet — pick a project, or search across all of them.",
             )
+            // The candidates ARE the next step (ADR-0044 decision 6): the chip
+            // used to be disabled here, which left the reader with nothing to do.
+            // They are stored AND posted: the chip's picker reads the stored
+            // list, the panel repaints on the event.
+            candidates = parseCandidates(res)
+            post(ChatEvent.Candidates(candidates))
         } catch (e: Exception) {
             setScope(ScopeState())
             announce(
@@ -142,7 +156,8 @@ class ChatSession(
         if (scope.projectId <= 0) {
             announce(
                 ChatLevel.WARN,
-                "This workspace does not resolve to a Repotory project yet, so there is nothing to lock to.",
+                "This workspace does not resolve to a Repotory project yet — " +
+                    "pick one from the project chip to lock the panel to it.",
             )
             return
         }
@@ -157,6 +172,156 @@ class ChatSession(
             },
         )
     }
+
+    // ------------------------------------------------- project recognition
+
+    /**
+     * The projects the workspace could belong to, as the last resolution saw
+     * them. The chip's picker reads this.
+     */
+    fun candidates(): List<ProjectOption> = candidates
+
+    /**
+     * File the workspace folder under a project (ADR-0044 decision 6).
+     *
+     * The binding is a write, so it lives on the HTTP bridge and has no MCP
+     * twin — which project a workspace belongs to is a human decision.
+     */
+    fun bindProject(projectId: Long) {
+        val dir = transport.workspacePath()
+        if (dir.isNullOrBlank()) {
+            announce(ChatLevel.ERROR, "Open a folder first — there is no workspace to file.")
+            return
+        }
+        try {
+            transport.rpc("BindWorkspaceToProject", listOf(dir, projectId))
+            refreshScope()
+            announce(ChatLevel.INFO, "This folder now belongs to that project.")
+        } catch (e: Exception) {
+            announce(
+                ChatLevel.ERROR,
+                "Could not file this folder: " + (e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName),
+            )
+        }
+    }
+
+    // ------------------------------------------------ the external AI provider
+
+    /**
+     * The provider settings the SERVER holds (ADR-0044 decision 5).
+     *
+     * The plugin reads the server's configuration instead of keeping its own
+     * copy: two copies would drift, and the key belongs to the server anyway
+     * (the desktop stores it in the `config` table too).
+     */
+    fun loadProvider(): ProviderOutcome {
+        return try {
+            val payload = transport.rpc("GetConfig", emptyList())
+            val config = (payload?.get("config") as? Map<*, *>)
+                ?.entries
+                ?.mapNotNull { (k, v) -> (k as? String)?.let { it to (v as? String).orEmpty() } }
+                ?.toMap()
+                .orEmpty()
+            val settings = AISettings(
+                baseUrl = config["ai_chat_base_url"].orEmpty(),
+                model = config["ai_chat_model"].orEmpty(),
+                // The server masks a stored secret; the sheet only needs to
+                // know that one is there.
+                hasKey = !config["ai_chat_api_key"].isNullOrBlank(),
+            )
+            ProviderOutcome(
+                ok = true,
+                message = if (settings.hasKey) {
+                    "Loaded from the local service — a key is stored, leave the field empty to keep it."
+                } else {
+                    "Loaded from the local service — no key stored yet."
+                },
+                settings = settings,
+            )
+        } catch (e: Exception) {
+            ProviderOutcome(
+                ok = false,
+                message = "Could not read the provider settings: " + reason(e),
+            )
+        }
+    }
+
+    /**
+     * Write the provider settings back to the server.
+     *
+     * An empty key means "leave the stored key alone" — the sheet never sees
+     * the key itself (the server masks it), so writing an empty value would
+     * silently delete it.
+     */
+    fun saveProvider(baseUrl: String, model: String, apiKey: String): ProviderOutcome {
+        return try {
+            updateConfig("ai_chat_base_url", baseUrl.trim())
+            updateConfig("ai_chat_model", model.trim())
+            if (apiKey.isNotBlank()) {
+                updateConfig("ai_chat_api_key", apiKey.trim())
+            }
+            ProviderOutcome(
+                ok = true,
+                message = if (apiKey.isNotBlank()) {
+                    "Provider saved — Repotory will use it for the next question."
+                } else {
+                    "Provider saved — the stored key was left untouched."
+                },
+            )
+        } catch (e: Exception) {
+            ProviderOutcome(
+                ok = false,
+                message = "Could not save the provider: " + reason(e),
+            )
+        }
+    }
+
+    /** Ask the endpoint which models it offers. */
+    fun listProviderModels(baseUrl: String, apiKey: String): ProviderOutcome {
+        return try {
+            val result = transport.rpc("ListAIModels", listOf(baseUrl.trim(), apiKey.trim()))
+            val models = (result?.get("models") as? List<*>)
+                ?.mapNotNull { it as? String }
+                .orEmpty()
+            ProviderOutcome(
+                ok = models.isNotEmpty(),
+                message = if (models.isEmpty()) {
+                    "The endpoint answered but advertised no models — type the model id by hand."
+                } else {
+                    "${models.size} model(s) offered by the endpoint."
+                },
+                models = models,
+            )
+        } catch (e: Exception) {
+            ProviderOutcome(ok = false, message = "Could not list the models: " + reason(e))
+        }
+    }
+
+    /** Send one minimal completion to prove the endpoint and the model work. */
+    fun testProvider(baseUrl: String, model: String, apiKey: String): ProviderOutcome {
+        return try {
+            val result = transport.rpc("TestAIChat", listOf(baseUrl.trim(), model.trim(), apiKey.trim()))
+            val reply = (result?.get("reply") as? String)?.trim().orEmpty()
+            ProviderOutcome(
+                ok = true,
+                message = if (reply.isNotEmpty()) {
+                    "The endpoint replied: " + reply.take(120)
+                } else {
+                    "The endpoint accepted the request."
+                },
+            )
+        } catch (e: Exception) {
+            ProviderOutcome(ok = false, message = "The endpoint did not answer: " + reason(e))
+        }
+    }
+
+    private fun updateConfig(key: String, value: String) {
+        transport.rpc("UpdateConfig", listOf(key, value))
+    }
+
+    /** The failure text of an exception, never blank. */
+    private fun reason(e: Exception): String =
+        e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
 
     // -------------------------------------------------------------- the turns
 
@@ -368,6 +533,23 @@ class ChatSession(
 
 /** The prefix the ask tool uses when the configured AI endpoint failed. */
 private const val ASK_ERROR_PREFIX = "error: "
+
+/**
+ * The candidate projects out of a resolution payload.
+ *
+ * A shape check, not a repair pass: a candidate without an id cannot be
+ * bound to, so it is dropped rather than shown as an unusable row.
+ */
+private fun parseCandidates(res: Map<String, Any?>?): List<ProjectOption> {
+    val raw = res?.get("Candidates") as? List<*> ?: return emptyList()
+    return raw.mapNotNull { entry ->
+        val map = entry as? Map<*, *> ?: return@mapNotNull null
+        val id = (map["id"] as? Number)?.toLong() ?: 0L
+        if (id <= 0) return@mapNotNull null
+        val name = map["name"] as? String ?: ""
+        ProjectOption(id, name.ifBlank { "project $id" })
+    }
+}
 
 /** The prefix the ask tool uses when no AI endpoint is configured at all. */
 private const val ASK_NO_ENDPOINT_PREFIX = "No AI endpoint is configured"

@@ -25,8 +25,14 @@ class ChatSessionTest {
         private val tools: Map<String, String>,
         private val project: Pair<Long, String>? = null,
         private val rpcFails: Boolean = false,
+        private val candidates: List<Pair<Long, String>> = emptyList(),
+        private val config: Map<String, String> = emptyMap(),
+        private val rpcResults: Map<String, Any?> = emptyMap(),
     ) : ChatTransport {
         val calls = mutableListOf<Pair<String, Map<String, Any?>>>()
+
+        /** Every RPC call, in order: the method and its arguments. */
+        val rpcCalls = mutableListOf<Pair<String, List<Any?>>>()
 
         override fun callTool(name: String, args: Map<String, Any?>): String {
             calls.add(name to args)
@@ -34,11 +40,22 @@ class ChatSessionTest {
         }
 
         override fun rpc(method: String, args: List<Any?>): Map<String, Any?>? {
+            rpcCalls.add(method to args)
             if (rpcFails) throw IllegalStateException("connection refused")
-            if (method == "ResolveWorkspacePath" && project != null) {
-                return mapOf("Project" to mapOf("id" to project.first, "name" to project.second))
+            if (method == "ResolveWorkspacePath") {
+                if (project != null) {
+                    return mapOf("Project" to mapOf("id" to project.first, "name" to project.second))
+                }
+                if (candidates.isNotEmpty()) {
+                    return mapOf(
+                        "Candidates" to candidates.map { mapOf("id" to it.first, "name" to it.second) },
+                    )
+                }
+                return null
             }
-            return null
+            if (method == "GetConfig") return mapOf("config" to config)
+            @Suppress("UNCHECKED_CAST")
+            return rpcResults[method] as? Map<String, Any?>
         }
 
         override fun serverUrl(): String = "http://127.0.0.1:18765"
@@ -302,7 +319,7 @@ class ChatSessionTest {
              {"type":"todo","id":42,"project_id":7,"title":"a todo","snippet":"t"}]
         """.trimIndent()
         val transport = FakeTransport(
-            mapOf(
+            tools = mapOf(
                 "repotory_notes_search" to hits,
                 "repotory_notes_read" to """{"id":42,"project_id":7,"title":"a note","content":"the body"}""",
             ),
@@ -316,5 +333,121 @@ class ChatSessionTest {
         // The TODO was opened — the note beside it, with the same number, was not.
         assertTrue(cards[1].body is CardBody.TextBody)
         assertNull(cards[0].body)
+    }
+
+    // -------------------------------------------------- project recognition
+
+    @Test
+    fun `an unresolved workspace offers the projects it could belong to`() {
+        // The chip used to be DISABLED here, which left the reader with
+        // nothing to do (ADR-0044 decision 6). The candidates ARE the next
+        // step, and they come from the server's own resolution.
+        val transport = FakeTransport(
+            tools = emptyMap(),
+            candidates = listOf(3L to "CBiPay", 4L to "Lushan"),
+        )
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        session.refreshScope()
+        assertEquals(listOf("CBiPay", "Lushan"), session.candidates().map { it.name })
+        val posted = events.filterIsInstance<ChatEvent.Candidates>().last()
+        assertEquals(2, posted.projects.size)
+        assertEquals(3L, posted.projects.first().id)
+    }
+
+    @Test
+    fun `a resolved workspace clears the candidates - there is nothing to pick`() {
+        val transport = FakeTransport(tools = emptyMap(), project = 7L to "Repotory")
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        session.refreshScope()
+        assertTrue(session.candidates().isEmpty())
+    }
+
+    @Test
+    fun `picking a project files the workspace under it`() {
+        val transport = FakeTransport(
+            tools = emptyMap(),
+            project = 7L to "Repotory",
+        )
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        session.refreshScope()
+        session.bindProject(7L)
+        val bind = transport.rpcCalls.first { it.first == "BindWorkspaceToProject" }
+        assertEquals("/tmp/work", bind.second[0])
+        assertEquals(7L, bind.second[1])
+    }
+
+    // ------------------------------------------------ the external AI provider
+
+    @Test
+    fun `the provider settings come from the server, not from the plugin`() {
+        val transport = FakeTransport(
+            tools = emptyMap(),
+            config = mapOf(
+                "ai_chat_base_url" to "http://127.0.0.1:1234/v1",
+                "ai_chat_model" to "qwen3",
+                "ai_chat_api_key" to "********",
+            ),
+        )
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        val outcome = session.loadProvider()
+        assertTrue(outcome.ok)
+        val settings = outcome.settings
+        assertNotNull(settings)
+        assertEquals("http://127.0.0.1:1234/v1", settings!!.baseUrl)
+        assertEquals("qwen3", settings.model)
+        // The server masks the secret; the sheet only needs to know it is there.
+        assertTrue(settings.hasKey)
+    }
+
+    @Test
+    fun `an empty api key leaves the stored key alone`() {
+        // The sheet never sees the key (the server masks it), so writing an
+        // empty value would silently DELETE it.
+        val transport = FakeTransport(tools = emptyMap())
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        val outcome = session.saveProvider("http://host/v1", "m", "")
+        assertTrue(outcome.ok)
+        val written = transport.rpcCalls.filter { it.first == "UpdateConfig" }.map { it.second[0] }
+        assertTrue(written.contains("ai_chat_base_url"))
+        assertTrue(written.contains("ai_chat_model"))
+        assertFalse(written.contains("ai_chat_api_key"))
+    }
+
+    @Test
+    fun `a typed api key is written`() {
+        val transport = FakeTransport(tools = emptyMap())
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        session.saveProvider("http://host/v1", "m", "sk-123")
+        val written = transport.rpcCalls.filter { it.first == "UpdateConfig" }.map { it.second }
+        assertTrue(written.any { it[0] == "ai_chat_api_key" && it[1] == "sk-123" })
+    }
+
+    @Test
+    fun `the model list comes from the endpoint`() {
+        val transport = FakeTransport(
+            tools = emptyMap(),
+            rpcResults = mapOf("ListAIModels" to mapOf("models" to listOf("a", "b"))),
+        )
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        val outcome = session.listProviderModels("http://host/v1", "sk")
+        assertTrue(outcome.ok)
+        assertEquals(listOf("a", "b"), outcome.models)
+    }
+
+    @Test
+    fun `a failing endpoint reports the failure instead of pretending it worked`() {
+        val transport = FakeTransport(tools = emptyMap(), rpcFails = true)
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        val outcome = session.testProvider("http://host/v1", "m", "sk")
+        assertFalse(outcome.ok)
+        assertTrue(outcome.message.contains("connection refused"))
     }
 }

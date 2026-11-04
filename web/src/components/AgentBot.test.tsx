@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import i18n from '../i18n' // real i18next instance — otherwise t() returns raw keys
 import { lagged } from '../test/renderReady' // ADR-0026 probe: REPO_TEST_LAG_MS re-opens the window
@@ -28,11 +28,15 @@ vi.mock('../api/client', async (importOriginal) => {
 })
 
 import {
+  askAIWithEvidenceStream,
   getConfig,
   getHeatmapData,
+  getProjectDetail,
+  getProjectOverview,
   getProjects,
   getSummary,
 } from '../api/client'
+import type { Project, ProjectDetail, ProjectOverview } from '../api/types'
 import AgentBot from './AgentBot'
 import { getDashboardScope, resetDashboardScope, setDashboardScope } from '../state/dashboardScope'
 import { getYesterday } from '../utils/dates'
@@ -44,6 +48,36 @@ const onToast = vi.fn()
 // day the app does — a hard-coded date would silently answer about a day
 // nobody is looking at.
 const Y = getYesterday()
+
+// The three project payloads are typed in full by the API layer, so the mocks
+// must be too — a partial literal would not compile against `getProjects`.
+// These helpers build the smallest value of each type that still says
+// everything the panel reads.
+function projectFixture(id: number, name: string): Project {
+  return {
+    id, name, root_path: `/x/${name}`, level_override: 0, is_auto_grouped: false,
+    is_starred: false, created_at: '', repo_count: 1, total_added: 0, total_deleted: 0,
+    my_added: 0, my_deleted: 0, my_files: 0, my_added_7d: 0, is_workday: false, below_standard: false,
+  }
+}
+
+function projectDetailFixture(id: number, name: string): ProjectDetail {
+  return {
+    id, name, root_path: `/x/${name}`, level_override: 0, is_auto_grouped: false,
+    repos: [],
+  }
+}
+
+function projectOverviewFixture(): ProjectOverview {
+  return {
+    readme_excerpt: '', tech_stack: [], languages: [], dependencies: [],
+    top_contributors: [], cached: false, recent_commits: [],
+    activity: {
+      total_commits: 12, commit_rate_30d: 3, active_days: 4,
+      last_commit_date: Y, active_months: 1,
+    },
+  }
+}
 
 beforeAll(async () => {
   await i18n.changeLanguage('zh-CN')
@@ -111,7 +145,11 @@ describe('AgentBot', () => {
   it('names the page it is on', () => {
     renderBot('/dashboard')
     clickBot()
-    expect(screen.getByText('仪表盘')).toBeTruthy()
+    // The module chip row repeats the module's name — that is the point of
+    // the row — so the page label is the one OUTSIDE that group.
+    const group = screen.getByRole('group', { name: '切换模块' })
+    const labels = screen.getAllByText('仪表盘')
+    expect(labels.some(node => !group.contains(node))).toBe(true)
   })
 
   it('opens with a card, not an empty box', async () => {
@@ -190,6 +228,70 @@ describe('AgentBot', () => {
     const b = bot()
     expect(parseFloat(b.style.left)).toBe(321)
     expect(parseFloat(b.style.top)).toBe(123)
+  })
+
+  it('offers the five modules and marks the one it is on', () => {
+    renderBot('/dashboard')
+    clickBot()
+    const group = screen.getByRole('group', { name: '切换模块' })
+    const chips = within(group).getAllByRole('button')
+    // The bot can lead the way: the same five entries the rail carries
+    // (ADR-0045 decision 3), so the bot and the rail can never point at
+    // different modules.
+    expect(chips.map(c => c.textContent)).toEqual(['首页', '仪表盘', '知识库', '审核', '设置'])
+    expect(chips[1].className).toContain('moduleChipActive')
+  })
+
+  it('asks about the whole library by default, even on a project page', async () => {
+    vi.mocked(getProjects).mockImplementation(() => lagged([
+      projectFixture(7, '支付'),
+    ]))
+    vi.mocked(getProjectDetail).mockImplementation(() => lagged(projectDetailFixture(7, '支付')))
+    vi.mocked(getProjectOverview).mockImplementation(() => lagged(projectOverviewFixture()))
+    renderBot('/project/7')
+    clickBot()
+    await screen.findAllByText('项目概览')
+    // ADR-0045 decision 4: the desktop bot is a global assistant — the
+    // page is only its current topic. The scope chip says so out loud.
+    expect(screen.getByText('全库')).toBeTruthy()
+  })
+
+  it('scopes a free-form question to the library until the user picks a project', async () => {
+    vi.mocked(getProjects).mockImplementation(() => lagged([
+      projectFixture(7, '支付'),
+    ]))
+    vi.mocked(getProjectDetail).mockImplementation(() => lagged(projectDetailFixture(7, '支付')))
+    vi.mocked(getProjectOverview).mockImplementation(() => lagged(projectOverviewFixture()))
+    renderBot('/project/7')
+    clickBot()
+    const box = await screen.findByLabelText('问题')
+    fireEvent.change(box, { target: { value: '这个项目最近踩了什么坑？' } })
+    fireEvent.click(screen.getByRole('button', { name: '直接发送' }))
+    await waitFor(() => expect(askAIWithEvidenceStream).toHaveBeenCalled())
+    expect(vi.mocked(askAIWithEvidenceStream).mock.calls[0][0]).toBe(0)
+  })
+
+  it('lets the user lock the question to a project', async () => {
+    vi.mocked(getProjects).mockImplementation(() => lagged([
+      projectFixture(7, '支付'),
+    ]))
+    vi.mocked(getProjectDetail).mockImplementation(() => lagged(projectDetailFixture(7, '支付')))
+    vi.mocked(getProjectOverview).mockImplementation(() => lagged(projectOverviewFixture()))
+    renderBot('/project/7')
+    clickBot()
+    await screen.findAllByText('项目概览')
+
+    // Open the scope picker and pick the project.
+    fireEvent.click(screen.getByRole('button', { name: /当前上下文/ }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: '当前项目 · 支付' }))
+    // The scope chip now names the locked project.
+    await screen.findAllByText('支付')
+
+    const box = await screen.findByLabelText('问题')
+    fireEvent.change(box, { target: { value: '这个项目最近踩了什么坑？' } })
+    fireEvent.click(screen.getByRole('button', { name: '直接发送' }))
+    await waitFor(() => expect(askAIWithEvidenceStream).toHaveBeenCalled())
+    expect(vi.mocked(askAIWithEvidenceStream).mock.calls[0][0]).toBe(7)
   })
 
   it('keeps the bot inside the window when it is resized', async () => {

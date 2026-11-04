@@ -63,6 +63,23 @@ export interface ProjectOption {
   name: string;
 }
 
+/**
+ * The external AI provider as the panel's settings sheet shows it.
+ *
+ * The plugin does NOT own these values — it reads and writes the server's
+ * `ai_chat_*` configuration (ADR-0044 decision 5). `hasKey` is the honest
+ * shape of a secret the server masks: the panel can say "a key is set"
+ * without ever seeing it.
+ */
+export interface AIProviderSettings {
+  /** The OpenAI-compatible base URL. */
+  baseUrl: string;
+  /** The model id to ask. */
+  model: string;
+  /** True when a key is stored on the server (its value is masked there). */
+  hasKey: boolean;
+}
+
 /** A fully-read item: the body of a note or of an approved knowledge page. */
 export interface Detail {
   type: string;
@@ -187,7 +204,22 @@ export type ExtMessage =
   | { type: "create"; turnId: string; cardType: string; cardId: number }
   | { type: "organize"; turnId: string; cardType: string; cardId: number }
   | { type: "save"; turnId: string; cardType: string; cardId: number; draft: EditorDraft }
-  | { type: "cancelEdit"; turnId: string; cardType: string; cardId: number };
+  | { type: "cancelEdit"; turnId: string; cardType: string; cardId: number }
+  // ---- the panel's own action strip (ADR-0044 decision 1) --------------------
+  // These four used to live in VS Code's `view/title`, where the host drew
+  // them at the far right of the sidebar title bar and cropped the third one
+  // off the panel's edge. The webview cannot draw that strip, so the actions
+  // moved into the header the panel draws itself.
+  | { type: "openSettings" }
+  | { type: "openDiagnostics" }
+  | { type: "openDesktop" }
+  // ---- the AI provider sheet (ADR-0044 decision 5) --------------------------
+  | { type: "closeSettings" }
+  | { type: "saveAISettings"; baseUrl: string; model: string; apiKey: string }
+  | { type: "listAIModels"; baseUrl: string; apiKey: string }
+  | { type: "testAIChat"; baseUrl: string; model: string; apiKey: string }
+  // ---- project recognition (ADR-0044 decision 6) ----------------------------
+  | { type: "pickProject"; projectId: number };
 
 /** host → webview. */
 export type ViewMessage =
@@ -210,4 +242,18 @@ export type ViewMessage =
   /** The editor closed with a saved note: the card shows the new body. */
   | { type: "saved"; turnId: string; cardType: string; cardId: number; detail: Detail }
   /** The editor closed with a created note: a new card joined the turn. */
-  | { type: "created"; turnId: string; cardType: string; cardId: number; detail: Detail };
+  | { type: "created"; turnId: string; cardType: string; cardId: number; detail: Detail }
+  /** The provider settings the server holds (the sheet's starting point). */
+  | { type: "aiSettings"; settings: AIProviderSettings }
+  /** The models the configured endpoint advertises. */
+  | { type: "aiModels"; models: string[] }
+  /** A one-line verdict about the provider sheet (saved / tested / failed). */
+  | { type: "aiStatus"; level: "info" | "warn" | "error"; message: string }
+  /**
+   * The projects the workspace could belong to.
+   *
+   * Sent when the workspace resolves to no project: the chip used to be
+   * disabled there, which left the user with nothing to do (ADR-0044
+   * decision 6).
+   */
+  | { type: "projectCandidates"; candidates: ProjectOption[] };

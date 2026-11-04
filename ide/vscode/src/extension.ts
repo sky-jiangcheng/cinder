@@ -748,7 +748,21 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   };
   const session = new ChatSession(transport, (message) => chatConsole.post(message));
-  chatConsole.onMessage = (msg) => session.handle(msg);
+  // The panel's own action strip (ADR-0044 decision 1). Two of the four
+  // actions are host-side commands — they were `view/title` registrations
+  // before, and the host chrome cropped the third one off the panel edge.
+  // They live in the webview's header now, so the host answers them here.
+  chatConsole.onMessage = async (msg) => {
+    if (msg.type === "openDiagnostics") {
+      await diagnose(context);
+      return;
+    }
+    if (msg.type === "openDesktop") {
+      await openDesktop();
+      return;
+    }
+    await session.handle(msg);
+  };
   chatConsole.onReady = () => session.init();
   session.onScopeChanged = (scope) => showScopeInStatusBar(scope);
   void session.refreshScope();

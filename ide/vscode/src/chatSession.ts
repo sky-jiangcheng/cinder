@@ -69,6 +69,24 @@ export interface Transport {
 interface WorkspaceResolution {
   Project?: { id: number; name: string; root_path: string } | null;
   Repository?: { id: number; path: string } | null;
+  /** The projects this folder could belong to, when it resolves to none. */
+  Candidates?: { id: number; name: string }[] | null;
+}
+
+/** The server's config payload: a flat key/value map plus the scan roots. */
+interface ConfigPayload {
+  config?: Record<string, string>;
+}
+
+/** The model list the provider sheet shows. */
+interface AIModelList {
+  models?: string[];
+}
+
+/** The verdict of a provider test. */
+interface AITestResult {
+  reply?: string;
+  resolved_base_url?: string;
 }
 
 /** The prefix the ask tool uses when the configured AI endpoint failed. */
@@ -144,8 +162,14 @@ export class ChatSession {
       this.setScope({ projectId: 0, projectName: "", repository: "", locked: false });
       this.announce(
         "warn",
-        "This folder is not in the knowledge base yet — the panel searches across all projects.",
+        "This folder is not in the knowledge base yet — pick a project, or search across all of them.",
       );
+      // The candidates ARE the next step (ADR-0044 decision 6): the chip used
+      // to be disabled here, which left the reader with nothing to do.
+      this.post({
+        type: "projectCandidates",
+        candidates: (res?.Candidates ?? []).map((p) => ({ id: Number(p.id ?? 0), name: p.name ?? "" })),
+      });
     } catch {
       this.setScope({ projectId: 0, projectName: "", repository: "", locked: false });
       this.announce(
@@ -188,8 +212,169 @@ export class ChatSession {
       case "cancelEdit":
         // The webview already restored the card on its own; nothing to undo.
         break;
+      case "openSettings":
+        await this.loadAISettings();
+        break;
+      case "closeSettings":
+        break;
+      case "saveAISettings":
+        await this.saveAISettings(msg.baseUrl, msg.model, msg.apiKey);
+        break;
+      case "listAIModels":
+        await this.listAIModels(msg.baseUrl, msg.apiKey);
+        break;
+      case "testAIChat":
+        await this.testAIChat(msg.baseUrl, msg.model, msg.apiKey);
+        break;
+      case "pickProject":
+        await this.bindWorkspaceToProject(msg.projectId);
+        break;
       default:
         break;
+    }
+  }
+
+  // ------------------------------------------------- the external AI provider
+
+  /**
+   * The provider settings the SERVER holds (ADR-0044 decision 5).
+   *
+   * The plugin reads the server's configuration instead of keeping its own
+   * copy: two copies would drift, and the key belongs to the server anyway
+   * (the desktop stores it in the `config` table too).
+   */
+  private async loadAISettings(): Promise<void> {
+    try {
+      const payload = (await this.transport.rpc("GetConfig", [])) as ConfigPayload | null;
+      const config = payload?.config ?? {};
+      this.post({
+        type: "aiSettings",
+        settings: {
+          baseUrl: config.ai_chat_base_url ?? "",
+          model: config.ai_chat_model ?? "",
+          // The server masks a stored secret; the panel only needs to know
+          // that one is there.
+          hasKey: Boolean(config.ai_chat_api_key),
+        },
+      });
+    } catch (err) {
+      this.post({
+        type: "aiStatus",
+        level: "error",
+        message: `The local Repotory service is not reachable at ${this.transport.serverUrl()} — the provider settings live there.`,
+      });
+      void err;
+    }
+  }
+
+  /**
+   * Write the provider settings back to the server.
+   *
+   * An empty key means "leave the stored key alone" — the panel never sees
+   * the key itself (the server masks it), so writing an empty value would
+   * silently delete it.
+   */
+  private async saveAISettings(baseUrl: string, model: string, apiKey: string): Promise<void> {
+    try {
+      await this.updateConfig("ai_chat_base_url", baseUrl.trim());
+      await this.updateConfig("ai_chat_model", model.trim());
+      if (apiKey.trim()) {
+        await this.updateConfig("ai_chat_api_key", apiKey.trim());
+      }
+      this.post({
+        type: "aiStatus",
+        level: "info",
+        message: apiKey.trim()
+          ? "Provider saved — Repotory will use it for the next question."
+          : "Provider saved — the stored key was left untouched.",
+      });
+      await this.loadAISettings();
+    } catch (err) {
+      this.post({
+        type: "aiStatus",
+        level: "error",
+        message: `Could not save the provider: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  }
+
+  /** Ask the endpoint which models it offers. */
+  private async listAIModels(baseUrl: string, apiKey: string): Promise<void> {
+    try {
+      const result = (await this.transport.rpc("ListAIModels", [baseUrl.trim(), apiKey.trim()])) as
+        | AIModelList
+        | null;
+      const models = result?.models ?? [];
+      this.post({ type: "aiModels", models });
+      if (!models.length) {
+        this.post({
+          type: "aiStatus",
+          level: "warn",
+          message: "The endpoint answered but advertised no models — type the model id by hand.",
+        });
+      }
+    } catch (err) {
+      this.post({
+        type: "aiStatus",
+        level: "error",
+        message: `Could not list the models: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  }
+
+  /** Send one minimal completion to prove the endpoint and the model work. */
+  private async testAIChat(baseUrl: string, model: string, apiKey: string): Promise<void> {
+    try {
+      const result = (await this.transport.rpc("TestAIChat", [
+        baseUrl.trim(),
+        model.trim(),
+        apiKey.trim(),
+      ])) as AITestResult | null;
+      const reply = (result?.reply ?? "").trim();
+      this.post({
+        type: "aiStatus",
+        level: "info",
+        message: reply ? `The endpoint replied: ${reply.slice(0, 120)}` : "The endpoint accepted the request.",
+      });
+    } catch (err) {
+      this.post({
+        type: "aiStatus",
+        level: "error",
+        message: `The endpoint did not answer: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  }
+
+  private async updateConfig(key: string, value: string): Promise<void> {
+    const response = (await this.transport.rpc("UpdateConfig", [key, value])) as {
+      error?: string;
+    } | null;
+    if (response?.error) throw new Error(response.error);
+  }
+
+  // ------------------------------------------------------ project recognition
+
+  /**
+   * File the workspace folder under a project (ADR-0044 decision 6).
+   *
+   * The binding is a write, so it lives on the HTTP bridge and has no MCP
+   * twin — which project a workspace belongs to is a human decision.
+   */
+  private async bindWorkspaceToProject(projectId: number): Promise<void> {
+    const dir = this.transport.workspacePath();
+    if (!dir) {
+      this.announce("error", "Open a folder first — there is no workspace to file.");
+      return;
+    }
+    try {
+      await this.transport.rpc("BindWorkspaceToProject", [dir, projectId]);
+      await this.refreshScope();
+      this.announce("info", "This folder now belongs to that project.");
+    } catch (err) {
+      this.announce(
+        "error",
+        `Could not file this folder: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -331,7 +516,7 @@ export class ChatSession {
     if (!this.scope.projectId) {
       this.announce(
         "warn",
-        "This workspace does not resolve to a Repotory project yet, so there is nothing to lock to.",
+        "This workspace does not resolve to a Repotory project yet — pick one from the project chip to lock the panel to it.",
       );
       return;
     }

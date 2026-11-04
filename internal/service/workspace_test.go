@@ -463,3 +463,107 @@ func TestBuildProjectContextAnnouncesItsScope(t *testing.T) {
 		t.Fatalf("expected the honest empty-scope wording:\n%s", out)
 	}
 }
+
+// ------------------------------------------------------------------- binding
+
+// Binding a workspace folder to a project (ADR-0044 decision 6).
+//
+// The whole point of the binding is that the NEXT resolution hits on its own:
+// the folder becomes a repository of that project, and tier 1 (repository-exact)
+// fires. If the binding returned a resolution that only the binding path could
+// produce, the panel would have to keep a second truth — and that is the
+// disagreement ADR-0009 exists to prevent.
+func TestBindRepositoryToProject_MakesTheNextResolutionHit(t *testing.T) {
+	svc, _ := setupService(t)
+	f := newWorkspaceFixture(t, svc)
+	// A folder that belongs to no project at all: not under CBiPay, and the
+	// auto-grouped catch-all rooted at home may not adopt it (tier 4 is
+	// restricted), so this really is unresolved before the binding.
+	loose := f.homeRoot + "/elsewhere/pay-loose"
+
+	// Before: the folder belongs to no project.
+	if res := svc.ResolveProjectByPath(loose); res.Project != nil {
+		t.Fatalf("precondition: %s should not resolve, got project %d", loose, res.Project.ID)
+	}
+
+	res, err := svc.BindRepositoryToProject(loose, f.project)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	if res == nil || res.Project == nil || res.Project.ID != f.project {
+		t.Fatalf("binding should resolve to project %d, got %+v", f.project, res)
+	}
+	if res.MatchedOn != "repository-exact" {
+		t.Fatalf("MatchedOn = %q, want repository-exact", res.MatchedOn)
+	}
+
+	// And the resolution on its own — not the binding's return value — must hit.
+	again := svc.ResolveProjectByPath(loose)
+	if again.Project == nil || again.Project.ID != f.project {
+		t.Fatalf("the folder should now resolve on its own, got %+v", again)
+	}
+	if again.MatchedOn != "repository-exact" {
+		t.Fatalf("MatchedOn = %q, want repository-exact", again.MatchedOn)
+	}
+}
+
+// Re-binding the same folder must MOVE it, not add a second row: two
+// repository rows for one path would make the resolution depend on row order.
+func TestBindRepositoryToProject_MovesTheFolderInsteadOfDuplicating(t *testing.T) {
+	svc, _ := setupService(t)
+	f := newWorkspaceFixture(t, svc)
+	other := addProject(t, svc.db, "CBiPay-Other", f.projectPt+"-other", false)
+	loose := f.homeRoot + "/elsewhere/pay-loose"
+
+	if _, err := svc.BindRepositoryToProject(loose, f.project); err != nil {
+		t.Fatalf("first bind: %v", err)
+	}
+	if _, err := svc.BindRepositoryToProject(loose, other); err != nil {
+		t.Fatalf("second bind: %v", err)
+	}
+
+	repos, err := db.GetAllRepositories(svc.db)
+	if err != nil {
+		t.Fatalf("load repositories: %v", err)
+	}
+	count := 0
+	for _, r := range repos {
+		if r.Path == loose {
+			count++
+			if r.ProjectID == nil || *r.ProjectID != other {
+				t.Fatalf("the folder should now belong to %d, got %+v", other, r.ProjectID)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly one repository row for %s, got %d", loose, count)
+	}
+}
+
+// The refusals: an unknown project, an empty path and a zero id must all be
+// refused rather than silently filed under something.
+func TestBindRepositoryToProject_RefusesBadInput(t *testing.T) {
+	svc, _ := setupService(t)
+	f := newWorkspaceFixture(t, svc)
+
+	if _, err := svc.BindRepositoryToProject(f.projectPt+"/x", 0); err == nil {
+		t.Fatal("a zero project id must be refused")
+	}
+	if _, err := svc.BindRepositoryToProject(f.projectPt+"/x", 999999); err == nil {
+		t.Fatal("an unknown project id must be refused")
+	}
+	if _, err := svc.BindRepositoryToProject("   ", f.project); err == nil {
+		t.Fatal("an empty path must be refused")
+	}
+
+	// A refused binding must not have written anything.
+	repos, err := db.GetAllRepositories(svc.db)
+	if err != nil {
+		t.Fatalf("load repositories: %v", err)
+	}
+	for _, r := range repos {
+		if r.Path == f.projectPt+"/x" {
+			t.Fatalf("a refused binding must not write a repository row")
+		}
+	}
+}

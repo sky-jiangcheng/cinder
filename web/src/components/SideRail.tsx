@@ -21,25 +21,11 @@ import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import Icon, { type IconName } from './Icon'
 import BrandMark from './BrandMark'
+import { NAV_ENTRIES } from './navEntries'
 import { getUpdateState, subscribeUpdateState } from '../api/updateStatus'
 import { getCurrentLanguage, setLanguage } from '../i18n'
 import type { ThemeMode } from '../utils/theme'
 import s from './SideRail.module.css'
-
-interface NavEntry {
-  to: string
-  labelKey: string
-  icon: IconName
-  active: (pathname: string) => boolean
-}
-
-const NAV_ENTRIES: NavEntry[] = [
-  { to: '/', labelKey: 'nav.home', icon: 'home', active: p => p === '/' },
-  { to: '/dashboard', labelKey: 'nav.dashboard', icon: 'grid', active: p => p === '/dashboard' },
-  { to: '/knowledge', labelKey: 'nav.knowledge', icon: 'book', active: p => p.startsWith('/knowledge') },
-  { to: '/review', labelKey: 'nav.review', icon: 'check', active: p => p.startsWith('/review') },
-  { to: '/settings', labelKey: 'nav.settings', icon: 'settings', active: p => p.startsWith('/settings') },
-]
 
 const THEME_OPTIONS: { value: ThemeMode; labelKey: string; icon: IconName }[] = [
   { value: 'light', labelKey: 'nav.themes.light', icon: 'sun' },

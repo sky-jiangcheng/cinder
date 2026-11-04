@@ -151,6 +151,42 @@ data class ChatTurn(
     val error: String = "",
 )
 
+/**
+ * The external AI provider as the panel's settings sheet shows it.
+ *
+ * The plugin does NOT own these values — it reads and writes the server's
+ * `ai_chat_*` configuration (ADR-0044 decision 5). [hasKey] is the honest
+ * shape of a secret the server masks: the sheet can say "a key is set"
+ * without ever seeing it.
+ */
+data class AISettings(
+    /** The OpenAI-compatible base URL. */
+    val baseUrl: String,
+    /** The model id to ask. */
+    val model: String,
+    /** True when a key is stored on the server (its value is masked there). */
+    val hasKey: Boolean,
+)
+
+/**
+ * The outcome of one provider operation (ADR-0044 decision 5).
+ *
+ * One type for all four calls — load, save, list models, test — because they
+ * all answer the same way: a verdict line, and at most some data. The sheet
+ * shows [message] where the user is looking, so the panel's announcement bar
+ * stays about the CONVERSATION and does not repeat the same sentence twice.
+ */
+data class ProviderOutcome(
+    /** True when the call did what it was asked. */
+    val ok: Boolean,
+    /** The one line the sheet shows. */
+    val message: String,
+    /** The settings the server holds (load only). */
+    val settings: AISettings? = null,
+    /** The models the endpoint advertises (list models only). */
+    val models: List<String> = emptyList(),
+)
+
 /** What the session tells the UI. */
 sealed interface ChatEvent {
     /** A turn was created or changed. */
@@ -164,6 +200,15 @@ sealed interface ChatEvent {
 
     /** The mode changed (the mode buttons show it). */
     data class Mode(val mode: ChatMode) : ChatEvent
+
+    /**
+     * The projects the workspace could belong to.
+     *
+     * Sent when the workspace resolves to no project: the chip used to be
+     * disabled there, which left the user with nothing to do (ADR-0044
+     * decision 6).
+     */
+    data class Candidates(val projects: List<ProjectOption>) : ChatEvent
 }
 
 // --------------------------------------------------------------- ask answers

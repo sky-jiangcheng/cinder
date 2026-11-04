@@ -1156,6 +1156,8 @@
     "title": "Repotory Agent",
     "open": "Open the agent",
     "scope": "Context: {{scope}}",
+    "modulesTitle": "Switch module",
+    "scopeLabel": "Scope",
     "actionsTitle": "Quick questions",
     "loading": "Loading…",
     "questionPlaceholder": "Ask anything… (Enter to send, Shift+Enter for a new line)",

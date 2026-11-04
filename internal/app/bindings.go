@@ -791,6 +791,25 @@ func (a *App) ResolveWorkspacePath(path string) (*service.ProjectResolution, err
 	return a.svc.ResolveProjectByPath(path), nil
 }
 
+// BindWorkspaceToProject files the IDE's workspace folder under a project.
+//
+// ADR-0044 decision 6. The read-only twin above tells the panel what the
+// folder resolves to; when that is "nothing", this is the way forward — the
+// user picks a project and the folder becomes a repository of it, so the next
+// resolution hits repository-exact on its own.
+//
+// It is a WRITE, so it has no MCP twin: which project a workspace belongs to
+// is a human decision, exactly like MoveNote's reasoning (re-filing knowledge
+// is not something an agent may do to itself).
+func (a *App) BindWorkspaceToProject(path string, projectID int64) (*service.ProjectResolution, error) {
+	// Same limit as the read-only twin, from the same package: the two
+	// surfaces must not disagree about how long a path they will look at.
+	if len(path) > bounds.MaxPathLen {
+		return nil, fmt.Errorf("%s", bounds.TooLong("path", len(path), bounds.MaxPathLen))
+	}
+	return a.svc.BindRepositoryToProject(path, projectID)
+}
+
 // ListWikiPageVersions returns a page's approved-content snapshots, newest first
 // (ADR-0021). Read-only, and the writer is a database trigger rather than a call
 // anyone can forget to make.

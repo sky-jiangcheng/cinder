@@ -295,6 +295,23 @@ interface RuntimeGlobal {
 }
 
 /**
+ * Subscribe to the "Ask Repotory…" menu event (ADR-0045 decision 2).
+ *
+ * The desktop app's menu bar is its status bar: the app keeps running with
+ * no visible window, and this event is how the menu brings the bot back.
+ * The event exists only in the desktop shell, so in a plain browser tab
+ * this returns a no-op unsubscribe.
+ */
+export function listenAskBot(cb: () => void): () => void {
+  const w = window as unknown as RuntimeGlobal
+  if (w.runtime?.EventsOn) {
+    const off = w.runtime.EventsOn('app.ask-bot', () => cb())
+    return () => off?.()
+  }
+  return () => {}
+}
+
+/**
  * Subscribe to the import.completed Wails event. Returns an unsubscribe
  * function when the runtime provides one (Wails v2.5+); callers must invoke
  * it on cleanup to avoid stacking duplicate listeners.

@@ -1155,6 +1155,8 @@
     "title": "Repotory Agent",
     "open": "打开 Agent",
     "scope": "当前上下文：{{scope}}",
+    "modulesTitle": "切换模块",
+    "scopeLabel": "作用域",
     "actionsTitle": "快捷问题",
     "loading": "加载中…",
     "questionPlaceholder": "问点什么…（Enter 发送，Shift+Enter 换行）",

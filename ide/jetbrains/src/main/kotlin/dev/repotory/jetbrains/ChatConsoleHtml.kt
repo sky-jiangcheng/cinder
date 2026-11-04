@@ -27,10 +27,6 @@ internal object ChatConsoleHtml {
     /** The href scheme every action in the feed uses. */
     const val LINK_SCHEME = "repotory:"
 
-    // The promo line under the wordmark. It is the only marketing copy in the
-    // product surface, and it says what the knowledge base actually holds.
-    private const val TAGLINE = "The local-first memory layer for AI coding agents"
-
     /** Colours pulled from the IDE theme, as #rrggbb for the HTML renderer. */
     private val meta: String get() = metaColorHex()
     private val border: String get() = colorHex(JBColor.border())
@@ -67,17 +63,23 @@ internal object ChatConsoleHtml {
         return sb.toString()
     }
 
-    /** The header's wordmark line, under the brand mark. */
-    fun tagline(): String = TAGLINE
-
     // ------------------------------------------------------------- the pieces
 
-    /** The idle panel before the first question — the product pitch, not an error. */
+    /**
+     * The idle panel before the first question.
+     *
+     * Copy only talks about ACTIONS (ADR-0044 decision 4): one line of what
+     * the panel does, then three tappable examples. The old four-paragraph
+     * pitch described the product instead of telling the reader what to do.
+     */
     private fun emptyStateHtml(): String = """
         <p style="font-size:12pt; font-weight:bold; margin-top:8px;">Ask what your project knows.</p>
-        <p>Repotory keeps what your coding agents learn — why a decision was made, what gotcha
-        you hit, what to do next — in a local, searchable store. Ask a question and read the answer
-        with its sources; switch to <b>Notes</b> or <b>Pages</b> to browse what is already there.</p>
+        <p>Repotory answers from the notes your coding agents left behind, with the sources listed.</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
+        <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/ask">Why was the retry budget raised?</a></td></tr>
+        <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/notes">Search the notes &amp; todos</a></td></tr>
+        <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/pages">Browse the approved knowledge pages</a></td></tr>
+        </table>
     """.trimIndent()
 
     /** The folded history: one row for every turn older than the visible ones. */

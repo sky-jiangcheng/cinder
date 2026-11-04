@@ -85,6 +85,27 @@ export interface AgentContext {
   actions: AgentAction[]
 }
 
+/**
+ * The parts of a context the caller can override.
+ *
+ * The route decides the QUICK ACTIONS (the page's own answers); the scope
+ * chip decides what a free-form QUESTION is about. They are two different
+ * things, and ADR-0045 decision 4 makes them two different things on
+ * purpose: the desktop bot asks about the whole library unless the user
+ * says otherwise, even while it sits on a project page.
+ */
+export interface AgentContextOptions {
+  /**
+   * The project a free-form question is scoped to; 0 = the whole library.
+   *
+   * Left undefined, the question follows the route (ADR-0041's behaviour:
+   * a project page asks about that project).
+   */
+  questionProjectId?: number
+  /** The scope's label ("全库" / a project name). */
+  questionScopeLabel?: string
+}
+
 /** The translator the builders use. */
 export type TFunc = (key: string, opts?: Record<string, unknown>) => string
 
@@ -419,17 +440,34 @@ export const DEFAULT_SCOPE: DashboardScope = { date: getYesterday(), starredOnly
  * agent and the dashboard are always talking about the same day and the same
  * projects. The chip label follows it too: a chip that says "今日提交量"
  * while the card answers about another day is a chip that lies.
+ *
+ * `options.questionProjectId` decides what a free-form question is about.
+ * Left undefined the question follows the route; set to 0 it is asked about
+ * the whole library (ADR-0045 decision 4).
  */
 export function buildAgentContext(
   pathname: string,
   t: TFunc,
   projectName?: string,
   scope: DashboardScope = DEFAULT_SCOPE,
+  options: AgentContextOptions = {},
 ): AgentContext {
   const { date, starredOnly } = scope
   const isToday = date === getYesterday()
   const projectMatch = pathname.match(/^\/project\/(\d+)/)
-  const projectId = projectMatch ? Number(projectMatch[1]) : 0
+  const routeProjectId = projectMatch ? Number(projectMatch[1]) : 0
+  // The question's scope: the caller's choice wins, otherwise the route's.
+  const projectId = options.questionProjectId === undefined
+    ? routeProjectId
+    : options.questionProjectId
+  const scopeLabel = options.questionScopeLabel
+    ?? (routeProjectId > 0 ? (projectName || t('agent.context.thisProject')) : t('agent.context.library'))
+  // Which project the QUICK ANSWERS are about. An explicit scope wins: the
+  // user picked that project on purpose, so the bot should answer about it.
+  // Without one the route decides, as it always did.
+  const actionProjectId = options.questionProjectId !== undefined && options.questionProjectId > 0
+    ? options.questionProjectId
+    : routeProjectId
 
   // The labels for the day-scoped actions, so a card and its chip never
   // disagree about which day they are about.
@@ -439,16 +477,16 @@ export function buildAgentContext(
   /** The library-wide day card, in the dashboard's scope. */
   const day = () => todayCard(t, date, starredOnly)
 
-  if (projectId) {
+  if (actionProjectId) {
     return {
       label: t('agent.context.project'),
-      scopeLabel: projectName || t('agent.context.thisProject'),
+      scopeLabel,
       projectId,
       actions: [
-        { key: 'overview', label: t('agent.action.projectOverview'), load: () => projectCard(t, projectId) },
-        { key: 'today', label: projectDayLabel, load: () => projectTodayCard(t, projectId, date) },
-        { key: 'commits', label: t('agent.action.projectCommits'), load: () => projectCommitsCard(t, projectId) },
-        { key: 'stack', label: t('agent.action.projectStack'), load: () => projectStackCard(t, projectId) },
+        { key: 'overview', label: t('agent.action.projectOverview'), load: () => projectCard(t, actionProjectId) },
+        { key: 'today', label: projectDayLabel, load: () => projectTodayCard(t, actionProjectId, date) },
+        { key: 'commits', label: t('agent.action.projectCommits'), load: () => projectCommitsCard(t, actionProjectId) },
+        { key: 'stack', label: t('agent.action.projectStack'), load: () => projectStackCard(t, actionProjectId) },
       ],
     }
   }
@@ -456,8 +494,8 @@ export function buildAgentContext(
   if (pathname.startsWith('/dashboard')) {
     return {
       label: t('agent.context.dashboard'),
-      scopeLabel: t('agent.context.library'),
-      projectId: 0,
+      scopeLabel,
+      projectId,
       actions: [
         { key: 'today', label: dayLabel, load: day },
         { key: 'week', label: t('agent.action.weekCommits'), load: () => weekCard(t, date) },
@@ -470,8 +508,8 @@ export function buildAgentContext(
   if (pathname.startsWith('/review')) {
     return {
       label: t('agent.context.review'),
-      scopeLabel: t('agent.context.library'),
-      projectId: 0,
+      scopeLabel,
+      projectId,
       actions: [
         { key: 'pending', label: t('agent.action.pendingPages'), load: () => reviewCard(t) },
         { key: 'today', label: dayLabel, load: day },
@@ -482,8 +520,8 @@ export function buildAgentContext(
   if (pathname.startsWith('/knowledge')) {
     return {
       label: t('agent.context.knowledge'),
-      scopeLabel: t('agent.context.library'),
-      projectId: 0,
+      scopeLabel,
+      projectId,
       actions: [
         { key: 'pending', label: t('agent.action.pending'), load: () => pendingCard(t) },
         { key: 'today', label: dayLabel, load: day },
@@ -494,8 +532,8 @@ export function buildAgentContext(
   if (pathname.startsWith('/wiki')) {
     return {
       label: t('agent.context.wiki'),
-      scopeLabel: t('agent.context.library'),
-      projectId: 0,
+      scopeLabel,
+      projectId,
       actions: [
         { key: 'handoff', label: t('agent.action.handoff'), load: () => handoffCard(t) },
         { key: 'today', label: dayLabel, load: day },
@@ -506,8 +544,8 @@ export function buildAgentContext(
   if (pathname.startsWith('/settings')) {
     return {
       label: t('agent.context.settings'),
-      scopeLabel: t('agent.context.library'),
-      projectId: 0,
+      scopeLabel,
+      projectId,
       actions: [
         { key: 'install', label: t('agent.action.installInfo'), load: () => installCard(t) },
         { key: 'today', label: dayLabel, load: day },
@@ -518,8 +556,8 @@ export function buildAgentContext(
   if (pathname === '/') {
     return {
       label: t('agent.context.home'),
-      scopeLabel: t('agent.context.library'),
-      projectId: 0,
+      scopeLabel,
+      projectId,
       actions: [
         { key: 'handoff', label: t('agent.action.handoff'), load: () => handoffCard(t) },
         { key: 'today', label: dayLabel, load: day },
@@ -529,8 +567,8 @@ export function buildAgentContext(
 
   return {
     label: t('agent.context.other'),
-    scopeLabel: t('agent.context.library'),
-    projectId: 0,
+    scopeLabel,
+    projectId,
     actions: [
       { key: 'today', label: dayLabel, load: day },
     ],

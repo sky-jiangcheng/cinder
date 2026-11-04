@@ -130,6 +130,53 @@ func (s *Service) ResolveProjectByPath(dir string) *ProjectResolution {
 	return res
 }
 
+// BindRepositoryToProject files a workspace folder under a project.
+//
+// ADR-0044 decision 6. The resolution above is READ-ONLY and it is the right
+// shape for an agent: "here is what this folder resolves to". But an IDE
+// panel that cannot resolve its workspace had nowhere to go next — the chip
+// was disabled and the user was told to go scan the project somewhere else.
+//
+// This is that next step, and it writes exactly one thing: the workspace
+// folder becomes a repository row pointing at the chosen project. The next
+// resolution then hits tier 1 (repository-exact) on its own — the binding is
+// not remembered anywhere else, and there is no second matcher to keep in
+// sync.
+//
+// The write is deliberately narrow: it files a DIRECTORY under a project, it
+// does not move knowledge, and it never touches notes. Which project a
+// workspace belongs to is a human decision, which is why this has no MCP twin
+// (the same reasoning as MoveNote).
+func (s *Service) BindRepositoryToProject(path string, projectID int64) (*ProjectResolution, error) {
+	dir := db.NormalizeMatchPath(path)
+	if dir == "" {
+		return nil, fmt.Errorf("a workspace path is required")
+	}
+	if projectID <= 0 {
+		return nil, fmt.Errorf("a project id is required")
+	}
+	projects, err := db.GetAllProjects(s.db)
+	if err != nil {
+		return nil, err
+	}
+	known := false
+	for i := range projects {
+		if projects[i].ID == projectID {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return nil, fmt.Errorf("project %d does not exist", projectID)
+	}
+	if err := db.UpsertRepository(s.db, dir, projectID); err != nil {
+		return nil, err
+	}
+	// Resolve again so the caller gets the resolution the binding produced —
+	// the caller shows this to the user, and a stale "unresolved" would be a lie.
+	return s.ResolveProjectByPath(dir), nil
+}
+
 // repositoryScopeID is the id to narrow mining and notes to, or 0 when the
 // resolution carries no repository. Centralised so context building and search
 // cannot disagree about what "scoped" means.

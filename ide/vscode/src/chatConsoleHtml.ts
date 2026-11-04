@@ -7,9 +7,19 @@
 /** How many recent turns stay expanded; the rest fold into one row. */
 export const VISIBLE_TURNS = 2;
 
-// The promo line under the wordmark. It is the only marketing copy in the
-// product surface, and it says what the knowledge base actually holds.
-const TAGLINE = "The local-first memory layer for AI coding agents";
+// The panel's own action strip (ADR-0044 decision 1).
+//
+// The icons are inlined instead of loaded from `media/`: the webview has no
+// `localResourceRoots`, so an external file 404s — and a 404 icon shows up in
+// VS Code as an empty box, which is harder to diagnose than a missing button.
+// All four draw with `currentColor`, so they follow the theme by themselves.
+const ICON_SEARCH = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
+const ICON_SETTINGS = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.6v1.9M8 12.5v1.9M1.6 8h1.9M12.5 8h1.9M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+
+const ICON_DIAGNOSE = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 4.5h12M2 8h12M2 11.5h12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="5.5" cy="4.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="10" cy="8" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="6.5" cy="11.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`;
+
+const ICON_DESKTOP = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 13.5h5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
 
 const KINDS = ["knowledge", "log", "idea", "other"];
 
@@ -49,15 +59,32 @@ export function consoleHtml(nonce: string): string {
     background: var(--vscode-sideBar-background, #fff);
   }
   button { font-family: var(--vscode-font-family, sans-serif); }
-  /* ---------- header: identity ---------- */
-  header.brand {
+  /* ---------- header: identity + the panel's OWN action strip ---------- */
+  /* The strip used to live in VS Code's view/title, where the host drew it
+     at the far right of the sidebar title bar and cropped the third button
+     off the panel's edge. The webview cannot draw that strip, so the actions
+     moved in here (ADR-0044 decision 1). */
+  header.bar {
     display: flex; align-items: center; gap: 8px; flex: none;
-    padding: 8px 12px; border-bottom: 1px solid var(--r-border);
+    padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--r-border);
   }
   .mark { flex: none; display: block; border-radius: 3px; }
-  .wordmark { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .wordmark b { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
-  .wordmark span { font-size: 10px; line-height: 1.3; color: var(--r-muted); }
+  .wordmark {
+    flex: 1; min-width: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .actions { display: flex; align-items: center; gap: 1px; flex: none; }
+  .icon-btn {
+    flex: none; width: 24px; height: 24px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; border-radius: 4px;
+    color: var(--vscode-foreground, #333);
+  }
+  .icon-btn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
+  .icon-btn:focus-visible { outline: 1px solid var(--r-accent); outline-offset: -1px; }
+  .icon-btn svg { width: 16px; height: 16px; display: block; }
+  /* A narrow sidebar has no room for the wordmark; the icons never shrink. */
+  @media (max-width: 260px) { .wordmark { display: none; } }
   /* ---------- announcement bar (ADR-0036 decision 5) ---------- */
   .announce {
     flex: none; display: flex; align-items: flex-start; gap: 8px;
@@ -231,28 +258,42 @@ export function consoleHtml(nonce: string): string {
   }
   /* ---------- the composer (always there) ---------- */
   footer.composer {
-    flex: none; border-top: 1px solid var(--r-border); padding: 8px 10px 10px;
+    flex: none; position: relative;
+    border-top: 1px solid var(--r-border); padding: 8px 10px 8px;
   }
+  .input-wrap { position: relative; }
   .composer textarea {
     display: block; width: 100%; min-height: 32px; max-height: 190px; resize: none;
-    padding: 6px 8px; font-size: 12px; line-height: 1.5;
+    padding: 6px 30px 6px 8px; font-size: 12px; line-height: 1.5;
     font-family: var(--vscode-font-family, sans-serif);
     color: var(--vscode-input-foreground, #333);
     background: var(--vscode-input-background, #fff);
     border: 1px solid var(--vscode-input-border, #ccc); border-radius: 5px; outline: none;
   }
   .composer textarea:focus { border-color: var(--r-accent); }
-  .composer-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
-  .modes { display: flex; gap: 3px; flex: none; }
-  .mode-btn {
-    padding: 3px 8px; font-size: 11px; cursor: pointer; border-radius: 4px;
-    border: 1px solid transparent;
-    color: var(--vscode-foreground, #333);
-    background: var(--vscode-button-secondaryBackground, rgba(128,128,128,.15));
-  }
-  .mode-btn.active {
+  /* The send key sits INSIDE the input box (Windsurf's shape), so the input
+     grows downward and never covers it. */
+  .send {
+    position: absolute; right: 4px; bottom: 4px;
+    width: 22px; height: 22px; padding: 0; font-size: 12px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 4px;
     color: var(--vscode-button-foreground, #fff);
     background: var(--vscode-button-background, #06c);
+  }
+  .send:disabled { opacity: .5; cursor: default; }
+  /* The tool row: the mode group on the left, the project chip on the right. */
+  .tools { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+  .modes { display: flex; gap: 3px; flex: none; }
+  .mode-btn {
+    padding: 3px 8px; font-size: 11px; cursor: pointer; border-radius: 11px;
+    border: 1px solid var(--r-border);
+    color: var(--r-muted); background: transparent;
+  }
+  .mode-btn:hover { color: var(--vscode-foreground, #333); }
+  .mode-btn.active {
+    color: var(--vscode-button-foreground, #fff);
+    background: var(--vscode-button-background, #06c); border-color: transparent;
   }
   .chip {
     margin-left: auto; flex: none; max-width: 45%; overflow: hidden;
@@ -261,14 +302,74 @@ export function consoleHtml(nonce: string): string {
     border: 1px solid var(--r-border); background: transparent; color: var(--r-muted);
   }
   .chip.locked { color: var(--vscode-foreground, #333); border-color: var(--r-accent); }
-  .chip:disabled { opacity: .65; cursor: default; }
-  .send {
-    flex: none; padding: 4px 12px; font-size: 12px; cursor: pointer;
-    border: none; border-radius: 4px;
-    color: var(--vscode-button-foreground, #fff);
-    background: var(--vscode-button-background, #06c);
+  .chip.pick { color: var(--vscode-foreground, #333); border-style: dashed; }
+  /* ---------- the project picker (a popover under the chip) ---------- */
+  .pop {
+    position: absolute; z-index: 5; left: 10px; right: 10px; bottom: 46px;
+    max-height: 220px; overflow-y: auto;
+    border: 1px solid var(--r-border); border-radius: 6px;
+    background: var(--vscode-dropdown-background, var(--vscode-editorWidget-background, #fff));
+    box-shadow: 0 4px 14px rgba(0,0,0,.22);
   }
-  .send:disabled { opacity: .5; cursor: default; }
+  .pop[hidden] { display: none; }
+  .pop-item {
+    display: block; width: 100%; text-align: left;
+    padding: 6px 10px; font-size: 12px; cursor: pointer;
+    background: none; border: none; color: var(--vscode-foreground, #333);
+  }
+  .pop-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.18)); }
+  .pop-empty { padding: 8px 10px; font-size: 11px; color: var(--r-muted); }
+  /* ---------- the provider sheet (ADR-0044 decision 5) ---------- */
+  .sheet {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 24px 12px; overflow-y: auto;
+    background: rgba(0,0,0,.32);
+  }
+  .sheet[hidden] { display: none; }
+  /* The inputs below set display: block, which would beat the UA's
+     display: none for [hidden] — the model picker would show up empty. */
+  .sheet [hidden] { display: none; }
+  .sheet-panel {
+    width: 100%; max-width: 360px; padding: 12px 14px 14px;
+    border: 1px solid var(--r-border); border-radius: 8px;
+    background: var(--vscode-editorWidget-background, var(--vscode-editor-background, #fff));
+  }
+  .sheet-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .sheet-head b { flex: 1; font-size: 13px; }
+  .sheet-head .x {
+    flex: none; background: none; border: none; cursor: pointer; color: inherit;
+    font-size: 14px; line-height: 1; padding: 0 2px; opacity: .7;
+  }
+  .sheet-head .x:hover { opacity: 1; }
+  .sheet-note { margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: var(--r-muted); }
+  .sheet label {
+    display: block; margin-bottom: 8px; font-size: 10px; font-weight: 600;
+    letter-spacing: .05em; text-transform: uppercase; color: var(--r-muted);
+  }
+  .sheet input[type=text], .sheet input[type=password], .sheet select {
+    display: block; width: 100%; margin-top: 3px; padding: 4px 7px; font-size: 12px;
+    font-family: var(--vscode-font-family, sans-serif);
+    color: var(--vscode-input-foreground, #333);
+    background: var(--vscode-input-background, #fff);
+    border: 1px solid var(--vscode-input-border, #ccc); border-radius: 4px; outline: none;
+  }
+  .sheet input:focus, .sheet select:focus { border-color: var(--r-accent); }
+  .sheet-row { display: flex; gap: 6px; margin-top: 4px; }
+  .sheet-row button {
+    flex: 1; padding: 5px 8px; font-size: 11px; cursor: pointer;
+    border: 1px solid var(--r-border); border-radius: 4px;
+    color: var(--vscode-foreground, #333);
+    background: var(--vscode-button-secondaryBackground, rgba(128,128,128,.15));
+  }
+  .sheet-row button.primary {
+    color: var(--vscode-button-foreground, #fff);
+    background: var(--vscode-button-background, #06c); border-color: transparent;
+  }
+  .sheet-row button:disabled { opacity: .55; cursor: default; }
+  .sheet-status { margin-top: 9px; font-size: 11px; line-height: 1.5; color: var(--r-muted); overflow-wrap: anywhere; }
+  .sheet-status.error { color: var(--vscode-errorForeground, #c33); }
+  .sheet-status.info { color: var(--vscode-foreground, #333); }
   /* ---------- the empty state ---------- */
   .empty { padding: 18px 12px; font-size: 12px; line-height: 1.6; color: var(--r-muted); }
   .empty h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--vscode-foreground, #333); }
@@ -279,12 +380,26 @@ export function consoleHtml(nonce: string): string {
     font-family: var(--vscode-editor-font-family, monospace);
     border: 1px solid var(--r-border);
   }
+  .examples { list-style: none; margin: 0; padding: 0; }
+  .examples li { margin-bottom: 5px; }
+  .examples button {
+    width: 100%; text-align: left; padding: 6px 9px; font-size: 12px; cursor: pointer;
+    border: 1px solid var(--r-border); border-radius: 5px;
+    color: var(--vscode-foreground, #333); background: transparent;
+  }
+  .examples button:hover { border-color: var(--r-accent); }
 </style>
 </head>
 <body>
-<header class="brand">
+<header class="bar">
   <span class="mark">${MARK_SVG}</span>
-  <span class="wordmark"><b>Repotory</b><span>${TAGLINE}</span></span>
+  <span class="wordmark">Repotory</span>
+  <span class="actions">
+    <button class="icon-btn" id="act-search" type="button" title="Search notes &amp; todos" aria-label="Search notes and todos">${ICON_SEARCH}</button>
+    <button class="icon-btn" id="act-settings" type="button" title="AI provider" aria-label="AI provider">${ICON_SETTINGS}</button>
+    <button class="icon-btn" id="act-diagnose" type="button" title="Setup &amp; diagnostics" aria-label="Setup and diagnostics">${ICON_DIAGNOSE}</button>
+    <button class="icon-btn" id="act-desktop" type="button" title="Open the Repotory desktop app" aria-label="Open the Repotory desktop app">${ICON_DESKTOP}</button>
+  </span>
 </header>
 <div class="announce" id="announce" hidden>
   <span class="msg" id="announce-msg"></span>
@@ -292,17 +407,39 @@ export function consoleHtml(nonce: string): string {
 </div>
 <main class="feed" id="feed"></main>
 <footer class="composer">
-  <textarea id="q" rows="1" placeholder="Ask about this project…" spellcheck="false"></textarea>
-  <div class="composer-row">
+  <div class="pop" id="project-pop" hidden></div>
+  <div class="input-wrap">
+    <textarea id="q" rows="1" placeholder="Ask about this project…" spellcheck="false"></textarea>
+    <button class="send" id="send" type="button" title="Send (Enter)" aria-label="Send">↵</button>
+  </div>
+  <div class="tools">
     <span class="modes" role="group" aria-label="Knowledge mode">
       <button class="mode-btn active" data-mode="ask" type="button">Ask</button>
       <button class="mode-btn" data-mode="notes" type="button">Notes</button>
       <button class="mode-btn" data-mode="pages" type="button">Pages</button>
     </span>
     <button class="chip" id="chip" type="button">All projects</button>
-    <button class="send" id="send" type="button">Send</button>
   </div>
 </footer>
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <b>AI provider</b>
+      <button class="x" id="sheet-x" type="button" title="Close" aria-label="Close">✕</button>
+    </div>
+    <p class="sheet-note">Repotory keeps these in its local service. The desktop app and this panel use the same ones.</p>
+    <label>Base URL<input id="ai-base" type="text" spellcheck="false" placeholder="http://127.0.0.1:1234/v1"></label>
+    <label>API key<input id="ai-key" type="password" spellcheck="false" placeholder="leave empty to keep the stored key"></label>
+    <label>Model<input id="ai-model" type="text" spellcheck="false" placeholder="the model id to ask"></label>
+    <select id="ai-picker" hidden></select>
+    <div class="sheet-row">
+      <button id="ai-models" type="button">List models</button>
+      <button id="ai-test" type="button">Test</button>
+      <button id="ai-save" class="primary" type="button">Save</button>
+    </div>
+    <div class="sheet-status" id="ai-status"></div>
+  </div>
+</div>
 <script nonce="${nonce}">
 const MARK_SVG = ${JSON.stringify(MARK_SVG)};
 const KINDS = ${JSON.stringify(KINDS)};
@@ -315,6 +452,13 @@ const q = document.getElementById('q');
 const sendBtn = document.getElementById('send');
 const chip = document.getElementById('chip');
 const modeBtns = Array.from(document.querySelectorAll('.mode-btn'));
+const popEl = document.getElementById('project-pop');
+const sheetEl = document.getElementById('sheet');
+const aiBase = document.getElementById('ai-base');
+const aiKey = document.getElementById('ai-key');
+const aiModel = document.getElementById('ai-model');
+const aiPicker = document.getElementById('ai-picker');
+const aiStatus = document.getElementById('ai-status');
 
 // ---- state -----------------------------------------------------------------
 // The host owns the DATA (the turns); this side owns the FOLD STATE. A
@@ -327,6 +471,9 @@ let expandedSources = new Set();
 let expandedCards = new Set();
 let showEarlier = false;
 let announcement = null;
+// The projects the workspace could belong to (ADR-0044 decision 6). The host
+// sends them when the workspace resolves to none.
+let candidates = [];
 // The open editor: { turnId, cardId, node }. The node is kept alive across
 // re-renders so a half-typed draft survives an unrelated turn update.
 let editor = null;
@@ -389,15 +536,16 @@ function cardBadge(card) {
 }
 
 // ---- scope chip ------------------------------------------------------------
+// The chip is never disabled. An unresolvable workspace used to disable it,
+// which left the reader with nothing to do (ADR-0044 decision 6); now it
+// opens the project picker instead.
 function renderScope() {
   if (!scope.projectId) {
-    chip.textContent = 'No project';
-    chip.className = 'chip';
-    chip.disabled = true;
-    chip.title = 'This workspace does not resolve to a Repotory project yet — the panel searches across all projects.';
+    chip.textContent = candidates.length ? 'Choose project' : 'All projects';
+    chip.className = 'chip pick';
+    chip.title = 'This workspace does not resolve to a Repotory project yet — click to pick one.';
     return;
   }
-  chip.disabled = false;
   if (scope.locked) {
     chip.textContent = '🔒 ' + scope.projectName;
     chip.className = 'chip locked';
@@ -407,6 +555,43 @@ function renderScope() {
     chip.className = 'chip';
     chip.title = 'Searching across all projects — click to lock back to ' + scope.projectName + '.';
   }
+}
+
+// ---- the project picker -----------------------------------------------------
+function closePop() {
+  popEl.hidden = true;
+  popEl.innerHTML = '';
+}
+
+function renderPop() {
+  popEl.innerHTML = '';
+  const all = document.createElement('button');
+  all.className = 'pop-item';
+  all.type = 'button';
+  all.textContent = 'All projects';
+  all.addEventListener('click', () => {
+    closePop();
+    if (scope.projectId) vscode.postMessage({ type: 'scopeToggle' });
+  });
+  popEl.appendChild(all);
+  for (const c of candidates) {
+    const item = document.createElement('button');
+    item.className = 'pop-item';
+    item.type = 'button';
+    item.textContent = c.name;
+    item.addEventListener('click', () => {
+      closePop();
+      vscode.postMessage({ type: 'pickProject', projectId: c.id });
+    });
+    popEl.appendChild(item);
+  }
+  if (!candidates.length) {
+    const empty = document.createElement('div');
+    empty.className = 'pop-empty';
+    empty.textContent = 'No projects in the knowledge base yet — run a scan in the desktop app.';
+    popEl.appendChild(empty);
+  }
+  popEl.hidden = false;
 }
 
 // ---- announcement bar ------------------------------------------------------
@@ -425,11 +610,29 @@ function renderFeed() {
   if (!turns.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
+    // Copy only talks about actions (ADR-0044 decision 4): one question and
+    // three tappable examples. The old four-paragraph pitch described the
+    // product instead of telling the reader what to do.
     empty.innerHTML = MARK_SVG +
       '<h2>Ask what your project knows.</h2>' +
-      '<p>Repotory keeps what your coding agents learn — why a decision was made, what gotcha you hit, what to do next — in a local, searchable store. ' +
-      'Ask a question and read the answer with its sources; switch to <b>Notes</b> or <b>Pages</b> to browse what is already there.</p>' +
-      '<p>Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> <kbd>S</kbd> (macOS: <kbd>Ctrl</kbd>+<kbd>Cmd</kbd>+<kbd>R</kbd> <kbd>S</kbd>) to search without touching the mouse.</p>';
+      '<p>Repotory answers from the notes your coding agents left behind, with the sources listed.</p>' +
+      '<ul class="examples">' +
+      '<li><button type="button" data-example="ask">Why was the retry budget raised?</button></li>' +
+      '<li><button type="button" data-example="notes">Search the notes &amp; todos</button></li>' +
+      '<li><button type="button" data-example="pages">Browse the approved knowledge pages</button></li>' +
+      '</ul>';
+    for (const btn of Array.from(empty.querySelectorAll('[data-example]'))) {
+      btn.addEventListener('click', () => {
+        const kind = btn.getAttribute('data-example');
+        if (kind === 'notes' || kind === 'pages') {
+          setMode(kind);
+          vscode.postMessage({ type: 'mode', mode: kind });
+          q.focus();
+          return;
+        }
+        q.focus();
+      });
+    }
     feedEl.appendChild(empty);
     return;
   }
@@ -784,8 +987,65 @@ for (const b of modeBtns) {
   b.addEventListener('click', () => { setMode(b.dataset.mode); vscode.postMessage({ type: 'mode', mode }); });
 }
 
-chip.addEventListener('click', () => vscode.postMessage({ type: 'scopeToggle' }));
+// The chip opens the project picker when the workspace resolves to nothing,
+// and toggles the lock when it does (ADR-0044 decision 6).
+chip.addEventListener('click', () => {
+  if (!scope.projectId) {
+    if (popEl.hidden) renderPop();
+    else closePop();
+    return;
+  }
+  vscode.postMessage({ type: 'scopeToggle' });
+});
 sendBtn.addEventListener('click', submit);
+
+// ---- the panel's own action strip -----------------------------------------
+document.getElementById('act-search').addEventListener('click', () => {
+  setMode('notes');
+  vscode.postMessage({ type: 'mode', mode: 'notes' });
+  q.focus();
+});
+document.getElementById('act-settings').addEventListener('click', () => {
+  sheetEl.hidden = false;
+  aiStatus.textContent = '';
+  aiStatus.className = 'sheet-status';
+  vscode.postMessage({ type: 'openSettings' });
+});
+document.getElementById('act-diagnose').addEventListener('click', () => {
+  vscode.postMessage({ type: 'openDiagnostics' });
+});
+document.getElementById('act-desktop').addEventListener('click', () => {
+  vscode.postMessage({ type: 'openDesktop' });
+});
+
+// ---- the provider sheet ----------------------------------------------------
+document.getElementById('sheet-x').addEventListener('click', () => {
+  sheetEl.hidden = true;
+  vscode.postMessage({ type: 'closeSettings' });
+});
+document.getElementById('ai-save').addEventListener('click', () => {
+  vscode.postMessage({
+    type: 'saveAISettings',
+    baseUrl: aiBase.value,
+    model: aiModel.value,
+    apiKey: aiKey.value,
+  });
+});
+document.getElementById('ai-test').addEventListener('click', () => {
+  vscode.postMessage({
+    type: 'testAIChat',
+    baseUrl: aiBase.value,
+    model: aiModel.value,
+    apiKey: aiKey.value,
+  });
+});
+document.getElementById('ai-models').addEventListener('click', () => {
+  vscode.postMessage({ type: 'listAIModels', baseUrl: aiBase.value, apiKey: aiKey.value });
+});
+aiPicker.addEventListener('change', () => {
+  if (aiPicker.value) aiModel.value = aiPicker.value;
+});
+
 document.getElementById('announce-x').addEventListener('click', () => {
   announcement = null;
   renderAnnounce();
@@ -839,6 +1099,34 @@ window.addEventListener('message', (event) => {
     editor = null;
     expandedCards.add(msg.turnId + '/' + msg.cardType + '/' + msg.cardId);
     renderFeed();
+  } else if (msg.type === 'projectCandidates') {
+    candidates = msg.candidates || [];
+    renderScope();
+    if (!popEl.hidden) renderPop();
+  } else if (msg.type === 'aiSettings') {
+    aiBase.value = msg.settings.baseUrl || '';
+    aiModel.value = msg.settings.model || '';
+    aiKey.value = '';
+    aiKey.placeholder = msg.settings.hasKey
+      ? 'a key is stored — leave empty to keep it'
+      : 'no key stored yet';
+  } else if (msg.type === 'aiModels') {
+    const models = msg.models || [];
+    aiPicker.innerHTML = '';
+    if (models.length) {
+      for (const m of models) {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        aiPicker.appendChild(opt);
+      }
+      aiPicker.hidden = false;
+    } else {
+      aiPicker.hidden = true;
+    }
+  } else if (msg.type === 'aiStatus') {
+    aiStatus.textContent = msg.message || '';
+    aiStatus.className = 'sheet-status ' + (msg.level || 'info');
   }
 });
 

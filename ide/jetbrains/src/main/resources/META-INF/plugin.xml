@@ -51,12 +51,21 @@
           panel back to cross-project. Ask and Pages really filter
           server-side; Notes cannot (the tool has no project parameter), so
           the panel filters the hits itself and tells you how many it
-          dropped.
+          dropped. A folder that is not in the knowledge base yet says so and
+          offers the projects it could belong to — one click files it.
+        • Your own AI provider, configured in place: the panel's gear button
+          opens the endpoint, the key and the model, and writes them to the
+          local Repotory service — the same settings the desktop app uses, so
+          the two never disagree. "List models" asks the endpoint what it
+          offers; "Test" proves the answer comes back before you save.
         • Full-text search (FTS5) over every note and todo you ever captured,
           ranked exactly as the Repotory desktop app ranks it — the plugin
           reimplements no ranking, no snippet extraction, no gating.
         • One-click jump: "Open in Repotory" deep-links the item into the
           Repotory web app.
+        • A diagnostics report: the panel's third button answers "why does
+          this not work?" — the MCP binary, the local service and the
+          workspace's resolution, each with what it found.
         • Note maintenance without leaving the IDE: edit a note's title, kind,
           tags and 项目 (project), add a new note under the same 项目, or let
           the AI tidy a note into a restructured proposal — sections, an

@@ -109,9 +109,130 @@
   background: var(--bg-tertiary);
 }
 
-.panelScope {
+/* ---- module chips (ADR-0045 decision 3) ----
+   The bot's own switch between the app's five top-level modules. They
+   sit under the header, above the cards, because they answer "which
+   module am I talking about" — the scope chip below answers "about
+   which project". */
+
+.modules {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.moduleChip {
+  font-family: inherit;
   font-size: 11px;
+  line-height: 1.4;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: none;
   color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+.moduleChip:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.moduleChipActive {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ---- the scope chip (ADR-0045 decision 4) ---- */
+
+.scopeRow {
+  position: relative;
+}
+
+.scopeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.scopeChip:hover {
+  border-color: var(--accent);
+}
+
+.scopeName {
+  color: var(--text-muted);
+}
+
+.scopeValue {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A locked scope is stated, not implied: the accent says "this question
+   is about one project", the plain grey said "the whole library". */
+.scopeChipLocked {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.scopeChipLocked .scopeValue {
+  color: var(--accent);
+}
+
+.scopeMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 220;
+  min-width: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.scopeItem {
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scopeItem:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.scopeItemActive {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* ---- quick actions ---- */

@@ -11,13 +11,13 @@ The panel is a **conversation console**, not a result list (ADR-0036). One quest
 | Surface | What it does |
 |---|---|
 | Tool window **Repotory** | The chat console. Five regions: a header (brand + channel state), an **announcement bar** (one line, dismissible — it replaced the old status line), the **conversation feed** (the only scroll area), the **folded history** (older turns fold into one row) and the **input area** at the bottom (always there) |
-| Brand header | The mark, the wordmark and the one-line pitch, plus the channel state (a pill: `online` / `offline` / `checking…`) and the two service actions — **Refresh** and **Start local service**. Clicking the pill re-checks the channel |
+| Brand header | The mark and the wordmark, plus the channel state (a pill: `online` / `offline` / `checking…`), the **service actions** — **Refresh** and **Start local service** — and the **panel actions**: **Search notes**, **AI provider**, **Diagnostics** and **Desktop app**. Clicking the pill re-checks the channel |
 | Conversation feed | One turn per question: the mode it was asked in (`ASK` / `NOTES` / `PAGES`), the question, and the answer or the cards it produced. The newest **2** turns stay open; everything older folds into `▸ N earlier turns` and opens on click |
 | **Ask** mode (default) | `repotory_ask` answers with prose plus a `Sources:` list. The answer is the body; the sources are its footnote, folded behind `Sources (N) ▸`. A source list that cannot be parsed is shown **verbatim** — the raw text — so nothing is ever swallowed |
 | **Notes** mode | `repotory_notes_search` answers with cards (notes / todos). Clicking a title opens the item **in place**, inside the turn that produced it — there is no separate detail pane |
 | **Pages** mode | `repotory_wiki_search` answers with the approved knowledge pages, opened in place the same way |
 | Card actions | **Open in Repotory** (deep link into the web UI), **Copy** (title + body), and for notes **Edit** / **New note here** / **AI Tidy** — see *Maintaining notes without leaving the IDE* below |
-| Scope chip | The panel is **locked to the current project** by default. The chip shows `🔒 <project>`; clicking it unlocks the panel back to cross-project. A workspace that resolves to no project says `No project` instead of pretending to be scoped |
+| Scope chip | The panel is **locked to the current project** by default. The chip shows `🔒 <project>`; clicking it unlocks the panel back to cross-project. A workspace that resolves to no project offers the candidate projects to pick from instead of a dead end — see *When the folder is not in the knowledge base yet* |
 | **Tools → Repotory** | Opens the tool window (also on its title bar) |
 | **Settings → Tools → Repotory** | The **`repotory-mcp`** binary (the plugin's data channel) with a **Check MCP channel** diagnostic that lists every place it looked, plus the optional server address, server binary path, a **Test connection** button that tells "API and web UI both reachable" from "API-only, the link would 404", and **Start local service** for a one-click launch |
 
@@ -34,6 +34,24 @@ The lock is a **default, not a restriction** — the chip opens and the panel go
 | **Notes** | `repotory_notes_search` has **no project parameter** (`path` only re-ranks), so the panel filters the hits itself and says so: `Locked to <project>: K of N matches shown. The notes tool has no project filter, so the panel filtered the list.` |
 
 A project that resolves to no project, or a service that is not running, leaves the panel unlocked **and says why** — the panel never pretends to be scoped.
+
+## The external AI provider
+
+The **AI provider** action in the panel header opens a dialog that configures the model the panel talks to: **Base URL**, **API key** and **Model**, plus **List models** (ask the endpoint what it serves) and **Test** (send one minimal completion and show what came back). Save writes it to the Repotory service.
+
+Three things worth knowing:
+
+- **It is the server's configuration, not the plugin's.** The plugin reads and writes the same `ai_chat_*` settings the desktop app uses (Settings → AI). Two copies would drift, and the key belongs to the service anyway — so **there is no AI key in the plugin's settings**, and what you configure in JetBrains is the same endpoint when you open the panel in VS Code.
+- **An empty key means "leave the stored key alone."** The service masks a stored secret, so the dialog never sees it; saving with the key field empty keeps what is already stored instead of deleting it.
+- **The panel works without one.** Ask falls back to the service's own answer path when no provider is configured; the dialog says so instead of failing silently.
+
+> **A deliberate difference from the VS Code panel:** there, the provider form is a **sheet inside the webview**; Swing has no inline form surface, so the JetBrains plugin opens a `DialogWrapper` dialog. The fields, the buttons and the status wording are the same on both sides — only the carrier differs (ADR-0044).
+
+## When the folder is not in the knowledge base yet
+
+If the workspace folder resolves to no project, the scope chip stops being a dead end: it offers the candidate projects the service knows about. Pick one and the plugin files this folder under it — a real binding in the knowledge base, not a per-window setting — and the next resolution hits it directly. The picker is the *only* place a project is chosen by hand; everything else is resolved from the path.
+
+If there are no candidates either (the service is unreachable, or nothing matches), the chip says so and the panel searches across all projects — it never pretends to be scoped to something.
 
 ## Requirements
 
@@ -81,7 +99,7 @@ The console is also the editor. Open a card in the feed (click its title) and th
 > **A deliberate difference from the VS Code console:** there, the editor opens *inside* the card. Swing has no inline editing surface, so the JetBrains plugin opens the shared `NoteEditorDialog` instead — a platform modal form with a live preview. The gate is the same: the AI writes a proposal, the human saves it.
 
 
-The tidy proposal is generated server-side by the shared service layer (`OrganizeNote`, twin tool `repotory_notes_organize`) and writes nothing by itself — the human save is the gate, exactly as in the desktop app. The AI endpoint is configured once in the desktop app (Settings → AI); that setting lives in the knowledge base, so the headless service this plugin talks to reads the same one. In the dialog's preview a mermaid block shows as labelled source code — the same note renders it as a graphic in the desktop app.
+The tidy proposal is generated server-side by the shared service layer (`OrganizeNote`, twin tool `repotory_notes_organize`) and writes nothing by itself — the human save is the gate, exactly as in the desktop app. The AI endpoint is configured once — in the desktop app (Settings → AI) or from the panel's **AI provider** dialog, which writes the same setting. Either way it lives in the knowledge base, so the headless service this plugin talks to reads the same one. In the dialog's preview a mermaid block shows as labelled source code — the same note renders it as a graphic in the desktop app.
 
 ## Settings
 
@@ -91,7 +109,7 @@ The tidy proposal is generated server-side by the shared service layer (`Organiz
 | Server address | `http://127.0.0.1:18765` | Repotory headless service URL (deep links and moving notes) |
 | Server binary | empty (auto-detect) | Path to `repotory-server`; empty means `REPOTORY_SERVER_BIN`, then `PATH`, then common install directories |
 
-All three values are stored in the IDE's own properties store (`repotory.xml`), not in Repotory's database — a client must not write into the service's storage.
+All three values are stored in the IDE's own properties store (`repotory.xml`), not in Repotory's database — a client must not write into the service's storage. **The AI provider is not here either**: it lives in the service's configuration and is edited from the panel (see *The external AI provider*), so there is nothing to keep in sync between the IDE and the desktop app.
 
 ## Scope
 

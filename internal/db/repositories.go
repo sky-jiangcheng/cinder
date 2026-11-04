@@ -74,11 +74,23 @@ func GetRepoCounts(db *sql.DB) (map[int64]int, error) {
 	return counts, rows.Err()
 }
 
+// upsertRepositorySQL is the one statement behind both upsert entry points, so
+// the transactional and the plain form cannot drift apart.
+const upsertRepositorySQL = "INSERT INTO repositories (path, project_id) VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET project_id = excluded.project_id"
+
+// UpsertRepository inserts or updates a repository row by path.
+//
+// The plain (non-transactional) twin of UpsertRepositoryTx: binding a
+// workspace folder to a project is a single statement and needs no
+// transaction (ADR-0044 decision 6).
+func UpsertRepository(db *sql.DB, path string, projectID int64) error {
+	_, err := db.Exec(upsertRepositorySQL, path, projectID)
+	return err
+}
+
 // UpsertRepositoryTx inserts or updates a repository row by path.
 func UpsertRepositoryTx(tx *sql.Tx, path string, projectID int64) error {
-	_, err := tx.Exec(
-		"INSERT INTO repositories (path, project_id) VALUES (?, ?) ON CONFLICT(path) DO UPDATE SET project_id = excluded.project_id",
-		path, projectID)
+	_, err := tx.Exec(upsertRepositorySQL, path, projectID)
 	return err
 }
 
