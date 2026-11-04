@@ -8,7 +8,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync/atomic"
 
 	"repotory/internal/app"
 	"repotory/internal/db"
@@ -18,11 +17,9 @@ import (
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
-	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:web/dist
@@ -73,43 +70,16 @@ func main() {
 			// as a rail there too.
 			TitleBar: mac.TitleBarHidden(),
 		},
-		// The application menu (ADR-0045 decision 2). On macOS this IS the
-		// status bar: the app keeps running with no visible window, and
-		// these items are how the user gets it back.
+		// The application menu (ADR-0047 decision 1). The desktop app is no
+		// longer resident — closing the window ends the process — so there is
+		// no status bar to keep and no "Show Repotory" item.
+		//
+		// The Edit and Window role menus stay, and they are NOT optional:
+		// Wails' darwin frontend always calls SetAsApplicationMenu, and with
+		// no menu at all the bar would be empty — macOS webviews then have no
+		// Cmd+C / Cmd+V. These are role items, so the system renders them and
+		// they do not depend on any item of our own.
 		Menu: appMenu(),
-		// Only one process may own the database. A second launch wakes the
-		// running one instead of starting a rival process over the same
-		// SQLite file (ADR-0045 decision 1).
-		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "com.repotory.desktop",
-			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
-				// The user asked for the app again: bring it forward and
-				// open the bot — the bot is the app's front door now.
-				showWindow()
-				askBot()
-			},
-		},
-		// Closing the window does NOT end the process (ADR-0045 decision 1).
-		// OnBeforeClose intercepts the close: macOS hides the window so the
-		// menu bar keeps the app's items, and Windows and Linux minimise it
-		// so the taskbar keeps an icon. Only the "Quit Repotory" menu item
-		// really ends the process.
-		OnBeforeClose: func(ctx context.Context) bool {
-			if quitting.Load() {
-				return false // the explicit quit gets through
-			}
-			// The hide runs on its own goroutine: on Windows the close
-			// callback arrives ON the UI thread, and the window calls there
-			// post messages to that same thread.
-			go func() {
-				if runtime.GOOS == "darwin" {
-					wailsruntime.WindowHide(ctx)
-				} else {
-					wailsruntime.WindowMinimise(ctx)
-				}
-			}()
-			return true
-		},
 		AssetServer: &assetserver.Options{
 			Assets:  assets,
 			Handler: spaFallback{},
@@ -146,9 +116,6 @@ func main() {
 			},
 		},
 		OnStartup: func(ctx context.Context) {
-			// The menu callbacks get no context of their own, so the app
-			// context is kept here for them to reach the runtime with.
-			appCtx.Store(ctx)
 			a.Startup(ctx)
 		},
 		OnShutdown: a.Shutdown,
@@ -161,88 +128,31 @@ func main() {
 	}
 }
 
-// --- the resident app (ADR-0045) ---------------------------------------------
-//
-// Closing the window does not end the process. The bot stays alive, and on
-// macOS the menu bar keeps the app's items, so the app is still reachable
-// with no visible window.
-//
-// Wails v2 has no system tray: pkg/menu carries a TrayMenu type, but no
-// platform frontend renders it and no public API reaches it. So on macOS
-// the MENU BAR is the status bar, and on Windows and Linux the taskbar
-// icon is. The manual says so out loud.
-
-// quitting is set by the "Quit Repotory" menu item, so the close handler
-// can tell "the window was closed" from "the app is leaving".
-var quitting atomic.Bool
-
-// appCtx holds the Wails context (a context.Context, stored atomically).
-var appCtx atomic.Value
-
-// The event the menu bar's "Ask Repotory…" item fires; the frontend opens
-// the bot panel when it sees it.
-const eventAskBot = "app.ask-bot"
-
 // appMenu builds the application menu.
 //
-// On macOS this IS the status bar: the app runs with no visible window and
-// these items are how the user gets it back. The Edit menu is not optional
-// — without it macOS has no Cmd+C / Cmd+V in the webview.
+// The desktop app is not resident (ADR-0047 decision 1): closing the window
+// ends the process, so there is no status bar to keep and no item of our own
+// to offer.
+//
+// The role menus are NOT optional, and their ORDER matters:
+//
+//   - The Edit role menu carries Cut / Copy / Paste, so it is what gives the
+//     macOS webview its Cmd+C / Cmd+V. Wails' darwin frontend always calls
+//     SetAsApplicationMenu, and with no menu at all the bar would be empty.
+//   - macOS renders the FIRST menu item as the application menu and shows the
+//     app's name there, so the first item must be one whose title the system
+//     supplies. The AppMenu role is exactly that (its title is the app's
+//     localized name, and it carries About / Hide / Quit). Putting Edit first
+//     instead makes macOS render "Edit" as the application menu — the app
+//     name then replaces the Edit title and the whole Edit group collapses
+//     into the application menu, so the bar shows only "Repotory | Window"
+//     and the copy/paste items are no longer where they belong.
 func appMenu() *menu.Menu {
 	m := menu.NewMenu()
-
-	// The app's own menu comes FIRST: macOS reads the first item as the
-	// application menu, and shows the app's name there.
-	app := m.AddSubmenu("Repotory")
-	app.AddText("Show Repotory", nil, func(_ *menu.CallbackData) {
-		showWindow()
-	})
-	app.AddText("Ask Repotory…", keys.CmdOrCtrl("k"), func(_ *menu.CallbackData) {
-		showWindow()
-		askBot()
-	})
-	app.AddSeparator()
-	app.AddText("Quit Repotory", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
-		quitApp()
-	})
-
+	m.Append(menu.AppMenu())
 	m.Append(menu.EditMenu())
 	m.Append(menu.WindowMenu())
 	return m
-}
-
-// runtimeContext returns the app context, or nil before the app started.
-func runtimeContext() context.Context {
-	ctx, _ := appCtx.Load().(context.Context)
-	return ctx
-}
-
-// showWindow brings the window back and focuses it.
-func showWindow() {
-	ctx := runtimeContext()
-	if ctx == nil {
-		return
-	}
-	wailsruntime.WindowShow(ctx)
-}
-
-// askBot shows the window and asks the frontend to open the bot panel.
-func askBot() {
-	ctx := runtimeContext()
-	if ctx == nil {
-		return
-	}
-	wailsruntime.EventsEmit(ctx, eventAskBot)
-}
-
-// quitApp ends the process for real — the only way out of the resident app.
-func quitApp() {
-	ctx := runtimeContext()
-	if ctx == nil {
-		return
-	}
-	quitting.Store(true)
-	wailsruntime.Quit(ctx)
 }
 
 // spaFallback serves index.html for any GET request the embedded Assets could

@@ -1,7 +1,7 @@
 # ADR-0045: The desktop bot becomes resident — it survives the window closing, switches modules itself, and is not locked to a project
 
-- Status: Accepted (2026-11-03, the user proposed and settled the shape directly)
-- Date: 2026-11-03
+- Status: Superseded (partial, 2026-11-04) — **decisions 1 (residency) and 2 (the macOS menu bar as the status bar) are superseded by [ADR-0047](0047-resident-agent-separate-host.md)**: the desktop app goes back to "closing the window quits", and a separate project becomes an **independent copilot** (`repotory-agent`). **Decisions 3 through 7 remain in force, but their scope narrows to "the small bot inside the workbench"** (module chips / scope defaults to the whole library / what "independent" means / capability parity with the two IDE plugins / no schema or MCP tool surface change) — **the copilot inherits none of those five**: it is an independent product, not a frontend of the workbench.
+- Date: 2026-11-03 (decisions 1 and 2 were superseded by ADR-0047 on 2026-11-04; the scope of decisions 3 through 7 was narrowed the same day)
 - Related: [ADR-0041](0041-draggable-agent-bot-and-shared-dashboard-scope.md) (the draggable bot and the shared dashboard scope), [ADR-0038](0038-desktop-information-architecture.md) (the top level converged to five entries), [ADR-0034](0034-desktop-three-column-shell.md) (the three-column shell and the hidden macOS title bar), [ADR-0044](0044-ide-panel-windsurf-shape.md) (the Windsurf-shaped IDE panel, provider configuration and project recognition)
 
 ## Background
@@ -189,7 +189,7 @@ to the `ai_chat_*` config keys, no change to the brand's three domains.** The me
 | Surface | File |
 |---|---|
 | Residency and menu | `main.go` (`OnBeforeClose` / `SingleInstanceLock` / `Menu`) |
-| Menu → frontend | a Wails event (`runtime.EventsEmit`, event name `app.ask-bot`) → `listenAskBot` in `web/src/api/transport.ts` |
+| Menu → frontend | a Wails event (`runtime.EventsEmit`, event name `app.ask-bot`) → `listenAskBot` in `web/src/api/transport.ts` (**deleted along with ADR-0047 decision 1**: the menu item and its only sender went away, leaving the frontend subscription dead code**) |
 | Module switching | `web/src/components/navEntries.ts` (the module list), `web/src/components/SideRail.tsx`, `web/src/components/AgentBot.tsx` (module chips) |
 | Scope | `web/src/components/AgentBot.tsx`, `web/src/components/agent/agentContext.ts` |
 | Bilingual strings | `web/src/locales/{zh-CN,en}/common.json` (**both changed together**) |

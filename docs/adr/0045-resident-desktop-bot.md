@@ -1,7 +1,7 @@
 # ADR-0045: 桌面机器人常驻——关掉窗口仍在、能自己切模块、不锁项目
 
-- 状态：Accepted（2026-11-03，用户直接提出并拍定形态）
-- 日期：2026-11-03
+- 状态：Superseded（部分，2026-11-04）—— **决策①（常驻）与决策②（macOS 菜单栏当状态栏）被 [ADR-0047](0047-resident-agent-separate-host.md) 取代**：桌面 App 回归「关窗口即退出」，独立项目另立为 **copilot**（`repotory-agent`）。**决策③～⑦继续有效，但适用范围收窄为「工作台内的小机器人」**（模块 chip / 作用域默认全库 / 「独立」的语义 / 与两个 IDE 插件能力对齐 / 不动 schema 与 MCP 工具面）——**copilot 不继承这五条**，它是独立产品，不是工作台的一个前端。
+- 日期：2026-11-03（决策①② 于 2026-11-04 被 ADR-0047 取代；决策③～⑦ 的适用范围于同日收窄）
 - 关联：[ADR-0041](0041-draggable-agent-bot-and-shared-dashboard-scope.md)（可拖拽机器人 + 仪表盘作用域共享单一真值）、[ADR-0038](0038-desktop-information-architecture.md)（顶级入口收敛为五个）、[ADR-0034](0034-desktop-three-column-shell.md)（三栏外壳与 macOS 隐藏标题栏）、[ADR-0044](0044-ide-panel-windsurf-shape.md)（IDE 面板的 Windsurf 形态、provider 配置与项目识别）
 
 ## 背景
@@ -168,7 +168,7 @@ ADR-0041 决策 ⑤ 的仪表盘作用域共享单一真值**不动**——
 | 面 | 文件 |
 |---|---|
 | 常驻与菜单 | `main.go`（`OnBeforeClose` / `SingleInstanceLock` / `Menu`） |
-| 菜单 → 前端 | Wails 事件（`runtime.EventsEmit`，事件名 `app.ask-bot`）→ `web/src/api/transport.ts` 的 `listenAskBot` |
+| 菜单 → 前端 | Wails 事件（`runtime.EventsEmit`，事件名 `app.ask-bot`）→ `web/src/api/transport.ts` 的 `listenAskBot`（**已随 ADR-0047 决策① 删除**：菜单项与它的发送方一起撤了，前端订阅是死代码） |
 | 模块切换 | `web/src/components/navEntries.ts`（模块清单）、`web/src/components/SideRail.tsx`、`web/src/components/AgentBot.tsx`（模块 chip） |
 | 作用域 | `web/src/components/AgentBot.tsx`、`web/src/components/agent/agentContext.ts` |
 | 双语词条 | `web/src/locales/{zh-CN,en}/common.json`（**两份同改**） |

@@ -39,7 +39,6 @@ import {
   getConfig,
   getProjectDetail,
   getProjects,
-  listenAskBot,
   type Evidence,
 } from '../api/client'
 import type { PushToast } from '../hooks/useToast'
@@ -259,13 +258,19 @@ export default function AgentBot({ onToast }: Props) {
       .finally(() => setLoadingKey(null))
   }
 
-  // The desktop app's menu bar is its status bar: with the window closed
-  // the app keeps running, and "Ask Repotory…" brings the bot back
-  // (ADR-0045 decision 2). The event exists only in the desktop shell,
-  // so in a plain browser tab the listener is a no-op.
-  const openPanelRef = useRef<() => void>(() => {})
-  useEffect(() => { openPanelRef.current = openPanel })
-  useEffect(() => listenAskBot(() => { openPanelRef.current() }), [])
+  // The bot is a view inside the workbench (ADR-0047 decision 2), and the
+  // floating ball is its entry: clicking the ball opens the panel, and
+  // clicking it again closes it.
+  //
+  // There used to be a second entry — a Wails event (`app.ask-bot`) fired by
+  // the desktop menu bar, which was how the resident app brought the bot back
+  // after the window was hidden. ADR-0047's decision 1 took the residency
+  // away, and with it that event's only sender, so the subscription went with
+  // it: a listener with no sender is dead code that reads like a live
+  // contract.
+  //
+  // The IDE plugins have their own bots and their own frontends; they never
+  // shared this event.
 
   const runAction = (key: string, load: () => Promise<AgentCard>) => {
     lastActionKeyRef.current = key
