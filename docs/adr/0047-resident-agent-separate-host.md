@@ -224,9 +224,14 @@ schema 不变。
   - **版本耦合需要显式处理**：copilot 消费的 MCP 工具集随 Repotory 演进。
     **不做能力协商的话，「哪个版本配哪个版本」是一个隐式约束**，
     必须写进 copilot 的 README 与安装器（不能只在脑子里）。
-  - **ADR-0046 的实现从仓里消失**：那段 ObjC 注入只存在于 git 历史。
-  - **copilot 目前还没有托盘**：`tauri.conf.json` 里没有 tray 配置，
-    Phase 1 之后才谈得上常驻。**在那之前它是一个普通窗口。**
+  - **ADR-0046 的实现从仓里消失**：那段 ObjC 注入**从未进过 git 历史**
+    （`git log -- internal/platform/darwinreopen/` 为空）——将来若真有 Wails 侧常驻需求，
+    **要重新写一遍**；留下来的只有 ADR-0046 的分析。
+  - **copilot 的托盘已落地，但「常驻」还没兑现成产品形态**：独立仓里托盘已经实现
+    （`src-tauri/src/tray.rs`：左键唤回窗口，右键 Show / Quit 菜单）。
+    **但托盘是「已经在跑的进程」的唤回入口，不是「窗口藏起来只留一个图标」那种常驻**——
+    关窗口仍然结束应用（与决策① 同一口径）。**全局快捷键、窗口常驻可见都还没做**，
+    唤醒交互的完整形态仍待使用者反馈（见「未决」）。
 - **不能假装解决的**：
   - **「原生」这个词有歧义**：Tauri 用系统 WebView，不是 Swift/AppKit 原生控件。
     copilot 是「独立进程 + 真托盘 + 真分发渠道」，**不是原生 UI 框架**。
@@ -257,6 +262,7 @@ schema 不变。
 | copilot 门禁 | 独立仓补 `.github/workflows/`（docs mirror + 前端 build + `cargo check` / `clippy` / `test`） |
 | copilot 图标 | 换掉 Tauri 默认图标，走主仓母图生成器（品牌三域：OS 应用域用 squircle） |
 | MCP 工具副本 | 独立仓 `src-tauri/src/memory_layer.rs` 里那份硬编码工具清单**已漂移**（少列 7 个真实工具），改为动态拉取 |
+| copilot 托盘 | 独立仓 `src-tauri/src/tray.rs`（**已落地**）：左键唤回窗口，右键 Show / Quit；`shell_status` 暴露 `tray.installed`，首屏有「唤回入口」卡片 |
 | schema / MCP 工具面 | **不动** |
 
 ## 后续路线
@@ -264,5 +270,6 @@ schema 不变。
 1. 独立仓改名 + 定位重写 + 门禁 + 图标（让 copilot 先成为一个「能构建、能自证」的仓）。
 2. copilot 落 MCP 客户端（`initialize` + `tools/list` + `tools/call`），
    顺带把那份漂移的工具清单改成动态拉取。
-3. 落 Tauri 托盘 + 常驻，把「关掉工作台还有助手在」兑现出来。
+3. 落 Tauri 托盘（**已落地**）+ 常驻，把「关掉工作台还有助手在」兑现出来。
+   **剩下的常驻形态**（全局快捷键 / 窗口常驻可见）待反馈。
 4. copilot 的形态与分发渠道由使用者反馈决定，不预设。

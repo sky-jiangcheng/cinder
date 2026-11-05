@@ -272,10 +272,16 @@ in this one.
     with Repotory. **Without a capability negotiation, "which version pairs with which version" is an
     implicit constraint** and has to be written into the copilot's README and installer (not just kept
     in someone's head).
-  - **ADR-0046's implementation leaves the repo**: that Objective-C injection now exists only in the
-    git history.
-  - **The copilot has no tray yet**: `tauri.conf.json` has no tray configuration; that is a Phase 1+
-    concern. **Until then it is an ordinary window.**
+  - **ADR-0046's implementation leaves the repo**: that Objective-C injection **never entered the
+    git history** (`git log -- internal/platform/darwinreopen/` is empty) — if a Wails-side residency
+    need ever appears it **has to be written again**; only ADR-0046's analysis survives.
+  - **The copilot's tray is in place, but "residency" has not become a product form yet**: the tray
+    is implemented in the separate repo (`src-tauri/src/tray.rs` — left click wakes the window, right
+    click opens the Show / Quit menu). **But the tray is a wake-up entry for a process that is
+    already running**, not a "hide the window and keep an icon" kind of residency — closing the
+    window still ends the app (the same reading as decision 1). **A global shortcut and an
+    always-visible window are not built yet**; the full shape of the wake-up interaction still waits
+    for user feedback (see "Not decided").
 - **What cannot be pretended away**:
   - **"Native" is an ambiguous word here**: Tauri uses the system WebView, not Swift/AppKit native
     controls. The copilot is "an independent process + a real tray + a real distribution channel",
@@ -309,6 +315,7 @@ in this one.
 | Copilot gates | add `.github/workflows/` to the separate repo (docs mirror + frontend build + `cargo check` / `clippy` / `test`) |
 | Copilot icons | replace the default Tauri icons via the main repo's generator (three brand domains: the OS app domain uses the squircle) |
 | MCP tool copy | the hardcoded tool list in the separate repo's `src-tauri/src/memory_layer.rs` **has already drifted** (7 real tools missing) — switch to fetching it dynamically |
+| The copilot's tray | the separate repo's `src-tauri/src/tray.rs` (**in place**): left click wakes the window, right click opens Show / Quit; `shell_status` exposes `tray.installed`, and the first screen carries a "wake-up entry" card |
 | schema / MCP tool surface | **untouched** |
 
 ## Roadmap
@@ -317,5 +324,7 @@ in this one.
    "builds and can prove itself" first).
 2. Land the copilot's MCP client (`initialize` + `tools/list` + `tools/call`), and turn that drifted
    tool list into a dynamic fetch on the way.
-3. Land the Tauri tray + residency, delivering "close the workbench and the assistant is still there".
+3. Land the Tauri tray (**in place**) + residency, delivering "close the workbench and the assistant
+   is still there". **The remaining residency forms** (global shortcut / always-visible window) wait
+   for feedback.
 4. The copilot's form and distribution channel are decided by user feedback, not preset.
