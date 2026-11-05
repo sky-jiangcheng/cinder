@@ -4,13 +4,9 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
-## [2.31.1] - 2026-11-05
-
-### 修复
-
-- **VS Code 插件改名「Cinder Memory」再发一次——上一版的显示名在 Marketplace 上已被别人占用（2026-11-05）**：v2.31.0 的发布流水线里**只有 VS Code Marketplace 那一格红了**，报错是 `##[error]This extension display name is taken.`——不是构建、不是签名、不是版本冲突，而是**VS Code Marketplace 要求 `displayName` 在全站唯一**，而「Cinder」这个显示名**已经被别人的扩展占了**（`muowl.cinder-warm-theme`）。JetBrains Marketplace 没有这条约束，所以 JetBrains 插件照发成功（id 35396）。**为什么不能换个名字重发 2.31.0**：同一个扩展 id 的同一个版本号只能对应一份产物，重发会留下两份内容不同的 2.31.0，与「一个版本一份产物」的发布契约（ADR-0017）冲突，已发布的 `SHA256SUMS` 也会对不上——所以走 **v2.31.1**。**改什么**：VS Code 插件的 `displayName` 改成 **Cinder Memory**，JetBrains 插件的 `<name>` 同步改成 **Cinder Memory**（两个 IDE 统一，母品牌 + 限定词）；**产物 id 一字不动**（`sky-jiangcheng.repotory-vscode` / `dev.repotory.jetbrains`）——标识层冻结照旧，Marketplace 上是同一条条目换了个名字，不是新条目。**守门补强**：`build/brand.json` 多一个 `idePlugin` 键，`scripts/check-brand.mjs` 对这两个市场名**逐字相等**——原来那道门只查「这份文件里含有母品牌词」，而**「Cinder」也含有母品牌词**，所以它对这次失败**完全无感，一路绿到底**；现在这道门正面管住它，**负例已验**（把两个名字改回「Cinder」立刻红）。独立仓的 `brand.json` 同批加上同一个键（那份不参与发布，只是不让两份真相源的形状分叉）。**记在** [ADR-0049](docs/adr/0049-brand-restructure-manus-style.md) 补注（中英双份）+ ADR 索引 + TODO 现状速查。**不动 schema / 不改 MCP 工具面 / 不涨契约版本**（`CoreVersion` 保持 `1.0.0`）
-
 ## [Unreleased]
+
+## [2.32.0] - 2026-11-06
 
 ### 变更
 
@@ -33,6 +29,12 @@
 - **首次并发建库时，记忆层把自己锁在门外：`PRAGMA journal_mode=WAL` 撞 `SQLITE_BUSY`（2026-11-06）**：**症状**：Warden 与 IDE 插件**同时第一次**连上这台机器（同一个数据目录、库里还没建过表），后到的那个 `InitDB` 直接失败——用户看到的是「记忆层连不上」，而**没有任何东西坏**，重试一次就好了。**根因是两行的顺序**：把 journal_mode 从 DELETE 切到 WAL **要拿 exclusive lock**，而 `PRAGMA busy_timeout=5000` 排在设 WAL **之后**，于是设 WAL 用的还是 SQLite 自己的默认超时；先建者此刻正持着写锁建 schema，后来者**等满超时**才返回 `SQLITE_BUSY` → 整个进程起不来。**不是推演**：独立探针实测「**等满才失败**」（5.053s），据此排除了「改 journal_mode 根本不等锁、直接重试就行」这个更省事的假设——**它不等，但它会等满一个太短的数**。**修法**：设 WAL 提到 `busy_timeout` 之前，并包成 `enableWAL`——单次 250ms 超时 + **15 秒总预算**的指数退避重试（25ms 起、封顶 400ms）；WAL 模式记在文件头，**先建者一旦提交，后来者再设就成功**。失败时的文案是「另一个 Cinder 进程还在建这个库」而不是一个 `SQLITE_BUSY`。**新增守门** `internal/db/wal_race_test.go` 两测：`TestEnableWALWaitsForFirstCreator`（seed 建库 → 另一条连接 `BEGIN EXCLUSIVE` 持锁 800ms → `enableWAL` 必须**等满并落成 wal**）与 `TestJournalModeChangeFailsWhileLocked`（**钉住前提**：持锁下单次设 WAL 必须失败——前提哪天不成立了，这道门就该红，而不是安静地什么都没测）。**零错峰双进程 E2E 同批通过**（见上条），stderr 无 locked。**不动 schema / 不改 MCP 工具面 / 不改任何工具的入参出参**
 
 - **「在 Dock 栏无法退出、也无法显示主窗口」——查实是装着的还是 v2.29.0 那个常驻版，当前版实测三条 Dock 路径全通（ADR-0047 补注四，2026-11-05）**：用户报的那个故障有**两个症状**，而它们**恰好是 ADR-0045 常驻版的两个签名**——`OnBeforeClose` 返回 `true` 时 Wails 的 `frontend.Quit()` 走的是 `if !OnBeforeClose(ctx) { mainWindow.Quit() }`，**返回 true 就永远不退出**，而 Dock 的「退出」与 Cmd+Q 都汇到同一条 `applicationShouldTerminate:` → `processMessage("Q")` → `frontend.Quit()`，**于是同一条拦截把它们一起拦掉**；关闭时旧版调 `wailsruntime.WindowHide(ctx)`，Wails 的隐藏是 `orderOut:`——**窗口被摘出屏幕列表**，而点 Dock 图标派发的 reopen 事件**Wails v2 没有 `applicationShouldHandleReopen` 接收**（ADR-0046 的核实结论，至今成立）→ **无人接**。**查装的是哪一版**：`/Applications/Repotory.app` 是 **v2.29.0**，二进制里留着 `com.repotory.desktop`——那是常驻版 `SingleInstanceLock` 的 `UniqueId`；而撤常驻的提交（`5f205b7`）**到 v2.30.0 才进 release**（`git merge-base --is-ancestor` 对 v2.29.0 为假、对 v2.30.0 为真）→ **不是没修，是装的还是修之前那一版**。**当前版实测（用真实手势，不是推演）**：当前代码打成 `.app` bundle、以 `LSEnvironment` 隔离 HOME 跑起来，再用 System Events 点 Dock 图标、点 Dock 右键菜单——**关窗口红按钮 → 进程退出**、**Dock 右键「退出」→ 进程退出**、**Dock「隐藏」后再点 Dock 图标 → 主窗口回来**（同一区域截图前后对比）；另：`osascript` 的 `quit` 会报 **-128「用户已取消」**，那是 Wails 的 `applicationShouldTerminate:` 返回 `NSTerminateCancel` 的回声，**进程照样退出，不是故障**。**新增守门**：`main_test.go` 的 `TestDesktopAppMustNotBecomeResident`——用 `go/parser` 解析 `main.go`（**不是 grep 文本**：注释掉的那行不该决定门红不红），断言 `options.App` 上**不得出现** `OnBeforeClose` / `SingleInstanceLock`、`mac.Options` 上**不得出现** `HideWindowOnClose`、**不得调用** `runtime.WindowHide` / `runtime.WindowMinimise`；**负例已验**（三个字段分别塞回去各红一次，恢复后绿），并带**反向对照**（找不到 `options.App` 字面量就红，防止这道门因为「什么都没看」而假绿）。**为什么值得加**：常驻那条路**看起来像个合理功能**（「用户去浏览器时机器人还留着」），而它的后果正是这次报的那个故障——**决策① 当时只靠一次人工复盘，没有任何东西拦着它被顺手加回来**。**明确不做**：**不把 ADR-0046 的 reopen 钩子加回来**（桌面 App 不再有「窗口被隐藏但进程还活着」的状态，那段钩子**没有消费者**；真需要常驻唤回的是独立仓那个 copilot，而它走 Tauri 托盘）。**处置**：用户机器上的 App 已从 v2.29.0 换成 **v2.31.1**（取 release 的 `repotory-darwin-arm64.dmg`，**`SHA256SUMS` 逐字节对上**；DMG 里的 bundle 叫 `Cinder.app`——显示层改名的结果，**标识层不动**：可执行文件仍叫 `repotory`），**数据目录一个字没动**（`~/Library/Application Support/repotory` 下**没长出 `cinder` 目录**，`repotory.db` 照常打开、内容照常读出）、**schema 不变、契约版本不变**（`CoreVersion` 保持 `1.0.0`）；**三条 Dock 路径在换上去的真机 bundle 上又验了一遍**（不只在测试 bundle 上验），旧 bundle 没删、挪到 `/tmp/Repotory.app-v2.29.0.bak` 备查
+
+## [2.31.1] - 2026-11-05
+
+### 修复
+
+- **VS Code 插件改名「Cinder Memory」再发一次——上一版的显示名在 Marketplace 上已被别人占用（2026-11-05）**：v2.31.0 的发布流水线里**只有 VS Code Marketplace 那一格红了**，报错是 `##[error]This extension display name is taken.`——不是构建、不是签名、不是版本冲突，而是**VS Code Marketplace 要求 `displayName` 在全站唯一**，而「Cinder」这个显示名**已经被别人的扩展占了**（`muowl.cinder-warm-theme`）。JetBrains Marketplace 没有这条约束，所以 JetBrains 插件照发成功（id 35396）。**为什么不能换个名字重发 2.31.0**：同一个扩展 id 的同一个版本号只能对应一份产物，重发会留下两份内容不同的 2.31.0，与「一个版本一份产物」的发布契约（ADR-0017）冲突，已发布的 `SHA256SUMS` 也会对不上——所以走 **v2.31.1**。**改什么**：VS Code 插件的 `displayName` 改成 **Cinder Memory**，JetBrains 插件的 `<name>` 同步改成 **Cinder Memory**（两个 IDE 统一，母品牌 + 限定词）；**产物 id 一字不动**（`sky-jiangcheng.repotory-vscode` / `dev.repotory.jetbrains`）——标识层冻结照旧，Marketplace 上是同一条条目换了个名字，不是新条目。**守门补强**：`build/brand.json` 多一个 `idePlugin` 键，`scripts/check-brand.mjs` 对这两个市场名**逐字相等**——原来那道门只查「这份文件里含有母品牌词」，而**「Cinder」也含有母品牌词**，所以它对这次失败**完全无感，一路绿到底**；现在这道门正面管住它，**负例已验**（把两个名字改回「Cinder」立刻红）。独立仓的 `brand.json` 同批加上同一个键（那份不参与发布，只是不让两份真相源的形状分叉）。**记在** [ADR-0049](docs/adr/0049-brand-restructure-manus-style.md) 补注（中英双份）+ ADR 索引 + TODO 现状速查。**不动 schema / 不改 MCP 工具面 / 不涨契约版本**（`CoreVersion` 保持 `1.0.0`）
 
 ## [2.31.0] - 2026-11-05
 

@@ -6,7 +6,7 @@
 # Version is stamped by scripts/update-manifests.sh from wails.json
 # (info.productVersion) — never edit it by hand.
 cask "repotory-mcp" do
-  version "2.31.1"
+  version "2.32.0"
   name "Cinder MCP Server"
   desc "MCP stdio server exposing the Cinder local knowledge base to AI agents"
   homepage "https://github.com/sky-jiangcheng/cinder"

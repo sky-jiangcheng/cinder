@@ -1,9 +1,9 @@
 {
-  "version": "2.31.1",
+  "version": "2.32.0",
   "description": "Local-first code project context base",
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
-  "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.31.1/repotory-windows-amd64.zip",
+  "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.32.0/repotory-windows-amd64.zip",
   "hash": "sha256:3a85c817d58564e045e0f92f6caf2945137836a0a630914e1853ecebfd8b67df",
   "bin": "repotory.exe",
   "checkver": {
