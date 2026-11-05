@@ -1,6 +1,6 @@
 # ADR-0049: Rebuild the brand the Manus way — a new parent brand, an independent name per surface, the identifier layer frozen
 
-Status: **Accepted (2026-11-05, the user picked option (c) "full Manus-style restructure" among the four routes offered for "how do we redefine the brand and the UI"; the three words are still to be picked)**
+Status: **Accepted (2026-11-05, the user picked option (c) "full Manus-style restructure" among the four routes offered for "how do we redefine the brand and the UI"; the same day the three words were settled: parent brand **Cinder** / desktop **Cinder Desktop** / Agent **Warden** — the landing process is recorded under "Landing record" at the end)**
 Date: 2026-11-05
 Related: [ADR-0037](../../docs/en/adr/0037-brand-legibility-and-ui-language.md) (brand legibility and UI language — this ADR **narrowed the scope of its decision 4**), [ADR-0047](../../docs/en/adr/0047-resident-agent-separate-host.md) (two products, one job each), [ADR-0048](../../docs/en/adr/0048-core-contract-version.md) (the contract version), [ADR-0034](../../docs/en/adr/0034-desktop-three-column-shell.md) (the precedent for separating the display name from the binary name), [ADR-0006](../../docs/en/adr/0006-scope-freeze.md) (scope freeze and frozen identifiers)
 Starting schema: v28 (**this ADR does not change the schema**)
@@ -110,7 +110,9 @@ A candidate must satisfy all of these:
 7. **No collision with a concept already in the product** — for instance `hermes` is already the name of **one of this repo's import sources** (the memories of Nous Research's Hermes agent), so **Hermes is unavailable**;
 8. **It must read as both a noun and something you can put in front of a tool**: `<brand>_context` / `<brand>-mcp` / `~/…/<brand>/` all have to roll off the tongue.
 
-### ⑥ The words are still to be picked; the candidate pool (availability already checked)
+### ⑥ The words (candidate pool and availability already checked)
+
+**Settled (see "Landing record" at the end): parent brand Cinder / desktop Cinder Desktop / Agent Warden.**
 
 **Parent brand (engine) candidates**:
 
@@ -158,6 +160,84 @@ This ADR is about **naming and the display layer**. Not one tool name changes �
 7. **Guards**: extend `scripts/check-version-drift.mjs` — **the brand name must have exactly one source of truth on the product surface** (any place holding both the old and the new name must be an explicit allowlist, e.g. the frozen identifiers and the historical documents); `scripts/check-docs-mirror.mjs` keeps guarding the bilingual pair.
 8. **Written in the same batch**: CHANGELOG (one entry per language, **the first line is a bold headline**), the `TODO.md` status section, this ADR's "Landing record" section, and the ADR index (one row per language; the next number increments from `0050`).
 
-## Landing record (to be filled in)
+## Landing record (added 2026-11-05)
 
-To be written once the words are picked and the rename has landed: the three words, the migration tested against a real directory, the negative-case verification, and the list of leftover old names.
+### The three words
+
+| Slot | Word | Where it comes from |
+|---|---|---|
+| Parent brand (engine / memory layer) | **Cinder** | from the candidate pool — "the bit still glowing after the fire goes out": persistent, but no longer burning |
+| Desktop workbench | **Cinder Desktop** | the wording the README already used ("parent brand + qualifier"); no new word invented |
+| Agent (the copilot in the separate repository) | **Warden** | from the candidate pool — "the night watchman": an independent product, no longer an "X Agent" |
+
+The three words were **settled in one go** (decision ②'s cost: changing half of them is worse than changing none). The parent brand and the Agent deliberately come from different semantics — **the engine and the assistant are not the same role**, which is exactly what "the name cannot be older than the decision" means.
+
+### Two deviations from the landing checklist (both toward "frozen")
+
+Checklist item 6 and decision ③ **contradict each other**: the checklist asks for one more `legacyDirName` generation (the data directory `repotory` → the new name), while decision ③ states that "the tool prefix, the binary name, **the data directory** and the MCP server name do not move by a single character". **Decision ③ wins**:
+
+1. **The data directory is not migrated** (the fourth migration is cancelled): `dirName = "repotory"` and `legacyDirName = "reponest"` in `internal/platform/platform.go` are **untouched**, and only an explanatory comment was added (why the brand changed but the directory name did not). **Cost**: the user's data directory is still called `repotory`, and the command line is still `repotory-mcp` — that is the deliberate cost written into decision ③. **Gain**: no fourth migration, no skipped-generation user (a data directory left at `reponest` or older) losing their directory, and **no room left for "one more migration" afterwards**.
+2. **The DB sentinel does not move and the schema does not bump**: `repotory://memory/default` in the database is **data**, not schema, but it is just as much "a string on somebody else's machine" — treated as part of the identifier layer, untouched, **the schema version stays v28**. Changing it and bumping the schema was considered during the landing discussion and **finally settled as frozen**; it is written down here so the next person does not assume it was an oversight.
+
+### The master mark and the icons
+
+- The letter in `build/icon.svg` went **R → C**: the glyph is the C of IBM Plex Sans Bold (© IBM Corp., SIL OFL 1.1), outlined and scaled to a 320-unit cap height, **centred on its visual mass rather than on its bounding box** — the C's aperture opens to the right, so the ink sits 9 units right of dead centre (the R it replaced sat under half that rule: 6 units). **The hairline frame (9 units, inset 26) and the paper field `#F5F0E4` did not move by a character** — what ADR-0037's decision 1 protects is that rule, not that letter.
+- Every derivative was regenerated: the brand domain (favicons / the stores / the brand mark inside the JetBrains tool window), the OS app domain (appicon / the ladder / ico), and the glyph domain (the VS Code activity bar 24px, the JetBrains sidebar 16px plus `_dark`, the macOS tray 22px in one colour on transparency).
+- **`scripts/generate-icons.mjs` gained `--agent-repo <path>`**: one command now derives the whole Tauri icon set for the separate repository (15 PNGs + `icon.ico` + `icon.icns` + `tray-22.png`). **That was a real gap**: the agent repository's AGENTS.md forbids hand-editing those PNGs, yet the main repository's generator had **no path that emitted them** — that set was hand-drawn, and not from the same master. Now it is.
+- The generated `icon.icns` was round-tripped through `iconutil -c iconset` back into 10 slots (macOS reads it natively; one trap was hit on the way: the ICNS chunk length field **includes the 8-byte chunk header**, and writing it without the header yields a file where only one slot can be extracted).
+
+### Display layer (main repository)
+
+`name` / `productName` in `wails.json` (`outputfilename` untouched), `web/index.html`, the locales, the Homebrew cask's `name`, the install and build scripts, ISSUE_TEMPLATE, the READMEs (both languages), the documentation site, the VS Code extension's `displayName` and command titles, and the JetBrains `plugin.xml`'s `<name>` (`<id>` untouched).
+
+**The DMG window canvas is a display surface too**: `build/dmg-background.svg` used to carry the old product name plus a subtitle that had been wrong for three generations ("Git 代码提交统计面板" — the positioning of three generations ago); it now carries the new desktop name and "AI 编码 Agent 的本地记忆层".
+
+**`build/dmg-readme.txt` was deleted**: an unreferenced dead file holding an even older brand name.
+
+### Display layer (separate repository)
+
+`productName` and the window title in `tauri.conf.json`, the READMEs in both languages, `AGENTS.md`, `docs/product.md` in both languages, and the UI copy — **`identifier` untouched**.
+
+Real defects fixed along the way (not style issues — they came out of the rename):
+
+- **9 missing spaces**: the bulk replacement ate the space in "Latin word + space + Han character" (8 in the separate repository, 1 in the main one) — "Cinder Desktop是两个产品" and the like.
+- **1 misaligned ASCII diagram**: in `docs/roadmap.md`, `Repotory` → `Cinder` is 2 columns shorter, so the arrow column shifted → 2 spaces added, the columns restored.
+- **5 broken anchors**: **changing a heading changes the anchor**. After the rename, 4 links pointed at nothing (plus one that was missing a 的 — "ADR-0015 人类闸门" — an older hand-typing slip). All fixed.
+- **1 self-contradicting statement**: after the rename, 4 places said "Cinder is the **workbench**", which contradicts the README's own role table (where Cinder is the memory layer) → changed back to "Cinder Desktop is the workbench".
+
+### Guards (one per repository)
+
+| | Main repository | Separate repository |
+|---|---|---|
+| Source of truth | `build/brand.json` | `brand.json` |
+| Script | `scripts/check-brand.mjs` | `scripts/check-brand.mjs` |
+| Entry point | CI `brand` job | CI `brand` job (the fourth gate) + `npm run check:brand` |
+| What it checks | the product name at 10 sites equals brand.json; the 12 frozen identifiers are still there verbatim; the current surfaces carry no old brand word (historical surfaces are allowed by prefix); the app's `BrandMark` comes from the master mark (path `d`, group transform, hairline width, inset, both colours) | the product name at 13 sites equals brand.json (including `productName`, the window title, `<title>`, the first-screen name); the 6 frozen identifiers are still there; the current surfaces carry no old brand word; **the document anchors still point at a heading** |
+
+**The negative cases were verified** (a gate that can only go green is not a gate): in the main repository, four — the product name reverted to the old name, the data directory renamed, the README leaking the old name, the `BrandMark` path off by one — each goes red; in the separate repository, five — `productName` reverted, `identifier` "tidied up", an old brand word on a current surface, an old brand word inside an anchor, the desktop name no longer derived from the parent brand — each goes red. Both repositories are green again after restoring.
+
+**Each repository has its own `brand.json`**: CI runs on one repository at a time and cannot see the other, so **a word change has to land in both in the same batch**. That is the one structural weakness of this source of truth; it is noted here.
+
+### Leftover old names
+
+- **Kept on purpose (identifier layer)**: the binary names, the data directory, the database file name, the MCP server name, the tool prefix, the Go module, the VS Code / JetBrains plugin ids, the npm package name, the cask token, the skill name, the Windows install directory, the GitHub slugs.
+- **Kept by convention (historical surfaces)**: the historical ADRs / CHANGELOG / review records / the historical entries in `TODO.md`.
+- **Fixed**: the DMG window canvas, and the separate repository's first screen and menu hint ("点菜单栏的 R 唤回窗口" → "C").
+- **Deleted**: `build/dmg-readme.txt`.
+- **Outstanding**: the 9 screenshots under `outputs/screenshots/` in the separate repository were taken **before the rename** (the first screen shows the old name) — a `README.md` was added saying they are historical evidence, and they were **not retaken** (retaking means bringing up the Tauri window with a real MCP server and a real provider).
+- **Unrelated to the rename, broken for longer**: 5 internal document links in the main repository (`docs/data-management.md` and others); not fixed in this batch.
+
+### Left alone (needs separate approval)
+
+- **The GitHub repository slugs**: `sky-jiangcheng/repotory` and `sky-jiangcheng/repotory-agent` **stay as they are**. Renaming a slug makes every old clone change its remote by hand, which is shared state and needs its own decision; **this has to go into the release notes**.
+
+### Verification
+
+- Main repository: `node scripts/check-brand.mjs` green; `node scripts/generate-icons.mjs --check --tracked-only` green (the master mark and every committed derivative agree).
+- Separate repository: `npm run check:brand` green; `npm run check:docs` green; `npm run build` (`tsc` + `vite build`) green; `cargo fmt --check` and `cargo clippy --all-targets --features test-fixtures -- -D warnings` green; `cargo test --all-targets --features test-fixtures` **80 passed / 0 failed**.
+
+### Still open (left as it was)
+
+- **UI subtraction and hierarchy rework**: metadata drowning the content, the permanent 288px right rail, the floating bot covering the body text — diagnosed, and an **ADR of its own**, unrelated to naming.
+- **Whether the master mark gets redrawn**: this round only changed the letter; the hairline three-domain rules and the "printed card" construction stay.
+

@@ -1,6 +1,6 @@
 # ADR-0049: 品牌按 Manus 式重排——母品牌换名、每个面独立名字、标识层冻结
 
-状态：**Accepted（2026-11-05，用户在「品牌与 UI 怎么重新定义」的四条路线里选 (c)「全量 Manus 式重排」；三个词待选）**
+状态：**Accepted（2026-11-05，用户在「品牌与 UI 怎么重新定义」的四条路线里选 (c)「全量 Manus 式重排」；同日定下三个词：母品牌 **Cinder** / 桌面 **Cinder Desktop** / Agent **Warden**——落地过程见文末「落地记录」）**
 日期：2026-11-05
 关联：[ADR-0037](0037-brand-legibility-and-ui-language.md)（品牌辨识度与界面语法——本篇**修订其决策 4 的适用范围**）、[ADR-0047](0047-resident-agent-separate-host.md)（两个产品各担一件事）、[ADR-0048](0048-core-contract-version.md)（契约版本）、[ADR-0034](0034-desktop-three-column-shell.md)（显示名与二进制名分层的先例）、[ADR-0006](0006-scope-freeze.md)（范围冻结与冻结标识）
 起始 schema：v28（**本 ADR 不改 schema**）
@@ -110,7 +110,9 @@ Manus 2026-09-28 之后的结构是：**母品牌（Manus）= 平台/引擎；�
 7. **不与仓内既有概念撞名**——例如 `hermes` 已经是本仓的**一个 import 来源名**（Nous Research 的 Hermes agent 的记忆），因此 **Hermes 不可用**；
 8. **能当动词或名词读出来**：`<brand>_context` / `<brand>-mcp` / `~/…/<brand>/` 三处都要顺口。
 
-### ⑥ 词待选；候选池（已做占用排查）
+### ⑥ 词的选择（候选池与占用排查）
+
+**已定（见文末「落地记录」）：母品牌 Cinder / 桌面 Cinder Desktop / Agent Warden。**
 
 **母品牌（引擎）候选**：
 
@@ -158,6 +160,84 @@ Manus 2026-09-28 之后的结构是：**母品牌（Manus）= 平台/引擎；�
 7. **守门**：新增/扩展 `scripts/check-version-drift.mjs` —— **品牌名在产品面必须只有一个真值**（新旧名并存处必须是显式白名单，例如冻结标识与历史文档）；`scripts/check-docs-mirror.mjs` 继续守中英双份。
 8. **同批写**：CHANGELOG（中英各一条，**首行是加粗标题**）、`TODO.md` 现状速查、本 ADR 的「落地记录」段、ADR 索引（中英各一行，下一个编号从 `0050` 递增）。
 
-## 落地记录（待补）
+## 落地记录（2026-11-05 补记）
 
-选词与落地完成后补记：三个词、迁移脚本实测、负例验证、旧名残留清单。
+### 三个词
+
+| 槽位 | 词 | 出处 |
+|---|---|---|
+| 母品牌（引擎 / 记忆层） | **Cinder** | 候选池里的「火灭之后仍然红着的那一点」——持久，但不再燃烧 |
+| 桌面工作台 | **Cinder Desktop** | 沿用 README 已有口径「母品牌 + 限定词」，不新造词 |
+| Agent（独立仓 copilot） | **Warden** | 候选池里的「守夜人」——独立产品，不再是「X Agent」 |
+
+三个词**一次拍齐**（决策②的代价：只换一半比不改更糟）。母品牌与 Agent 的语义出处刻意不同——**引擎与助手不是同一个角色**，这正是「名字不能比决策更旧」。
+
+### 与落地清单的两处偏差（都往「冻结」那一侧收）
+
+落地清单第 6 条与决策③**自相矛盾**：清单要写下一代 `legacyDirName`（数据目录 `repotory` → 新名），而决策③明写「工具前缀、二进制名、**数据目录**、MCP server 名一字不动」。**以决策③为准**：
+
+1. **数据目录不迁移**（第四次迁移取消）：`internal/platform/platform.go` 的 `dirName = "repotory"` 与 `legacyDirName = "reponest"` **一字未动**，只补了一条说明注释（为什么品牌换了、目录名没换）。**代价**：用户的数据目录仍叫 `repotory`，命令行里仍叫 `repotory-mcp`——这正是决策③写下的「有意的代价」。**收益**：没有第四代迁移，没有跳代用户（数据目录停在 `reponest` 或更早）丢目录，**这一代之后也没有「再迁一次」的余地了**。
+2. **DB sentinel 不动、schema 不 bump**：库里那个 `repotory://memory/default` 是**数据**不是 schema，但它同样是「别人机器上的字符串」——按标识层处理，一字不动，**schema 版本保持 v28**。落地讨论中曾一度打算改它并 bump schema，**最终按标识层冻结办**；此处写明，免得下一个人以为它是漏掉的。
+
+### 母图与图标
+
+- `build/icon.svg` 的字母 **R → C**：字形取自 IBM Plex Sans Bold（© IBM Corp., SIL OFL 1.1）的 C，描边后缩放到 320 单位 cap height，**按视觉重心居中而不是按包围盒**——C 的开口朝右，所以墨迹落在包围盒中心右侧 9 单位（它替下的 R 用的是同一条规则的一半：6 单位）。**hairline 框（9 单位、inset 26）与纸面底色 `#F5F0E4` 一个字没动**——ADR-0037 决策 1 的「可复述构造」保住的是那套规则，不是那个字母。
+- 全部派生件重生成：品牌域（favicon / 商店 / JetBrains 工具窗内的品牌标记）、OS 应用域（appicon / 阶梯 / ico）、字形域（VS Code 活动栏 24px、JetBrains 侧栏 16px + `_dark`、macOS 托盘 22px 单色透明底）。
+- **`scripts/generate-icons.mjs` 新增 `--agent-repo <path>`**：一条命令把独立仓整套 Tauri 图标派生出来（15 个 PNG + `icon.ico` + `icon.icns` + `tray-22.png`）。**此前那是个真缺口**：独立仓的 AGENTS.md 明令「图标是生成物，别手改 PNG」，而主仓的生成器**根本没有输出到它那儿去的路径**——那套图标是手画的，与母图不是同一份母图。现在是了。
+- 生成出的 `icon.icns` 用 `iconutil -c iconset` 反解回 10 个槽位验过（macOS 原生可读；踩过一个坑：ICNS 的 chunk 长度字段**含 8 字节 chunk 头**，写成不含就只有一个槽位解得出来）。
+
+### 显示层（主仓）
+
+`wails.json` 的 `name` / `productName`（`outputfilename` 不动）、`web/index.html`、locales、Homebrew cask 的 `name`、安装与构建脚本、ISSUE_TEMPLATE、README（中英）、文档站、VS Code 插件 `displayName` 与命令标题、JetBrains `plugin.xml` 的 `<name>`（`<id>` 不动）。
+
+**DMG 窗口那块画布也是当前面**：`build/dmg-background.svg` 上原来写着旧产品名 + 一句早就不对的副标题（「Git 代码提交统计面板」——那是三代以前的定位），改成新桌面名 + 「AI 编码 Agent 的本地记忆层」。
+
+**删了 `build/dmg-readme.txt`**：无人引用的死文件，内容是更老的一代品牌名。
+
+### 显示层（独立仓）
+
+`tauri.conf.json` 的 `productName` 与窗口标题、中英 README、`AGENTS.md`、`docs/product.md` 中英双份、界面文案，**`identifier` 不动**。
+
+顺手修掉的**真缺陷**（不是风格问题，是改名带出来的）：
+
+- **9 处缺空格**：批量替换把「拉丁词 + 空格 + 汉字」里的空格吃掉了（独立仓 8 处、主仓 1 处）——「Cinder Desktop是两个产品」这种。
+- **1 处 ASCII 架构图歪了**：`docs/roadmap.md` 里 `Repotory` → `Cinder` 短了 2 列，箭头那一列跟着错位 → 补 2 个空格，列宽复原。
+- **5 处断锚点**：**改标题就是改锚点**。改名后 4 处链接指向空处（另外 1 处「ADR-0015 人类闸门」少了一个「的」，是更早的手写笔误），一并修好。
+- **1 处语义自相矛盾**：改完后有 4 处写成「Cinder 是**工作台**」，与 README 自己的角色表冲突（表里 Cinder 是记忆层）→ 改回「Cinder Desktop 是工作台」。
+
+### 守门（两仓各一道）
+
+| | 主仓 | 独立仓 |
+|---|---|---|
+| 真相源 | `build/brand.json` | `brand.json` |
+| 脚本 | `scripts/check-brand.mjs` | `scripts/check-brand.mjs` |
+| 入口 | CI `brand` job | CI `brand` job（第四道门）+ `npm run check:brand` |
+| 查什么 | 产品名 10 处 = brand.json；冻结标识层 12 条逐条仍在原处；当前面不留旧品牌词（历史面按前缀放行）；App 里的 `BrandMark` 与母图同源（路径 `d`、组变换、hairline 宽度、inset、两种颜色） | 产品名 13 处 = brand.json（含 `productName`、窗口标题、`<title>`、首屏名）；冻结标识层 6 条；当前面不留旧品牌词；**文档锚点还指得到标题** |
+
+**负例已验**（门不是只会绿）：主仓四道——产品名回退旧名、数据目录被改、README 漏出旧名、`BrandMark` 路径偏一位——每道都红；独立仓五道——`productName` 回退、`identifier` 被「顺手清理」、当前面漏旧名、锚点里的旧品牌词、桌面名不再与母品牌同源——每道都红。恢复后两仓复跑皆绿。
+
+**两仓各有一份 `brand.json`**：CI 各跑各的仓，谁也看不到对方，所以**改词要同批改**。这是这份真相源唯一的结构性弱点，备忘在此。
+
+### 旧名残留清单
+
+- **故意保留（标识层）**：二进制名、数据目录、库文件名、MCP server 名、工具前缀、Go module、VS Code / JetBrains 插件 id、npm 包名、cask token、skill 名、Windows 安装目录、GitHub slug。
+- **历史面按惯例保留**：历史 ADR / CHANGELOG / 评审记录 / `TODO.md` 的历史条目。
+- **已修**：DMG 窗口画布、独立仓首屏与菜单提示（「点菜单栏的 R 唤回窗口」→「C」）。
+- **已删**：`build/dmg-readme.txt`。
+- **待办**：独立仓 `outputs/screenshots/` 的 9 张截图是**改名前**拍的（首屏写着旧名）——已加 `README.md` 说明它是历史证据，**未重拍**（重拍要跑起 Tauri 窗口 + 真 MCP server + 真 provider）。
+- **与改名无关、更早就断的**：主仓 5 处文档内链（`docs/data-management.md` 等），本次未修。
+
+### 未改的（要单独批准）
+
+- **GitHub 仓 slug**：远端 `sky-jiangcheng/repotory` 与 `sky-jiangcheng/repotory-agent` **保持原样**。改 slug 会让每个老 clone 要手动改一次 remote，属于共享状态，要单独决定；**这一条要写进发布说明**。
+
+### 验证
+
+- 主仓：`node scripts/check-brand.mjs` 绿；`node scripts/generate-icons.mjs --check --tracked-only` 绿（母图与全部已提交派生件同源）。
+- 独立仓：`npm run check:brand` 绿；`npm run check:docs` 绿；`npm run build`（`tsc` + `vite build`）绿；`cargo fmt --check`、`cargo clippy --all-targets --features test-fixtures -- -D warnings` 绿；`cargo test --all-targets --features test-fixtures` **80 passed / 0 failed**。
+
+### 仍然未决（按原样留着）
+
+- **UI 减法与主次重构**：元数据压内容、常驻右栏 288px、悬浮机器人压正文——已诊断，**独立的一篇 ADR**，与命名无关。
+- **母图是否再画**：本轮只换了字母，hairline 三域规则与「印出来的卡」构造保持。
+
