@@ -16,6 +16,8 @@ That layer is **agent-neutral and protocol-neutral**: every coding agent that sp
 
 The consequence: each IDE's or agent's own session history lives **inside its own ecosystem** (VS Code's session index is still unreadable by extensions), so the cross-agent layer needs a **neutral home of its own** — which is exactly where Repotory sits.
 
+**Two products, one job each**: Repotory is the **workbench** — it browses, edits, **approves** and governs this memory; [Repotory Agent](https://github.com/sky-jiangcheng/repotory-agent) is the **assistant** — a local copilot that reads this memory, chats about the current project and runs commands over MCP. They share one local memory and one protocol, and **approval always happens in Repotory** (the assistant goes over MCP, and the MCP tool surface has no approve / reject to begin with).
+
 Current priorities:
 
 1. **Local project understanding and knowledge context** comes first

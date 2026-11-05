@@ -16,6 +16,8 @@ Repotory 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记�
 
 推论：各家 IDE / agent 自己的会话记录都是**各自生态内部的实现**（VS Code 的 session 索引，扩展至今读不到），跨 agent 的那一层因此需要一个**中立的落点**——这正是 Repotory 所在的位置。
 
+**两个产品，各担一件事**：Repotory 是**工作台**——浏览、编辑、**审批**、治理这份记忆；[Repotory Agent](https://github.com/sky-jiangcheng/repotory-agent) 是**助手**——一个跑在本机的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。两者共享同一份本地记忆、同一套协议，**审批永远在 Repotory 那边**（助手走 MCP，而 MCP 工具面里本来就没有 approve / reject）。
+
 当前优先级声明：
 1. **本地项目理解与知识上下文** 是第一优先级
 2. 仪表盘与统计是支持能力，不作为产品主叙事

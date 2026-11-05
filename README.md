@@ -20,6 +20,13 @@
 </p>
 
 <p align="center">
+  <b>Two products, one job each.</b><br/>
+  Repotory is the <b>workbench</b> — browse, edit, <b>approve</b> and govern this memory.<br/>
+  <a href="https://github.com/sky-jiangcheng/repotory-agent">Repotory Agent</a> is the <b>assistant</b> — a local copilot that reads this memory, chats about the project and runs commands over MCP.<br/>
+  One shared local memory, one protocol, and <b>approval happens here, never there</b>.
+</p>
+
+<p align="center">
   <a href="https://github.com/sky-jiangcheng/repotory/releases"><img src="https://img.shields.io/github/v/release/sky-jiangcheng/repotory?color=6366f1" alt="Release" /></a>
   <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml/badge.svg" alt="Install smoke test" /></a>
