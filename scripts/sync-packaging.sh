@@ -230,7 +230,7 @@ if [ "$PUSH" -eq 1 ]; then
     API_AUTH=(-H "Authorization: Bearer ${PACKAGING_PUSH_TOKEN}")
   fi
   if ! curl -fsSL --max-time 60 -H "Accept: application/vnd.github+json" "${API_AUTH[@]}" \
-       "https://api.github.com/repos/sky-jiangcheng/repotory/releases/tags/v${VERSION}" \
+       "https://api.github.com/repos/sky-jiangcheng/cinder/releases/tags/v${VERSION}" \
      | python3 -c "
 import json, sys
 rel = json.load(sys.stdin)

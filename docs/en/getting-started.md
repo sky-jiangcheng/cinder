@@ -21,7 +21,7 @@ If your daily development revolves around Claude Code, Cursor, or Windsurf in th
 
 ```bash
 # 1. Download and install repotory-mcp (macOS / Linux)
-curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. Register MCP with the installed agents and write the
 #    "read context at the start / hand off at the end" instructions into the
@@ -44,19 +44,19 @@ If you prefer a visual knowledge base, block-based Markdown editor, and human re
 
 #### macOS / Linux One-Line Script
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 ```
 > Installs to `/Applications/Cinder.app` on macOS and `/usr/local/bin/repotory` on Linux; also places `repotory-mcp` in your PATH.
 
 #### Windows One-Line Script
 ```powershell
-iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 | iex
 ```
 
 #### Package Managers & Direct Download
 - **Homebrew (macOS)**: `brew install --cask sky-jiangcheng/repo/repotory`
 - **Scoop (Windows)**: `scoop install repo/repotory`
-- **Direct Downloads**: Grab `.dmg` / `.tar.gz` / `.zip` from [GitHub Releases](https://github.com/sky-jiangcheng/repotory/releases).
+- **Direct Downloads**: Grab `.dmg` / `.tar.gz` / `.zip` from [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases).
 
 ---
 

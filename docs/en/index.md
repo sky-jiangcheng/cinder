@@ -16,7 +16,7 @@ That layer is **agent-neutral and protocol-neutral**: every coding agent that sp
 
 The consequence: each IDE's or agent's own session history lives **inside its own ecosystem** (VS Code's session index is still unreadable by extensions), so the cross-agent layer needs a **neutral home of its own** — which is exactly where Cinder sits.
 
-**Two products, one job each**: Cinder is the **workbench** — it browses, edits, **approves** and governs this memory; [Warden](https://github.com/sky-jiangcheng/repotory-agent) is the **assistant** — a local copilot that reads this memory, chats about the current project and runs commands over MCP. They share one local memory and one protocol, and **approval always happens in Cinder** (the assistant goes over MCP, and the MCP tool surface has no approve / reject to begin with).
+**Two products, one job each**: Cinder is the **workbench** — it browses, edits, **approves** and governs this memory; [Warden](https://github.com/sky-jiangcheng/warden) is the **assistant** — a local copilot that reads this memory, chats about the current project and runs commands over MCP. They share one local memory and one protocol, and **approval always happens in Cinder** (the assistant goes over MCP, and the MCP tool surface has no approve / reject to begin with).
 
 Current priorities:
 
@@ -117,9 +117,9 @@ How to read it: **the top two rows are the shelf** — the desktop App and the V
 
 This manual covers Cinder's core features and use cases. The docs are written in Markdown (the single source of content, stored in the repository's `docs/` directory), rendered to HTML by `scripts/build-docs.mjs`, and deployed to GitHub Pages.
 
-- **Read online**: <https://sky-jiangcheng.github.io/repotory/> — updated automatically with the master branch
+- **Read online**: <https://sky-jiangcheng.github.io/cinder/> — updated automatically with the master branch
 - **Build locally**: `node scripts/build-docs.mjs` (uses marked from `web/node_modules`)
-- **Report issues**: <https://github.com/sky-jiangcheng/repotory/issues>
+- **Report issues**: <https://github.com/sky-jiangcheng/cinder/issues>
 
 ## Quick Navigation
 

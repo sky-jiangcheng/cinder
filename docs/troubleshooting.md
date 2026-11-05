@@ -86,4 +86,4 @@ FTS5 trigram 索引最短匹配 3 字符；更短的查询自动降级为 LIKE �
 
 ## 报告问题
 
-如发现 Bug 或有功能建议，请在 [GitHub Issues](https://github.com/sky-jiangcheng/repotory/issues) 提交（含版本号、平台、日志片段）。安全漏洞请走[私密报告渠道](https://github.com/sky-jiangcheng/repotory/security/advisories/new)。
+如发现 Bug 或有功能建议，请在 [GitHub Issues](https://github.com/sky-jiangcheng/cinder/issues) 提交（含版本号、平台、日志片段）。安全漏洞请走[私密报告渠道](https://github.com/sky-jiangcheng/cinder/security/advisories/new)。

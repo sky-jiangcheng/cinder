@@ -16,7 +16,7 @@ Cinder 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记住
 
 推论：各家 IDE / agent 自己的会话记录都是**各自生态内部的实现**（VS Code 的 session 索引，扩展至今读不到），跨 agent 的那一层因此需要一个**中立的落点**——这正是 Cinder 所在的位置。
 
-**两个产品，各担一件事**：Cinder 是**工作台**——浏览、编辑、**审批**、治理这份记忆；[Warden](https://github.com/sky-jiangcheng/repotory-agent) 是**助手**——一个跑在本机的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。两者共享同一份本地记忆、同一套协议，**审批永远在 Cinder 那边**（助手走 MCP，而 MCP 工具面里本来就没有 approve / reject）。
+**两个产品，各担一件事**：Cinder 是**工作台**——浏览、编辑、**审批**、治理这份记忆；[Warden](https://github.com/sky-jiangcheng/warden) 是**助手**——一个跑在本机的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。两者共享同一份本地记忆、同一套协议，**审批永远在 Cinder 那边**（助手走 MCP，而 MCP 工具面里本来就没有 approve / reject）。
 
 当前优先级声明：
 1. **本地项目理解与知识上下文** 是第一优先级
@@ -120,9 +120,9 @@ flowchart TB
 
 手册有**英文（默认）与中文两个版本**，通过侧栏顶部的语言切换器互跳；英文内容源在 `docs/en/`，中文在 `docs/`。
 
-- **在线浏览**：<https://sky-jiangcheng.github.io/repotory/>，随 master 分支自动更新
+- **在线浏览**：<https://sky-jiangcheng.github.io/cinder/>，随 master 分支自动更新
 - **本地生成**：`node scripts/build-docs.mjs`（依赖 `web/node_modules` 中的 marked）
-- **问题反馈**：<https://github.com/sky-jiangcheng/repotory/issues>
+- **问题反馈**：<https://github.com/sky-jiangcheng/cinder/issues>
 
 ## 快速导览
 

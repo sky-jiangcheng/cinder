@@ -12,7 +12,7 @@
 #       name: '/absolute/path/to/Cinder/dsh-plugin-repotory/src/index.ts'
 #
 # For a permanent install, prefer `pnpm dsh plugin add ./dsh-plugin-repotory`
-# (or `github:sky-jiangcheng/repotory` once the plugin is its own repo), which
+# (or `github:sky-jiangcheng/cinder` once the plugin is its own repo), which
 # installs it as an npm package instead of a transient --patch overlay.
 - insert:
   - id: repotory

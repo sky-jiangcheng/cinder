@@ -11,7 +11,7 @@ set -e
 
 BINARY_NAME="repotory"
 MCP_BINARY_NAME="repotory-mcp"
-REPO="sky-jiangcheng/repotory"
+REPO="sky-jiangcheng/cinder"
 # RELEASES is the base URL for release assets. Overridable so CI can point it
 # at a local fixture server and exercise the real download/extract/install
 # path without a published release (see .github/workflows/install-smoke.yml).

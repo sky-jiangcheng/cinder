@@ -247,4 +247,4 @@ It and the terminal `repotory-init` path are **two implementations of one protoc
 
 ## OpenAPI
 
-For now, the tables on this page serve as the machine-readable contract (the hand-maintained openapi.json was removed in D10 and will return once CI generates it automatically). The desktop app does not expose a public HTTP service (see [TODO](https://github.com/sky-jiangcheng/repotory/blob/master/TODO.md)).
+For now, the tables on this page serve as the machine-readable contract (the hand-maintained openapi.json was removed in D10 and will return once CI generates it automatically). The desktop app does not expose a public HTTP service (see [TODO](https://github.com/sky-jiangcheng/cinder/blob/master/TODO.md)).

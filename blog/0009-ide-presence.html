@@ -33,7 +33,7 @@
     <div class="min-w-0 flex-1">
       <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--mute)] mb-1">决策原文 · ADR-0009</div>
       <div class="text-[14px] font-medium text-[var(--ink)] leading-snug">本文是 ADR-0009 的可读版：背景、决策五条与后果均出自决策原文</div>
-      <div class="text-[12px] mt-1"><a href="https://github.com/sky-jiangcheng/repotory/blob/master/docs/adr/0009-ide-presence.md" style="color:var(--accent)">docs/adr/0009-ide-presence.md&nbsp;&nbsp;↗</a></div>
+      <div class="text-[12px] mt-1"><a href="https://github.com/sky-jiangcheng/cinder/blob/master/docs/adr/0009-ide-presence.md" style="color:var(--accent)">docs/adr/0009-ide-presence.md&nbsp;&nbsp;↗</a></div>
     </div>
   </div>
 
@@ -88,7 +88,7 @@
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" class="shrink-0 mt-0.5" style="color:var(--accent)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>
     <div>
       <div class="font-semibold text-[var(--ink)] mb-1">第一步已经落地。</div>
-      <div class="text-[13px] text-[var(--mute)]">repotory-init 位于 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">scripts/repotory-init/</code>，幂等、可 dry-run；M5 的 VS Code 扩展骨架也已落在 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">ide/vscode/</code>。决策全文见 <a href="https://github.com/sky-jiangcheng/repotory/blob/master/docs/adr/0009-ide-presence.md">docs/adr/0009-ide-presence.md</a>。</div>
+      <div class="text-[13px] text-[var(--mute)]">repotory-init 位于 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">scripts/repotory-init/</code>，幂等、可 dry-run；M5 的 VS Code 扩展骨架也已落在 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">ide/vscode/</code>。决策全文见 <a href="https://github.com/sky-jiangcheng/cinder/blob/master/docs/adr/0009-ide-presence.md">docs/adr/0009-ide-presence.md</a>。</div>
     </div>
   </div>
 
@@ -96,7 +96,7 @@
   <div class="rounded-2xl border border-dashed border-[var(--line)] bg-white/40 p-6 mt-8">
     <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--mute)] mb-2">更新说明 · 2026-10-29</div>
     <div class="text-[13px] text-[var(--mute)] leading-relaxed">
-      本文首发于 2026-10-02，此后有三处变化，正文已按现状订正：① 产品于 v2.0.0 由 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">RepoNest</code> 更名为 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">Repotory</code>，文中品牌、<code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">repotory-init</code> / <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">repotory-mcp</code> 与命令名随之更新——旧名下的路径今天已经不存在；② 文中「JetBrains 缓议」已被 <a href="https://github.com/sky-jiangcheng/repotory/blob/master/docs/adr/0027-jetbrains-plugin.md" style="color:var(--accent)">ADR-0027</a> 取代（2026-10-22 立项并上架 Marketplace）；③「VS Code 扩展是唯一的 IDE 扩展」这句话因此不再成立，但薄客户端纪律那一条（MCP 是唯一执行接口，扩展只是薄壳）没有变。
+      本文首发于 2026-10-02，此后有三处变化，正文已按现状订正：① 产品于 v2.0.0 由 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">RepoNest</code> 更名为 <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">Repotory</code>，文中品牌、<code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">repotory-init</code> / <code class="px-1.5 py-0.5 rounded bg-[#f0ece5] text-[0.92em] font-mono text-[#7a3d27]">repotory-mcp</code> 与命令名随之更新——旧名下的路径今天已经不存在；② 文中「JetBrains 缓议」已被 <a href="https://github.com/sky-jiangcheng/cinder/blob/master/docs/adr/0027-jetbrains-plugin.md" style="color:var(--accent)">ADR-0027</a> 取代（2026-10-22 立项并上架 Marketplace）；③「VS Code 扩展是唯一的 IDE 扩展」这句话因此不再成立，但薄客户端纪律那一条（MCP 是唯一执行接口，扩展只是薄壳）没有变。
     </div>
   </div>
 </article>

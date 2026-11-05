@@ -9,18 +9,18 @@ cask "repotory-mcp" do
   version "2.31.1"
   name "Cinder MCP Server"
   desc "MCP stdio server exposing the Cinder local knowledge base to AI agents"
-  homepage "https://github.com/sky-jiangcheng/repotory"
+  homepage "https://github.com/sky-jiangcheng/cinder"
   # NOTE: no `license` stanza — `license` is a FORMULA method, not a Cask
   # one. `brew install --cask` rejects the whole definition with
   # "undefined method 'license' for Cask". The license is MIT; see README.
 
   on_arm do
-    url "https://github.com/sky-jiangcheng/repotory/releases/download/v#{version}/repotory-mcp-darwin-arm64.tar.gz"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-mcp-darwin-arm64.tar.gz"
     sha256 "b72bbccdd2fba46036b73d68fc85d7719f0d7fba261cfbde432df5184645472e"
   end
 
   on_intel do
-    url "https://github.com/sky-jiangcheng/repotory/releases/download/v#{version}/repotory-mcp-darwin-amd64.tar.gz"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-mcp-darwin-amd64.tar.gz"
     sha256 "b2e9cda399d917476b8e7853ac56ca0af6ac03aaac3d7a9c4763c0a5a0c69e9c"
   end
 

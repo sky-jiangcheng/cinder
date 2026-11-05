@@ -350,7 +350,7 @@ Cinder parses and materializes the raw git data into local SQLite **once at scan
 
 ## Skill card for AI agents
 
-[SKILL.md](https://github.com/sky-jiangcheng/repotory/blob/master/SKILL.md) at the repository root is a capability card written for agents to read (commands, tool table, paths) — feed it to them directly.
+[SKILL.md](https://github.com/sky-jiangcheng/cinder/blob/master/SKILL.md) at the repository root is a capability card written for agents to read (commands, tool table, paths) — feed it to them directly.
 
 ### The WorkBuddy skill package
 

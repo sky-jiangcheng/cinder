@@ -13,7 +13,7 @@
 
 请勿在公开 Issue 中披露安全漏洞。请通过以下方式私下报告：
 
-- 在 GitHub 上创建 [Security Advisory](https://github.com/sky-jiangcheng/repotory/security/advisories/new)（推荐）
+- 在 GitHub 上创建 [Security Advisory](https://github.com/sky-jiangcheng/cinder/security/advisories/new)（推荐）
 - 或向维护者发送包含漏洞细节的私信/邮件
 
 请在报告中包含：

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 支持与文档
-    url: https://github.com/sky-jiangcheng/repotory#readme
+    url: https://github.com/sky-jiangcheng/cinder#readme
     about: 阅读 README 中的常见问题与使用说明
   - name: 安全漏洞
-    url: https://github.com/sky-jiangcheng/repotory/security/advisories/new
+    url: https://github.com/sky-jiangcheng/cinder/security/advisories/new
     about: 请通过 Security Advisory 私密报告安全问题，勿在公开 Issue 中披露

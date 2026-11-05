@@ -142,4 +142,4 @@ npm test        # unit tests for the parsers (ask answer, project lock)
 npx @vscode/vsce package --no-dependencies   # → repotory-vscode-<version>.vsix
 ```
 
-Architecture and scope: [ADR-0009](https://github.com/sky-jiangcheng/repotory/blob/master/docs/en/adr/0009-ide-presence.md) for the client discipline, [ADR-0036](https://github.com/sky-jiangcheng/repotory/blob/master/docs/en/adr/0036-ide-chat-console.md) for the chat console's shape. The extension calls `repotory-mcp` over stdio and the loopback-only headless service; zero business logic lives here.
+Architecture and scope: [ADR-0009](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0009-ide-presence.md) for the client discipline, [ADR-0036](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0036-ide-chat-console.md) for the chat console's shape. The extension calls `repotory-mcp` over stdio and the loopback-only headless service; zero business logic lives here.

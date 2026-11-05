@@ -20,7 +20,7 @@ license: MIT
 allowed-tools: Read, Write, Bash
 metadata:
   version: "1.0.0"
-  upstream: "https://github.com/sky-jiangcheng/repotory"
+  upstream: "https://github.com/sky-jiangcheng/cinder"
   description_en: |
     Use Cinder as a cross-agent memory layer: read and write the local project knowledge base
     (notes, projects, topics, todos) that survives across sessions and is shared by every agent
@@ -334,4 +334,4 @@ curl -s -X POST http://127.0.0.1:18765/api/rpc \
 - `scripts/repotory-query.py` —— 通道 C 的只读查询工具（检索 / 列主题 / 列项目 / 读单条 / 库概况）- `references/mcp-tools.md` —— 14 个 MCP 工具的完整参数与返回值、HTTP RPC 方法映射
 - `references/data-model.md` —— schema 与不变量（主题归属、迁移、handoff 保护、搜索边界）
 
-上游项目：<https://github.com/sky-jiangcheng/repotory> · 文档：<https://sky-jiangcheng.github.io/repotory/>
+上游项目：<https://github.com/sky-jiangcheng/cinder> · 文档：<https://sky-jiangcheng.github.io/cinder/>

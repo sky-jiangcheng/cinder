@@ -1,17 +1,17 @@
 {
   "version": "2.31.1",
   "description": "MCP stdio server exposing the Cinder local knowledge base to AI agents",
-  "homepage": "https://github.com/sky-jiangcheng/repotory",
+  "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
-  "url": "https://github.com/sky-jiangcheng/repotory/releases/download/v2.31.1/repotory-mcp-windows-amd64.zip",
+  "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.31.1/repotory-mcp-windows-amd64.zip",
   "hash": "sha256:d87684417654e27fae13d217ce079a8886a5f09e985beda2667a89ed37065f8f",
   "bin": "repotory-mcp.exe",
   "checkver": {
-    "url": "https://api.github.com/repos/sky-jiangcheng/repotory/releases/latest",
+    "url": "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest",
     "jsonpath": "$.tag_name",
     "regex": "v([\\d.]+)"
   },
   "autoupdate": {
-    "url": "https://github.com/sky-jiangcheng/repotory/releases/download/v$version/repotory-mcp-windows-amd64.zip"
+    "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v$version/repotory-mcp-windows-amd64.zip"
   }
 }

@@ -46,7 +46,7 @@ const updateNotesMaxLen = 2000
 // excludes drafts and prereleases by definition, which is exactly the
 // channel stable builds track. A var, not a const, so tests can point it
 // at a stub server — a const would make every test hit the real API.
-var releasesLatestURL = "https://api.github.com/repos/sky-jiangcheng/repotory/releases/latest"
+var releasesLatestURL = "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest"
 
 // UpdateInfo is the verdict of one update check.
 type UpdateInfo struct {

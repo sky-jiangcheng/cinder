@@ -29,6 +29,6 @@
 
 ## 执行
 
-如遇骚扰或不当行为，请通过 [GitHub 私信联系维护者](https://github.com/sky-jiangcheng) 或在 [Security Advisory](https://github.com/sky-jiangcheng/repotory/security/advisories/new) 中私密上报。所有报告将保密处理。
+如遇骚扰或不当行为，请通过 [GitHub 私信联系维护者](https://github.com/sky-jiangcheng) 或在 [Security Advisory](https://github.com/sky-jiangcheng/cinder/security/advisories/new) 中私密上报。所有报告将保密处理。
 
 本准则改编自 [Contributor Covenant](https://www.contributor-covenant.org) 2.1 版。

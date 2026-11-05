@@ -154,4 +154,4 @@ This file is the platform-agnostic capability card. Hosts with a skill-package m
 
 The package adds what this card cannot: a three-tier fallback (MCP → HTTP RPC → read-only SQLite) so an agent still reaches the knowledge base when no MCP client is wired up, plus the explicit list of bindings that are **desktop-only on purpose** — creating / renaming / deleting a topic, filing a note under a topic, merging projects, compiling and approving wiki pages. Those are organizing and review acts, and they belong to a human.
 
-Docs: <https://sky-jiangcheng.github.io/repotory/> · Repo: <https://github.com/sky-jiangcheng/repotory>
+Docs: <https://sky-jiangcheng.github.io/cinder/> · Repo: <https://github.com/sky-jiangcheng/cinder>

@@ -113,7 +113,7 @@ import kotlin.math.ceil
 private const val NOTIFICATION_GROUP = "Cinder"
 
 /** Where the desktop app is downloaded from, when it is not installed. */
-private const val RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases"
+private const val RELEASES_URL = "https://github.com/sky-jiangcheng/cinder/releases"
 
 /**
  * The state of the connection to the Cinder service.

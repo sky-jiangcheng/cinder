@@ -24,7 +24,7 @@
     -->
     <id>dev.repotory.jetbrains</id>
     <name>Cinder Memory</name>
-    <vendor email="sky-jiangcheng@users.noreply.github.com" url="https://github.com/sky-jiangcheng/repotory">Cinder</vendor>
+    <vendor email="sky-jiangcheng@users.noreply.github.com" url="https://github.com/sky-jiangcheng/cinder">Cinder</vendor>
     <!-- The Plugin Verifier rejects a descriptor without <description> (it is
          a required property of a valid plugin), and Marketplace shows it to
          the user, so it says what the plugin actually does. -->

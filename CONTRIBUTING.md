@@ -130,4 +130,4 @@ GitHub Release 的正文是 **CHANGELOG 里那一节的条目标题**（`scripts
 
 ## 报告问题
 
-Bug 与功能建议走 [GitHub Issues](https://github.com/sky-jiangcheng/repotory/issues)，请附版本号、平台与日志片段（日志位置见[故障排查](docs/troubleshooting.md)）。**安全漏洞不要开公开 Issue**，走[私密安全报告](SECURITY.md)。
+Bug 与功能建议走 [GitHub Issues](https://github.com/sky-jiangcheng/cinder/issues)，请附版本号、平台与日志片段（日志位置见[故障排查](docs/troubleshooting.md)）。**安全漏洞不要开公开 Issue**，走[私密安全报告](SECURITY.md)。

@@ -1,6 +1,6 @@
 # homebrew-repo
 
-Homebrew tap for [Cinder](https://github.com/sky-jiangcheng/repotory) — the
+Homebrew tap for [Cinder](https://github.com/sky-jiangcheng/cinder) — the
 local-first code project context base.
 
 ## What is in here
@@ -61,7 +61,7 @@ different file, and a digest taken from it would reject every real download.
 ## Maintenance
 
 The manifests in this repository are generated from
-[`packaging/homebrew/`](https://github.com/sky-jiangcheng/repotory/tree/master/packaging/homebrew)
+[`packaging/homebrew/`](https://github.com/sky-jiangcheng/cinder/tree/master/packaging/homebrew)
 in the main repository. **Edit them there**, then re-publish; editing here will
 be overwritten on the next release.
 
@@ -69,4 +69,4 @@ The `tests.yml` workflow runs `brew install`, `brew audit --cask` and
 `brew test` against every push, so a broken manifest fails here rather than in
 a user's terminal.
 
-[datadir]: https://github.com/sky-jiangcheng/repotory#数据目录
+[datadir]: https://github.com/sky-jiangcheng/cinder#数据目录

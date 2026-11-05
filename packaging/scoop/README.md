@@ -1,6 +1,6 @@
 # scoop-repo
 
-Scoop bucket for [Cinder](https://github.com/sky-jiangcheng/repotory) — the
+Scoop bucket for [Cinder](https://github.com/sky-jiangcheng/cinder) — the
 local-first code project context base.
 
 ## What is in here
@@ -59,7 +59,7 @@ so a manifest whose `hash` has not been refreshed will still update cleanly.
 ## Maintenance
 
 The manifests in `bucket/` are generated from
-[`packaging/scoop/`](https://github.com/sky-jiangcheng/repotory/tree/master/packaging/scoop)
+[`packaging/scoop/`](https://github.com/sky-jiangcheng/cinder/tree/master/packaging/scoop)
 in the main repository. **Edit them there**, then re-publish; editing here will
 be overwritten on the next release.
 

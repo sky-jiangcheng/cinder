@@ -133,11 +133,11 @@
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sky-jiangcheng/repotory.git"
+    "url": "https://github.com/sky-jiangcheng/cinder.git"
   },
-  "homepage": "https://github.com/sky-jiangcheng/repotory/tree/master/ide/vscode",
+  "homepage": "https://github.com/sky-jiangcheng/cinder/tree/master/ide/vscode",
   "bugs": {
-    "url": "https://github.com/sky-jiangcheng/repotory/issues"
+    "url": "https://github.com/sky-jiangcheng/cinder/issues"
   },
   "keywords": [
     "repotory",

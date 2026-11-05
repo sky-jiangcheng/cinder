@@ -24,9 +24,9 @@ const SERVER_URL_KEY = "serverUrl";
 const MCP_PATH_KEY = "mcpPath";
 const MCP_ENV = "REPOTORY_MCP_BIN";
 const BINARY_NAMES = ["repotory-mcp", "repotory-mcp.exe"];
-const RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases";
+const RELEASES_URL = "https://github.com/sky-jiangcheng/cinder/releases";
 const AI_INTEGRATION_DOC =
-  "https://github.com/sky-jiangcheng/repotory/blob/master/docs/features/ai-integration.md";
+  "https://github.com/sky-jiangcheng/cinder/blob/master/docs/features/ai-integration.md";
 /** The webview view the chat console lives in. */
 const CONSOLE_VIEW_ID = "repotory.notesSearch";
 
@@ -688,7 +688,7 @@ async function openDesktop(): Promise<void> {
           if (choice === "打开 Releases 页面") {
             void vscode.env.openExternal(
               vscode.Uri.parse(
-                "https://github.com/sky-jiangcheng/repotory/releases",
+                "https://github.com/sky-jiangcheng/cinder/releases",
               ),
             );
           }

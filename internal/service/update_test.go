@@ -51,7 +51,7 @@ func releaseHandler(t *testing.T, tag, htmlURL, body, publishedAt string, prerel
 
 func TestCheckUpdateFindsNewerVersion(t *testing.T) {
 	srv := httptest.NewServer(releaseHandler(t,
-		"v9.9.9", "https://github.com/sky-jiangcheng/repotory/releases/tag/v9.9.9",
+		"v9.9.9", "https://github.com/sky-jiangcheng/cinder/releases/tag/v9.9.9",
 		"- shiny things", "2026-10-24T10:00:00Z", false))
 	defer srv.Close()
 	stubUpdateClient(t, srv)

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/sky-jiangcheng/repotory"><img src="build/icon.svg" width="88" alt="Cinder" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder"><img src="build/icon.svg" width="88" alt="Cinder" /></a>
 </p>
 
 <h1 align="center">Cinder</h1>
@@ -22,22 +22,22 @@
 <p align="center">
   <b>Two products, one job each.</b><br/>
   Cinder is the <b>workbench</b> — browse, edit, <b>approve</b> and govern this memory.<br/>
-  <a href="https://github.com/sky-jiangcheng/repotory-agent">Warden</a> is the <b>assistant</b> — a local copilot that reads this memory, chats about the project and runs commands over MCP.<br/>
+  <a href="https://github.com/sky-jiangcheng/warden">Warden</a> is the <b>assistant</b> — a local copilot that reads this memory, chats about the project and runs commands over MCP.<br/>
   One shared local memory, one protocol, and <b>approval happens here, never there</b>.
 </p>
 
 <p align="center">
-  <a href="https://github.com/sky-jiangcheng/repotory/releases"><img src="https://img.shields.io/github/v/release/sky-jiangcheng/repotory?color=6366f1" alt="Release" /></a>
-  <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml/badge.svg" alt="Install smoke test" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder/releases"><img src="https://img.shields.io/github/v/release/sky-jiangcheng/cinder?color=6366f1" alt="Release" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder/actions/workflows/ci.yml"><img src="https://github.com/sky-jiangcheng/cinder/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder/actions/workflows/install-smoke.yml"><img src="https://github.com/sky-jiangcheng/cinder/actions/workflows/install-smoke.yml/badge.svg" alt="Install smoke test" /></a>
   <img src="https://img.shields.io/badge/Platforms-macOS%20%7C%20Windows%20%7C%20Linux-111827" alt="macOS | Windows | Linux" />
   <img src="https://img.shields.io/badge/Agents-Claude%20Code%20%7C%20Cursor%20%7C%20Windsurf%20%7C%20VS%20Code-7c3aed" alt="Claude Code | Cursor | Windsurf | VS Code" />
   <img src="https://img.shields.io/badge/Storage-Local%20SQLite%20%2B%20FTS5%20%2B%20vec-003B57" alt="Local SQLite + FTS5 + vec" />
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/sky-jiangcheng/repotory?color=22c55e" alt="MIT License" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/sky-jiangcheng/cinder?color=22c55e" alt="MIT License" /></a>
 </p>
 
 <p align="center">
-  English | <a href="README.zh-CN.md">简体中文</a> · <a href="https://sky-jiangcheng.github.io/repotory/">Documentation</a>
+  English | <a href="README.zh-CN.md">简体中文</a> · <a href="https://sky-jiangcheng.github.io/cinder/">Documentation</a>
 </p>
 
 ---
@@ -62,7 +62,7 @@ Cinder is engineered as a modular local knowledge suite. Choose the artifact tha
 | Artifact | Type | Description & Best For | Quick Access |
 | :--- | :--- | :--- | :--- |
 | **`repotory-mcp`** | 🤖 Standalone MCP Server | **Core agent memory engine.** Runs via stdio. Connects Claude Code, Cursor, Windsurf, and any MCP client to local memory with **zero desktop app required**. | `node scripts/repotory-init/index.mjs` |
-| **Cinder Desktop** | 🖥️ Desktop Application | **Visual workspace & review hub.** Native single-file desktop app (Wails v2 + React 19) for macOS, Windows, and Linux. Browse notes, review LLM wiki drafts, explore repo metrics. | [Releases](https://github.com/sky-jiangcheng/repotory/releases) · `brew` · `scoop` |
+| **Cinder Desktop** | 🖥️ Desktop Application | **Visual workspace & review hub.** Native single-file desktop app (Wails v2 + React 19) for macOS, Windows, and Linux. Browse notes, review LLM wiki drafts, explore repo metrics. | [Releases](https://github.com/sky-jiangcheng/cinder/releases) · `brew` · `scoop` |
 | **IDE Extensions** | 🧩 VS Code & JetBrains | **In-editor lookup.** Search notes, todos, and project handoffs directly from your editor sidebar (VS Code / Cursor / Windsurf & IntelliJ family). | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) · JetBrains Plugins |
 | **CLI & Headless** | ⚡ Automation & Daemon | **Automated capture & headless mode.** `repotory-capture` (auto-session hook), `repotory-server` (headless API), vector setup, and data integrity audit tools. | Included with install script |
 
@@ -76,7 +76,7 @@ Cinder is engineered as a modular local knowledge suite. Choose the artifact tha
 
 ```bash
 # 1. Install repotory-mcp (macOS / Linux)
-curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. Register MCP with your installed agents, write the read-at-start /
 #    hand-off-at-end instructions into AGENTS.md and CLAUDE.md, and install the
@@ -93,10 +93,10 @@ Prefer a visual dashboard, markdown note editor, and human review queue?
 
 | Method | Command / Download |
 | :--- | :--- |
-| **Direct Download** | [GitHub Releases](https://github.com/sky-jiangcheng/repotory/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
+| **Direct Download** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
-| **One-Line Script (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.ps1 \| iex` |
+| **One-Line Script (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
 
 First launch automatically seeds your scan roots (HOME on macOS/Linux; non-system drives on Windows). Hit **Rescan** on the dashboard and your knowledge base is immediately ready. Full walkthrough: [Getting Started](docs/en/getting-started.md).
 
@@ -150,7 +150,7 @@ The dashed line is the key: handoffs live in your local SQLite database, not in 
 
 One VSIX covers VS Code, Cursor, and Windsurf as a lightweight client: commands call `repotory-mcp` over stdio and query the local knowledge base directly from your editor.
 
-- Install directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) or download the `.vsix` from [Releases](https://github.com/sky-jiangcheng/repotory/releases).
+- Install directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) or download the `.vsix` from [Releases](https://github.com/sky-jiangcheng/cinder/releases).
 - Package from source:
   ```bash
   cd ide/vscode && npm install && npx @vscode/vsce package --no-dependencies
@@ -162,7 +162,7 @@ One VSIX covers VS Code, Cursor, and Windsurf as a lightweight client: commands 
 
 Installs into the IntelliJ family (IDEA, PyCharm, GoLand, WebStorm) using platform APIs. Provides a tool window to search notes and todos directly within your IDE.
 
-- Search for **Cinder** under **Settings | Plugins | Marketplace**, or download the plugin zip from [Releases](https://github.com/sky-jiangcheng/repotory/releases).
+- Search for **Cinder** under **Settings | Plugins | Marketplace**, or download the plugin zip from [Releases](https://github.com/sky-jiangcheng/cinder/releases).
 - Build from source:
   ```bash
   cd ide/jetbrains && gradle buildPlugin
@@ -226,7 +226,7 @@ Data directories and MCP tool names are external contracts with AI clients — w
 
 ## 📖 Documentation
 
-English documentation is the primary reference; the [Chinese manual](https://sky-jiangcheng.github.io/repotory/zh/) mirrors it.
+English documentation is the primary reference; the [Chinese manual](https://sky-jiangcheng.github.io/cinder/zh/) mirrors it.
 
 | Document | Contents |
 | :--- | :--- |
@@ -242,7 +242,7 @@ English documentation is the primary reference; the [Chinese manual](https://sky
 | [SKILL.md](SKILL.md) | Capability card for AI agents |
 | [TODO.md](TODO.md) | Known issues and roadmap |
 
-[Online Documentation](https://sky-jiangcheng.github.io/repotory/) (auto-deployed from master).
+[Online Documentation](https://sky-jiangcheng.github.io/cinder/) (auto-deployed from master).
 
 ---
 

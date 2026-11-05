@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/sky-jiangcheng/repotory"><img src="build/icon.svg" width="88" alt="Cinder" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder"><img src="build/icon.svg" width="88" alt="Cinder" /></a>
 </p>
 
 <h1 align="center">Cinder</h1>
@@ -22,22 +22,22 @@
 <p align="center">
   <b>两个产品，各担一件事。</b><br/>
   Cinder 是<b>工作台</b>——浏览、编辑、<b>审批</b>、治理这份记忆。<br/>
-  <a href="https://github.com/sky-jiangcheng/repotory-agent">Warden</a> 是<b>助手</b>——一个本地的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。<br/>
+  <a href="https://github.com/sky-jiangcheng/warden">Warden</a> 是<b>助手</b>——一个本地的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。<br/>
   共享同一份本地记忆、同一套协议，<b>审批在这里发生，不在那里</b>。
 </p>
 
 <p align="center">
-  <a href="https://github.com/sky-jiangcheng/repotory/releases"><img src="https://img.shields.io/github/v/release/sky-jiangcheng/repotory?color=6366f1" alt="Release" /></a>
-  <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml"><img src="https://github.com/sky-jiangcheng/repotory/actions/workflows/install-smoke.yml/badge.svg" alt="Install smoke test" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder/releases"><img src="https://img.shields.io/github/v/release/sky-jiangcheng/cinder?color=6366f1" alt="Release" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder/actions/workflows/ci.yml"><img src="https://github.com/sky-jiangcheng/cinder/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder/actions/workflows/install-smoke.yml"><img src="https://github.com/sky-jiangcheng/cinder/actions/workflows/install-smoke.yml/badge.svg" alt="Install smoke test" /></a>
   <img src="https://img.shields.io/badge/平台-macOS%20%7C%20Windows%20%7C%20Linux-111827" alt="macOS | Windows | Linux" />
   <img src="https://img.shields.io/badge/Agent-Claude%20Code%20%7C%20Cursor%20%7C%20Windsurf%20%7C%20VS%20Code-7c3aed" alt="Claude Code | Cursor | Windsurf | VS Code" />
   <img src="https://img.shields.io/badge/存储-本地%20SQLite%20%2B%20FTS5%20%2B%20vec-003B57" alt="本地 SQLite + FTS5 + vec" />
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/sky-jiangcheng/repotory?color=22c55e" alt="MIT License" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/sky-jiangcheng/cinder?color=22c55e" alt="MIT License" /></a>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | 简体中文 · <a href="https://sky-jiangcheng.github.io/repotory/zh/">中文文档</a>
+  <a href="README.md">English</a> | 简体中文 · <a href="https://sky-jiangcheng.github.io/cinder/zh/">中文文档</a>
 </p>
 
 ---
@@ -62,7 +62,7 @@ Cinder 不仅是一个应用，而是一套模块化的本地项目知识套件�
 | 产物 | 形态 | 核心作用 & 适用场景 | 快速接入 |
 | :--- | :--- | :--- | :--- |
 | **`repotory-mcp`** | 🤖 独立 MCP 服务器 | **Agent 记忆引擎核心**。通过 stdio 运行。为 Claude Code、Cursor、Windsurf 等提供标准工具接口，**无需打开桌面应用即可独立使用**。 | `node scripts/repotory-init/index.mjs` |
-| **Cinder Desktop** | 🖥️ 桌面应用 | **可视化工作台与审核中心**。单文件原生跨平台桌面应用（Wails v2 + React 19），提供笔记浏览、待办看板、LLM Wiki 审核队列与仓库指标。 | [Releases](https://github.com/sky-jiangcheng/repotory/releases) · `brew` · `scoop` |
+| **Cinder Desktop** | 🖥️ 桌面应用 | **可视化工作台与审核中心**。单文件原生跨平台桌面应用（Wails v2 + React 19），提供笔记浏览、待办看板、LLM Wiki 审核队列与仓库指标。 | [Releases](https://github.com/sky-jiangcheng/cinder/releases) · `brew` · `scoop` |
 | **IDE 扩展插件** | 🧩 VS Code & JetBrains | **编辑器内就地检索**。在 VS Code、Cursor、Windsurf 侧边栏及 IntelliJ 系列 IDE 工具窗中直接搜索笔记、待办与交接记录。 | [VS Code 商店](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) · JetBrains 插件 |
 | **CLI 自动化与守护** | ⚡ 终端工具与服务 | **自动交接钩子与无头服务**。包含 `repotory-capture`（会话结束自动交接 Hook）、`repotory-server`（无头 HTTP API）、向量配置与数据审计工具。 | 随安装脚本自动下发 |
 
@@ -76,7 +76,7 @@ Cinder 不仅是一个应用，而是一套模块化的本地项目知识套件�
 
 ```bash
 # 1. 下载 / 安装 repotory-mcp（macOS / Linux）
-curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. 一键注册到已安装的 Agent (Claude Code / Cursor / Windsurf / VS Code)，
 #    把「开局读上下文 / 收尾写交接」写进 AGENTS.md 与 CLAUDE.md，并启用 SessionEnd 钩子
@@ -92,10 +92,10 @@ claude mcp add repotory -- "$(which repotory-mcp)"
 
 | 方式 | 命令 / 资产 |
 | :--- | :--- |
-| **直接下载** | [GitHub Releases](https://github.com/sky-jiangcheng/repotory/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
+| **直接下载** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
-| **一行脚本 (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.ps1 \| iex` |
+| **一行脚本 (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
 
 首次启动自动播种扫描根目录（macOS/Linux 为 HOME；Windows 为非系统盘）。在仪表盘点击 **重新扫描** 即可立即可用。详见[快速上手指南](docs/getting-started.md)。
 
@@ -149,7 +149,7 @@ flowchart TB
 
 一个通用的 VSIX 瘦客户端：通过 stdio 与 `repotory-mcp` 通信，在侧边栏直接查看项目知识与交接。
 
-- 从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) 安装，或从 [Releases](https://github.com/sky-jiangcheng/repotory/releases) 下载 `.vsix` 文件。
+- 从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) 安装，或从 [Releases](https://github.com/sky-jiangcheng/cinder/releases) 下载 `.vsix` 文件。
 - 源码打包：
   ```bash
   cd ide/vscode && npm install && npx @vscode/vsce package --no-dependencies
@@ -161,7 +161,7 @@ flowchart TB
 
 适用于 IntelliJ 全家桶（IDEA, PyCharm, GoLand, WebStorm 等）。提供专用的工具窗口进行笔记与待办检索。
 
-- 在 IDE 的 **Settings | Plugins | Marketplace** 搜索 **Cinder**，或从 [Releases](https://github.com/sky-jiangcheng/repotory/releases) 下载 zip 包离线安装。
+- 在 IDE 的 **Settings | Plugins | Marketplace** 搜索 **Cinder**，或从 [Releases](https://github.com/sky-jiangcheng/cinder/releases) 下载 zip 包离线安装。
 - 源码构建：
   ```bash
   cd ide/jetbrains && gradle buildPlugin
@@ -241,7 +241,7 @@ web/src/           # React 19 + TypeScript：api · hooks · pages · components
 | [SKILL.md](SKILL.md) | 专为 AI Agent 准备的能力清单与调用指引 |
 | [TODO.md](TODO.md) | 已知问题跟踪与未来路线图 |
 
-[在线文档站点](https://sky-jiangcheng.github.io/repotory/zh/)（GitHub Pages，master 分支自动部署）。
+[在线文档站点](https://sky-jiangcheng.github.io/cinder/zh/)（GitHub Pages，master 分支自动部署）。
 
 ---
 

@@ -352,7 +352,7 @@ Cinder 在**扫描时一次性**把 git 原始数据解析并物化进本地 SQL
 
 ## 面向 AI 代理的技能卡
 
-仓库根目录的 [SKILL.md](https://github.com/sky-jiangcheng/repotory/blob/master/SKILL.md) 是给代理阅读的能力卡片（命令、工具表、路径），可直接投喂。
+仓库根目录的 [SKILL.md](https://github.com/sky-jiangcheng/cinder/blob/master/SKILL.md) 是给代理阅读的能力卡片（命令、工具表、路径），可直接投喂。
 
 ### WorkBuddy 技能包
 

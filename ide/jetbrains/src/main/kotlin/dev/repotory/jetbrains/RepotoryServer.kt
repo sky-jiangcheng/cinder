@@ -45,7 +45,7 @@ private const val START_TIMEOUT_MS = 30_000L
 /** How often the health probe is repeated while waiting for the server. */
 private const val HEALTH_POLL_MS = 250L
 
-private const val RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases"
+private const val RELEASES_URL = "https://github.com/sky-jiangcheng/cinder/releases"
 
 /** Where a resolved server binary came from, for the settings/diagnostics text. */
 data class ServerBinary(val file: File, val source: String)

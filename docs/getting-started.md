@@ -21,7 +21,7 @@ Cinder 是面向 AI 编程 Agent 的本地优先记忆层与工作台。其核�
 
 ```bash
 # 1. 下载并安装 repotory-mcp（macOS / Linux）
-curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. 一键注册 MCP 到所有已安装 Agent，并把「开局读上下文 / 收尾写交接」
 #    写进项目的 AGENTS.md 与 CLAUDE.md（任何读它们的 agent 都会照做）；
@@ -42,19 +42,19 @@ claude mcp add repotory -- "$(which repotory-mcp)"
 
 #### macOS / Linux 一键脚本
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 ```
 > macOS 安装到 `/Applications/Cinder.app`，Linux 安装到 `/usr/local/bin/repotory`；同时都会把 `repotory-mcp` 放入 PATH。
 
 #### Windows 一键脚本
 ```powershell
-iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 | iex
 ```
 
 #### 包管理器与二进制直接下载
 - **Homebrew (macOS)**：`brew install --cask sky-jiangcheng/repo/repotory`
 - **Scoop (Windows)**：`scoop install repo/repotory`
-- **二进制下载**：访问 [GitHub Releases](https://github.com/sky-jiangcheng/repotory/releases) 下载 `.dmg` / `.tar.gz` / `.zip`
+- **二进制下载**：访问 [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) 下载 `.dmg` / `.tar.gz` / `.zip`
 
 ---
 

@@ -891,7 +891,7 @@ jobs:
           python3 - "$VER" "$DIR/SHA256SUMS" <<'PY'
           import json, os, sys, urllib.request
           ver, out = sys.argv[1], sys.argv[2]
-          url = f"https://api.github.com/repos/sky-jiangcheng/repotory/releases/tags/v{ver}"
+          url = f"https://api.github.com/repos/sky-jiangcheng/cinder/releases/tags/v{ver}"
           headers = {"Accept": "application/vnd.github+json"}
           # Authenticate when a token is available: shared runner IPs exhaust
           # the anonymous 60 req/hour limit and make this step flaky.

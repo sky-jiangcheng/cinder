@@ -95,7 +95,7 @@ intellijPlatform {
         // instead of a second copy that would drift from CHANGELOG.md.
         changeNotes = """
             See the changelog for this release:
-            https://github.com/sky-jiangcheng/repotory/blob/master/CHANGELOG.md
+            https://github.com/sky-jiangcheng/cinder/blob/master/CHANGELOG.md
         """.trimIndent()
     }
     pluginVerification {

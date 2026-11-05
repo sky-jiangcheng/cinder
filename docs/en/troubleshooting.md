@@ -86,4 +86,4 @@ Logs also record the PATH environment and plugin runtime state; attach them when
 
 ## Reporting issues
 
-Found a bug or have a feature request? Please open it on [GitHub Issues](https://github.com/sky-jiangcheng/repotory/issues) (include the version, platform, and log excerpts). For security vulnerabilities, use the [private reporting channel](https://github.com/sky-jiangcheng/repotory/security/advisories/new).
+Found a bug or have a feature request? Please open it on [GitHub Issues](https://github.com/sky-jiangcheng/cinder/issues) (include the version, platform, and log excerpts). For security vulnerabilities, use the [private reporting channel](https://github.com/sky-jiangcheng/cinder/security/advisories/new).

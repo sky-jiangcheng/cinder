@@ -266,7 +266,7 @@ try {
 
 const sidebar = JSON.parse(readFileSync(join(docsDir, 'sidebar.json'), 'utf8'))
 const version = JSON.parse(readFileSync(join(root, 'web', 'package.json'), 'utf8')).version
-const REPO = 'https://github.com/sky-jiangcheng/repotory'
+const REPO = 'https://github.com/sky-jiangcheng/cinder'
 
 // --- Locale registry -------------------------------------------------------------
 // srcRoot: where the locale's .md sources live; outRoot: where its .html goes.

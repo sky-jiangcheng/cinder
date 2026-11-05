@@ -19,7 +19,7 @@ const HOOK_SCRIPT_REL = ".claude/hooks/repotory-handoff.sh";
 // scripts/check-agent-init-contract.mjs.
 const BACKUP_SUFFIX = ".repotory-init.bak";
 
-const RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases";
+const RELEASES_URL = "https://github.com/sky-jiangcheng/cinder/releases";
 
 const USAGE = `repotory-init — register Cinder's MCP server with your AI clients (ADR-0009)
 

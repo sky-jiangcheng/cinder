@@ -9,18 +9,18 @@ cask "repotory" do
   version "2.31.1"
   name "Cinder Desktop"
   desc "Local-first code project context base"
-  homepage "https://github.com/sky-jiangcheng/repotory"
+  homepage "https://github.com/sky-jiangcheng/cinder"
   # NOTE: no `license` stanza — `license` is a FORMULA method, not a Cask
   # one. `brew install --cask` rejects the whole definition with
   # "undefined method 'license' for Cask". The license is MIT; see README.
 
   on_arm do
-    url "https://github.com/sky-jiangcheng/repotory/releases/download/v#{version}/repotory-darwin-arm64.dmg"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-darwin-arm64.dmg"
     sha256 "c788c6ffb6cf1ff820cf7542ebeaa9dfb9b768c6a467e0c9e7f43d830c3ae53c"
   end
 
   on_intel do
-    url "https://github.com/sky-jiangcheng/repotory/releases/download/v#{version}/repotory-darwin-amd64.dmg"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-darwin-amd64.dmg"
     sha256 "bedb350f85d5dd50e9d7bd98e14878892b8eb95113a493fc1eff9344eba3f4a9"
   end
 

@@ -102,7 +102,7 @@ if [ "${1:-}" = "--fill-sha256" ]; then
     echo "Reading digests for v$VERSION from the GitHub Release API (anonymous)"
     mkdir -p "$(dirname "$SUMS")"
     curl -fsSL -H "Accept: application/vnd.github+json" \
-      "https://api.github.com/repos/sky-jiangcheng/repotory/releases/tags/v$VERSION" \
+      "https://api.github.com/repos/sky-jiangcheng/cinder/releases/tags/v$VERSION" \
     | python3 -c "
 import json, sys
 rel = json.load(sys.stdin)
