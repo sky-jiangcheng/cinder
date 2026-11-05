@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -65,17 +66,20 @@ func TestChatCreateRejectsNonStringPath(t *testing.T) {
 // create branch ignoring the argument.
 func TestChatCreateStoresSuppliedPath(t *testing.T) {
 	ts := newTestServer(t)
+	// A real absolute path rather than a POSIX literal: the service demands
+	// filepath.IsAbs, and on Windows a rootless "/tmp/scoped" is not one.
+	scope := filepath.Join(t.TempDir(), "scoped")
 	payload, errMsg := chatCreate(t, ts, map[string]any{
 		"operation": "create",
 		"id":        "5f0f0b1a-3333-4aac-9a1a-0123456789ab",
 		"title":     "scoped topic",
-		"path":      "/tmp/scoped",
+		"path":      scope,
 	})
 	if errMsg != "" {
 		t.Fatalf("create with path failed: %s", errMsg)
 	}
 	thread, _ := payload["thread"].(map[string]any)
-	if got, _ := thread["path"].(string); got != "/tmp/scoped" {
-		t.Errorf("path = %q, want /tmp/scoped", got)
+	if got, _ := thread["path"].(string); got != scope {
+		t.Errorf("path = %q, want %q", got, scope)
 	}
 }

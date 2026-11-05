@@ -121,7 +121,7 @@ func (s *Service) GetMetrics(ctx context.Context, path string) (*Metrics, error)
 		// recorded zero from a malformed cache that omitted its count.
 		var counts []struct {
 			Language string `json:"language"`
-			Count *int64 `json:"count"`
+			Count    *int64 `json:"count"`
 		}
 		if siblings != 1 || db.NormalizeMatchPath(repoPath) != db.NormalizeMatchPath(root) || json.Unmarshal([]byte(languages), &counts) != nil || len(counts) == 0 {
 			complete = false
