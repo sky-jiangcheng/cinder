@@ -99,32 +99,49 @@ jobs:
       # the installed layout directly instead — these are the same things a
       # user would check after installing, and they fail if the DMG, the app
       # name inside it, or the sha256 were wrong.
-      - name: verify installed app
+      - name: verify installed artifact
         run: |
           set -euo pipefail
-          # The bundle name comes from the manifest's own `app` stanza rather
-          # than from a path written down here: each project's cask declares
-          # its own bundle, and a hardcoded name would test the wrong one.
-          APP_NAME="$(sed -nE 's/^[[:space:]]*app[[:space:]]+"([^"]+)"[[:space:]]*$/\1/p' "Casks/${{ matrix.cask }}.rb" | head -1)"
-          if [ -z "$APP_NAME" ]; then
-            echo "::error::Casks/${{ matrix.cask }}.rb declares no 'app' stanza — cannot tell which bundle to look for"
+          MANIFEST="Casks/${{ matrix.cask }}.rb"
+          # A cask installs one of two things here, and the manifest says
+          # which: an app bundle (`app "Cinder.app"`) or a bare executable
+          # (`binary "repotory-mcp"`). The shape is read from the manifest
+          # rather than assumed, because a hardcoded assumption tests the
+          # wrong artifact — and for the binary cask it tests nothing at all.
+          APP_NAME="$(sed -nE 's/^[[:space:]]*app[[:space:]]+"([^"]+)"[[:space:]]*$/\1/p' "$MANIFEST" | head -1)"
+          BIN_NAME="$(sed -nE 's/^[[:space:]]*binary[[:space:]]+"([^"]+)"[[:space:]]*$/\1/p' "$MANIFEST" | head -1)"
+
+          if [ -n "$APP_NAME" ]; then
+            APP="/Applications/$APP_NAME"
+            if [ ! -d "$APP" ]; then
+              echo "::error::$APP was not installed"
+              ls -la /Applications || true
+              exit 1
+            fi
+            echo "app bundle present: $APP"
+            # Wails puts the executable at Contents/MacOS/<name>.
+            ls -la "$APP/Contents/MacOS/"
+            test -n "$(find "$APP/Contents/MacOS" -type f -perm -111 -print -quit)" \
+              || { echo "::error::no executable inside the app bundle"; exit 1; }
+            echo "app contains an executable"
+            # The Info.plist should carry the product name, proving the DMG held
+            # the real Wails bundle and not some stray .app.
+            /usr/libexec/PlistBuddy -c "Print :CFBundleName" "$APP/Contents/Info.plist"
+          elif [ -n "$BIN_NAME" ]; then
+            # A binary cask links the executable into the prefix's bin
+            # directory. That link is what makes `which repotory-mcp` work
+            # for the MCP client config, so the link is what gets checked.
+            BIN_PATH="$(brew --prefix)/bin/$BIN_NAME"
+            if [ ! -x "$BIN_PATH" ]; then
+              echo "::error::$BIN_PATH was not installed"
+              ls -la "$(brew --prefix)/bin" || true
+              exit 1
+            fi
+            echo "binary present: $BIN_PATH"
+          else
+            echo "::error::$MANIFEST declares neither an 'app' nor a 'binary' stanza — cannot tell what it installs"
             exit 1
           fi
-          APP="/Applications/$APP_NAME"
-          if [ ! -d "$APP" ]; then
-            echo "::error::$APP was not installed"
-            ls -la /Applications || true
-            exit 1
-          fi
-          echo "app bundle present: $APP"
-          # Wails puts the executable at Contents/MacOS/<name>.
-          ls -la "$APP/Contents/MacOS/"
-          test -n "$(find "$APP/Contents/MacOS" -type f -perm -111 -print -quit)" \
-            || { echo "::error::no executable inside the app bundle"; exit 1; }
-          echo "app contains an executable"
-          # The Info.plist should carry the product name, proving the DMG held
-          # the real Wails bundle and not some stray .app.
-          /usr/libexec/PlistBuddy -c "Print :CFBundleName" "$APP/Contents/Info.plist"
 
       # `brew audit` without --strict: --strict checks style and deprecated DSL,
       # and a tap whose CI goes red over formatting teaches people to ignore
