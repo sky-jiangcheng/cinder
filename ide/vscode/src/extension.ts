@@ -763,7 +763,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     await session.handle(msg);
   };
-  chatConsole.onReady = () => session.init();
+  chatConsole.onReady = () => {
+    session.init();
+    session.setVisible(true);
+  };
+  chatConsole.onVisibilityChanged = visible => session.setVisible(visible);
+  context.subscriptions.push(session);
   session.onScopeChanged = (scope) => showScopeInStatusBar(scope);
   void session.refreshScope();
   context.subscriptions.push(

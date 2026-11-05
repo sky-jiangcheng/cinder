@@ -48,6 +48,7 @@ export class RepotoryChatConsoleProvider implements vscode.WebviewViewProvider {
   onMessage?: (msg: ExtMessage) => void | Promise<void>;
   /** Set by the extension: the panel is on screen and wants its state. */
   onReady?: () => void;
+  onVisibilityChanged?: (visible: boolean) => void;
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -55,6 +56,11 @@ export class RepotoryChatConsoleProvider implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken,
   ): void {
     this.view = webviewView;
+    webviewView.onDidChangeVisibility(() => this.onVisibilityChanged?.(webviewView.visible));
+    webviewView.onDidDispose(() => {
+      this.view = undefined;
+      this.onVisibilityChanged?.(false);
+    });
     webviewView.webview.options = { enableScripts: true };
     webviewView.webview.html = consoleHtml(nonce());
 

@@ -363,10 +363,7 @@ class ChatSession(
         if (scope.locked && scope.projectId > 0) args["project_id"] = scope.projectId
         val text = transport.callTool(ChatMode.ASK.tool, args)
 
-        if (text.startsWith(ASK_ERROR_PREFIX)) {
-            val detail = text.removePrefix(ASK_ERROR_PREFIX).trim()
-            throw IllegalStateException(detail.ifEmpty { "The AI endpoint failed." })
-        }
+        checkAskResponse(text)
         if (text.startsWith(ASK_NO_ENDPOINT_PREFIX)) {
             announce(
                 ChatLevel.WARN,
@@ -531,8 +528,16 @@ class ChatSession(
     }
 }
 
-/** The prefix the ask tool uses when the configured AI endpoint failed. */
-private const val ASK_ERROR_PREFIX = "error: "
+/** Text-level tool errors must never become successful local or shared answers. */
+internal fun checkAskResponse(text: String) {
+    val trimmed = text.trimStart()
+    if (trimmed.startsWith("error:", ignoreCase = true)) {
+        throw IllegalStateException(trimmed.substringAfter(':').trim().ifEmpty { "The AI endpoint failed." })
+    }
+    if (trimmed == "query is required" || trimmed.startsWith("query too long:")) {
+        throw IllegalStateException(trimmed)
+    }
+}
 
 /**
  * The candidate projects out of a resolution payload.

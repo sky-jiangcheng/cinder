@@ -63,6 +63,60 @@ internal object ChatConsoleHtml {
         return sb.toString()
     }
 
+    /** Shared text is escaped, never interpreted as HTML (including titles and source labels). */
+    fun renderShared(state: SharedChatState): String = buildString {
+        append("<html><body style=\"margin:8px;\">")
+        append("<h3>Warden shared conversations</h3>")
+        append("<p>Knowledge-base Q&amp;A via repotory_ask — not Warden's local provider. " +
+            "History is shared; local Ask/Notes/Pages history stays in this panel.</p>")
+        if (state.syncError.isNotBlank()) append(sharedText("Not synced", state.syncError))
+        if (state.operationError.isNotBlank()) append(sharedText("Operation failed", state.operationError))
+        val thread = state.selected
+        if (thread == null) {
+            append("<p>Select an existing conversation, or explicitly choose New conversation.</p>")
+        } else {
+            append(sharedText(thread.title, thread.path.ifBlank { "All projects" }))
+            if (state.messages.isEmpty() && state.pending.isEmpty()) {
+                append("<p>No messages loaded yet. Send a knowledge-base question when ready.</p>")
+            }
+            val pending = state.pending.associateBy { it.userId }
+            val ids = state.messages.map { it.id }.toSet()
+            for (group in sharedMessageGroups(state.messages)) {
+                for (message in group) {
+                    val origin = if (message.role == "assistant" && message.source == "jetbrains") {
+                        "jetbrains · knowledge-base Q&A"
+                    } else message.source
+                    append(sharedText("${message.role} · $origin · ${message.createdAt}", message.content))
+                    if (message.role == "assistant" && group.first().role != "user") {
+                        append(sharedText("Unpaired reply", message.replyTo ?: "No replyTo supplied"))
+                    }
+                }
+                pending[group.first().id]?.let { append(sharedPendingHtml(it, ids)) }
+                append("<hr>")
+            }
+            state.pending.filter { it.userId !in ids }.forEach {
+                append(sharedText("user · jetbrains · not yet synced", it.question))
+                append(sharedPendingHtml(it, ids))
+            }
+        }
+        append("</body></html>")
+    }
+
+    private fun sharedPendingHtml(job: SharedPending, storedIds: Set<String>): String = buildString {
+        if (job.answer != null && job.userId + "-reply" !in storedIds) {
+            append(sharedText("Knowledge-base answer · not yet synced", job.answer))
+        }
+        if (job.busy) append("<p><i>Saving / asking the knowledge base…</i></p>")
+        if (job.error.isNotBlank()) {
+            append(sharedText("Request failed · retained in this panel", job.error))
+            // userId is generated locally, not a server-supplied href fragment.
+            append("<p><a href=\"${LINK_SCHEME}//shared/retry/${esc(job.userId)}\">Retry failed request / sync</a></p>")
+        }
+    }
+
+    private fun sharedText(label: String, text: String): String =
+        "<p><b>${esc(label)}</b></p><div>${esc(text).replace("\n", "<br>")}</div>"
+
     // ------------------------------------------------------------- the pieces
 
     /**

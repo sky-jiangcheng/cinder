@@ -98,7 +98,11 @@ import javax.swing.BoxLayout
 import javax.swing.ButtonGroup
 import javax.swing.Icon
 import javax.swing.ImageIcon
+import javax.swing.DefaultListCellRenderer
 import javax.swing.JButton
+import javax.swing.JComboBox
+import javax.swing.JList
+import javax.swing.Timer
 import javax.swing.JEditorPane
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -148,7 +152,36 @@ class RepotoryToolWindowFactory : ToolWindowFactory, DumbAware {
  */
 class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
 
-    private val session = ChatSession(McpChatTransport(project), ::post)
+    private val transport = McpChatTransport(project)
+    private val session = ChatSession(transport, ::post)
+    private val shared = SharedChatSession(transport) {
+        ApplicationManager.getApplication().invokeLater { if (!disposed) renderShared() }
+    }
+    private val sharedPolling = SharedChatPolling(
+        shared,
+        execute = { work -> background(work) },
+        onUi = { work -> ApplicationManager.getApplication().invokeLater(work) },
+        schedule = { delay, work ->
+            val timer = Timer(delay) { work() }.apply { isRepeats = false; start() }
+            val stop: () -> Unit = { timer.stop() }
+            stop
+        },
+    )
+    private val sectionPicker = JComboBox(arrayOf("Local Ask / Notes / Pages", "Warden shared conversations"))
+    private val threadPicker = JComboBox<ThreadChoice>()
+    private val sharedControls = JPanel(BorderLayout(4, 4))
+    private val sharedStatus = JLabel("Not synced")
+    private val renameThread = JButton("Rename")
+    private var sharedSection = false
+    private var updatingThreads = false
+    private var displayedThread: String? = null
+    private var localDraft = ""
+    private val sharedDrafts = mutableMapOf<String?, String>()
+    private val modeToggles = mutableMapOf<ChatMode, JToggleButton>()
+
+    private data class ThreadChoice(val id: String?, val label: String) {
+        override fun toString(): String = label
+    }
     private val feed = JEditorPane()
     private val feedScroll = JBScrollPane(feed)
     private val announcement = AnnouncementBar()
@@ -232,6 +265,99 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         // "ready" handshake, and the scope resolution needs the network, so it
         // cannot run on the EDT either.
         background { session.init() }
+        addHierarchyListener { event ->
+            if (event.changeFlags and java.awt.event.HierarchyEvent.SHOWING_CHANGED.toLong() != 0L) {
+                sharedPolling.setVisible(isShowing && sharedSection)
+            }
+        }
+    }
+
+    // ----------------------------------------------------- shared conversations
+
+    private fun conversationPicker(): JPanel {
+        val panel = JPanel(BorderLayout(4, 4))
+        panel.border = JBUI.Borders.empty(4, 8)
+        panel.add(sectionPicker, BorderLayout.NORTH)
+        sharedControls.add(threadPicker, BorderLayout.NORTH)
+        val actions = JPanel(GridLayout(1, 3, 4, 0))
+        actions.add(JButton("New conversation").apply {
+            addActionListener {
+                val title = Messages.showInputDialog(project, "Conversation title (shared with Warden):",
+                    "New shared conversation", null)?.trim().orEmpty()
+                if (title.isNotEmpty()) background { shared.create(title) }
+            }
+        })
+        renameThread.addActionListener {
+            val thread = shared.snapshot().selected ?: return@addActionListener
+            val title = Messages.showInputDialog(project, "New conversation title:",
+                "Rename shared conversation", null, thread.title, null)?.trim().orEmpty()
+            if (title.isNotEmpty()) background { shared.rename(thread.id, title) }
+        }
+        actions.add(renameThread)
+        actions.add(JButton("Refresh").apply { addActionListener { sharedPolling.refreshNow() } })
+        sharedControls.add(actions, BorderLayout.CENTER)
+        sharedControls.add(sharedStatus, BorderLayout.SOUTH)
+        sharedControls.isVisible = false
+        panel.add(sharedControls, BorderLayout.CENTER)
+        // Swing labels interpret a leading <html> unless explicitly disabled.
+        threadPicker.renderer = object : DefaultListCellRenderer() {
+            override fun getListCellRendererComponent(list: JList<*>?, value: Any?, index: Int,
+                isSelected: Boolean, cellHasFocus: Boolean): Component {
+                putClientProperty("html.disable", true)
+                return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
+            }
+        }
+        threadPicker.addActionListener {
+            if (!updatingThreads) {
+                shared.select((threadPicker.selectedItem as? ThreadChoice)?.id)
+                renderShared()
+                sharedPolling.refreshNow()
+            }
+        }
+        sectionPicker.addActionListener {
+            if (sharedSection) sharedDrafts[displayedThread] = inputField.text else localDraft = inputField.text
+            sharedSection = sectionPicker.selectedIndex == 1
+            sharedControls.isVisible = sharedSection
+            displayedThread = shared.snapshot().selectedId
+            inputField.text = if (sharedSection) sharedDrafts[displayedThread].orEmpty() else localDraft
+            scopeChipButton.isVisible = !sharedSection
+            renderMode()
+            renderShared()
+            renderFeed()
+            sharedPolling.setVisible(isShowing && sharedSection)
+        }
+        return panel
+    }
+
+    private fun renderShared() {
+        val state = shared.snapshot()
+        if (sharedSection && displayedThread != state.selectedId) {
+            sharedDrafts[displayedThread] = inputField.text
+            displayedThread = state.selectedId
+            inputField.text = sharedDrafts[displayedThread].orEmpty()
+        }
+        val choices = listOf(ThreadChoice(null, "Choose conversation · all workspaces")) +
+            state.threads.sortedWith(compareByDescending<SharedThread> { it.updatedAt }.thenBy { it.id })
+                .map { ThreadChoice(it.id, "${it.title} · ${it.path.ifBlank { "All projects" }}") }
+        updatingThreads = true
+        try {
+            val existing = (0 until threadPicker.itemCount).map { threadPicker.getItemAt(it) }
+            if (choices != existing) {
+                threadPicker.removeAllItems()
+                choices.forEach { threadPicker.addItem(it) }
+            }
+            threadPicker.selectedItem = choices.firstOrNull { it.id == state.selectedId }
+        } finally {
+            updatingThreads = false
+        }
+        renameThread.isEnabled = state.selected != null
+        sharedStatus.text = when {
+            state.syncError.isNotEmpty() -> "Not synced — check/upgrade Cinder"
+            state.pending.any { it.error.isNotBlank() } -> "Request failed — retained locally; retry in the feed"
+            state.synced -> "Shared history refreshed · knowledge-base Q&A"
+            else -> "Not synced yet · select a conversation and refresh"
+        }
+        if (sharedSection) renderFeed()
     }
 
     // ------------------------------------------------------------- header strip
@@ -440,7 +566,10 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      */
     private fun conversationArea(): JPanel {
         val area = JPanel(BorderLayout(0, 0))
-        area.add(announcement, BorderLayout.NORTH)
+        val top = JPanel(BorderLayout())
+        top.add(conversationPicker(), BorderLayout.NORTH)
+        top.add(announcement, BorderLayout.SOUTH)
+        area.add(top, BorderLayout.NORTH)
 
         feed.contentType = "text/html"
         feed.isEditable = false
@@ -516,6 +645,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         panel.isOpaque = false
         for (candidate in ChatMode.entries) {
             val button = JToggleButton(candidate.label)
+            modeToggles[candidate] = button
             button.isSelected = candidate == mode
             button.toolTipText = candidate.placeholder
             group.add(button)
@@ -588,9 +718,21 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private fun submit() {
         val text = inputField.text.trim()
         if (text.isEmpty()) return
-        inputField.text = ""
+        if (sharedSection) {
+            val job = shared.prepareSend(text)
+            if (job == null) {
+                showAnnouncement(ChatLevel.WARN, "Select or explicitly create a shared conversation first; " +
+                    "wait for any active request in it to finish. Your draft is kept.")
+                return
+            }
+            inputField.text = ""
+            background { shared.send(job) }
+        } else {
+            val requestedMode = mode
+            inputField.text = ""
+            background { session.run(text, requestedMode) }
+        }
         inputField.fitHeight()
-        background { session.run(text, mode) }
     }
 
     // ------------------------------------------------------------- the session
@@ -624,6 +766,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
 
     /** Switch the knowledge face the composer talks to. */
     private fun switchMode(next: ChatMode) {
+        if (sharedSection) sectionPicker.selectedIndex = 0
         if (mode == next) return
         mode = next
         session.setMode(next)
@@ -631,8 +774,16 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     }
 
     private fun renderMode() {
-        inputField.placeholder = mode.placeholder
+        inputField.placeholder = if (sharedSection) "Ask the knowledge base in this shared conversation…" else mode.placeholder
+        modeToggles.forEach { (candidate, button) -> button.isSelected = candidate == mode }
     }
+
+    /**
+     * The scope chip is never disabled, so it must not become a wall of text
+     * either: a long project name used to push the Send button out of the row
+     * in a narrow tool window. The tooltip keeps the full name.
+     */
+    private fun scopeLabel(raw: String): String = if (raw.length <= 18) raw else raw.take(17) + "…"
 
     /**
      * The chip's wording.
@@ -661,7 +812,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                 chip.isEnabled = true
             }
             scope.locked -> {
-                chip.text = "🔒 " + scope.projectName
+                chip.text = scopeLabel("🔒 " + scope.projectName)
                 chip.toolTipText = "Locked to ${scope.projectName} — click to search across all projects."
                 chip.isEnabled = true
             }
@@ -691,7 +842,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     /** Repaint the feed from the session's turns and the panel's fold state. */
     private fun renderFeed() {
         if (disposed) return
-        val html = ChatConsoleHtml.render(
+        val html = if (sharedSection) ChatConsoleHtml.renderShared(shared.snapshot()) else ChatConsoleHtml.render(
             turns = session.turns(),
             showEarlier = showEarlier,
             collapsedTurns = collapsedTurns,
@@ -737,6 +888,11 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private fun handleFeedAction(target: String) {
         val parts = target.trim('/').split('/')
         when (parts.firstOrNull()) {
+            "shared" -> {
+                if (!sharedSection || parts.getOrNull(1) != "retry") return
+                val job = shared.prepareRetry(parts.getOrNull(2) ?: return) ?: return
+                background { shared.send(job) }
+            }
             "earlier" -> {
                 showEarlier = !showEarlier
                 renderFeed()
@@ -1284,6 +1440,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
 
     override fun dispose() {
         disposed = true
+        sharedPolling.close()
     }
 }
 
@@ -1330,7 +1487,10 @@ private class ChatTextArea : JTextArea() {
 
     /** Grow the field with its content, up to a readable ceiling. */
     fun fitHeight() {
-        val width = width.coerceAtLeast(JBUI.scale(220))
+        // Use the real width once the field has been laid out. The old 220px
+        // floor under-counted rows in a narrow tool window, so the text was
+        // clipped instead of wrapped.
+        val width = if (width > 0) width else JBUI.scale(220)
         val metrics = getFontMetrics(font)
         val lines = text.split("\n").sumOf { line ->
             if (line.isEmpty()) 1 else maxOf(1, ceil(metrics.stringWidth(line).toDouble() / width).toInt())

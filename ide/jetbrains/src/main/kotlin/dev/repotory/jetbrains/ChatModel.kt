@@ -187,6 +187,57 @@ data class ProviderOutcome(
     val models: List<String> = emptyList(),
 )
 
+// Shared conversations are a separate section, not a fourth retrieval mode.
+// Local Ask/Notes/Pages turns and opened note cards remain untouched.
+data class SharedThread(
+    val id: String,
+    val title: String,
+    val path: String,
+    val createdAt: String,
+    val updatedAt: String,
+)
+
+data class SharedMessage(
+    val id: String,
+    val role: String,
+    val content: String,
+    val source: String,
+    val replyTo: String?,
+    val createdAt: String,
+)
+
+/** An unsent/failed operation stays local and can be retried with the SAME ids. */
+data class SharedPending(
+    val threadId: String,
+    val userId: String,
+    val question: String,
+    val path: String,
+    val answer: String? = null,
+    val error: String = "",
+    val busy: Boolean = true,
+)
+
+data class SharedChatState(
+    val threads: List<SharedThread> = emptyList(),
+    val selectedId: String? = null,
+    val messages: List<SharedMessage> = emptyList(),
+    val pending: List<SharedPending> = emptyList(),
+    val syncError: String = "",
+    val operationError: String = "",
+    val synced: Boolean = false,
+) {
+    val selected: SharedThread? get() = threads.firstOrNull { it.id == selectedId }
+}
+
+/** Pair by replyTo, never by adjacency; orphan replies remain visible. */
+internal fun sharedMessageGroups(messages: List<SharedMessage>): List<List<SharedMessage>> {
+    val ordered = messages.sortedWith(compareBy<SharedMessage> { it.createdAt }.thenBy { it.id })
+    val users = ordered.filter { it.role == "user" }.map { it.id }.toSet()
+    val replies = ordered.filter { it.role == "assistant" && it.replyTo in users }.groupBy { it.replyTo }
+    return ordered.filterNot { it.role == "assistant" && it.replyTo in users }
+        .map { listOf(it) + replies[it.id].orEmpty() }
+}
+
 /** What the session tells the UI. */
 sealed interface ChatEvent {
     /** A turn was created or changed. */

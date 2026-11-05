@@ -183,6 +183,9 @@ export interface EditorDraft {
  * would open the wrong one.
  */
 export type ExtMessage =
+  | { type: "sharedSelect"; threadId: string | null }
+  | { type: "sharedCreate"; title: string }
+  | { type: "sharedRefresh" }
   /**
    * The webview's script is up.
    *
@@ -223,6 +226,8 @@ export type ExtMessage =
 
 /** host → webview. */
 export type ViewMessage =
+  | { type: "sharedSent"; threadId: string; query: string }
+  | ({ type: "sharedState" } & import("./sharedChat.js").SharedChatState)
   | { type: "init"; mode: Mode; scope: ScopeState; turns: Turn[] }
   | { type: "turn"; turn: Turn }
   | { type: "announce"; level: "info" | "warn" | "error"; message: string }

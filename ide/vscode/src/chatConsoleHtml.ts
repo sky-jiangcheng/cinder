@@ -25,14 +25,13 @@ const KINDS = ["knowledge", "log", "idea", "other"];
 
 /**
  * The brand mark, inlined so the webview needs no resource roots and no
- * image loads. Same construction as build/icon.svg (the brand SSOT): warm
- * field, hairline ink frame, the brand R.
+ * image loads. Same construction as build/icon.svg (the brand SSOT): the
+ * inverse seal — solid ink field, the C knocked out in paper, no frame.
  */
 const MARK_SVG = `<svg viewBox="0 0 512 512" width="28" height="28" aria-hidden="true" focusable="false">
-  <rect width="512" height="512" fill="#F5F0E4"/>
-  <rect x="26" y="26" width="460" height="460" fill="none" stroke="#1B1B1B" stroke-width="9"/>
+  <rect width="512" height="512" fill="#34322D"/>
   <g transform="translate(21.06 13.06) scale(0.941176)">
-    <path fill="#1B1B1B" fill-rule="nonzero" d="M195.6 426H121.56V86H282.79Q306.17 86 325.17 93.79Q344.17 101.59 357.56 115.96Q370.96 130.33 378.26 150.3Q385.57 170.27 385.57 194.62Q385.57 229.21 370.23 255.03Q354.88 280.84 323.71 292.53L390.44 426H308.12L248.69 301.3H195.6ZM273.54 238.95Q290.1 238.95 299.6 230.43Q309.09 221.9 309.09 205.34V183.91Q309.09 167.35 299.6 158.82Q290.1 150.3 273.54 150.3H195.6V238.95Z"/>
+    <path fill="#F7F4EE" fill-rule="nonzero" d="M270.36 431.85Q235.78 431.85 208.01 420.89Q180.25 409.93 160.76 388.25Q141.28 366.57 130.56 334.18Q119.85 301.79 119.85 258.44Q119.85 215.57 130.56 182.2Q141.28 148.84 160.76 126.19Q180.25 103.54 208.01 91.85Q235.78 80.15 270.36 80.15Q317.61 80.15 348.3 99.4Q378.99 118.64 397.5 160.04L333.69 193.16Q326.87 171.73 312.5 158.82Q298.13 145.91 270.36 145.91Q237.73 145.91 218 167.1Q198.27 188.29 198.27 228.72V283.28Q198.27 323.71 218 344.9Q237.73 366.09 270.36 366.09Q297.64 366.09 313.96 351.23Q330.28 336.37 338.07 315.43L398.47 350.5Q379.47 389.47 348.54 410.66Q317.61 431.85 270.36 431.85Z"/>
   </g>
 </svg>`;
 
@@ -274,38 +273,54 @@ export function consoleHtml(nonce: string): string {
   /* The send key sits INSIDE the input box (Windsurf's shape), so the input
      grows downward and never covers it. */
   .send {
-    position: absolute; right: 4px; bottom: 4px;
-    width: 22px; height: 22px; padding: 0; font-size: 12px; line-height: 1; cursor: pointer;
+    position: absolute; right: 3px; bottom: 3px;
+    width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     border: none; border-radius: 4px;
     color: var(--vscode-button-foreground, #fff);
     background: var(--vscode-button-background, #06c);
+    transition: background 120ms ease, opacity 120ms ease;
   }
+  .send:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, var(--vscode-button-background, #06c)); filter: brightness(.94); }
+  .send:active:not(:disabled) { filter: brightness(.88); }
+  .send:focus-visible { outline: 1px solid var(--vscode-focusBorder, #06c); outline-offset: 1px; }
   .send:disabled { opacity: .5; cursor: default; }
-  /* The tool row: the mode group on the left, the project chip on the right. */
-  .tools { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
-  .modes { display: flex; gap: 3px; flex: none; }
+  /* The tool row: the mode group on the left, the project chip on the right.
+     It wraps instead of clipping: a narrow side bar used to hide the chip
+     beyond overflow:hidden, which made project scope unreachable. */
+  .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 6px; margin-top: 7px; }
+  .modes { display: flex; gap: 3px; flex: none; flex-wrap: wrap; }
   .mode-btn {
-    padding: 3px 8px; font-size: 11px; cursor: pointer; border-radius: 11px;
+    padding: 4px 8px; min-height: 24px; font-size: 11px; cursor: pointer; border-radius: 6px;
     border: 1px solid var(--r-border);
     color: var(--r-muted); background: transparent;
+    transition: color 120ms ease, border-color 120ms ease;
   }
   .mode-btn:hover { color: var(--vscode-foreground, #333); }
+  .mode-btn:active { color: var(--vscode-foreground, #333); border-color: var(--vscode-foreground, #333); }
+  .mode-btn:focus-visible { outline: 1px solid var(--vscode-focusBorder, #06c); outline-offset: 1px; }
   .mode-btn.active {
     color: var(--vscode-button-foreground, #fff);
     background: var(--vscode-button-background, #06c); border-color: transparent;
   }
   .chip {
-    margin-left: auto; flex: none; max-width: 45%; overflow: hidden;
+    margin-left: auto; flex: none; max-width: 100%; min-height: 24px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
-    padding: 3px 9px; font-size: 11px; cursor: pointer; border-radius: 11px;
+    padding: 4px 9px; font-size: 11px; cursor: pointer; border-radius: 6px;
     border: 1px solid var(--r-border); background: transparent; color: var(--r-muted);
+    transition: color 120ms ease, border-color 120ms ease;
   }
+  .chip:active { color: var(--vscode-foreground, #333); }
+  .chip:focus-visible { outline: 1px solid var(--vscode-focusBorder, #06c); outline-offset: 1px; }
   .chip.locked { color: var(--vscode-foreground, #333); border-color: var(--r-accent); }
   .chip.pick { color: var(--vscode-foreground, #333); border-style: dashed; }
   /* ---------- the project picker (a popover under the chip) ---------- */
+  /* Anchored to the composer's top edge, not a magic pixel offset: the input
+     grows with the question, and a fixed bottom: 46px used to end up underneath the
+     textarea and the send key. */
   .pop {
-    position: absolute; z-index: 5; left: 10px; right: 10px; bottom: 46px;
+    position: absolute; z-index: 5; left: 10px; right: 10px; bottom: 100%;
+    margin-bottom: 6px;
     max-height: 220px; overflow-y: auto;
     border: 1px solid var(--r-border); border-radius: 6px;
     background: var(--vscode-dropdown-background, var(--vscode-editorWidget-background, #fff));
@@ -370,6 +385,15 @@ export function consoleHtml(nonce: string): string {
   .sheet-status { margin-top: 9px; font-size: 11px; line-height: 1.5; color: var(--r-muted); overflow-wrap: anywhere; }
   .sheet-status.error { color: var(--vscode-errorForeground, #c33); }
   .sheet-status.info { color: var(--vscode-foreground, #333); }
+  .shared-topics { padding: 8px 12px; border-bottom: 1px solid var(--r-border); }
+  .topic-row { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .topic-row[hidden] { display: none; }
+  .topic-row select, .topic-row input { flex: 1; min-width: 0; width: 0; padding: 6px 8px; border: 1px solid var(--r-border); border-radius: 8px; background: var(--vscode-input-background, transparent); color: var(--vscode-foreground, inherit); font: inherit; }
+  .topic-row button { cursor: pointer; color: var(--vscode-foreground, inherit); background: transparent; border: 1px solid var(--r-border); border-radius: 6px; padding: 5px; }
+  #topic-form { margin-top: 8px; }
+  #topic-status { margin: 6px 0 0; font-size: 11px; line-height: 1.5; color: var(--r-muted); overflow-wrap: anywhere; }
+  #topic-status.error { color: var(--vscode-errorForeground, #c33); }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--vscode-focusBorder, currentColor); outline-offset: 2px; }
   /* ---------- the empty state ---------- */
   .empty { padding: 18px 12px; font-size: 12px; line-height: 1.6; color: var(--r-muted); }
   .empty h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--vscode-foreground, #333); }
@@ -401,6 +425,19 @@ export function consoleHtml(nonce: string): string {
     <button class="icon-btn" id="act-desktop" type="button" title="Open the Cinder Desktop app" aria-label="Open the Cinder Desktop app">${ICON_DESKTOP}</button>
   </span>
 </header>
+<section class="shared-topics" aria-label="Shared conversation topics">
+  <div class="topic-row">
+    <select id="topic-select" aria-label="Conversation topic"><option value="">Local knowledge console</option></select>
+    <button class="icon-btn" id="topic-new" type="button" aria-label="New shared conversation" title="New shared conversation">+</button>
+    <button class="icon-btn" id="topic-refresh" type="button" aria-label="Refresh shared conversations" title="Refresh shared conversations">↻</button>
+  </div>
+  <form id="topic-form" class="topic-row" hidden>
+    <input id="topic-title" aria-label="Conversation title" placeholder="Name this conversation" maxlength="160" required>
+    <button type="submit">Create</button>
+    <button id="topic-cancel" type="button">Cancel</button>
+  </form>
+  <p id="topic-status" role="status">Shared through Cinder · connect Cinder MCP to sync</p>
+</section>
 <div class="announce" id="announce" hidden>
   <span class="msg" id="announce-msg"></span>
   <button class="x" id="announce-x" type="button" title="Dismiss" aria-label="Dismiss">✕</button>
@@ -466,6 +503,13 @@ const aiStatus = document.getElementById('ai-status');
 let mode = 'ask';
 let scope = { projectId: 0, projectName: '', repository: '', locked: false };
 let turns = [];
+let sharedThreadId = null;
+let sharedBusy = false;
+let sharedSignature = '';
+const drafts = new Map();
+const topicSelect = document.getElementById('topic-select');
+const topicStatus = document.getElementById('topic-status');
+let topicSignature = '';
 let collapsedTurns = new Set();
 let expandedSources = new Set();
 let expandedCards = new Set();
@@ -977,10 +1021,14 @@ function setMode(next) {
 
 function submit() {
   const text = q.value.trim();
-  if (!text) return;
-  vscode.postMessage({ type: 'submit', query: text, mode });
-  q.value = '';
-  q.style.height = 'auto';
+  if (!text || (sharedThreadId && sharedBusy)) return;
+  if (sharedThreadId) {
+    sharedBusy = true;
+    sendBtn.disabled = true;
+    drafts.set(sharedThreadId, q.value);
+  }
+  vscode.postMessage({ type: 'submit', query: text, mode: sharedThreadId ? 'ask' : mode });
+  if (!sharedThreadId) { q.value = ''; q.style.height = 'auto'; }
 }
 
 for (const b of modeBtns) {
@@ -1056,16 +1104,79 @@ q.addEventListener('input', () => {
   q.style.height = Math.min(q.scrollHeight, 190) + 'px';
 });
 q.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter' && !ev.shiftKey) {
+  if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) {
     ev.preventDefault();
     submit();
   }
 });
 
+topicSelect.addEventListener('change', () => {
+  drafts.set(sharedThreadId || '', q.value);
+  vscode.postMessage({ type: 'sharedSelect', threadId: topicSelect.value || null });
+});
+document.getElementById('topic-new').addEventListener('click', () => {
+  document.getElementById('topic-form').hidden = false;
+  document.getElementById('topic-title').focus();
+});
+document.getElementById('topic-cancel').addEventListener('click', () => {
+  document.getElementById('topic-form').hidden = true;
+  document.getElementById('topic-new').focus();
+});
+document.getElementById('topic-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const title = document.getElementById('topic-title').value.trim();
+  if (title && !sharedBusy) vscode.postMessage({ type: 'sharedCreate', title });
+});
+document.getElementById('topic-refresh').addEventListener('click', () => vscode.postMessage({ type: 'sharedRefresh' }));
+
 // ---- messages --------------------------------------------------------------
 window.addEventListener('message', (event) => {
   const msg = event.data;
-  if (msg.type === 'init') {
+  if (msg.type === 'sharedSent') {
+    if ((drafts.get(msg.threadId) || '').trim() === msg.query) drafts.delete(msg.threadId);
+    if (sharedThreadId === msg.threadId && q.value.trim() === msg.query) {
+      q.value = '';
+      q.style.height = 'auto';
+    }
+  } else if (msg.type === 'sharedState') {
+    const nextId = msg.threadId || null;
+    if (nextId !== sharedThreadId) {
+      drafts.set(sharedThreadId || '', q.value);
+      q.value = drafts.get(nextId || '') || '';
+      q.style.height = 'auto';
+      sharedThreadId = nextId;
+      editor = null;
+      if (nextId) setMode('ask');
+      document.getElementById('topic-form').hidden = true;
+    }
+    const nextTopics = JSON.stringify((msg.threads || []).map(t => [t.id, t.title]));
+    if (nextTopics !== topicSignature) {
+      topicSignature = nextTopics;
+      topicSelect.replaceChildren();
+      const local = document.createElement('option');
+      local.value = '';
+      local.textContent = 'Local knowledge console';
+      topicSelect.appendChild(local);
+      for (const thread of msg.threads || []) {
+        const option = document.createElement('option');
+        option.value = thread.id;
+        option.textContent = thread.title;
+        topicSelect.appendChild(option);
+      }
+    }
+    topicSelect.value = sharedThreadId || '';
+    sharedBusy = !!msg.busy;
+    sendBtn.disabled = !!sharedThreadId && sharedBusy;
+    document.getElementById('topic-new').disabled = sharedBusy;
+    topicStatus.textContent = msg.problem || (sharedThreadId ? 'Shared through Cinder · library Q&A via the Cinder provider' : 'Shared topics · choose a topic or create one');
+    topicStatus.className = msg.problem ? 'error' : '';
+    const signature = JSON.stringify([sharedThreadId, msg.turns]);
+    if (signature !== sharedSignature) {
+      sharedSignature = signature;
+      turns = msg.turns || [];
+      renderFeed();
+    }
+  } else if (msg.type === 'init') {
     mode = msg.mode || 'ask';
     scope = msg.scope || scope;
     turns = msg.turns || [];
@@ -1073,6 +1184,7 @@ window.addEventListener('message', (event) => {
     renderScope();
     renderFeed();
   } else if (msg.type === 'turn') {
+    if (sharedThreadId) return;
     const turn = msg.turn;
     const at = turns.findIndex((t) => t.id === turn.id);
     if (at >= 0) turns[at] = turn;

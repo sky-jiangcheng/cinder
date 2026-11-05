@@ -21,6 +21,7 @@
 //           filter over the returned hits. The cost is real (a project can
 //           come back with fewer than N hits) and the panel says so instead
 //           of pretending the count is everything.
+import { SharedChat } from "./sharedChat.js";
 import {
   excerpt,
   hitText,
@@ -104,10 +105,20 @@ export class ChatSession {
   /** Set by the extension: the scope changed (the status bar shows it). */
   onScopeChanged?: (scope: ScopeState) => void;
 
+  private readonly shared: SharedChat;
+
   constructor(
     private readonly transport: Transport,
     private readonly post: (message: ViewMessage) => void,
-  ) {}
+  ) {
+    this.shared = new SharedChat(transport, state => this.post({
+      type: "sharedState", ...state, turns: state.threadId ? state.turns : this.turns,
+    }));
+  }
+
+  setVisible(visible: boolean): void { this.shared.setVisible(visible); }
+
+  dispose(): void { this.shared.dispose(); }
 
   /** The panel came on screen: hand it the state it needs to render. */
   init(): void {
@@ -182,11 +193,21 @@ export class ChatSession {
   /** The messages the webview sends. */
   async handle(msg: ExtMessage): Promise<void> {
     switch (msg.type) {
+      case "sharedSelect":
+        await this.shared.select(msg.threadId);
+        break;
+      case "sharedCreate":
+        await this.shared.create(msg.title);
+        break;
+      case "sharedRefresh":
+        await this.shared.refresh();
+        break;
       case "submit":
         await this.run(msg.query, msg.mode);
         break;
       case "mode":
         this.mode = msg.mode;
+        if (msg.mode !== "ask" && this.shared.active) await this.shared.select(null);
         break;
       case "scopeToggle":
         await this.toggleScope();
@@ -387,6 +408,18 @@ export class ChatSession {
   async run(query: string, mode?: Mode): Promise<void> {
     const text = query.trim();
     if (!text) return;
+    if (this.shared.active && (mode ?? this.mode) === "ask") {
+      const threadId = this.shared.threadId!;
+      const sent = await this.shared.send(text, async question => {
+        const result = await this.transport.callTool("repotory_ask", { query: question });
+        if (result.startsWith(ASK_ERROR_PREFIX)) throw new Error(result.slice(ASK_ERROR_PREFIX.length).trim());
+        if (result.startsWith(ASK_NO_ENDPOINT_PREFIX)) throw new Error("Configure the Cinder AI provider to answer shared questions.");
+        return result;
+      });
+      if (sent) this.post({ type: "sharedSent", threadId, query: text });
+      return;
+    }
+    if (this.shared.active) await this.shared.select(null);
     const turn: Turn = {
       id: `turn-${++this.counter}`,
       mode: mode ?? this.mode,
