@@ -20,6 +20,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:web/dist
@@ -53,7 +54,18 @@ func main() {
 	// makes was started by a human in the app, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceDesktop)
 	svc.EnsureDefaultScanRoots()
-	a := app.New(svc)
+	// The Wails runtime is wired here, at the desktop entry point, and nowhere
+	// else. internal/app is also linked into the headless server, and a Wails
+	// import in that package would drag the whole webview frontend stack into
+	// a binary that never opens a window.
+	a := app.New(svc,
+		app.WithEmitter(func(ctx context.Context, event string, data any) {
+			wailsruntime.EventsEmit(ctx, event, data)
+		}),
+		app.WithOpener(func(ctx context.Context, rawURL string) {
+			wailsruntime.BrowserOpenURL(ctx, rawURL)
+		}),
+	)
 
 	// Launch Wails
 	err = wails.Run(&options.App{

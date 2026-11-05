@@ -12,8 +12,6 @@ import (
 	"repotory/internal/domain"
 	"repotory/internal/service"
 	"repotory/internal/stats"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // --- Wails binding ↔ MCP tool audit (P32, 2026-10-02) -----------------------
@@ -557,8 +555,9 @@ type AskStreamResult struct {
 }
 
 // StartAskStream launches the streaming evidence-backed ask and returns at
-// once with a stream id; the answer then arrives progressively as Wails events
-// named "ai.ask.stream", each payload tagged with that id:
+// once with a stream id; the answer then arrives progressively as UI events
+// named "ai.ask.stream" (Wails events on the desktop), each payload tagged
+// with that id:
 //
 //	{"stream_id": "...", "delta": "…"}                   ← content fragments
 //	{"stream_id": "...", "done": true, "reply": "…",
@@ -572,24 +571,22 @@ func (a *App) StartAskStream(projectID int64, question string) (*AskStreamResult
 	streamID := fmt.Sprintf("ask-%d", time.Now().UnixNano())
 	go func() {
 		ans, err := a.svc.AskAIWithEvidenceStream(projectID, question, service.DefaultEvidenceBudget, func(delta string) {
-			if a.ctx != nil {
-				wailsruntime.EventsEmit(a.ctx, "ai.ask.stream", map[string]any{
-					"stream_id": streamID,
-					"delta":     delta,
-				})
-			}
+			a.emitEvent("ai.ask.stream", map[string]any{
+				"stream_id": streamID,
+				"delta":     delta,
+			})
 		})
 		if a.ctx == nil {
 			return
 		}
 		if err != nil {
-			wailsruntime.EventsEmit(a.ctx, "ai.ask.stream", map[string]any{
+			a.emitEvent("ai.ask.stream", map[string]any{
 				"stream_id": streamID,
 				"error":     err.Error(),
 			})
 			return
 		}
-		wailsruntime.EventsEmit(a.ctx, "ai.ask.stream", map[string]any{
+		a.emitEvent("ai.ask.stream", map[string]any{
 			"stream_id": streamID,
 			"done":      true,
 			"reply":     ans.Reply,
@@ -932,9 +929,9 @@ func (a *App) OpenBrowserURL(rawURL string) error {
 	if err != nil || u.Scheme != "https" {
 		return fmt.Errorf("refusing to open non-https URL: %q", rawURL)
 	}
-	if a.ctx == nil {
+	if a.open == nil || a.ctx == nil {
 		return fmt.Errorf("browser open unavailable outside the desktop runtime")
 	}
-	wailsruntime.BrowserOpenURL(a.ctx, rawURL)
+	a.open(a.ctx, rawURL)
 	return nil
 }
