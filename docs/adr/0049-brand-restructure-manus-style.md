@@ -212,11 +212,29 @@ Manus 2026-09-28 之后的结构是：**母品牌（Manus）= 平台/引擎；�
 | 真相源 | `build/brand.json` | `brand.json` |
 | 脚本 | `scripts/check-brand.mjs` | `scripts/check-brand.mjs` |
 | 入口 | CI `brand` job | CI `brand` job（第四道门）+ `npm run check:brand` |
-| 查什么 | 产品名 10 处 = brand.json；冻结标识层 12 条逐条仍在原处；当前面不留旧品牌词（历史面按前缀放行）；App 里的 `BrandMark` 与母图同源（路径 `d`、组变换、hairline 宽度、inset、两种颜色） | 产品名 13 处 = brand.json（含 `productName`、窗口标题、`<title>`、首屏名）；冻结标识层 6 条；当前面不留旧品牌词；**文档锚点还指得到标题** |
+| 查什么 | 产品名 8 处 = brand.json；**市场名 2 处逐字相等**；冻结标识层 12 条逐条仍在原处；当前面不留旧品牌词（历史面按前缀放行）；App 里的 `BrandMark` 与母图同源（路径 `d`、组变换、hairline 宽度、inset、两种颜色） | 产品名 13 处 = brand.json（含 `productName`、窗口标题、`<title>`、首屏名）；冻结标识层 6 条；当前面不留旧品牌词；**文档锚点还指得到标题** |
 
-**负例已验**（门不是只会绿）：主仓四道——产品名回退旧名、数据目录被改、README 漏出旧名、`BrandMark` 路径偏一位——每道都红；独立仓五道——`productName` 回退、`identifier` 被「顺手清理」、当前面漏旧名、锚点里的旧品牌词、桌面名不再与母品牌同源——每道都红。恢复后两仓复跑皆绿。
+**负例已验**（门不是只会绿）：主仓五道——产品名回退旧名、**市场名改回被占的那个**、数据目录被改、README 漏出旧名、`BrandMark` 路径偏一位——每道都红；独立仓五道——`productName` 回退、`identifier` 被「顺手清理」、当前面漏旧名、锚点里的旧品牌词、桌面名不再与母品牌同源——每道都红。恢复后两仓复跑皆绿。
 
 **两仓各有一份 `brand.json`**：CI 各跑各的仓，谁也看不到对方，所以**改词要同批改**。这是这份真相源唯一的结构性弱点，备忘在此。
+
+### 补注：市场名被占（2026-11-05，v2.31.0 发版当天）
+
+v2.31.0 的发布流水线里，**只有 VS Code Marketplace 那一格红了**：
+
+```
+##[error]This extension display name is taken.
+```
+
+不是构建、不是签名、不是版本冲突——**VS Code Marketplace 要求 `displayName` 在全站唯一**，而「Cinder」这个显示名**已经被别人的扩展占了**（`muowl.cinder-warm-theme`）。JetBrains Marketplace 没有这条约束，所以 JetBrains 插件照发成功（id 35396）。
+
+**这一格不能重发**：同一个扩展 id 的同一个版本号只能对应一份产物，所以不能「换个名字再发一次 2.31.0」——那会留下两份同名不同内容的 2.31.0，与「一个版本一份产物」的发布契约（ADR-0017）冲突，已发布的 `SHA256SUMS` 也对不上。
+
+**因此**：IDE 插件的**市场名** = **Cinder Memory**（母品牌 + 限定词），两个 IDE 插件统一。**产物 id 一字不动**（`sky-jiangcheng.repotory-vscode` / `dev.repotory.jetbrains`）——标识层冻结照旧；Marketplace 上是同一条条目换了个名字，不是新条目。**编辑器里的命令标题仍是「Cinder: …」**——那是母品牌词，界面上要读得出同源；带限定词的是**市场条目名**（Marketplace 的标题、扩展列表里的那一行）。
+
+**守门补强**：原来的品牌门查的是「这份文件里**含有**母品牌词」，而「Cinder」**也含有**母品牌词——所以旧门对这次失败完全无感，绿得理直气壮。现在 `build/brand.json` 多一个键 `idePlugin`，守门对两个 IDE 插件的市场名**逐字相等**（不再是「含有」），并要求它以母品牌 + 空格开头。负例已验：把两个名字改回「Cinder」，门立刻红。
+
+**两仓同批**：`idePlugin` 这个键在独立仓的 `brand.json` 里也加上了（那份不参与发布，只是不让两份真相源的形状分叉）。
 
 ### 旧名残留清单
 

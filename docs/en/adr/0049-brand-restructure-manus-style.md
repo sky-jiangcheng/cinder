@@ -212,11 +212,29 @@ Real defects fixed along the way (not style issues — they came out of the rena
 | Source of truth | `build/brand.json` | `brand.json` |
 | Script | `scripts/check-brand.mjs` | `scripts/check-brand.mjs` |
 | Entry point | CI `brand` job | CI `brand` job (the fourth gate) + `npm run check:brand` |
-| What it checks | the product name at 10 sites equals brand.json; the 12 frozen identifiers are still there verbatim; the current surfaces carry no old brand word (historical surfaces are allowed by prefix); the app's `BrandMark` comes from the master mark (path `d`, group transform, hairline width, inset, both colours) | the product name at 13 sites equals brand.json (including `productName`, the window title, `<title>`, the first-screen name); the 6 frozen identifiers are still there; the current surfaces carry no old brand word; **the document anchors still point at a heading** |
+| What it checks | the product name at 8 sites equals brand.json; **the marketplace name at 2 sites matches exactly**; the 12 frozen identifiers are still there verbatim; the current surfaces carry no old brand word (historical surfaces are allowed by prefix); the app's `BrandMark` comes from the master mark (path `d`, group transform, hairline width, inset, both colours) | the product name at 13 sites equals brand.json (including `productName`, the window title, `<title>`, the first-screen name); the 6 frozen identifiers are still there; the current surfaces carry no old brand word; **the document anchors still point at a heading** |
 
-**The negative cases were verified** (a gate that can only go green is not a gate): in the main repository, four — the product name reverted to the old name, the data directory renamed, the README leaking the old name, the `BrandMark` path off by one — each goes red; in the separate repository, five — `productName` reverted, `identifier` "tidied up", an old brand word on a current surface, an old brand word inside an anchor, the desktop name no longer derived from the parent brand — each goes red. Both repositories are green again after restoring.
+**The negative cases were verified** (a gate that can only go green is not a gate): in the main repository, five — the product name reverted to the old name, **the marketplace name changed back to the taken one**, the data directory renamed, the README leaking the old name, the `BrandMark` path off by one — each goes red; in the separate repository, five — `productName` reverted, `identifier` "tidied up", an old brand word on a current surface, an old brand word inside an anchor, the desktop name no longer derived from the parent brand — each goes red. Both repositories are green again after restoring.
 
 **Each repository has its own `brand.json`**: CI runs on one repository at a time and cannot see the other, so **a word change has to land in both in the same batch**. That is the one structural weakness of this source of truth; it is noted here.
+
+### Addendum: the marketplace name was taken (2026-11-05, the day v2.31.0 shipped)
+
+In the v2.31.0 release pipeline, **exactly one cell went red — the VS Code Marketplace publish**:
+
+```
+##[error]This extension display name is taken.
+```
+
+Not the build, not the signature, not a version conflict — **the VS Code Marketplace requires `displayName` to be unique across the whole marketplace**, and the display name "Cinder" was **already held by somebody else's extension** (`muowl.cinder-warm-theme`). The JetBrains Marketplace has no such rule, so the JetBrains plugin published successfully (id 35396).
+
+**That cell cannot be published twice**: one extension id at one version number may only correspond to one artifact, so "publish 2.31.0 again under a different name" is not available — it would leave two different artifacts claiming to be 2.31.0, which breaks the "one version, one artifact set" release contract (ADR-0017) and leaves the published `SHA256SUMS` pointing at the wrong files.
+
+**Therefore**: the IDE plugins' **marketplace name** is **Cinder Memory** (the parent brand plus a qualifier), the same on both IDEs. The **artifact ids stay exactly as they are** (`sky-jiangcheng.repotory-vscode` / `dev.repotory.jetbrains`) — the identifier layer stays frozen; on the marketplace this is the same listing under a different name, not a new one. **The command titles inside the editor stay "Cinder: …"** — that is the parent brand word, and the interface has to read as the same family; the qualified name is the **marketplace listing name** (the title on the Marketplace, the one line in the extension list).
+
+**The guard was strengthened**: the brand gate used to check that a file *contains* the parent brand word — and "Cinder" contains it too, so the old gate was blind to exactly this failure and stayed green the whole way. `build/brand.json` now carries one more key, `idePlugin`, and the gate compares the two IDE plugins' marketplace names **exactly** (no longer "contains"), and requires them to start with the parent brand plus a space. The negative case was verified: putting both names back to "Cinder" turns the gate red immediately.
+
+**Both repositories in the same batch**: the `idePlugin` key was added to the separate repository's `brand.json` as well (that copy ships nothing; it only keeps the two sources of truth from diverging in shape).
 
 ### Leftover old names
 
