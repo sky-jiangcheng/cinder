@@ -4,6 +4,13 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
+## [Unreleased]
+
+### 变更
+
+- **无头 server 不再链接 Wails：13 个 webview 包从「永远不开窗口的二进制」里消失（2026-11-05）**：`cmd/server` 曾经 `import` **整个 Wails 前端栈**（`go list -deps ./cmd/server` 实测 13 个 `github.com/wailsapp/*` 包，含 `internal/frontend` 那套 webview）——而它**永远不开窗口**。根因只有一处，却很小：**`internal/app` 为了两个副作用 import 了 Wails runtime**（`EventsEmit` 发事件、`BrowserOpenURL` 开浏览器），而 `cmd/server` 也链接 `internal/app`（它反射同一个绑定对象，把 `/api/rpc` 暴露给浏览器与脚本）。**改法不是搬目录，是把副作用倒过来**：两个副作用改成**注入**（`app.WithEmitter` / `app.WithOpener`），Wails 实现放回桌面入口 `main.go`，`internal/app` 不再 import Wails——**`go list -deps ./cmd/server` 现在是 0 个 Wails 包**。**行为逐字不变**：没有 emitter 时事件照旧丢弃（与旧的 `ctx == nil` 判断同结果），没有 opener 时 `OpenBrowserURL` 照旧返回同一句「browser open unavailable outside the desktop runtime」，**桌面端的事件与开链接行为一字未变**。**新增守门** `cmd/server/wails_free_test.go`：从 `cmd/server` 出发走**模块内 import 图**（`go/parser` 静态解析，**不联网、不调工具链**），断言**整条依赖链不含任何 `github.com/wailsapp/*`**；并带一个**反向对照**（从仓根出发必须能找出桌面那份 Wails 导入），防止这道门因为「什么都没走」而假绿。**为什么做这一刀**：本仓同时装着工作台与服务，而**真正共享的是 `internal/service` + `internal/db`，server 只是三扇门之一**——桌面与 MCP 都是直接开同一个 SQLite、**不经过 HTTP server**；**IDE 插件与 CLI 本来就是纯 HTTP 客户端**（TS / Kotlin / node，零 Go 耦合），**它们已经拆出去了**，所以**拆仓换不来任何东西，只会多出跨仓的 schema 迁移发布**。**决策与代价记在 [ADR-0047](docs/adr/0047-resident-agent-separate-host.md) 补注二**（中英双份）：**暂不拆仓，先立仓内边界**；**触发拆仓的条件只有两个**——① 有第三方需要**以 Go 库**的方式消费 core；② 桌面发版节奏必须与 schema 迁移解耦。**不动 schema、不新增绑定、不改 `/api/rpc` 契约、不改桌面行为**
+
+- **记忆层契约有自己的版本号：core version 与发布版本分开走（ADR-0048，2026-11-05）**：`internal/version/version.go` 里那个 `Version = "2.30.0"` 原本同时在回答两个问题——**「这是哪个构建」**（升级器拿它跟 GitHub 上最新的 release 比、安装信息拿它写进本地记录）与**「客户端可以依赖什么」**（`cmd/mcp/main.go` 的 `server.NewMCPServer("repotory-mcp", version.Version)` 把它报进 MCP `initialize` 响应的 `serverInfo.version`）。**两个数塞进一个变量，两个都失去意义**：客户端拿到 2.30.0 **读不出工具面有没有变过**——而这是结构性的，不是巧合：ADR-0038 / 0039 / 0041 / 0042 全是前端布局，**18 个 MCP 工具一个没动**；而 `repotory_wiki_search` / `repotory_wiki_read` 进工具面时桌面界面几乎没动。**新增 `internal/version/core.go` 的 `const CoreVersion = "1.0.0"`**，**语义按契约变化定**：`major` = 破坏性（工具被删/改名、字段含义变）、`minor` = 增量（新工具 / 新可选字段 / 新接口）、`patch` = 契约没动——**界面改动不涨它，工具面改动必须涨它**。**落地**：① MCP 的 `serverInfo.version` **改报契约版本**（问「我能依赖什么」的人要的是契约号，发布号在启动日志与 `/health` 里都有；MCP 的 `serverInfo` 只有 `name` 与 `version` 两个字段，没有第二个位置可放）；② `/health` **多带一个 `core_version`，`version` 一字不动**（升级器与安装信息都依赖 `version`，动它会改掉升级语义；`core_version` 是新增键，老客户端忽略未知键）；③ **契约版本钉在工具清单旁边**（`cmd/mcp/main_test.go` 的 `TestToolsRegistered` 钉一份字面量）——**加/删工具时那行必须同时改**，把「忘了涨版本号」变成一道红而不是一个隐患；④ `scripts/check-version-drift.mjs` 新增**第⑧道检查**：两份拷贝必须相等（**负例已验**：改成 `9.9.9` 必红 `exit 1`）；⑤ 桌面 / server / MCP 三处启动日志同时打两个号。**代价（接受）**：**多一个版本号就多处该更新**（第⑧道检查是故意的关卡）；**两个号从此可以各说各话**——契约号答「面变了没」，发布号答「构建新不新」，放一起比没意义；**`serverInfo.version` 的语义变了**（今天还没有生产代码依赖它，独立仓的 MCP 客户端此前把整个 `initialize` 响应丢掉了——**这个窗口是暂时的**，等客户端真的开始读它，语义就不能随便换了）。**不动 schema / 不新增 MCP 工具 / 不改任何工具的入参出参 / 不改发布流程**（决策与代价记在 [ADR-0048](docs/adr/0048-core-contract-version.md)，中英双份；[ADR-0047](docs/adr/0047-resident-agent-separate-host.md) 补注三记了那处首屏文案的订正：**「Repotory vX.Y.Z · N 工具」改成「记忆层 vX.Y.Z · N 工具」**）
 ## [2.30.0] - 2026-11-05
 
 ### 变更
@@ -39,12 +46,6 @@
 > 下一个想给 Wails 加常驻的人会因为这段分析省掉一次排查。
 
 - **Release 页面正文改成 CHANGELOG 里的条目标题，不再是一串 commit subject（2026-11-04）**：v2.29.0 的 Release 正文只有一行 `**Full Changelog**: …`——GitHub 的 `generate_release_notes` 产出的是 **commit subject 清单 + compare 链接**，而本仓的 commit 大多是内部动作（`fix(test): 比对要归一化`、`chore(packaging): fill sha256`、`docs(changelog): 切出 v2.29.0`），读者在发布页上看不出这一版**用户可见地变了什么**。而 CHANGELOG 里早就有写给读者的那一句——每条条目开头的**加粗标题**（「IDE 面板重画：按钮不再被裁切…」，后面才是推导、决策与代价）。**那道标题就是发布页该给的东西**；剩下的推导进的是仓库与 CHANGELOG 链接，不是发布页。改法：`scripts/release-notes.mjs` 把目标版本那一节压成标题清单（按 CHANGELOG 自己的 `###` 小节分组），`release.yml` 新增一个 `release-notes` job 生成它，`create-release` 把它作为 `body_path` 交给 release action——**action 把它前置**在 GitHub 自动生成的 notes 前面，于是 commit 清单与 compare 链接仍在下面，一行不少。**两道门**：① **每条条目必须以加粗标题开头**，否则「发布什么」就落空——CI 新增 `release-notes` job 用 `node scripts/release-notes.mjs --check` 在**每次推送**上就报红（不用等打 tag）；② **那道门必须能红**，job 还会拿 `scripts/testdata/release-notes/` 里两份**故意的坏 CHANGELOG**（一条条目缺标题 / 一节里一条都没有）喂一遍脚本并断言它**必须失败**——只绿的门不算门。**两个实现细节**：① `release-notes` 是**独立 job** 而不是 `create-release` 里的一步，因为后者的 workspace root 放着发布产物，而那一步的 `SHA256SUMS` 会把 root 下**每个文件**都算进去（安装脚本拿它对用户实际下载的文件做校验）——一份 CHANGELOG 落在那儿会让所有人装不上；notes 因此下载到 `notes/` 子目录，并在发布前断言它**存在且非空**（action 读不到 `body_path` 时只**警告**并回落到空正文，那会悄悄发出一个只有 commit 清单的版本，正是本条要防的事）。② 仓库地址**从 CHANGELOG 自己的链接定义读**（`[2.29.0]: https://github.com/<owner>/<repo>/compare/…`），不写死第二份。**不动**：不改产品行为、不改 schema、不动其它 ADR 决策
-
-## [Unreleased]
-
-### 变更
-
-- **无头 server 不再链接 Wails：13 个 webview 包从「永远不开窗口的二进制」里消失（2026-11-05）**：`cmd/server` 曾经 `import` **整个 Wails 前端栈**（`go list -deps ./cmd/server` 实测 13 个 `github.com/wailsapp/*` 包，含 `internal/frontend` 那套 webview）——而它**永远不开窗口**。根因只有一处，却很小：**`internal/app` 为了两个副作用 import 了 Wails runtime**（`EventsEmit` 发事件、`BrowserOpenURL` 开浏览器），而 `cmd/server` 也链接 `internal/app`（它反射同一个绑定对象，把 `/api/rpc` 暴露给浏览器与脚本）。**改法不是搬目录，是把副作用倒过来**：两个副作用改成**注入**（`app.WithEmitter` / `app.WithOpener`），Wails 实现放回桌面入口 `main.go`，`internal/app` 不再 import Wails——**`go list -deps ./cmd/server` 现在是 0 个 Wails 包**。**行为逐字不变**：没有 emitter 时事件照旧丢弃（与旧的 `ctx == nil` 判断同结果），没有 opener 时 `OpenBrowserURL` 照旧返回同一句「browser open unavailable outside the desktop runtime」，**桌面端的事件与开链接行为一字未变**。**新增守门** `cmd/server/wails_free_test.go`：从 `cmd/server` 出发走**模块内 import 图**（`go/parser` 静态解析，**不联网、不调工具链**），断言**整条依赖链不含任何 `github.com/wailsapp/*`**；并带一个**反向对照**（从仓根出发必须能找出桌面那份 Wails 导入），防止这道门因为「什么都没走」而假绿。**为什么做这一刀**：本仓同时装着工作台与服务，而**真正共享的是 `internal/service` + `internal/db`，server 只是三扇门之一**——桌面与 MCP 都是直接开同一个 SQLite、**不经过 HTTP server**；**IDE 插件与 CLI 本来就是纯 HTTP 客户端**（TS / Kotlin / node，零 Go 耦合），**它们已经拆出去了**，所以**拆仓换不来任何东西，只会多出跨仓的 schema 迁移发布**。**决策与代价记在 [ADR-0047](docs/adr/0047-resident-agent-separate-host.md) 补注二**（中英双份）：**暂不拆仓，先立仓内边界**；**触发拆仓的条件只有两个**——① 有第三方需要**以 Go 库**的方式消费 core；② 桌面发版节奏必须与 schema 迁移解耦。**不动 schema、不新增绑定、不改 `/api/rpc` 契约、不改桌面行为**
 
 ## [2.29.0] - 2026-11-04
 
@@ -799,7 +800,6 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.29.0...HEAD
 [Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.30.0...HEAD
 [2.29.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.28.0...v2.29.0
 [2.30.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.29.0...v2.30.0

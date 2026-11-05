@@ -74,7 +74,8 @@ func main() {
 	webDist := flag.String("web-dist", envOr("REPOTORY_WEB_DIST", ""), "directory of the built web frontend to serve (optional, API-only when empty)")
 	flag.Parse()
 
-	log.Printf("Repotory headless server %s starting on 127.0.0.1:%s", version.Version, *port)
+	log.Printf("Repotory headless server %s starting on 127.0.0.1:%s (memory-layer contract %s)",
+		version.Version, *port, version.CoreVersion)
 
 	database, err := openDatabase(platform.GetDbPath())
 	if err != nil {

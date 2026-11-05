@@ -22,7 +22,7 @@ Repotory 的对外接口是 **Wails 绑定面**：Go 方法经 Wails Bind 暴露
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/health` | GET | 服务与数据库健康状态 |
+| `/health` | GET | 服务与数据库健康状态（`version` = 发布版本，`core_version` = 记忆层契约版本，见 [ADR-0048](../adr/0048-core-contract-version.md)） |
 | `/api/ai_context` | GET/POST | 全知识库 Markdown（llms.txt 风格） |
 | `/api/search?q=...&all=1` | GET | FTS5 全文搜索（默认仅笔记，`all=1` 含待办） |
 | `/api/project/{id}/detail` | GET | 项目 + 仓库及历史统计 |

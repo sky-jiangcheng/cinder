@@ -22,7 +22,7 @@ A JSON API for external runtimes such as the DeepSeek Harness dsh-plugin. It sha
 
 | Endpoint | Method | Description |
 |------|------|------|
-| `/health` | GET | service and database health |
+| `/health` | GET | service and database health (`version` = release version, `core_version` = memory-layer contract version, see [ADR-0048](../adr/0048-core-contract-version.md)) |
 | `/api/ai_context` | GET/POST | the entire knowledge base as Markdown (llms.txt style) |
 | `/api/search?q=...&all=1` | GET | FTS5 full-text search (notes only by default; `all=1` includes todos) |
 | `/api/project/{id}/detail` | GET | project + repos with historical stats |

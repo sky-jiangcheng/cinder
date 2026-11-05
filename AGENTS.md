@@ -29,6 +29,7 @@ bash scripts/dev.sh
 - **`docs/**/*.html` 是构建产物，不手改**；内容源是 `docs/**/*.md`
 - **界面文案中英必须同批改**：`web/src/locales/{zh-CN,en}/common.json` 是镜像，只改一边 = 英文界面显示 key 本身，或被调用点的中文 `defaultValue` 悄悄接管。已有 CI 硬门 `i18n-keys`（`scripts/check-i18n-keys.mjs`）拦截——新增 `t()` key 时两份都要补，英文文案里也不该留中文
 - **schema 变更**：`ExpectedSchemaVersion`（`internal/integrity/checks.go`）与迁移表（`internal/db/migrate.go`）+ 防漂移测试是守卫，版本号必须同步推进且可逆测试跟上
+- **MCP 工具面变了要涨契约版本**：`internal/version/core.go` 的 `CoreVersion` 是**对外契约版本**（不是发布版本 `Version`）——`major` = 工具被删/改名或字段含义变，`minor` = 新增工具/新可选字段，`patch` = 契约没动。契约版本**钉在工具清单旁边**（`cmd/mcp/main_test.go` 的 `TestToolsRegistered` 里 `wantCoreVersion`），两份拷贝由 `scripts/check-version-drift.mjs` 第⑧道检查兜住——**加/删工具却忘了涨版本号，那道门会红**，别去改检查脚本绕开它。详见 [ADR-0048](docs/adr/0048-core-contract-version.md)
 - **CSS 语义色顺序不变量**由 `web/src/styles/semanticInk.test.ts` 钉住；改全局 CSS 顺序前先读它
 - **冻结标识**（`repotory` 二进制名/数据目录/MCP 前缀 `repotory_*`）绑定用户数据迁移史，不「顺手统一」——见 CONTRIBUTING「范围冻结」
 - **图标三域**：`build/icon.svg` 是唯一母图；`generate-icons.mjs` 派生「品牌域方边（favicon/商店/JetBrains 工具窗内的品牌标记 PNG）」、「OS 应用域 squircle（appicon.png/阶梯/ico，macOS 不自掩码）」与「字形域单色透明底（VS Code 活动栏 24px 框+字母；JetBrains 工具窗侧栏 16px 仅字母，带 `_dark` 深色变体——该槽位由宿主光栅化不遮罩，奶油卡会读作发亮方块）」三套形状，改母图后必须跑生成器，CI 同步门兜底（先 `--check --tracked-only` 再生成，别反过来）——见 CONTRIBUTING「品牌图标三域规则」

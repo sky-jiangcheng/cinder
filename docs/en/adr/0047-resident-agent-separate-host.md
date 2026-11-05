@@ -380,6 +380,20 @@ constraint.
 | The copilot's tray | the separate repo's `src-tauri/src/tray.rs` (**in place**): left click wakes the window, right click opens Show / Quit; `shell_status` exposes `tray.installed`, and the first screen carries a "wake-up entry" card |
 | schema / MCP tool surface | **untouched** |
 
+## Addendum III (2026-11-05): that "version" is the contract version, not the release version
+
+The first-screen wording written in the addendum above — "**Repotory vX.Y.Z · N tools**" — needs one
+correction. [ADR-0048](0048-core-contract-version.md) defines the MCP `initialize` response's
+`serverInfo.version` as the **memory layer's contract version** (core version), not the release version.
+
+So the first screen shows "**memory layer vX.Y.Z · N tools**" — and that X.Y.Z answers
+**"did the tool surface change"**, not "is the build new". The release version is still reachable
+(`/health`'s `version` key and the startup log), but it has **no answer** to "what may I rely on":
+the contract surface rarely moves and the build surface moves constantly, so a 2.30.0 cannot say
+whether the tool surface changed.
+
+**The original text is kept as history.**
+
 ## Roadmap
 
 1. Rename the separate repo + rewrite its positioning + add gates + icons (make the copilot a repo that

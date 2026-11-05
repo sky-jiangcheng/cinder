@@ -11,7 +11,7 @@
 // 抄写不掉的就不抄（改成指向事实源的链接，见 AGENTS.md 与 SECURITY.md 的改法），
 // 剩下的由 CI 兜住——手改绕不过这道门，bump-version.sh 漏掉的也会被这里抓出来。
 //
-// 五道检查：
+// 八道检查：
 //   ① 版本一致 —— wails.json 的 info.productVersion 是 SSOT，十处产物清单必须与它相等
 //   ② TODO 现状速查 —— TODO.md 顶部那行的版本必须与 SSOT 相等（由 bump-version.sh 同步）
 //   ③ ADR 集合 —— docs/adr/ 的文件集合 = 中英两份索引列出的集合，且两份索引逐条对应
@@ -19,6 +19,10 @@
 //   ⑤ 工具数量 —— 随包分发的 skill 参考文档声称的工具数 = cmd/mcp 测试钉死的工具数
 //   ⑥ Node 版本 —— .nvmrc 是 SSOT，Dockerfile 的 ARG 默认值必须与它相等，
 //      且所有 setup-node 步骤必须读 .nvmrc 而不是各写一份字面量
+//   ⑦ Go 版本 —— 每个工作流的 go-version 必须钉到同一个确切补丁版，
+//      go.mod 的 toolchain 与 Dockerfile 的 ARG 必须与它相等
+//   ⑧ 核心契约版本 —— internal/version/core.go 的 CoreVersion 必须与
+//      cmd/mcp 测试里钉死的那一份相等（两者一起描述同一个工具面）
 //
 // 运行：node scripts/check-version-drift.mjs
 // 结果：全过 → exit 0；发现漂移 → 打印清单并 exit 1。
@@ -373,6 +377,26 @@ if (!dockerGo) {
   report('Dockerfile · ARG GO_VERSION', pinnedGo, dockerGo)
 }
 
+// -------------------------------------------------- ⑧ 核心契约版本 ----
+
+// 记忆层的契约版本（core version）与发布版本各走各的：它描述的是「客户端
+// 可以依赖什么」，所以它与工具面一起动。事实源是 internal/version/core.go，
+// cmd/mcp/main_test.go 里钉了同一份字面量（就在工具清单旁边）——两份必须相等，
+// 否则「版本号说没变、工具面变了」这件事就没人能发现了。
+const coreSrc = read('internal/version/core.go')
+const coreVersion = coreSrc.match(/const CoreVersion\s*=\s*"([^"]+)"/)?.[1]
+const pinnedCoreVersion = mcpTest.match(/const wantCoreVersion\s*=\s*"([^"]+)"/)?.[1]
+if (!coreVersion) {
+  issues.push('internal/version/core.go: 读不到 const CoreVersion')
+} else if (!/^\d+\.\d+\.\d+$/.test(coreVersion)) {
+  issues.push(`internal/version/core.go: CoreVersion = "${coreVersion}"，不是 X.Y.Z 三段式`)
+}
+if (!pinnedCoreVersion) {
+  issues.push('cmd/mcp/main_test.go: 读不到 const wantCoreVersion——契约版本必须与工具清单钉在同一个地方')
+} else if (coreVersion && pinnedCoreVersion !== coreVersion) {
+  report('cmd/mcp/main_test.go · 钉死的契约版本', coreVersion, pinnedCoreVersion)
+}
+
 // ------------------------------------------------------------------ 结论 ----
 
 if (issues.length > 0) {
@@ -388,6 +412,6 @@ if (issues.length > 0) {
 console.log(
   `version drift OK: SSOT ${ssot}（10 处产物清单一致）、TODO 现状速查一致、` +
     `ADR ${adrFiles.length} 份中英索引对齐、扫描频率与 dependabot.yml 一致、` +
-    `MCP ${toolNames.length} 个工具与 skill 文档一致、` +
+    `MCP ${toolNames.length} 个工具与 skill 文档一致、契约版本 ${coreVersion} 与测试钉死的一致、` +
     `Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致、Go ${goList[0]} 各工作流一致。`
 )

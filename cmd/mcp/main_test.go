@@ -18,6 +18,7 @@ import (
 
 	"repotory/internal/db"
 	"repotory/internal/service"
+	"repotory/internal/version"
 )
 
 // testServer bundles the pieces a test needs: a real MCPServer with every
@@ -120,6 +121,17 @@ func (ts *testServer) jsonPayload(res *mcp.CallToolResult) map[string]any {
 	return out
 }
 
+// wantCoreVersion is the memory-layer contract version, pinned next to the
+// tool list it describes. The two travel together on purpose: the contract
+// version is the number a client pins against, so it moves only when the
+// outward surface moves (minor = additive, major = breaking). Adding or
+// removing a tool therefore forces a deliberate decision about which number
+// changes, instead of leaving it to whoever notices.
+//
+// The literal is duplicated in internal/version/core.go; the drift guard in
+// scripts/check-version-drift.mjs fails if the two copies disagree.
+const wantCoreVersion = "1.0.0"
+
 func TestToolsRegistered(t *testing.T) {
 	ts := newTestServer(t)
 	want := []string{
@@ -157,6 +169,10 @@ func TestToolsRegistered(t *testing.T) {
 	}
 	if got := len(ts.s.ListTools()); got != len(want) {
 		t.Errorf("registered %d tools, want %d", got, len(want))
+	}
+	if version.CoreVersion != wantCoreVersion {
+		t.Errorf("core version = %q, want %q — the contract version moves when the tool surface moves "+
+			"(minor = additive, major = breaking), so bump it here on purpose", version.CoreVersion, wantCoreVersion)
 	}
 }
 

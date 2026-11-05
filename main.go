@@ -28,7 +28,7 @@ var assets embed.FS
 
 func main() {
 	platform.SetPrivateUmask() // owner-only files: DB sidecars, logs, exports
-	log.Printf("Repotory %s starting...", version.Version)
+	log.Printf("Repotory %s starting... (memory-layer contract %s)", version.Version, version.CoreVersion)
 
 	// Check storage safety before opening database
 	dbPath := platform.GetDbPath()

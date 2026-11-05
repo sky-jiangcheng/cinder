@@ -34,7 +34,11 @@ func main() {
 	// is an agent call, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceMCP)
 
-	mcpServer := server.NewMCPServer("repotory-mcp", version.Version)
+	// serverInfo.version carries the memory-layer CONTRACT version, not the
+	// release version. A client asking "what may I rely on" wants the answer
+	// to survive a UI-only release; the release version is still one log line
+	// away and rides along on /health as "version".
+	mcpServer := server.NewMCPServer("repotory-mcp", version.CoreVersion)
 	registerTools(mcpServer, svc)
 	registerAskTool(mcpServer, svc)
 	registerWikiTools(mcpServer, svc)
@@ -46,7 +50,8 @@ func main() {
 	// repositories via repotory_scan without ever opening the desktop app.
 	svc.EnsureDefaultScanRoots()
 
-	log.Printf("Repotory MCP server v%s starting on stdio...", version.Version)
+	log.Printf("Repotory MCP server v%s starting on stdio... (release %s, memory-layer contract %s)",
+		version.CoreVersion, version.Version, version.CoreVersion)
 	if err := server.ServeStdio(mcpServer); err != nil {
 		log.Fatalf("MCP server error: %v", err)
 	}

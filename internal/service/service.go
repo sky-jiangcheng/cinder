@@ -298,7 +298,15 @@ func (s *Service) Health() map[string]any {
 	if err := s.db.Ping(); err != nil {
 		return map[string]any{"status": "error", "message": "database unavailable"}
 	}
-	return map[string]any{"status": "ok", "version": version.Version}
+	// "version" stays the release version: the updater and the install-info
+	// path compare it against the latest published release. "core_version" is
+	// the memory-layer contract version, which is what a client programs
+	// against.
+	return map[string]any{
+		"status":       "ok",
+		"version":      version.Version,
+		"core_version": version.CoreVersion,
+	}
 }
 
 // Close releases the underlying database handle.
