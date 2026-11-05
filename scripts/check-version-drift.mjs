@@ -12,7 +12,8 @@
 // 剩下的由 CI 兜住——手改绕不过这道门，bump-version.sh 漏掉的也会被这里抓出来。
 //
 // 八道检查：
-//   ① 版本一致 —— wails.json 的 info.productVersion 是 SSOT，十处产物清单必须与它相等
+//   ① 版本一致 —— wails.json 的 info.productVersion 是 SSOT，各产物清单必须与它相等
+//      （打包清单按命名空间层发现，新增项目不必改本文件）
 //   ② TODO 现状速查 —— TODO.md 顶部那行的版本必须与 SSOT 相等（由 bump-version.sh 同步）
 //   ③ ADR 集合 —— docs/adr/ 的文件集合 = 中英两份索引列出的集合，且两份索引逐条对应
 //   ④ 扫描频率 —— SECURITY.md 承诺的扫描频率必须与 .github/dependabot.yml 一致
@@ -27,7 +28,7 @@
 // 运行：node scripts/check-version-drift.mjs
 // 结果：全过 → exit 0；发现漂移 → 打印清单并 exit 1。
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync, globSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -76,33 +77,29 @@ const versionSites = [
     'ide/jetbrains/build.gradle.kts',
     (t) => ({ version: t.match(/^version\s*=\s*"([^"]+)"/m)?.[1] }),
   ],
-  [
-    'packaging/homebrew/Casks/repotory.rb',
-    (t) => ({ version: t.match(/\n\s*version\s+"([^"]+)"/)?.[1] }),
-  ],
-  [
-    'packaging/homebrew/Casks/repotory-mcp.rb',
-    (t) => ({ version: t.match(/\n\s*version\s+"([^"]+)"/)?.[1] }),
-  ],
-  [
-    'packaging/homebrew/Formula/repotory-mcp.rb',
-    (t) => ({ version: t.match(/\n\s*version\s+"([^"]+)"/)?.[1] }),
-  ],
-  [
-    'packaging/scoop/repotory.json',
-    (t) => {
-      const j = JSON.parse(t)
-      return { version: j.version, 'url 里的 tag': j.url?.match(/\/v([^/]+)\//)?.[1] }
-    },
-  ],
-  [
-    'packaging/scoop/repotory-mcp.json',
-    (t) => {
-      const j = JSON.parse(t)
-      return { version: j.version, 'url 里的 tag': j.url?.match(/\/v([^/]+)\//)?.[1] }
-    },
-  ],
 ]
+
+// The packaging manifests live under a namespace layer (one directory per
+// project), so they are DISCOVERED rather than listed. A new project must not
+// have to edit this file for its version to be checked — the whole point of
+// the namespace is that dropping a directory in is enough.
+for (const file of [
+  ...globSync('packaging/*/homebrew/Casks/*.rb'),
+  ...globSync('packaging/*/homebrew/Formula/*.rb'),
+  ...globSync('packaging/*/scoop/*.json'),
+]) {
+  versionSites.push(
+    file.endsWith('.json')
+      ? [
+          file,
+          (t) => {
+            const j = JSON.parse(t)
+            return { version: j.version, 'url 里的 tag': j.url?.match(/\/v([^/]+)\//)?.[1] }
+          },
+        ]
+      : [file, (t) => ({ version: t.match(/\n\s*version\s+"([^"]+)"/)?.[1] })]
+  )
+}
 
 for (const [file, extract] of versionSites) {
   if (!existsSync(join(root, file))) {
@@ -410,7 +407,7 @@ if (issues.length > 0) {
 }
 
 console.log(
-  `version drift OK: SSOT ${ssot}（10 处产物清单一致）、TODO 现状速查一致、` +
+  `version drift OK: SSOT ${ssot}（${versionSites.length} 处产物清单一致）、TODO 现状速查一致、` +
     `ADR ${adrFiles.length} 份中英索引对齐、扫描频率与 dependabot.yml 一致、` +
     `MCP ${toolNames.length} 个工具与 skill 文档一致、契约版本 ${coreVersion} 与测试钉死的一致、` +
     `Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致、Go ${goList[0]} 各工作流一致。`

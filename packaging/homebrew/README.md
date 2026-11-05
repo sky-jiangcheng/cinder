@@ -3,6 +3,9 @@
 Homebrew tap for [Cinder](https://github.com/sky-jiangcheng/cinder) — the
 local-first code project context base.
 
+This tap is **shared**: it carries the manifests of every project that is
+published into it, and the set grows without the tap being renamed.
+
 ## What is in here
 
 | Manifest | Package | Platform | Artifact |
@@ -10,6 +13,10 @@ local-first code project context base.
 | [`Casks/repotory.rb`](Casks/repotory.rb) | `repotory` | macOS | `repotory-darwin-<arch>.dmg` — the Wails desktop app |
 | [`Casks/repotory-mcp.rb`](Casks/repotory-mcp.rb) | `repotory-mcp` | macOS | `repotory-mcp-<target>.tar.gz` — the MCP stdio server |
 | [`Formula/repotory-mcp.rb`](Formula/repotory-mcp.rb) | `repotory-mcp` | macOS + Linux | `repotory-mcp-<target>.tar.gz` — the MCP stdio server |
+
+The desktop app is a GUI bundle, so it ships as a **Cask** and only exists for
+macOS. The MCP server is a single static binary with no UI dependency, so it
+installs cleanly on every platform Homebrew supports and ships as a **Formula**.
 
 ### Deprecated aliases
 
@@ -20,28 +27,24 @@ previous version of those files pointed at RepoNest v1.8.0, so installing them
 silently fetched a six-versions-old build; that is the failure this alias
 policy exists to prevent.
 
-Use the new names:
-
-The desktop app is a GUI bundle, so it ships as a **Cask** and only exists for
-macOS. The MCP server is a single static binary with no UI dependency, so it
-installs cleanly on every platform Homebrew supports and ships as a **Formula**.
+Use the new names instead.
 
 ## Install
 
 ```bash
-brew tap sky-jiangcheng/repo
+brew tap sky-jiangcheng/homebrew-repo
 
 # Desktop app (macOS)
-brew install --cask sky-jiangcheng/repo/repotory
+brew install --cask sky-jiangcheng/homebrew-repo/repotory
 
 # MCP server (macOS and Linux)
-brew install sky-jiangcheng/repo/repotory-mcp
+brew install sky-jiangcheng/homebrew-repo/repotory-mcp
 ```
 
 After installing the MCP server, register it with an AI client:
 
 ```bash
-claude mcp add reponest -- "$(which reponest-mcp)"
+claude mcp add repotory -- "$(which repotory-mcp)"
 ```
 
 The desktop app is **not** required to use the MCP server. Both read the same
@@ -61,7 +64,7 @@ different file, and a digest taken from it would reject every real download.
 ## Maintenance
 
 The manifests in this repository are generated from
-[`packaging/homebrew/`](https://github.com/sky-jiangcheng/cinder/tree/master/packaging/homebrew)
+[`packaging/cinder/homebrew/`](https://github.com/sky-jiangcheng/cinder/tree/master/packaging/cinder/homebrew)
 in the main repository. **Edit them there**, then re-publish; editing here will
 be overwritten on the next release.
 

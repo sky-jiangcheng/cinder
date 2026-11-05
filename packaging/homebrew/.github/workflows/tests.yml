@@ -11,6 +11,10 @@ name: Tests
 # keeps HOMEBREW_REPOSITORY as an unexported shell variable, so referencing
 # "$HOMEBREW_REPOSITORY" in a later step expands to an empty string and brew
 # silently looks for "/formula/repotory-mcp.rb".
+#
+# The manifests are DISCOVERED, not listed: this tap is shared by every project
+# published into it, so a new project's cask and formula are covered by the
+# next push without anyone editing this workflow.
 on:
   push:
     branches: [main, master]
@@ -25,9 +29,51 @@ permissions:
   contents: read
 
 jobs:
+  discover:
+    name: Discover manifests
+    runs-on: ubuntu-latest
+    outputs:
+      casks: ${{ steps.list.outputs.casks }}
+      formulas: ${{ steps.list.outputs.formulas }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: List the manifests to test
+        id: list
+        run: |
+          set -euo pipefail
+          # The DEPRECATED-ALIAS marker is on the first line of an alias
+          # manifest. An alias is a copy of a current manifest under an old
+          # token, so installing it proves nothing the original does not —
+          # and it would download the same artifact a second time.
+          #
+          # The output is a JSON array because the matrix consumes it through
+          # fromJSON(); a comma-separated list would not parse there.
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import glob, json, os
+
+          def names(kind):
+              found = []
+              for path in sorted(glob.glob(f"{kind}/*.rb")):
+                  with open(path, encoding="utf-8") as fh:
+                      if fh.readline().startswith("# DEPRECATED-ALIAS:"):
+                          continue
+                  found.append(os.path.basename(path)[:-3])
+              return found
+
+          print("casks=" + json.dumps(names("Casks")))
+          print("formulas=" + json.dumps(names("Formula")))
+          PY
+          cat "$GITHUB_OUTPUT"
+
   cask:
-    name: Cask (macOS)
+    name: Cask ${{ matrix.cask }} (macOS)
+    needs: discover
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cask: ${{ fromJSON(needs.discover.outputs.casks) }}
     steps:
       # Pinned to a branch that exists. Homebrew/actions renamed its default
       # branch to `main`, so the widely-copied `@master` reference fails during
@@ -46,7 +92,7 @@ jobs:
         run: brew tap "$GITHUB_REPOSITORY"
 
       - name: brew install (cask)
-        run: brew install --cask "$GITHUB_REPOSITORY/repotory"
+        run: brew install --cask "$GITHUB_REPOSITORY/${{ matrix.cask }}"
 
       # `brew test --cask` is not usable here: `test` is not a Cask DSL method
       # in current Homebrew, so there is no test block for brew to run. Assert
@@ -56,7 +102,15 @@ jobs:
       - name: verify installed app
         run: |
           set -euo pipefail
-          APP="/Applications/Cinder.app"
+          # The bundle name comes from the manifest's own `app` stanza rather
+          # than from a path written down here: each project's cask declares
+          # its own bundle, and a hardcoded name would test the wrong one.
+          APP_NAME="$(sed -nE 's/^[[:space:]]*app[[:space:]]+"([^"]+)"[[:space:]]*$/\1/p' "Casks/${{ matrix.cask }}.rb" | head -1)"
+          if [ -z "$APP_NAME" ]; then
+            echo "::error::Casks/${{ matrix.cask }}.rb declares no 'app' stanza — cannot tell which bundle to look for"
+            exit 1
+          fi
+          APP="/Applications/$APP_NAME"
           if [ ! -d "$APP" ]; then
             echo "::error::$APP was not installed"
             ls -la /Applications || true
@@ -77,13 +131,15 @@ jobs:
       # red. The failures that matter — wrong digest, missing artifact — are
       # already caught by install and test above.
       - name: brew audit (cask)
-        run: brew audit --cask "$GITHUB_REPOSITORY/repotory" || true
+        run: brew audit --cask "$GITHUB_REPOSITORY/${{ matrix.cask }}" || true
 
   formula:
-    name: Formula (${{ matrix.os }})
+    name: Formula ${{ matrix.formula }} (${{ matrix.os }})
+    needs: discover
     strategy:
       fail-fast: false
       matrix:
+        formula: ${{ fromJSON(needs.discover.outputs.formulas) }}
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -101,13 +157,13 @@ jobs:
         run: brew tap "$GITHUB_REPOSITORY"
 
       - name: brew install (formula)
-        run: brew install "$GITHUB_REPOSITORY/repotory-mcp"
+        run: brew install "$GITHUB_REPOSITORY/${{ matrix.formula }}"
 
       # The Formula's test block asserts the binary is present and executable
       # rather than running it: repotory-mcp is a stdio MCP server and would
       # block on the JSON-RPC loop with no client attached.
       - name: brew test (formula)
-        run: brew test "$GITHUB_REPOSITORY/repotory-mcp"
+        run: brew test "$GITHUB_REPOSITORY/${{ matrix.formula }}"
 
       - name: brew audit (formula)
-        run: brew audit --formula "$GITHUB_REPOSITORY/repotory-mcp" || true
+        run: brew audit --formula "$GITHUB_REPOSITORY/${{ matrix.formula }}" || true

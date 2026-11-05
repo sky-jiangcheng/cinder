@@ -49,16 +49,20 @@ update_file() {
   echo "  updated $file"
 }
 
-for cask in packaging/homebrew/Casks/repotory.rb \
-            packaging/homebrew/Casks/repotory-mcp.rb \
-            packaging/homebrew/Formula/repotory-mcp.rb; do
+# The manifests are discovered, not listed: every packaging/<project>/homebrew
+# and packaging/<project>/scoop manifest takes part, so a new project joins
+# without touching this script.
+for cask in packaging/*/homebrew/Casks/*.rb \
+            packaging/*/homebrew/Formula/*.rb; do
+  [ -e "$cask" ] || continue
   # Ruby: `  version "1.7.9"`
   update_file "$cask" \
     '(version[[:space:]]+)"[^"]+"' \
     "\1\"$VERSION\""
 done
 
-for manifest in packaging/scoop/repotory.json packaging/scoop/repotory-mcp.json; do
+for manifest in packaging/*/scoop/*.json; do
+  [ -e "$manifest" ] || continue
   # JSON: the version is pinned in two places, and Scoop has no interpolation
   # in the top-level `url` — so both must move together or `scoop install`
   # silently resolves a 404.
@@ -73,8 +77,8 @@ done
 echo
 echo "Done. Verify with:"
 echo "  grep -rn '$VERSION' packaging/"
-echo "  ruby -c packaging/homebrew/Casks/repotory.rb"
-echo "  python3 -m json.tool packaging/scoop/repotory-mcp.json > /dev/null"
+echo "  ruby -c packaging/cinder/homebrew/Casks/repotory.rb"
+echo "  python3 -m json.tool packaging/cinder/scoop/repotory-mcp.json > /dev/null"
 echo
 echo "sha256 fields are filled automatically by release.yml (fill-sha256 job) after"
 echo "each tag's release is published, or manually via:"
@@ -187,17 +191,17 @@ for a in assets:
   }
 
   echo "Filling sha256 from $SUMS"
-  # Desktop app
-  fill packaging/homebrew/Casks/repotory.rb    repotory-darwin-arm64.dmg
-  fill packaging/homebrew/Casks/repotory.rb    repotory-darwin-amd64.dmg
-  fill packaging/scoop/repotory.json           repotory-windows-amd64.zip
-  # MCP server
-  fill packaging/homebrew/Casks/repotory-mcp.rb    repotory-mcp-darwin-arm64.tar.gz
-  fill packaging/homebrew/Casks/repotory-mcp.rb    repotory-mcp-darwin-amd64.tar.gz
-  fill packaging/homebrew/Formula/repotory-mcp.rb  repotory-mcp-darwin-arm64.tar.gz
-  fill packaging/homebrew/Formula/repotory-mcp.rb  repotory-mcp-darwin-amd64.tar.gz
-  fill packaging/homebrew/Formula/repotory-mcp.rb  repotory-mcp-linux-amd64.tar.gz
-  fill packaging/scoop/repotory-mcp.json           repotory-mcp-windows-amd64.zip
+  # The asset list is derived from the manifests: each one names its download
+  # asset in the release URL, so a new project — or a new artifact in an
+  # existing one — needs no change here. The URL is the only place an asset
+  # name appears, and the digest always sits on the line below it.
+  while IFS= read -r file; do
+    while IFS= read -r asset; do
+      [ -n "$asset" ] || continue
+      fill "$file" "$asset"
+    done < <(grep -hoE 'releases/download/[^/]+/[^"[:space:]]+' "$file" \
+             | sed -E 's#^releases/download/[^/]+/##' | sort -u)
+  done < <(find packaging -type f \( -name '*.rb' -o -name '*.json' \) | sort)
 
   echo
   echo "Any manifest still holding a __FILL_SHA256_*__ placeholder needs a"

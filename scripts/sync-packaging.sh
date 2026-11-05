@@ -4,6 +4,19 @@
 #   ./scripts/sync-packaging.sh homebrew [--push] [--with-workflows]
 #   ./scripts/sync-packaging.sh scoop    [--push] [--with-workflows]
 #
+# The tap and the bucket are SHARED: they serve every project that has a
+# namespace under packaging/. The layout is:
+#
+#   packaging/homebrew/                shared: the tap's own README and CI
+#   packaging/scoop/                    shared: the bucket's own README and CI
+#   packaging/<project>/homebrew/…      one project's casks and formulas
+#   packaging/<project>/scoop/…        one project's scoop manifests
+#
+# So a future project joins by adding a directory and its manifests — this
+# script discovers the namespaces, and the guards (check-version-drift.mjs,
+# update-manifests.sh, check-packaging-manifests.sh) do the same. Nothing here
+# names a project.
+#
 # --with-workflows also replaces the tap's / bucket's own CI definitions with
 # the copies kept under packaging/. It is OFF by default because GitHub
 # refuses to let a token without the `workflow` scope create or update
@@ -53,6 +66,26 @@ case "$TARGET" in
   scoop)    REPO_SLUG="sky-jiangcheng/scoop-repo";  DEST_CASK="bucket"; DEST_FORMULA="" ;;
   *) echo "usage: $0 <homebrew|scoop> [--push]" >&2; exit 1 ;;
 esac
+
+# ------------------------------------------------------------- namespaces
+# A namespace is a directory under packaging/ that holds this target's
+# manifests. The shared level (packaging/homebrew, packaging/scoop) is NOT a
+# namespace: it holds the tap's / bucket's own README and CI, which belong to
+# the target repository as a whole rather than to one project.
+PROJECTS=()
+for dir in packaging/*/; do
+  name="$(basename "$dir")"
+  [ -d "packaging/$name/$TARGET" ] || continue
+  PROJECTS+=("$name")
+done
+
+if [ "${#PROJECTS[@]}" -eq 0 ]; then
+  echo "ERROR: no packaging/<project>/$TARGET namespace found." >&2
+  echo "       A project joins the tap by adding packaging/<project>/$TARGET/." >&2
+  exit 1
+fi
+
+echo "==> projects for $TARGET: ${PROJECTS[*]}"
 
 WORK="$(mktemp -d)"
 # cd out before deleting: the script cds into the clone inside WORK, and
@@ -122,6 +155,7 @@ alias_manifest() {
 # lives in the bucket's README instead.
 alias_header() {
   cat <<'HEADER'
+# DEPRECATED-ALIAS: an alias of a current manifest, not a manifest of its own.
 # DEPRECATED NAME — the project was renamed from RepoNest to Cinder.
 #
 # This alias exists so a command saved before the rename keeps working. It
@@ -135,30 +169,58 @@ HEADER
 HEADER_FILE="$WORK/alias-header.txt"
 alias_header > "$HEADER_FILE"
 
-if [ "$TARGET" = "homebrew" ]; then
-  echo "==> writing manifests"
-  write_manifest packaging/homebrew/Casks/repotory.rb        "$DEST_CASK/repotory.rb"
-  write_manifest packaging/homebrew/Casks/repotory-mcp.rb    "$DEST_CASK/repotory-mcp.rb"
-  write_manifest packaging/homebrew/Formula/repotory-mcp.rb  "$DEST_FORMULA/repotory-mcp.rb"
-  alias_manifest packaging/homebrew/Casks/repotory.rb       "$DEST_CASK/reponest.rb" \
-    's|^cask "repotory" do$|cask "reponest" do|' "$HEADER_FILE"
-  alias_manifest packaging/homebrew/Casks/repotory-mcp.rb   "$DEST_CASK/reponest-mcp.rb" \
-    's|^cask "repotory-mcp" do$|cask "reponest-mcp" do|' "$HEADER_FILE"
-  alias_manifest packaging/homebrew/Formula/repotory-mcp.rb "$DEST_FORMULA/reponest-mcp.rb" \
-    's|^class RepotoryMcp < Formula$|class ReponestMcp < Formula|' "$HEADER_FILE"
-else
-  echo "==> writing manifests"
-  write_manifest packaging/scoop/repotory.json     "$DEST_CASK/repotory.json"
-  write_manifest packaging/scoop/repotory-mcp.json "$DEST_CASK/repotory-mcp.json"
-  # The bucket alias keeps "bin": "repotory.exe" — the zip contains that file.
-  # Only the manifest FILENAME changes; the user still types `scoop install
-  # reponest` and gets the current binary under its real name.
-  #
-  # No comment header: JSON has no comment syntax, and a `#` line makes the
-  # manifest unparseable. The deprecation notice lives in the bucket README.
-  write_manifest packaging/scoop/repotory.json     "$DEST_CASK/reponest.json"
-  write_manifest packaging/scoop/repotory-mcp.json "$DEST_CASK/reponest-mcp.json"
-fi
+# read_aliases <conf-file>
+# Emits the alias table, one record per line, comments and blanks removed.
+# The table is per project and per target, so a project declares its own
+# deprecated tokens without this script knowing any of them.
+#
+# Homebrew records have three fields (source|destination|sed expression);
+# scoop records have two (source|destination) — JSON cannot carry a comment
+# header, so its aliases are plain copies under a different name.
+read_aliases() {
+  local conf="$1"
+  [ -f "$conf" ] || return 0
+  # Only WHOLE-LINE comments are stripped. A homebrew record carries a sed
+  # expression that uses `#` as its own delimiter, so a strip that reached
+  # mid-line would cut the expression in half and the alias would be written
+  # with no rename at all.
+  sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$conf"
+}
+
+echo "==> writing manifests"
+for project in "${PROJECTS[@]}"; do
+  src="packaging/$project/$TARGET"
+  if [ "$TARGET" = "homebrew" ]; then
+    for kind in "$DEST_CASK" "$DEST_FORMULA"; do
+      [ -d "$src/$kind" ] || continue
+      for f in "$src/$kind"/*.rb; do
+        [ -e "$f" ] || continue
+        write_manifest "$f" "$kind/$(basename "$f")"
+      done
+    done
+    while IFS='|' read -r a_src a_dst a_expr; do
+      [ -n "$a_src" ] || continue
+      alias_manifest "$src/$a_src" "$a_dst" "$a_expr" "$HEADER_FILE"
+    done < <(read_aliases "$src/aliases.conf")
+  else
+    for f in "$src"/*.json; do
+      [ -e "$f" ] || continue
+      write_manifest "$f" "$DEST_CASK/$(basename "$f")"
+    done
+    while IFS='|' read -r a_src a_dst; do
+      [ -n "$a_src" ] || continue
+      # The bucket alias keeps "bin": "repotory.exe" — the zip contains that
+      # file. Only the manifest FILENAME changes; the user still types
+      # `scoop install reponest` and gets the current binary under its real
+      # name.
+      #
+      # No comment header: JSON has no comment syntax, and a `#` line makes the
+      # manifest unparseable. The deprecation notice lives in the bucket
+      # README.
+      write_manifest "$src/$a_src" "$DEST_CASK/$a_dst"
+    done < <(read_aliases "$src/aliases.conf")
+  fi
+done
 
 # The README documents the install commands by name, so it moves with the
 # manifests. It is a plain file (not a workflow), so the ordinary token can
@@ -176,11 +238,10 @@ write_manifest "packaging/${TARGET}/README.md" README.md
 # worse than one that never tried.
 if [ "$WITH_WORKFLOWS" -eq 1 ]; then
   echo "==> writing CI workflows"
-  if [ "$TARGET" = "homebrew" ]; then
-    write_manifest packaging/homebrew/.github/workflows/tests.yml .github/workflows/tests.yml
-  else
-    write_manifest packaging/scoop/.github/workflows/verify.yml .github/workflows/verify.yml
-  fi
+  for f in "packaging/${TARGET}"/.github/workflows/*; do
+    [ -e "$f" ] || continue
+    write_manifest "$f" ".github/workflows/$(basename "$f")"
+  done
 else
   echo "==> skipping CI workflows (pass --with-workflows; needs a token with the 'workflow' scope)"
 fi
@@ -229,7 +290,8 @@ if [ "$PUSH" -eq 1 ]; then
   elif [ -n "${PACKAGING_PUSH_TOKEN:-}" ]; then
     API_AUTH=(-H "Authorization: Bearer ${PACKAGING_PUSH_TOKEN}")
   fi
-  if ! curl -fsSL --max-time 60 -H "Accept: application/vnd.github+json" "${API_AUTH[@]}" \
+  if ! curl -fsSL --max-time 60 -H "Accept: application/vnd.github+json" \
+       ${API_AUTH[@]+"${API_AUTH[@]}"} \
        "https://api.github.com/repos/sky-jiangcheng/cinder/releases/tags/v${VERSION}" \
      | python3 -c "
 import json, sys
@@ -250,12 +312,15 @@ for a in assets:
     exit 1
   fi
   stale=0
-  for d in $(grep -rhoE '[a-f0-9]{64}' packaging/homebrew packaging/scoop | sort -u); do
+  # The scan covers every namespace: a future project's manifests are checked
+  # by the same rule, without this file naming it.
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
     if ! grep -q "$d" "$SUMS"; then
       echo "STALE digest in packaging/: $d" >&2
       stale=1
     fi
-  done
+  done < <(find packaging -type f \( -name '*.rb' -o -name '*.json' \) -exec grep -hoE '[a-f0-9]{64}' {} + | sort -u)
   if [ "$stale" -ne 0 ]; then
     echo "ERROR: packaging/ carries digests that the v${VERSION} release does not serve." >&2
     echo "       The release workflow fills them in a commit to master — this" >&2

@@ -158,7 +158,7 @@ const FROZEN = [
     'JetBrains 插件 id',
   ],
   ['scripts/repotory-init/package.json', '"name": "repotory-init"', 'npm 包名'],
-  ['packaging/homebrew/Casks/repotory.rb', 'cask "repotory" do', 'Homebrew cask token'],
+  ['packaging/cinder/homebrew/Casks/repotory.rb', 'cask "repotory" do', 'Homebrew cask token'],
   ['scripts/install.ps1', '$env:LOCALAPPDATA\\Repotory', 'Windows 安装目录名'],
   ['skill/repotory/SKILL.md', 'name: repotory', 'skill 包名（skill/repotory/）'],
 ]

@@ -3,6 +3,9 @@
 Scoop bucket for [Cinder](https://github.com/sky-jiangcheng/cinder) — the
 local-first code project context base.
 
+This bucket is **shared**: it carries the manifests of every project that is
+published into it, and the set grows without the bucket being renamed.
+
 ## What is in here
 
 | Manifest | Package | Artifact |
@@ -19,7 +22,7 @@ previous version of those files pointed at RepoNest v1.8.0, so installing them
 silently fetched a six-versions-old build; that is the failure this alias
 policy exists to prevent.
 
-Use the new names:
+Use the new names instead.
 
 ## Install
 
@@ -59,7 +62,7 @@ so a manifest whose `hash` has not been refreshed will still update cleanly.
 ## Maintenance
 
 The manifests in `bucket/` are generated from
-[`packaging/scoop/`](https://github.com/sky-jiangcheng/cinder/tree/master/packaging/scoop)
+[`packaging/cinder/scoop/`](https://github.com/sky-jiangcheng/cinder/tree/master/packaging/cinder/scoop)
 in the main repository. **Edit them there**, then re-publish; editing here will
 be overwritten on the next release.
 

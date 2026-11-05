@@ -2,6 +2,27 @@
 
 Homebrew and Scoop manifests for Cinder release artifacts.
 
+## Layout
+
+```
+packaging/
+  homebrew/            shared: the tap's own README and CI
+  scoop/               shared: the bucket's own README and CI
+  <project>/homebrew/  one project's casks and formulas
+  <project>/scoop/     one project's scoop manifests
+```
+
+The tap (`sky-jiangcheng/homebrew-repo`) and the bucket
+(`sky-jiangcheng/scoop-repo`) are **shared** by every project that has a
+namespace here. A project joins by adding `packaging/<project>/homebrew/` and
+`packaging/<project>/scoop/` — the scripts and the guards discover the
+namespaces, so nothing has to be edited to register a new one.
+
+Each namespace may also carry an `aliases.conf`: the deprecated tokens of that
+project (the pre-rename `reponest` / `reponest-mcp` names), pointing at the
+current manifests so a command saved before the rename keeps working — and
+installs the current build instead of a fossil.
+
 The release workflow (`.github/workflows/release.yml`) publishes these assets per
 tag, and the manifests below point at them:
 
@@ -73,7 +94,7 @@ carrying its digest would reject every real download.
 
 | | Repository | User command |
 |---|---|---|
-| Homebrew | [sky-jiangcheng/homebrew-repo](https://github.com/sky-jiangcheng/homebrew-repo) | `brew tap sky-jiangcheng/repo` |
+| Homebrew | [sky-jiangcheng/homebrew-repo](https://github.com/sky-jiangcheng/homebrew-repo) | `brew tap sky-jiangcheng/homebrew-repo` |
 | Scoop | [sky-jiangcheng/scoop-repo](https://github.com/sky-jiangcheng/scoop-repo) | `scoop bucket add repo https://github.com/sky-jiangcheng/scoop-repo` |
 
 The tap keeps its own CI (`brew tap` → `brew install` → verify the installed
@@ -82,11 +103,11 @@ bucket validates each manifest's `hash` against the digest GitHub reports for
 the release asset.
 
 **This directory is the source of truth for both repositories, and the copy is
-automated.** `scripts/sync-packaging.sh` pushes these manifests — and the tap's
-and the bucket's own CI definitions, kept under `packaging/homebrew/` and
-`packaging/scoop/` — to the two repositories; `release.yml`'s `sync-packaging`
-job runs it after every release. Do not edit the tap or the bucket by hand:
-the next release overwrites them.
+automated.** `scripts/sync-packaging.sh` pushes every namespace's manifests —
+and the tap's and the bucket's own CI definitions, kept under
+`packaging/homebrew/` and `packaging/scoop/` — to the two repositories;
+`release.yml`'s `sync-packaging` job runs it after every release. Do not edit
+the tap or the bucket by hand: the next release overwrites them.
 
 That automation is recent. Until it existed, this paragraph claimed the copy
 happened "on every release" and nothing did it — the tap served the pre-rename
@@ -106,10 +127,10 @@ anything is pushed.
 
 ```bash
 # Ruby syntax only (no Homebrew needed)
-ruby -c homebrew/Casks/repotory.rb
+ruby -c cinder/homebrew/Casks/repotory.rb
 
 # JSON syntax only
-python3 -m json.tool scoop/repotory-mcp.json > /dev/null
+python3 -m json.tool cinder/scoop/repotory-mcp.json > /dev/null
 ```
 
 Both are safe to run in CI on every change.

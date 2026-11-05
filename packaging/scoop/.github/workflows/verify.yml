@@ -11,6 +11,10 @@ name: Verify manifests
 # generated from a local build of the same version, whose binary is a different
 # file from the one the release serves. Every user install then fails on
 # checksum verification, and nothing in the bucket would otherwise notice.
+#
+# The manifests are DISCOVERED, not listed: this bucket is shared by every
+# project published into it, so a new project's manifest is covered by the next
+# push without anyone editing this workflow.
 on:
   push:
     branches: [main, master]
@@ -29,20 +33,30 @@ permissions:
   contents: read
 
 jobs:
+  discover:
+    name: Discover manifests
+    runs-on: ubuntu-latest
+    outputs:
+      manifests: ${{ steps.list.outputs.manifests }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: List the manifests to verify
+        id: list
+        run: |
+          set -euo pipefail
+          manifests="$(python3 -c 'import glob, json, os; print(json.dumps(sorted(os.path.basename(p) for p in glob.glob("bucket/*.json"))))')"
+          echo "manifests=$manifests" >> "$GITHUB_OUTPUT"
+          echo "manifests: $manifests"
+
   verify:
     name: Verify ${{ matrix.manifest }}
+    needs: discover
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - manifest: repotory.json
-          - manifest: repotory-mcp.json
-          # The pre-rename aliases serve the SAME artifacts, so the digest
-          # check must hold for them too — otherwise the alias is free to rot
-          # into a version whose hash no longer matches.
-          - manifest: reponest.json
-          - manifest: reponest-mcp.json
+        manifest: ${{ fromJSON(needs.discover.outputs.manifests) }}
     steps:
       - uses: actions/checkout@v7
 

@@ -64,8 +64,8 @@
 
 #### 审计过程中新发现（2026-10-26，均已核实）
 
-- **[`packaging/homebrew/Casks/repotory.rb:13`] Cask 带了 `license "MIT"`** —— `license` 是 **Formula** 方法，`brew install --cask` 会拒绝整个定义（`undefined method 'license' for Cask`）。**这条意味着 `brew install --cask repotory` 从来就装不上**，只是因为清单从没推到 tap，无人发现。已修（Formula 里的 `license` 合法，保留）
-- **[`packaging/homebrew/Casks/repotory.rb` 的 `app` stanza]** 原本写 `app "Repotory.app"`，而 dmg 里实际是 **`repotory.app`**（`wails.json` 的 `outputfilename: "repotory"` 决定，与 `productName: "Repotory"` 无关）。macOS 默认大小写不敏感所以没炸，但 tap 的 runner 是大小写敏感的——已按实际产物名改正。**⚠ 2026-10-29 再次改动**：ADR-0034 把 `wails.json` 的 `name` 改成 `Repotory`（**`outputfilename` 仍是 `repotory`**，二进制名是 ADR-0006 的冻结标识），产物目录随之变为 `build/bin/Repotory.app`，所以 stanza **改回** `app "Repotory.app"`——这次它与产物名一致，不再是「改小写去迁就产物」，而是「产物名本身被改正了」。tap 的 `tests.yml` 断言（`/Applications/Repotory.app`）与 DMG 卷名（`--volname "Repotory"`）同步跟上
+- **[`packaging/cinder/homebrew/Casks/repotory.rb:13`] Cask 带了 `license "MIT"`** —— `license` 是 **Formula** 方法，`brew install --cask` 会拒绝整个定义（`undefined method 'license' for Cask`）。**这条意味着 `brew install --cask repotory` 从来就装不上**，只是因为清单从没推到 tap，无人发现。已修（Formula 里的 `license` 合法，保留）
+- **[`packaging/cinder/homebrew/Casks/repotory.rb` 的 `app` stanza]** 原本写 `app "Repotory.app"`，而 dmg 里实际是 **`repotory.app`**（`wails.json` 的 `outputfilename: "repotory"` 决定，与 `productName: "Repotory"` 无关）。macOS 默认大小写不敏感所以没炸，但 tap 的 runner 是大小写敏感的——已按实际产物名改正。**⚠ 2026-10-29 再次改动**：ADR-0034 把 `wails.json` 的 `name` 改成 `Repotory`（**`outputfilename` 仍是 `repotory`**，二进制名是 ADR-0006 的冻结标识），产物目录随之变为 `build/bin/Repotory.app`，所以 stanza **改回** `app "Repotory.app"`——这次它与产物名一致，不再是「改小写去迁就产物」，而是「产物名本身被改正了」。tap 的 `tests.yml` 断言（`/Applications/Repotory.app`）与 DMG 卷名（`--volname "Repotory"`）同步跟上
 - **[v2.14.0 的 dmg 内容]** 核验过：`repotory.app`，`CFBundleName=Repotory`、`CFBundleExecutable=repotory`（**这是 v2.14.0 的历史事实，不因 ADR-0034 改写**；新产物的 bundle 目录是 `Repotory.app`，但 `CFBundleExecutable` 仍是 `repotory`）
 - **[`internal/app/surface.go` 的注册表是完备的]** —— 原审计说「新增绑定会自动获得 HTTP 可达性、无门禁」是**错的**：注册表 + 完整性断言已经堵住了。真正的缺口是前端↔绑定的跨语言契约（已补测试）
 - **[`internal/service/service.go:29` 的 `Service.roDB`] 是死代码** —— 全项目无任何读取点，三个入口全传 nil

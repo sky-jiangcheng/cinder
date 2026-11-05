@@ -31,8 +31,11 @@ cd "$ROOT"
 
 fail=0
 
+# The manifests are discovered per namespace: every packaging/<project>/…
+# manifest is checked, so a new project is covered without editing this file.
+
 # --- 1. Scoop manifests must be valid JSON ----------------------------------
-for f in packaging/scoop/*.json; do
+for f in packaging/*/scoop/*.json; do
   [ -e "$f" ] || continue
   if ! out="$(python3 -m json.tool "$f" > /dev/null 2>&1)"; then
     echo "ERROR: $f is not valid JSON:"
@@ -61,7 +64,7 @@ done
 # `head` are Formula-only too.
 FORMULA_ONLY_METHODS="license|test|depends_on|head|keg_only|deprecated"
 
-for f in packaging/homebrew/Casks/*.rb; do
+for f in packaging/*/homebrew/Casks/*.rb; do
   [ -e "$f" ] || continue
   # Match a DSL call at the start of a line, indented — not a mention inside a
   # comment. A comment mentioning "license" must not trip the guard.
@@ -72,7 +75,12 @@ for f in packaging/homebrew/Casks/*.rb; do
     fail=1
   fi
   rm -f /tmp/cask-dsl-hit.$$
-  # Ruby syntax: cheap, and it catches a half-finished edit.
+done
+
+# Ruby syntax: cheap, and it catches a half-finished edit. Both casks and
+# formulas are Ruby, so both are checked.
+for f in packaging/*/homebrew/Casks/*.rb packaging/*/homebrew/Formula/*.rb; do
+  [ -e "$f" ] || continue
   if command -v ruby > /dev/null 2>&1; then
     if ! ruby -c "$f" > /dev/null 2>&1; then
       echo "ERROR: $f is not valid Ruby:"
@@ -88,4 +96,6 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "packaging manifests OK ($(ls packaging/scoop/*.json | wc -l | tr -d ' ') scoop, $(ls packaging/homebrew/Casks/*.rb | wc -l | tr -d ' ') cask)"
+scoop_count=$(find packaging -type f -path '*/scoop/*.json' | wc -l | tr -d ' ')
+rb_count=$(find packaging -type f -path '*/homebrew/*/*.rb' | wc -l | tr -d ' ')
+echo "packaging manifests OK (${scoop_count} scoop, ${rb_count} homebrew)"

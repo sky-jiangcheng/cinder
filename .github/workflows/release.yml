@@ -918,12 +918,14 @@ jobs:
           VER="${{ steps.ver.outputs.version }}"
           SUMS="assets/releases/v$VER/SHA256SUMS"
           # Gate 1: no placeholder may survive in the MANIFESTS. brew/scoop
-          # hard-fail on them. The grep is scoped to the manifest trees only:
+          # hard-fail on them. The grep is scoped to the manifest FILES only:
           # an unscoped grep over packaging/ also matched the README, which
           # documents the placeholder format verbatim, so this gate failed on
           # its own docs and blocked every release fill since it was added
-          # (v1.13.0, v1.14.0, v1.14.1).
-          if grep -rn "__FILL_SHA256_" packaging/homebrew packaging/scoop; then
+          # (v1.13.0, v1.14.0, v1.14.1). The file filter is also what makes
+          # this namespace-agnostic: every packaging/<project>/… manifest is
+          # covered, and a new project needs no change here.
+          if grep -rn "__FILL_SHA256_" --include='*.rb' --include='*.json' packaging/; then
             echo "ERROR: at least one asset this release should ship is missing" >&2
             echo "       (its manifest kept the placeholder). Check the release page." >&2
             exit 1
@@ -931,10 +933,10 @@ jobs:
           # Gate 2: freshness. A normal bump leaves the PREVIOUS release's
           # digests in place; if --fill-sha256 skipped an asset that exists in
           # no manifest line it touched, a stale digest would silently ship
-          # and break every install. Every 64-hex digest in packaging/ must
+          # and break every install. Every 64-hex digest in the manifests must
           # appear in THIS release's SHA256SUMS.
           bad=0
-          for d in $(grep -rhoE '[a-f0-9]{64}' packaging/homebrew packaging/scoop | sort -u); do
+          for d in $(grep -rhoE '[a-f0-9]{64}' --include='*.rb' --include='*.json' packaging/ | sort -u); do
             if ! grep -q "$d" "$SUMS"; then
               echo "STALE digest in packaging/: $d"
               bad=1

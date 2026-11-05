@@ -12,6 +12,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **打包清单加一层命名空间：tap 与 bucket 变成这对仓共享的一对仓库（2026-11-05）**：清单从 `packaging/homebrew/Casks/…` 与 `packaging/scoop/…` 搬到 `packaging/<project>/homebrew/…` 与 `packaging/<project>/scoop/…`（本仓即 `packaging/cinder/`），**`homebrew-repo` 与 `scoop-repo` 这对仓从此服务所有项目，而不只是 Cinder 一个**。**为什么现在做**：仓 slug 改叫 `cinder` 之后，「一个仓 = 一个项目」的假设就开始碍事——**下一个项目要装进同一对 tap / bucket，就得改遍每个脚本里写死的路径**。**改法不是搬目录，是把「项目」从脚本里拿掉**：`scripts/sync-packaging.sh`、`scripts/update-manifests.sh`、`scripts/check-packaging-manifests.sh`、`scripts/check-version-drift.mjs` 与 `release.yml` 的两道 digest 门**全部改为按命名空间发现**（`packaging/*/…`），**新增项目只要放一个目录进来，一个脚本都不用改**。**别名清单也下沉到各命名空间**（`aliases.conf`）：改名之前被人存进终端的 token（`reponest` / `reponest-mcp`）由各项目自己声明，同步脚本不再知道任何项目名；**别名文件首行打 `# DEPRECATED-ALIAS:` 标记**，tap 的 CI 据此跳过别名（别名是当前清单的副本，装它证明不了当前清单装得上，还白下一份产物）。**tap / bucket 的 CI 一并改成发现式**：清单按名安装、**bundle 名从清单自己的 `app` stanza 读**（不再写死 `/Applications/Cinder.app`），**新项目的清单下一次推送就自动进 CI**。**顺手修掉一个真 bug**：`sync-packaging.sh` 的 `"${API_AUTH[@]}"` 在 **macOS 自带的 bash 3.2 + `set -u`** 下报 `unbound variable` 而**中止推送**（CI 的 ubuntu 是 bash 5，一直没事，所以只有本地推会炸），已改成 `${API_AUTH[@]+"${API_AUTH[@]}"}`。**正例已验**：造一个第二命名空间跑一遍同步，**两个项目的清单与别名全部落到 tap / bucket，CI 的发现结果同步变多**；**负例已验**：把某个 digest 改成全零，`--fill-sha256` 依 URL 里的资产名把它修回原值——**填摘要不再靠手写资产清单，而是从清单自己的下载 URL 里读**。**不动 schema / 不改 MCP 工具面 / 不涨契约版本**（`CoreVersion` 保持 `1.0.0`）
+
 ## [2.31.0] - 2026-11-05
 
 ### 变更
