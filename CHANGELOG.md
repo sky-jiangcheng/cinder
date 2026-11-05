@@ -4,7 +4,7 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
-## [Unreleased]
+## [2.30.0] - 2026-11-05
 
 ### 变更
 
@@ -25,6 +25,8 @@
 > 下一个想给 Wails 加常驻的人会因为这段分析省掉一次排查。
 
 - **Release 页面正文改成 CHANGELOG 里的条目标题，不再是一串 commit subject（2026-11-04）**：v2.29.0 的 Release 正文只有一行 `**Full Changelog**: …`——GitHub 的 `generate_release_notes` 产出的是 **commit subject 清单 + compare 链接**，而本仓的 commit 大多是内部动作（`fix(test): 比对要归一化`、`chore(packaging): fill sha256`、`docs(changelog): 切出 v2.29.0`），读者在发布页上看不出这一版**用户可见地变了什么**。而 CHANGELOG 里早就有写给读者的那一句——每条条目开头的**加粗标题**（「IDE 面板重画：按钮不再被裁切…」，后面才是推导、决策与代价）。**那道标题就是发布页该给的东西**；剩下的推导进的是仓库与 CHANGELOG 链接，不是发布页。改法：`scripts/release-notes.mjs` 把目标版本那一节压成标题清单（按 CHANGELOG 自己的 `###` 小节分组），`release.yml` 新增一个 `release-notes` job 生成它，`create-release` 把它作为 `body_path` 交给 release action——**action 把它前置**在 GitHub 自动生成的 notes 前面，于是 commit 清单与 compare 链接仍在下面，一行不少。**两道门**：① **每条条目必须以加粗标题开头**，否则「发布什么」就落空——CI 新增 `release-notes` job 用 `node scripts/release-notes.mjs --check` 在**每次推送**上就报红（不用等打 tag）；② **那道门必须能红**，job 还会拿 `scripts/testdata/release-notes/` 里两份**故意的坏 CHANGELOG**（一条条目缺标题 / 一节里一条都没有）喂一遍脚本并断言它**必须失败**——只绿的门不算门。**两个实现细节**：① `release-notes` 是**独立 job** 而不是 `create-release` 里的一步，因为后者的 workspace root 放着发布产物，而那一步的 `SHA256SUMS` 会把 root 下**每个文件**都算进去（安装脚本拿它对用户实际下载的文件做校验）——一份 CHANGELOG 落在那儿会让所有人装不上；notes 因此下载到 `notes/` 子目录，并在发布前断言它**存在且非空**（action 读不到 `body_path` 时只**警告**并回落到空正文，那会悄悄发出一个只有 commit 清单的版本，正是本条要防的事）。② 仓库地址**从 CHANGELOG 自己的链接定义读**（`[2.29.0]: https://github.com/<owner>/<repo>/compare/…`），不写死第二份。**不动**：不改产品行为、不改 schema、不动其它 ADR 决策
+
+## [Unreleased]
 
 ## [2.29.0] - 2026-11-04
 
@@ -780,7 +782,9 @@
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
 [Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.29.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/repotory/compare/v2.30.0...HEAD
 [2.29.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.28.0...v2.29.0
+[2.30.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.29.0...v2.30.0
 [2.28.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.27.0...v2.28.0
 [2.27.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.26.0...v2.27.0
 [2.26.0]: https://github.com/sky-jiangcheng/repotory/compare/v2.25.0...v2.26.0
