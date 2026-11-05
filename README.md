@@ -94,7 +94,7 @@ Prefer a visual dashboard, markdown note editor, and human review queue?
 | Method | Command / Download |
 | :--- | :--- |
 | **Direct Download** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
-| **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/repo/repotory` |
+| **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
 | **One-Line Script (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
 

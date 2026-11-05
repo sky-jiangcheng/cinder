@@ -52,7 +52,7 @@ iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts
 ```
 
 #### 包管理器与二进制直接下载
-- **Homebrew (macOS)**：`brew install --cask sky-jiangcheng/repo/repotory`
+- **Homebrew (macOS)**：`brew install --cask sky-jiangcheng/homebrew-repo/repotory`
 - **Scoop (Windows)**：`scoop install repo/repotory`
 - **二进制下载**：访问 [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) 下载 `.dmg` / `.tar.gz` / `.zip`
 

@@ -73,8 +73,8 @@ Install from a release (preferred), then register:
 ```bash
 # No prerequisites — download repotory-mcp-<target>.tar.gz / .zip from Releases
 # Or use a package manager:
-#   macOS   : brew tap sky-jiangcheng/repo && brew install --cask sky-jiangcheng/repo/repotory-mcp
-#   Linux   : brew tap sky-jiangcheng/repo && brew install sky-jiangcheng/repo/repotory-mcp
+#   macOS   : brew tap sky-jiangcheng/homebrew-repo && brew install --cask sky-jiangcheng/homebrew-repo/repotory-mcp
+#   Linux   : brew tap sky-jiangcheng/homebrew-repo && brew install sky-jiangcheng/homebrew-repo/repotory-mcp
 #   Windows : scoop bucket add repo https://github.com/sky-jiangcheng/scoop-repo && scoop install repo/repotory-mcp
 ```
 

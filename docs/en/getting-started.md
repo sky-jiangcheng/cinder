@@ -54,7 +54,7 @@ iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts
 ```
 
 #### Package Managers & Direct Download
-- **Homebrew (macOS)**: `brew install --cask sky-jiangcheng/repo/repotory`
+- **Homebrew (macOS)**: `brew install --cask sky-jiangcheng/homebrew-repo/repotory`
 - **Scoop (Windows)**: `scoop install repo/repotory`
 - **Direct Downloads**: Grab `.dmg` / `.tar.gz` / `.zip` from [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases).
 

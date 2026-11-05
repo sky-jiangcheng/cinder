@@ -118,8 +118,8 @@ function printBinaryGuidance() {
   console.log(`
 Could not find the ${BINARY_NAME} binary. Install it with one of:
 
-  macOS   brew tap sky-jiangcheng/repo && brew install --cask sky-jiangcheng/repo/repotory-mcp
-  Linux   brew tap sky-jiangcheng/repo && brew install repotory-mcp
+  macOS   brew tap sky-jiangcheng/homebrew-repo && brew install --cask sky-jiangcheng/homebrew-repo/repotory-mcp
+  Linux   brew tap sky-jiangcheng/homebrew-repo && brew install repotory-mcp
   Windows scoop bucket add repo https://github.com/sky-jiangcheng/scoop-repo && scoop install repo/repotory-mcp
   Anywhere: download repotory-mcp-<target> from ${RELEASES_URL}
 

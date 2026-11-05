@@ -13,8 +13,8 @@
 //   ② 标识层冻结清单逐条仍在原处——冻结不是「不检查」，是「检查它还在」
 //   ③ 当前面（用户看得见的面）不再出现旧品牌词；历史面（ADR / CHANGELOG /
 //      评审记录 / 设计产物 / TODO 的历史条目）故意保留旧名，按前缀放行
-//   ④ 改过名的仓地址不留当前面——旧仓地址与旧 Pages 路径都不是「旧一点」，
-//      它们是打不开的链接
+//   ④ 仓地址只许指向真存在的仓——旧仓地址与旧 Pages 路径都不是「旧一点」，
+//      它们是打不开的链接；白名单由品牌词与同步脚本推导，不手抄
 //   ⑤ App 里的 BrandMark 组件与母图 build/icon.svg 的字形必须是同一条路径
 //
 // 依赖：git（只扫已提交的文件——未提交的本地中间物不该决定门红不红）。
@@ -249,8 +249,8 @@ for (const file of scanned) {
   })
 }
 
-// ------------------------------------------ ④ 改过名的仓地址不留当前面 ----
-
+// ------------------------------------------ ④ 仓地址只许指向真存在的仓 ----
+//
 // The repository slugs changed on 2026-11-05 (ADR-0049 addendum two), and
 // they had changed once before (v2.0.0). A stale address is not "slightly
 // old": GitHub Pages does not follow a rename — the old path answers 404
@@ -269,20 +269,77 @@ for (const file of scanned) {
 // (up to v1.16) and repotory (v2.0 to v2.31), the latter also the stem of
 // the separate repository's repotory-agent. Everything after the stem
 // belongs to the same stale address, so the stem is what gets hunted.
+//
+// But a rename is not the only way to end up pointing at nothing. A typo
+// does it too, and it does it in the one place everybody copies an install
+// command out of: every documented `brew install --cask
+// sky-jiangcheng/<tap>/…` used to name a repository that had never
+// existed (`sky-jiangcheng/repo` — 404, and no redirect to save it) while
+// the real tap was `sky-jiangcheng/homebrew-repo`. Nothing caught it: the
+// tap's own CI installs a manifest by its path INSIDE the tap and never
+// types the tap's own address, so the only thing that ever had to be
+// right was the thing nobody checked.
+//
+// So the addresses allowed in a current surface are an ALLOWLIST, derived
+// rather than written down twice:
+//
+//   · the mother and the agent words from build/brand.json, lowercased
+//     — the two projects' own repositories;
+//   · the tap and the bucket slugs from scripts/sync-packaging.sh — the
+//     script that actually pushes to them is the authority on what they
+//     are called.
+//
+// Anything else under the org is a dead link waiting to be typed.
+const ORG = 'sky-jiangcheng'
 const OLD_SLUG_STEMS = ['repo-nest', 'repotory']
-const oldAddressRe = new RegExp(
-  `sky-jiangcheng(?:\\.github\\.io)?/(?:${OLD_SLUG_STEMS.join('|')})[A-Za-z0-9._-]*`
+
+const allowedSlugs = new Set(
+  [brand.mother, brand.agent].filter(Boolean).map((word) => word.toLowerCase())
 )
+
+// The tap and the bucket are named in the script that clones and pushes to
+// them. Reading the names from there keeps a second copy of them from
+// existing here — a copy is a copy that can drift.
+const syncFile = 'scripts/sync-packaging.sh'
+if (!existsSync(join(root, syncFile))) {
+  issues.push(`${syncFile}: 文件不存在——tap / bucket 的仓名没有第二处真相源可比对`)
+} else {
+  for (const m of read(syncFile).matchAll(/REPO_SLUG="[^"]*\/([A-Za-z0-9._-]+)"/g)) {
+    allowedSlugs.add(m[1].replace(/\.git$/, ''))
+  }
+}
+
+// An address under the org, wherever it shows up: a repository URL, an API
+// path, a raw file path, a Pages path, or the `owner/tap` shorthand
+// Homebrew takes. The optional ".github.io" is the Pages host, whose path
+// is the repository name.
+const addressRe = new RegExp(`${ORG}(?:\\.github\\.io)?/([A-Za-z0-9._-]+)`, 'g')
 
 for (const file of scanned) {
   if (!existsSync(join(root, file))) continue
   read(file)
     .split('\n')
     .forEach((line, i) => {
-      if (!oldAddressRe.test(line)) return
-      issues.push(
-        `${file}:${i + 1}: 当前面还指着改过名的仓地址 —— ${line.trim().slice(0, 90)}`
-      )
+      const slugs = new Set()
+      for (const m of line.matchAll(addressRe)) {
+        // A trailing ".git" and a trailing dot or hyphen belong to the
+        // sentence, not to the name.
+        slugs.add(m[1].replace(/\.git$/, '').replace(/[-.]+$/, ''))
+      }
+      for (const slug of slugs) {
+        if (allowedSlugs.has(slug)) continue
+        if (OLD_SLUG_STEMS.some((stem) => slug.startsWith(stem))) {
+          issues.push(
+            `${file}:${i + 1}: 当前面还指着改过名的仓地址 —— ${line.trim().slice(0, 90)}`
+          )
+        } else {
+          issues.push(
+            `${file}:${i + 1}: 当前面指着白名单外的仓地址「${ORG}/${slug}」—— ` +
+              `白名单只有 ${[...allowedSlugs].sort().join(' / ')}；` +
+              `照抄不出来的安装命令就是从这种行里长出来的 —— ${line.trim().slice(0, 60)}`
+          )
+        }
+      }
     })
 }
 
@@ -349,7 +406,8 @@ if (issues.length > 0) {
     '\n修法：显示层改成 build/brand.json 里的词；标识层不许动——' +
       '它是接口不是品牌（ADR-0049 决策③），要动先走契约 major bump。' +
       '旧仓地址换成 GitHub 上现在那个路径（仓地址不是品牌词，它跟实际路径走，' +
-      '改名当天必须同批换掉）。'
+      '改名当天必须同批换掉）；白名单外的仓地址先问一句「这个仓真的存在吗」，' +
+      '再决定是改地址还是把它加进真相源。'
   )
   process.exit(1)
 }
@@ -357,5 +415,6 @@ if (issues.length > 0) {
 console.log(
   `brand OK: 母品牌 ${brand.mother} / 桌面 ${brand.desktop} / 助手 ${brand.agent}；` +
     `${BRAND_SITES.length} 处产品名一致，${FROZEN.length} 条冻结标识层仍在原处，` +
-    `${scanned.length} 个当前面文件无旧品牌词、无改过名的仓地址，BrandMark 与母图同源。`
+    `${scanned.length} 个当前面文件无旧品牌词，仓地址都在白名单里（` +
+    `${[...allowedSlugs].sort().join(' / ')}），BrandMark 与母图同源。`
 )

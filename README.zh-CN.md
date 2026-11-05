@@ -93,7 +93,7 @@ claude mcp add repotory -- "$(which repotory-mcp)"
 | 方式 | 命令 / 资产 |
 | :--- | :--- |
 | **直接下载** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
-| **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/repo/repotory` |
+| **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
 | **一行脚本 (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
 
