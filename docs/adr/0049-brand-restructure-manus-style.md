@@ -248,6 +248,27 @@ v2.31.0 的发布流水线里，**只有 VS Code Marketplace 那一格红了**�
 ### 未改的（要单独批准）
 
 - **GitHub 仓 slug**：远端 `sky-jiangcheng/repotory` 与 `sky-jiangcheng/repotory-agent` **保持原样**。改 slug 会让每个老 clone 要手动改一次 remote，属于共享状态，要单独决定；**这一条要写进发布说明**。
+  - **→ 已在「补注二」里被单独批准并执行（2026-11-05，同日）**：slug 最终改成了 `sky-jiangcheng/cinder` 与 `sky-jiangcheng/warden`。上面那句是当时的判断，**保留不改**——决策④说 slug 可改、但要单独批，批与不批是两次决定，抹掉前者就看不出后者为什么单独存在。
+
+### 补注二：仓 slug 真改了（2026-11-05，同日）
+
+上一节说 slug 保持原样、需单独批准——**那一条当天就被单独批准并执行了**。
+
+**改了什么**：`sky-jiangcheng/repotory` → **`sky-jiangcheng/cinder`**；独立仓 `sky-jiangcheng/repotory-agent` → **`sky-jiangcheng/warden`**。两个仓的 **description 与 homepage 一并修正**——它们此前是陈年旧文案（主仓写着「Git commit statistics tool」，独立仓写着「RepoNest」），**仓名换了、简介还留着上一个项目的名字，比不改更糟**。
+
+**范围只有「仓与对外名称层」**：GitHub slug、仓简介与 homepage、仓内所有指向这两个仓的链接、文档与发布说明。**标识层一字未动**——决策③的 12 条冻结项全部照旧。这不矛盾：决策④把 slug 归在「可改」那一侧，决策③管的是 `repotory_*` 那些**别人机器认的字面量**；slug 是**别人也认**的，但**改名它不破坏任何已装好的东西**（不像改 MCP 工具名会断掉用户机器上的 `claude mcp add`）。
+
+**三件必须写进发布说明的事**：
+
+1. **老 clone 要手动改一次 remote**。GitHub 对改名后的旧仓地址发 **301 重定向**，所以 `git clone` / `git fetch` 旧 URL **仍能工作**；但**已经 clone 过的本地仓**的 remote 还指着旧地址，`git pull` 会继续走重定向——**能跑，但每次多一跳**。手动改一次：`git remote set-url origin https://github.com/sky-jiangcheng/cinder.git`。
+2. **GitHub Pages 不跟着重定向**。仓改名后，旧文档站路径 `sky-jiangcheng.github.io/repotory/` **直接 404**（实测），新路径 `sky-jiangcheng.github.io/cinder/` **200**（实测）。**这是 GitHub 的行为，不是本仓的 bug**——仓改名只重定向**仓地址**，**Pages 站点路径跟仓名走，不继承那次重定向**。所以文档站链接必须在**同一批**里改掉，否则一批旧链接会静默变 404——**这正是本次把 Pages 路径与 slug 放在同一次提交里的原因**。
+3. **旧 URL 的 301 没有永久保证**。GitHub 的仓改名重定向不承诺长期保留；**指向旧仓的链接（README、issue、第三方文档）终将失效**。
+
+**顺带逼出来的一处结构问题**：仓名改了之后，「**一个仓 = 一个项目**」的假设开始碍事——**下一个项目要装进同一对 tap / bucket，就得改遍每个脚本里写死的路径**。因此同批把打包清单加了**命名空间层**（`packaging/<project>/<target>/…`），tap 与 bucket 从此是**这对仓共享的一对仓库**：新增项目只要放一个目录进来，一个脚本都不用改。详见 CHANGELOG 的「打包清单加一层命名空间」与 `packaging/README.md`。
+
+**守门**：独立仓的 `check-brand.mjs` 原先把上游主仓地址写成一条**冻结项**（主仓一改名它就会红——**冻的是别人的仓名，冻错了**）。现在那条改成**从母品牌词推导**：`https://github.com/sky-jiangcheng/<母品牌小写>`，母品牌变了地址跟着变，**不再是一条写死的字面量**。负例已验：把母品牌改成 `Cinderx`，门立刻红三处。
+
+**未做**：仓 slug 改名**不动任何数据**（用户的数据目录、库文件名、工具前缀全在标识层里，一字未动）；**不新开一条旧名的跳转服务**——GitHub 的 301 已经覆盖了 clone 与 fetch 这两种最常见的用法，而 Pages 那条**本来就不继承**，补它要自己再养一个服务，代价与收益不成比例，改为**把新路径写进发布说明与文档站导航**。
 
 ### 验证
 

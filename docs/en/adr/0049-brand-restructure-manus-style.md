@@ -248,6 +248,27 @@ Not the build, not the signature, not a version conflict — **the VS Code Marke
 ### Left alone (needs separate approval)
 
 - **The GitHub repository slugs**: `sky-jiangcheng/repotory` and `sky-jiangcheng/repotory-agent` **stay as they are**. Renaming a slug makes every old clone change its remote by hand, which is shared state and needs its own decision; **this has to go into the release notes**.
+  - **→ separately approved and executed in "Addendum two" (same day, 2026-11-05)**: the slugs finally became `sky-jiangcheng/cinder` and `sky-jiangcheng/warden`. The sentence above is that day's judgement and **is kept as it is** — decision ④ says a slug may change but needs its own approval, and approving versus not approving are two separate decisions; erasing the first would hide why the second exists at all.
+
+### Addendum two: the repository slugs really did change (2026-11-05, same day)
+
+The section above says the slugs stay as they are and need separate approval — **that approval was given and acted on the same day**.
+
+**What changed**: `sky-jiangcheng/repotory` → **`sky-jiangcheng/cinder`**; the separate repository `sky-jiangcheng/repotory-agent` → **`sky-jiangcheng/warden`**. Both repositories' **description and homepage were fixed at the same time** — they were stale copy from years back (the main repository said "Git commit statistics tool", the separate one said "RepoNest"), and **a renamed repository whose blurb still carries the previous project's name is worse than one that was never renamed**.
+
+**The scope was the repository and outward-facing name layer only**: the GitHub slugs, the repository descriptions and homepages, every in-repo link pointing at those two repositories, the documentation and the release notes. **Not one character of the identifier layer moved** — all twelve frozen items of decision ③ stand. That is not a contradiction: decision ④ puts the slug on the "may change" side, while decision ③ governs the `repotory_*` literals that **other people's machines recognise**. A slug is recognised by other people too, but **renaming it breaks nothing already installed** — unlike renaming an MCP tool, which breaks every user's `claude mcp add` on their machine.
+
+**Three things that have to go into the release notes**:
+
+1. **Old clones must fix their remote once by hand**. GitHub answers the old repository URL with a **301 redirect** after a rename, so `git clone` / `git fetch` against the old URL **still work**; but a **repository that was already cloned** still points its remote at the old address, so `git pull` keeps going through the redirect — **it works, with one extra hop every time**. Fix it once: `git remote set-url origin https://github.com/sky-jiangcheng/cinder.git`.
+2. **GitHub Pages does not follow the redirect**. After the rename, the old documentation-site path `sky-jiangcheng.github.io/repotory/` **returns 404** (measured), and the new path `sky-jiangcheng.github.io/cinder/` **returns 200** (measured). **That is GitHub's behaviour, not a bug in this repository** — a rename redirects **repository addresses** only, and the **Pages site path follows the repository name and does not inherit that redirect**. The documentation-site links therefore have to move **in the same batch**, or a batch of old links silently turns into 404s — **which is exactly why the Pages path and the slug went into one commit**.
+3. **The 301 on the old URL is not a permanent guarantee**. GitHub does not promise to keep a rename redirect forever; **links pointing at the old repository (READMEs, issues, third-party documentation) will eventually break**.
+
+**A structural problem the rename forced into the open**: once the repository name changed, the assumption that **one repository equals one project** started to get in the way — **the next project that wants to live in the same pair of tap and bucket would mean editing the hardcoded path in every script**. So the same batch added a **namespace layer** to the packaging manifests (`packaging/<project>/<target>/…`), and the tap and bucket are now **one pair of repositories shared by every project**: a new project only has to drop in a directory, and not one script has to change. See the CHANGELOG entry "the packaging manifests gain a namespace layer" and `packaging/README.md`.
+
+**Guard**: the separate repository's `check-brand.mjs` used to carry the upstream main repository's address as a **frozen item** — it would have gone red the moment the main repository was renamed, because **it froze somebody else's repository name**. That entry is now **derived from the parent brand word** instead: `https://github.com/sky-jiangcheng/<parent brand, lowercased>`, so the address follows the brand, and **it is no longer a hardcoded literal**. Negative case verified: change the parent brand to `Cinderx` and the gate goes red three times over.
+
+**Not done**: renaming the repository slug **moves no data** (the user's data directory, database file name and tool prefix all live in the identifier layer and did not move); **no redirect service was stood up for the old name** — GitHub's 301 already covers clone and fetch, the two most common uses, while the Pages path **never inherited the redirect in the first place**; covering that would mean running another service, whose cost does not match its benefit, so the new path went into the release notes and the documentation-site navigation instead.
 
 ### Verification
 
