@@ -71,6 +71,10 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
   }, [])
 
   if (collapsed) {
+    // The folded handle is the rail's whole presence, so it carries the one
+    // number that matters: how many compiled pages are waiting for a human
+    // decision. Context reaches the user without the rail eating the page.
+    const waiting = pending?.length ?? 0
     return (
       <button
         type="button"
@@ -80,6 +84,7 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
         title={t('shell.contextShow')}
       >
         <Icon name="panel-right" size={16} />
+        {waiting > 0 && <span className={s.handleCount}>{waiting}</span>}
       </button>
     )
   }

@@ -100,19 +100,22 @@ function cssVars(block: string): Record<string, string> {
 // --- The brand SSOT --------------------------------------------------------
 
 interface Master {
-  /** The card's field: the warm paper. */
-  field: string
-  /** The frame's stroke and the letter's fill: the near-black ink. */
+  /** The seal's ground: the solid warm ink field. */
   ink: string
+  /** The letter knocked out of the field: the off-white paper. */
+  paper: string
 }
 
 async function readMaster(): Promise<Master> {
+  // The master is an inverse seal (ADR-0050): a solid ink field rect with the
+  // glyph path knocked out of it in paper. There is no hairline frame to read
+  // any more — the two brand colours are the field's fill and the glyph's.
   const svg = await readRepoFile('..', 'build', 'icon.svg')
-  const field = /<rect width="512" height="512" fill="(#[0-9A-Fa-f]{6})"/.exec(svg)
-  const ink = /<rect x="26" y="26"[^>]*stroke="(#[0-9A-Fa-f]{6})"/.exec(svg)
-  expect(field, 'brand master: could not read the card field').not.toBeNull()
-  expect(ink, 'brand master: could not read the frame ink').not.toBeNull()
-  return { field: field![1].toUpperCase(), ink: ink![1].toUpperCase() }
+  const ink = /<rect width="512" height="512" fill="(#[0-9A-Fa-f]{6})"/.exec(svg)
+  const paper = /<path[^>]*\sfill="(#[0-9A-Fa-f]{6})"/.exec(svg)
+  expect(ink, 'brand master: could not read the ink field').not.toBeNull()
+  expect(paper, 'brand master: could not read the paper glyph').not.toBeNull()
+  return { ink: ink![1].toUpperCase(), paper: paper![1].toUpperCase() }
 }
 
 // --- The tokens ------------------------------------------------------------
@@ -137,7 +140,7 @@ describe('brand palette', () => {
   it('declares the master colours as the brand tokens', async () => {
     const master = await readMaster()
     const { light, dark } = await readThemes()
-    expect(light.vars['--brand-paper'], '--brand-paper').toBe(master.field.toLowerCase())
+    expect(light.vars['--brand-paper'], '--brand-paper').toBe(master.paper.toLowerCase())
     expect(light.vars['--brand-ink'], '--brand-ink').toBe(master.ink.toLowerCase())
     // The dark theme must NOT redefine them. The brand's two colours are the
     // same in both themes — the themes swap which one is ink and which is
@@ -154,7 +157,7 @@ describe('brand palette', () => {
     const master = await readMaster()
     const { light, dark } = await readThemes()
     expect(light.vars['--text-primary']).toBe(master.ink.toLowerCase())
-    expect(dark.vars['--text-primary']).toBe(master.field.toLowerCase())
+    expect(dark.vars['--text-primary']).toBe(master.paper.toLowerCase())
   })
 
   it('no longer wears the cold blue it used to wear', async () => {
@@ -175,7 +178,7 @@ describe('brand palette', () => {
     // the dock become two products again.
     const master = await readMaster()
     const src = await readRepoFile('src', 'components', 'BrandMark.tsx')
-    expect(src).toContain(master.field)
+    expect(src).toContain(master.paper)
     expect(src).toContain(master.ink)
   })
 })

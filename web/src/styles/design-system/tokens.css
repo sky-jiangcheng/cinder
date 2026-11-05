@@ -1,64 +1,67 @@
 /* ============================================
    Design Tokens
-   Warm-paper editorial style — the palette is derived from the brand SSOT
-   (build/icon.svg) so the app reads as the same object as the icon in the
-   dock (ADR-0037).
+   Neutral-minimal warm-ink family (ADR-0050). The palette collapses to two
+   brand colours — the warm ink of the inverse-seal mark and the off-white
+   paper knocked out of it — so the app reads as the same object as the icon
+   in the dock. Every value below is a derivative of the master SSOT
+   (build/icon.svg); brandTokens.test.ts reads the master and pins the two
+   anchors so a hand-kept copy cannot drift.
    ============================================ */
 
 :root {
   /* --- Brand SSOT ---------------------------------------------------
-     These two values are the brand's entire palette: the warm-paper field
-     and the near-black ink of the mark in build/icon.svg. Every colour
-     below is a derivative of them.
+     These two values are the brand's entire palette: the warm ink field
+     and the off-white paper glyph of the mark in build/icon.svg. Every
+     colour below is a derivative of them.
 
      They are kept here as literal values (not as colour-mix() recipes)
      because a test reads build/icon.svg and compares the two files — a
      hand-kept copy is exactly the failure mode CONTRIBUTING.md warns about
      ("four half-landed rebrands, every one of them a hand-kept copy"). */
-  --brand-paper: #F5F0E4;
-  --brand-ink: #1B1B1B;
+  --brand-ink: #34322D;
+  --brand-paper: #F7F4EE;
 
-  /* Backgrounds — the warm-paper family. The page is a shade deeper than
-     the brand card so a card still reads as a card on top of it; the card
-     surface is paper white rather than screen white, because pure #ffffff
-     next to a warm ground looks dirty. */
-  --bg-primary: #F0EBDF;
-  --bg-secondary: #FCFAF4;
-  --bg-tertiary: #E9E3D5;
-  --bg-hover: #E8E2D2;
-  --bg-active: #E3DCCA;
+  /* Backgrounds — the warm-off-white family. The page is a shade deeper than
+     the card so a card still reads as a card on top of it; the card surface
+     is off-white rather than screen white, because pure #ffffff next to a
+     warm ground looks dirty. */
+  --bg-primary: #F4F2EE;
+  --bg-secondary: #FBFAF8;
+  --bg-tertiary: #ECEAE4;
+  --bg-hover: #E7E4DD;
+  --bg-active: #E1DED6;
 
   /* Borders. --border-default draws control boundaries (buttons, inputs,
      chips), so it clears WCAG 1.4.11's 3:1 non-text contrast on every
-     surface a control sits on; the previous cool grey managed only 1.52:1.
-     --border-subtle is a decorative divider and stays quiet. */
-  --border-subtle: #D7CDB6;
-  --border-default: #8A816B;
+     surface a control sits on. --border-subtle is a decorative divider and
+     stays quiet. */
+  --border-subtle: #E0DCD3;
+  --border-default: #857E6C;
 
-  /* Text. --text-tertiary carries 12-13px secondary copy throughout the app,
-     so it is dark enough to clear WCAG AA (4.5:1) against every surface it
-     lands on -- card white, page paper and the --bg-tertiary row fill --
-     rather than the lighter grey it replaced, which only reached 3.5:1. It
-     still reads a step quieter than --text-secondary, so the ramp survives.
-     --text-muted is reserved for genuinely non-essential decoration
-     (placeholders, disabled affordances) and stays below AA by design.
-     --text-primary is the brand ink, unchanged in value from the mark. */
-  --text-primary: #1B1B1B;
-  --text-secondary: #4F4B41;
-  --text-tertiary: #66604F;
+  /* Text. --text-primary is the brand ink, unchanged in value from the mark.
+     --text-tertiary carries 12-13px secondary copy throughout the app, so it
+     is dark enough to clear WCAG AA (4.5:1) against every surface it lands on
+     -- card off-white, page paper and the --bg-tertiary row fill -- rather
+     than the lighter grey it replaced. It still reads a step quieter than
+     --text-secondary, so the ramp survives. --text-muted is reserved for
+     genuinely non-essential decoration (placeholders, disabled affordances)
+     and stays below AA by design. */
+  --text-primary: #34322D;
+  --text-secondary: #57524A;
+  --text-tertiary: #6E6759;
   --text-muted: #8C8577;
   --text-danger: #8B4A4A;
 
   /* Accents / semantic.
-     The accent is the brand ink pushed warm: a deep bronze-brown line
-     instead of the cold Tailwind blue the app used to wear. Brand
-     recognition then comes from the whole surface reading as one product
-     rather than from a blue that matched nothing else. Every value below
-     clears 4.5:1 against every surface it lands on, in both themes. */
-  --accent: #7A3E12;
-  --accent-light: #8F4E1C;
-  --accent-dark: #5E2E0C;
-  --accent-soft: #F2E4CD;
+     The accent is a restrained terracotta line — the only saturated colour in
+     the family, used sparingly so brand recognition comes from the whole
+     surface reading as one product rather than from a bright fill. Every
+     value below clears 4.5:1 against every surface it lands on, in both
+     themes. */
+  --accent: #A2441A;
+  --accent-light: #B8541F;
+  --accent-dark: #8A3A14;
+  --accent-soft: #F0E2D6;
 
   --danger: #8B4A4A;
   --danger-soft: #F5E7E7;
@@ -80,27 +83,37 @@
      they are a catalogue of both palettes. brandTokens.test.ts asserts each
      value equals the live token it depicts, so the catalogue cannot drift
      away from the palette it claims to show. */
-  --preview-light-page: #F0EBDF;
-  --preview-light-card: #FCFAF4;
-  --preview-light-edge: #D7CDB6;
-  --preview-light-line: #66604F;
-  --preview-light-accent: #7A3E12;
-  --preview-dark-page: #191713;
-  --preview-dark-card: #211E18;
+  --preview-light-page: #F4F2EE;
+  --preview-light-card: #FBFAF8;
+  --preview-light-edge: #E0DCD3;
+  --preview-light-line: #6E6759;
+  --preview-light-accent: #A2441A;
+  --preview-dark-page: #1A1712;
+  --preview-dark-card: #221E18;
   --preview-dark-edge: #3A352E;
   --preview-dark-line: #9B9484;
   --preview-dark-accent: #E09155;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(27, 27, 27, 0.06);
-  --shadow-md: 0 2px 10px rgba(27, 27, 27, 0.08);
-  --shadow-lg: 0 4px 16px rgba(27, 27, 27, 0.10);
+  /* Shadows — the warm ink at low alpha, so shadows stay warm on paper. */
+  --shadow-sm: 0 1px 3px rgba(52, 50, 45, 0.06);
+  --shadow-md: 0 2px 10px rgba(52, 50, 45, 0.08);
+  --shadow-lg: 0 4px 16px rgba(52, 50, 45, 0.10);
 
-  /* Radii */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  /* Radii — the family scale (ADR-0050 §⑧). */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Spacing — a modular scale so layout subtraction (ADR-0050 §⑧) has a
+     single ruler to snap to instead of ad-hoc pixel values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
 
   /* Shell columns. The right rail's width is published here because the
      floating action button anchors itself to the edge of the CENTRE column:
@@ -109,34 +122,47 @@
   --context-rail-width: 288px;
   --context-rail-collapsed-width: 30px;
 
-  /* Typography */
+  /* Typography. The display face is a self-hosted IBM Plex Serif (ADR-0050
+     §⑤): headings and pull-numerals set the serif, body copy stays sans.
+     The type ramp is modular (a ~1.2 step) so sizes relate to each other
+     instead of being picked per component. */
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-mono: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  --font-display: 'IBM Plex Serif', Georgia, 'Times New Roman', serif;
+
+  --text-display: 28px;
+  --text-title: 22px;
+  --text-heading: 18px;
+  --text-subhead: 16px;
+  --text-body: 14px;
+  --text-small: 13px;
+  --text-micro: 12px;
 
   /* Motion */
   --transition-fast: 0.15s ease;
   --transition-base: 0.25s ease;
+  --transition-slow: 0.35s ease;
 
   /* Overlay / component colors */
-  --overlay: rgba(27, 27, 27, 0.35);
+  --overlay: rgba(52, 50, 45, 0.35);
 }
 
 [data-theme="dark"] {
   /* Backgrounds — the same warm family, inverted: the paper becomes the ink
      and the ground goes to a warm near-black rather than a cold one. */
-  --bg-primary: #191713;
-  --bg-secondary: #211E18;
-  --bg-tertiary: #292520;
-  --bg-hover: #2D2922;
-  --bg-active: #312C25;
+  --bg-primary: #1A1712;
+  --bg-secondary: #221E18;
+  --bg-tertiary: #2A251E;
+  --bg-hover: #302A22;
+  --bg-active: #373027;
 
   /* Borders */
   --border-subtle: #3A352E;
-  --border-default: #78705E;
+  --border-default: #7A7260;
 
   /* Text. The dark theme's primary ink is the brand paper: the two themes
      use the same two brand colours, swapped. */
-  --text-primary: #F5F0E4;
+  --text-primary: #F7F4EE;
   --text-secondary: #B8B1A2;
   --text-tertiary: #9B9484;
   --text-muted: #7E7768;

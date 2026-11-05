@@ -21,7 +21,7 @@
 
 <p align="center">
   <b>Two products, one job each.</b><br/>
-  Cinder is the <b>workbench</b> — browse, edit, <b>approve</b> and govern this memory.<br/>
+  Cinder Desktop is the <b>workbench</b> — browse, edit, <b>approve</b> and govern this memory.<br/>
   <a href="https://github.com/sky-jiangcheng/warden">Warden</a> is the <b>assistant</b> — a local copilot that reads this memory, chats about the project and runs commands over MCP.<br/>
   One shared local memory, one protocol, and <b>approval happens here, never there</b>.
 </p>

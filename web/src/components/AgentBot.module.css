@@ -49,6 +49,9 @@
 .panel {
   position: fixed;
   z-index: 210;
+  /* The panel is 420px wide by design; clamp it so a narrow window never
+     pushes its right edge past the viewport. */
+  max-width: calc(100vw - 24px);
   max-height: 560px;
   display: flex;
   flex-direction: column;

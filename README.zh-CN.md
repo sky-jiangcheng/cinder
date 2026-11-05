@@ -21,7 +21,7 @@
 
 <p align="center">
   <b>两个产品，各担一件事。</b><br/>
-  Cinder 是<b>工作台</b>——浏览、编辑、<b>审批</b>、治理这份记忆。<br/>
+  Cinder Desktop 是<b>工作台</b>——浏览、编辑、<b>审批</b>、治理这份记忆。<br/>
   <a href="https://github.com/sky-jiangcheng/warden">Warden</a> 是<b>助手</b>——一个本地的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。<br/>
   共享同一份本地记忆、同一套协议，<b>审批在这里发生，不在那里</b>。
 </p>

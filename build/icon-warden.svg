@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Warden">
+  <title>Warden</title>
+
+  <!-- Single source of truth for the WARDEN brand mark — the standalone
+       copilot's own glyph. Warden is a separate product with its own name
+       (ADR-0047 decision ③, ADR-0049 decision ②), so it does NOT reuse
+       Cinder's "C". It shares the family construction (ADR-0050 decision ③,
+       "inverse seal": a solid warm-ink field #34322D with the symbol knocked
+       out in paper #F7F4EE, no hairline frame) but carries its own glyph —
+       an abstract lantern / nightwatch symbol (ADR-0050 decision ④).
+
+       scripts/generate-icons.mjs reads this file with the agent-repo flag
+       and derives the whole Tauri icon set from it, exactly as it derives
+       Cinder's set from build/icon.svg. Two masters, one construction.
+
+       The lantern: a bail handle over a flared hood, a tapering glass body
+       and a foot — the nightwatch lamp, bold enough to hold at 16px. It is
+       a solid silhouette (no window slot): a hole in the body would leave
+       paper walls under one pixel at stripe size, so the shape reads by its
+       outline alone. fill-rule="evenodd" cuts the handle's inner semicircle
+       out of its outer semicircle to make the bail a ring. -->
+
+  <rect width="512" height="512" fill="#34322D"/>
+  <g transform="translate(0 0)">
+    <path fill="#F7F4EE" fill-rule="evenodd" d="M200 150A56 56 0 0 1 312 150Z M220 150A36 36 0 0 1 292 150Z M216 150L296 150L344 186L304 186Q334 232 334 278Q334 330 314 368L322 368L340 394Q340 402 332 402L180 402Q172 402 172 394L190 368L198 368Q178 330 178 278Q178 232 208 186L168 186Z"/>
+  </g>
+</svg>

@@ -391,12 +391,22 @@
   border: none;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), opacity var(--transition-fast);
 }
 
+/* No lift on hover: a button that rises reads as decoration, and the whole
+   surface is meant to sit flat and stay quiet. */
 .sendBtn:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.sendBtn:active:not(:disabled) {
+  opacity: 0.82;
+}
+
+.sendBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .sendBtn:disabled {

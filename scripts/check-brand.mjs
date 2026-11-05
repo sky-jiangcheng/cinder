@@ -122,6 +122,52 @@ for (const [file, re, key, where] of EXACT_NAMES) {
   }
 }
 
+// The window title and the HTML <title> are one string shown in two places,
+// and they drifted apart once (main.go said "Cinder: …" while the page said
+// "Cinder Desktop: …"). Compare both against one value derived from
+// brand.json — not against each other.
+const DISPLAY_NAME = `${brand.desktop}: Local Git Knowledge Base`
+const TITLE_SITES = [
+  ['main.go', /Title:\s*"([^"]*)"/, 'Wails 窗口标题'],
+  ['web/index.html', /<title>([^<]*)<\/title>/, '首屏 <title>'],
+]
+for (const [file, re, where] of TITLE_SITES) {
+  if (!existsSync(join(root, file))) {
+    issues.push(`${file}: 文件不存在（${where}）`)
+    continue
+  }
+  const got = read(file).match(re)?.[1]
+  if (got !== DISPLAY_NAME) {
+    issues.push(`${file}: ${where}是「${got ?? '读不到'}」，应为「${DISPLAY_NAME}」`)
+  }
+}
+
+// Wails reads productName for the bundle; a wrong value renames the app in
+// Applications without touching a single line of copy.
+if (existsSync(join(root, 'wails.json'))) {
+  const product = read('wails.json').match(/"productName":\s*"([^"]*)"/)?.[1]
+  if (product !== brand.desktop) {
+    issues.push(`wails.json: productName 是「${product ?? '读不到'}」，应为「${brand.desktop}」`)
+  }
+}
+
+// The sibling repository keeps its own copy of brand.json because its CI runs
+// without this checkout — the structural blind spot ADR-0049 records. When
+// both are present on disk, they must agree; otherwise one repo can rename a
+// product and both gates stay green.
+const siblingBrand = join(root, '..', 'warden', 'brand.json')
+if (existsSync(siblingBrand)) {
+  const other = JSON.parse(readFileSync(siblingBrand, 'utf8'))
+  for (const key of ['mother', 'desktop', 'agent', 'idePlugin']) {
+    if (brand[key] !== other[key]) {
+      issues.push(
+        `../warden/brand.json: "${key}" 是「${other[key] ?? '读不到'}」，本仓是「${brand[key]}」——` +
+          '两仓 brand.json 必须同批改'
+      )
+    }
+  }
+}
+
 // The desktop name is the mother name plus a qualifier. If that stops
 // holding, "Cinder Desktop" is two unrelated words and the family reads
 // as two brands.

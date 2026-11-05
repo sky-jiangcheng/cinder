@@ -129,7 +129,7 @@ One difference from the desktop app is worth knowing: the MCP surface **cannot c
 
 ## Install
 
-**From the JetBrains Marketplace** (2026-10-22): **Settings | Plugins | Marketplace**, search for **Cinder**, install, restart the IDE. Every released version is published there with the same version number as the desktop app.
+**From the JetBrains Marketplace** (2026-10-22): **Settings | Plugins | Marketplace**, search for **Cinder Memory**, install, restart the IDE. Every released version is published there with the same version number as the desktop app.
 
 **From disk** (offline / pre-release builds): download the zip attached to a GitHub Release and use **Settings | Plugins | ⚙ | Install Plugin from Disk…**, then restart.
 

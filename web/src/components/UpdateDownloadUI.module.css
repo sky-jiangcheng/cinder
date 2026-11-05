@@ -163,12 +163,13 @@
 
 /* ---- corner card ---- */
 
-/* The minimized card sits above the bottom-left corner, clear of the
-   navigation rail's own content. */
+/* The minimized card sits clear of two neighbours: the 72px navigation rail
+   on its left, and the floating assistant anchored at the bottom-left. 88px
+   clears the rail; 84px clears the 52px bot plus its drag inset. */
 .corner {
   position: fixed;
-  left: 16px;
-  bottom: 16px;
+  left: 88px;
+  bottom: 84px;
   z-index: 880;
   display: flex;
   align-items: center;

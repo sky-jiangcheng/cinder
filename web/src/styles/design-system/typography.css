@@ -2,6 +2,48 @@
    Typography primitives
    ============================================ */
 
+/* The display face: IBM Plex Serif, self-hosted (ADR-0050 §⑤). The woff2
+   files are vendored in src/assets/fonts and served from the app bundle —
+   no Google Fonts CDN, so the type loads as fast as the rest of the CSS and
+   works fully offline (local-first). IBM Plex Serif is © IBM Corp., licensed
+   SIL OFL 1.1; the licence travels with the files in src/assets/fonts.
+
+   Only the latin subset and the two weights the display ramp actually uses
+   are vendored: a display face sets headings and pull-numerals, not body
+   copy, so 400 and 600 carry it. */
+@font-face {
+  font-family: 'IBM Plex Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../assets/fonts/ibm-plex-serif-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Serif';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../../assets/fonts/ibm-plex-serif-latin-600-normal.woff2') format('woff2');
+}
+
+/* The display utility: the one place the serif is applied from. Headings and
+   pull-numerals opt into it; body copy stays on the sans ramp so the serif
+   reads as an editorial accent, not as the whole voice. */
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Page and card titles set the serif: they are the editorial voice of a
+   knowledge base. h3 and below stay on the sans ramp — at sub-label sizes a
+   serif reads as decoration, not as hierarchy. */
+h1,
+h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
 .markdown-body {
   line-height: 1.7;
   word-break: break-word;
@@ -9,7 +51,17 @@
   color: var(--text-primary);
 }
 
-.markdown-body h1 { font-size: 1.4em; margin: 0.5em 0 0.3em; font-weight: 700; }
+/* Document headings inside rendered content set the serif: a knowledge base
+   is read like prose, and the serif is what makes a long page read as a
+   document rather than a form. */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.markdown-body h1 { font-size: 1.4em; margin: 0.5em 0 0.3em; font-weight: 600; }
 .markdown-body h2 { font-size: 1.2em; margin: 0.5em 0 0.3em; font-weight: 600; }
 .markdown-body h3 { font-size: 1.1em; margin: 0.4em 0 0.2em; font-weight: 600; }
 .markdown-body p { margin: 0.4em 0; }

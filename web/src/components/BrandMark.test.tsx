@@ -7,16 +7,16 @@
 // dependency, so swapping it back out breaks a test rather than shipping
 // silently.
 //
-// Second regression these guard: the brand moved from a navy tile to the
-// paper card (warm field + hairline ink frame). The UI is generated from
-// the same SSOT as the shipped icons, so a half-applied move — card in the
-// dock, navy tile in the navbar — would look like two products.
+// Second regression these guard: the brand moved to the inverse seal (a
+// solid warm-ink field with the letter knocked out in paper — ADR-0050, no
+// hairline frame). The UI is generated from the same SSOT as the shipped
+// icons, so a half-applied move — seal in the dock, framed card in the
+// navbar — would look like two products.
 //
 // Third regression (2026-10-24 UI sweep): the navbar put a 6px border-radius
-// on the mark. The brand master's own comment says the card has "no rounded
-// corners — the square edge and the hairline are the style", and at 26px the
-// frame sits ~1.3px from the edge, so the radius crop ate the frame's four
-// corners: the mark read as a torn sticker. The radius was left over from
+// on the mark. The brand master is a square seal — "no rounded corners, the
+// square edge is the style" — so a radius crop ate the ink field's four
+// corners and the mark read as a torn sticker. The radius was left over from
 // the navy-tile era, when the tile had a gradient of its own. A CSS module
 // rule is invisible to a DOM assertion, so the stylesheet is read through
 // node:fs and the radius rule asserted to be gone.
@@ -66,22 +66,24 @@ describe('BrandMark', () => {
     expect(svg!.querySelectorAll('rect, path').length).toBeGreaterThan(1)
   })
 
-  it('carries the paper-card field, not a gradient or a bevel', () => {
+  it('carries the inverse-seal field, not a gradient or a bevel', () => {
     const { container } = render(<BrandMark />)
     const html = container.innerHTML
-    // Warm-paper field + near-black ink, the brand SSOT's palette. A blue
-    // gradient and a white hairline were what made the old mark read as
-    // stock app-icon chrome.
-    expect(html).toContain('#F5F0E4')
-    expect(html).toContain('#1B1B1B')
+    // Solid warm-ink field + off-white paper glyph, the brand SSOT's palette.
+    // A blue gradient and a white hairline were what made the old mark read
+    // as stock app-icon chrome.
+    expect(html).toContain('#34322D')
+    expect(html).toContain('#F7F4EE')
     expect(container.querySelector('linearGradient')).toBeNull()
     expect(container.querySelector('clipPath')).toBeNull()
-    // The one stroke in the mark is the brand frame itself: the hairline
-    // that makes the card read as printed. It is a rect outline, not the
-    // old bevel rim on the glyph.
-    const stroked = [...container.querySelectorAll('[stroke]')]
-    expect(stroked).toHaveLength(1)
-    expect(stroked[0].tagName.toLowerCase()).toBe('rect')
+    // The inverse seal has NO frame: the recognition comes from the reversed
+    // figure, not from a stroke that has to be re-weighted to survive small
+    // sizes. Any stroke here means the framed-card era crept back in.
+    expect(container.querySelectorAll('[stroke]')).toHaveLength(0)
+    // The field is a full-bleed rect, not an inset framed card.
+    const field = container.querySelector('rect')!
+    expect(field.getAttribute('width')).toBe('512')
+    expect(field.getAttribute('fill')).toBe('#34322D')
     expect(container.querySelector('path')!.getAttribute('stroke')).toBeNull()
   })
 
@@ -149,47 +151,21 @@ describe('BrandMark', () => {
     expect(src).not.toMatch(/BrandMark/)
   })
 
-  it('re-weights the frame so the printed edge survives the rendering', () => {
-    // The regression (ADR-0037): the master draws a 9-unit hairline on the
-    // 512 grid. At the rail's 26px that is 0.46px — under one pixel, so the
-    // browser smears the frame into a grey line. The frame is the mark's
-    // only distinguishing feature ("a square warm card with a heavier ink
-    // line around it"), so at UI sizes it was losing exactly the thing that
-    // made the mark identifiable.
-    //
-    // The icon generator already re-weights its glyph domain for precisely
-    // this reason (scripts/generate-icons.mjs, 34 units at 24px); the UI
-    // was the one surface that never got the treatment.
-    for (const size of [17, 20, 22, 26, 32, 64]) {
+  it('draws the solid seal at every size above the glyph-only floor', () => {
+    // Above GLYPH_ONLY_MAX the mark is the full inverse seal: a flat ink
+    // field with the paper letter knocked out of it. There is no stroke to
+    // re-weight (the whole point of dropping the frame), so the field is the
+    // same full-bleed rect and the glyph the same paper fill at 17px and at
+    // 512px alike.
+    for (const size of [17, 20, 22, 26, 32, 64, 512]) {
       const { container, unmount } = render(<BrandMark size={size} />)
-      const frame = container.querySelector('[stroke]')
-      expect(frame, `no frame drawn at ${size}px`).not.toBeNull()
-      const stroke = Number(frame!.getAttribute('stroke-width'))
-      expect(
-        (stroke * size) / 512,
-        `frame at ${size}px must render at least 1px wide`,
-      ).toBeGreaterThanOrEqual(1)
-      // The paper margin around the frame has to survive too. A frame with
-      // no paper around it is not a printed edge, it is a dark border — and
-      // the master inset (26 units) cannot hold once the stroke is heavier.
-      const inset = Number(frame!.getAttribute('x'))
-      expect(
-        ((inset - stroke / 2) * size) / 512,
-        `paper margin at ${size}px must be at least 1px`,
-      ).toBeGreaterThanOrEqual(1)
+      expect(container.querySelector('[stroke]'), `frame at ${size}px`).toBeNull()
+      const field = container.querySelector('rect')!
+      expect(field.getAttribute('width'), `field at ${size}px`).toBe('512')
+      expect(field.getAttribute('fill')).toBe('#34322D')
+      expect(container.querySelector('path')!.getAttribute('fill')).toBe('#F7F4EE')
       unmount()
     }
-  })
-
-  it('reproduces the master exactly at the master size', () => {
-    // Re-weighting must not creep upward: at 512 the geometry has to be the
-    // master's geometry, or the app icon and the UI mark stop being the
-    // same drawing.
-    const { container } = render(<BrandMark size={512} />)
-    const frame = container.querySelector('[stroke]')!
-    expect(Number(frame.getAttribute('stroke-width'))).toBe(9)
-    expect(frame.getAttribute('x')).toBe('26')
-    expect(frame.getAttribute('width')).toBe('460')
   })
 
   it('collapses to the bare letter at glyph-domain sizes', () => {

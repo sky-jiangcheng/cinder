@@ -69,7 +69,7 @@ func main() {
 
 	// Launch Wails
 	err = wails.Run(&options.App{
-		Title:     "Cinder: Local Git Knowledge Base",
+		Title:     "Cinder Desktop: Local Git Knowledge Base",
 		Width:     1360,
 		Height:    860,
 		MinWidth:  900,

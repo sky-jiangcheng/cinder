@@ -21,8 +21,10 @@
   width: var(--context-rail-collapsed-width);
   align-self: stretch;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
   padding-top: calc(18px + var(--window-controls-inset, 0px));
   border: none;
   border-left: 1px solid var(--border-subtle);
@@ -35,6 +37,20 @@
 .handle:hover {
   color: var(--text-primary);
   background: var(--bg-tertiary);
+}
+
+/* The pending count on the folded handle: the one number the rail exists to
+   surface, kept legible at 30px wide. */
+.handleCount {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg-secondary);
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 600;
+  text-align: center;
 }
 
 .head {
@@ -139,6 +155,15 @@
   color: var(--text-primary);
 }
 
+.item:active {
+  background: var(--bg-active);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .itemTitle {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -153,25 +178,37 @@
 }
 
 .more {
-  padding: 6px 8px;
+  padding: 7px 8px;
+  min-height: 28px;
   border: none;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-tertiary);
   font-size: 12px;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .more:hover {
   color: var(--text-primary);
 }
 
+.more:active {
+  background: var(--bg-active);
+}
+
+.more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 @media (max-width: 1024px) {
-  /* Too narrow for three columns: the centre page keeps the space. The rail's
-     two blocks are still reachable from the review and knowledge tabs. */
-  .rail,
-  .handle {
+  /* Too narrow for three columns: the centre page keeps the space. The 30px
+     handle stays — it is the only route to pending review work, and hiding it
+     made that work (and its count badge) unreachable below 1024px. */
+  .rail {
     display: none;
   }
 }

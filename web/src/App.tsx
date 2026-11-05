@@ -76,10 +76,14 @@ const MAC_DESKTOP =
 const CONTEXT_RAIL_KEY = 'repotory:context-rail-collapsed'
 
 function readContextRailCollapsed(): boolean {
+  // The rail is contextual, not permanent (ADR-0050 §⑦): it no longer asserts
+  // 288px of every screen by default. A first run starts folded to its
+  // handle, and only an explicit open pins it wide; the folded handle still
+  // carries the pending count so waiting context reaches the user anyway.
   try {
-    return localStorage.getItem(CONTEXT_RAIL_KEY) === '1'
+    return localStorage.getItem(CONTEXT_RAIL_KEY) !== '0'
   } catch {
-    return false
+    return true
   }
 }
 

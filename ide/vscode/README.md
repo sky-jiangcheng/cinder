@@ -121,7 +121,7 @@ When the service **is** reachable but the folder matches nothing, the chip offer
 
 ## Install
 
-**Marketplace**: search "Cinder" in the Extensions view, or:
+**Marketplace**: search "Cinder Memory" in the Extensions view, or:
 
 ```bash
 code --install-extension repotory-vscode.vsix
