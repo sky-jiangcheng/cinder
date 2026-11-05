@@ -268,9 +268,21 @@ func TestChatLimitsAndSequenceOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Which five of the 105 the cap evicts is decided by updated_at, and
+	// CreateChatThread stamps with the wall clock. On the Windows runner 105
+	// creates land inside one clock tick: every row ties, the `id ASC` tie-break
+	// returns the lowest ids, and the cap looks broken when it is not. Stamp
+	// distinct times so the assertion is about the cap, not the clock.
+	for i := 1; i <= 105; i++ {
+		chatExec(t, s.db, "UPDATE chat_threads SET updated_at = ? WHERE id = ?",
+			fmt.Sprintf("2026-01-01T00:%02d:%02d.000000000Z", i/60, i%60), chatID(i))
+	}
 	threads, err := s.ListChatThreads(ctx, fixturePath("/workspace"))
-	if err != nil || len(threads) != 100 || threads[0].ID != chatID(105) {
+	if err != nil || len(threads) != 100 {
 		t.Fatalf("bounded threads: %d %v", len(threads), err)
+	}
+	if threads[0].ID != chatID(105) || threads[99].ID != chatID(6) {
+		t.Fatalf("cap kept the wrong end: first %s last %s, want %s then %s", threads[0].ID, threads[99].ID, chatID(105), chatID(6))
 	}
 	// Deliberately reverse timestamps; ordering must use SQLite seq, not clocks.
 	for i := 1; i <= 505; i++ {
