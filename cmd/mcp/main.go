@@ -89,6 +89,9 @@ func notesListLimit(req mcp.CallToolRequest) int {
 // through the same path a client does, instead of reaching for unexported
 // handlers.
 func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
+	registerChatTool(mcpServer, svc)
+	registerMetricsTool(mcpServer, svc)
+
 	mcpServer.AddTool(mcp.Tool{
 		Name:        "repotory_notes_list",
 		Description: "List knowledge notes across projects (bounded: default 50, max 500). For one project's working set call repotory_context instead — it returns that project's notes, todos and mined repo knowledge in one call, which is why this tool has no project_id argument.",

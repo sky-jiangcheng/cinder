@@ -59,7 +59,8 @@ const schemaVersionKey = "schema_version"
 // because writing those into the knowledge base would pollute it and pull API
 // keys into the same SQLite file the notes live in. Purely additive: no
 // existing table is touched.
-const ExpectedSchemaVersion = 28
+// v29 added isolated chat_threads / chat_messages with immutable message IDs.
+const ExpectedSchemaVersion = 29
 
 // StaleAfterDays is the age at which the repo_meta knowledge cache is reported
 // as stale. The cache feeds generated knowledge (tech stack, readme excerpt,
@@ -125,6 +126,20 @@ var requiredShape = []struct {
 	{"repo_meta", "dependencies"},     // v10
 	{"repo_meta", "top_contributors"}, // v10
 	{"repo_meta", "activity"},         // v10
+	{"chat_threads", "id"},            // v29
+	{"chat_threads", "title"},
+	{"chat_threads", "creation_title"},
+	{"chat_threads", "path"},
+	{"chat_threads", "created_at"},
+	{"chat_threads", "updated_at"},
+	{"chat_messages", "seq"},
+	{"chat_messages", "id"},
+	{"chat_messages", "thread_id"},
+	{"chat_messages", "role"},
+	{"chat_messages", "content"},
+	{"chat_messages", "source"},
+	{"chat_messages", "reply_to"},
+	{"chat_messages", "created_at"},
 }
 
 // substantiveMetaSQL is the predicate for a repo_meta row that carries actual

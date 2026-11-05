@@ -135,7 +135,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 
 ## 三、工具路由（通道 A）
 
-18 个工具，按意图选：
+20 个工具，按意图选：
 
 ### 读
 
@@ -148,6 +148,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 | `repotory_notes_search` | 精确全文检索 | FTS5 trigram + bm25 排序，支持 CJK |
 | `repotory_notes_read` | 读某条笔记全文 | 按 id |
 | `repotory_notes_list` | 列出全部笔记 | 默认 50，上限 500；单项目工作集用 `context` |
+| `repotory_metrics` | 「这个库 / 这个项目现在多大、今天动了多少」 | 只读**已存库**的缓存数字：不扫盘、不跑 git、不刷新；未知路径给空计数，代码行覆盖不全给 `null` |
 
 ### 写
 
@@ -156,6 +157,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 | `repotory_notes_create` | 记一条新知识 | 必填 `project_id` / `title` / `content`；`category` ∈ knowledge / log / idea / other |
 | `repotory_notes_update` | 改已有笔记 | **省略字段保持原值**；故意没有「清空标题/标签」的方式 —— 要清就写新笔记；可选 `pinned`（`true` 置顶 / `false` 取消置顶 / 省略保持原状态） |
 | `repotory_handoff` | 写会话交接 | 见上 |
+| `repotory_chat` | 与 Warden / 另一个 IDE 插件共享主题和已完成的消息 | `operation` ∈ `list`/`create`/`read`/`append`/`rename`；id 用客户端生成的 UUID，同 id 同载荷幂等、同 id 不同载荷报错**不覆盖**；与笔记 / 检索 / 审批完全隔离 |
 
 ### 自检
 

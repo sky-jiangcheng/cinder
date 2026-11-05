@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -22,15 +23,18 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// contention as a backstop.
 	db.SetMaxOpenConns(1)
 	db.SetConnMaxLifetime(0)
+
+	// Enable WAL mode for better concurrent read performance. This happens
+	// before busy_timeout is raised, because the mode change waits on its own
+	// short timeout — see enableWAL.
+	if err := enableWAL(db); err != nil {
+		db.Close() //nolint:errcheck // close on init failure, error irrelevant
+		return nil, err
+	}
+
 	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
 		db.Close() //nolint:errcheck // close on init failure, error irrelevant
 		return nil, fmt.Errorf("failed to set busy_timeout: %w", err)
-	}
-
-	// Enable WAL mode for better concurrent read performance
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close() //nolint:errcheck // close on init failure, error irrelevant
-		return nil, fmt.Errorf("failed to set WAL mode: %w", err)
 	}
 
 	// Enable foreign keys
@@ -149,6 +153,48 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// enableWAL sets the file-level journal mode, retrying until the lock frees.
+//
+// Why a retry is needed: changing the journal mode takes the exclusive lock,
+// and a second process that is still creating the same fresh database holds it
+// for as long as its own schema setup runs. One long busy_timeout is the wrong
+// shape for that wait — it blocks the caller, then gives up in a single
+// attempt while the other process is still working. Short waits with backoff
+// notice the release as soon as it happens. WAL lives in the file header, so
+// after the first creator commits, every later attempt finds the mode already
+// set and returns without taking the lock at all.
+//
+// Without this, the loser of a first-run race refuses to start: a user who
+// opens the desktop app while an IDE plugin launches the MCP server against a
+// brand-new database gets "failed to set WAL mode: database is locked".
+func enableWAL(db *sql.DB) error {
+	deadline := time.Now().Add(walWaitBudget)
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(walRetryBackoff(attempt)) * time.Millisecond)
+		}
+		// Both statements on one Exec so they share the single pooled
+		// connection: the short timeout only has to cover the mode change.
+		_, err := db.Exec("PRAGMA busy_timeout=250; PRAGMA journal_mode=WAL;")
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if time.Now().After(deadline) {
+			return fmt.Errorf("failed to set WAL mode after %s of waiting (another Cinder process is still creating this database): %w", walWaitBudget, lastErr)
+		}
+	}
+}
+
+// How long the second process is willing to wait for the first creator.
+const walWaitBudget = 15 * time.Second
+
+// 25ms doubled per attempt, capped at 400ms.
+func walRetryBackoff(attempt int) int {
+	return 25 << min(attempt-1, 4)
 }
 
 // createTables creates all required tables if they do not exist.

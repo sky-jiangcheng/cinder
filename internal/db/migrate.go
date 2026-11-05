@@ -466,6 +466,8 @@ func upgradeSchema(db *sql.DB) error {
 		//
 		// Purely additive: one new table, no existing table touched.
 		{id: 28, fn: EnsureAICallLog},
+		// v29: persistent cross-client conversations, isolated from knowledge.
+		{id: 29, fn: EnsureChatSchema},
 	}
 
 	for _, m := range migrations {

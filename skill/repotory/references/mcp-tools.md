@@ -1,17 +1,20 @@
 # Cinder MCP 工具完整参考（通道 A）
 
-18 个工具的精确参数签名（取自 `repotory-mcp` 的 `tools/list` 实际响应，非手写推测）。
+20 个工具的精确参数签名（取自 `repotory-mcp` 的 `tools/list` 实际响应，非手写推测）。
 
 ```
 repotory_agent_score()
 repotory_ai_audit(limit: number)
 repotory_ai_review_rules()
 repotory_ask(query*: string, project_id: number, path: string)
+repotory_chat(content: string, id: string, operation*: string, path: string,
+              reply_to: string, role: string, source: string, thread_id: string, title: string)
 repotory_context(path: string, project_id: number, project_name: string)
 repotory_handoff(agent: string, changes: array, decisions: array, gotchas: array,
                  next_steps: array, path: string, project_id: number, summary*: string,
                  tags: string)
 repotory_integrity()
+repotory_metrics(path: string)
 repotory_notes_create(category: string, content*: string, project_id*: number,
                        tags: string, title*: string)
 repotory_notes_list(limit: number)
@@ -128,6 +131,20 @@ FTS5 trigram + bm25 全文检索。
 
 单个项目的统计。
 
+### `repotory_metrics(path?)`
+
+读**已存库**的量化概览：仓库数、代码行、今日提交与增删、笔记数、待人工审批数。
+
+| 参数 | 说明 |
+|------|------|
+| `path` | 工作区绝对路径；**空 = 全库**。至多 4096 UTF-8 字节 |
+
+三条必须知道的取数边界：
+
+- **它不扫盘、不跑 git、不刷新缓存**。想要新的数字得先有人扫描；否则你读到的是上次扫描的结果。`refreshedAt` 是**最近一次仓库扫描的时间**，不是本次请求的时间。
+- **未知路径返回空计数，绝不回退全库总量**——把「这个目录没入库」说成「这个项目有 4.8 万行」是编造。
+- **`totalLines` 为 `null` 表示「不可信就没有」**：只有缓存的语言 LOC 覆盖了整个作用域才给总数。今日增删/提交用的是全作者缓存 `daily_stats`，不是「你个人今天的量」。
+
 ---
 
 ## 写工具
@@ -159,6 +176,29 @@ FTS5 trigram + bm25 全文检索。
 - 要生效必须人工 `notes_update`
 - 需要桌面端设置里配好 AI 端点
 - 机器写的措辞同样要过人工审核（ADR-0015 的评审闸）
+
+### `repotory_chat(operation*, ...)`
+
+跨端**共享会话**：Warden 与 IDE 插件之间同步「主题」和「已完成的消息」。五个操作在一个工具里，靠 `operation` 区分。
+
+| 参数 | 说明 |
+|------|------|
+| `operation` | **必填**：`list` / `create` / `read` / `append` / `rename` |
+| `path` | `list` 可选精确路径（空 = 全部主题）；`create` 的主题归属（空 = 不绑定工作区） |
+| `id` | `create` / `append` 的消息或主题 id：**客户端生成的 UUID** |
+| `thread_id` | `read` / `append` / `rename` 指向的主题 UUID |
+| `title` | `create` / `rename` 的标题：非空、无控制字符、至多 160 个 Unicode 字符 |
+| `role` | `append`：`user` / `assistant` |
+| `content` | `append`：消息正文，原样保存（至多 1 MiB UTF-8） |
+| `source` | `append`：`warden` / `vscode` / `jetbrains` —— 这条消息由哪个客户端写下 |
+| `reply_to` | `append` 可选：本主题内某条 `user` 消息的 UUID |
+
+四条契约（客户端不要靠试探来学）：
+
+- **幂等靠 id**：同 id + 同载荷重放返回既有那行，不产生第二条；同 id + 不同载荷**报错，绝不覆盖**。消息落库后不可变。
+- `append` 重试时**必须复用同一个 id**。换 id 就等于生成一条新答案。
+- `reply_to` 只能指向**同一主题内**的 `user` 消息；悬空引用被拒绝。assistant 消息的 id 约定是 `${user 的 UUID}-reply`。
+- **与知识笔记、检索、审批完全隔离**：共享会话不落 `project_notes`，不会被 `repotory_ask` / `notes_search` 召回，也不进任何人工评审闸。同步的是「已完成的消息」，跨端逐 token 流式不在契约内。
 
 ---
 
@@ -222,6 +262,10 @@ MCP 工具在 HTTP 桥上的对应关系不是同名 —— RPC 走的是桌面 
 | `repotory_integrity` | `Health()` |
 | `repotory_agent_score` | `GetSummary(date, starredOnly)` |
 | `repotory_handoff` | `CreateNoteWithMeta(projectID, title, content, tags, kind="handoff", source)` |
+
+> **`repotory_chat` 与 `repotory_metrics` 没有 HTTP RPC 孪生。** 它们只落在 `internal/service`
+> （`ListChatThreads` / `AppendChatMessage` / `GetMetrics`…），**没有登记进 `internal/app` 的桌面绑定**，
+> 而 `/api/rpc` 桥是反射那批绑定方法的——所以通道 B 看不见这两个工具。共享会话与量化指标只走 MCP stdio。
 
 调用形式：
 
