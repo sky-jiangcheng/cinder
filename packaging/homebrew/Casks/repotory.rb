@@ -16,12 +16,12 @@ cask "repotory" do
 
   on_arm do
     url "https://github.com/sky-jiangcheng/repotory/releases/download/v#{version}/repotory-darwin-arm64.dmg"
-    sha256 "9a976027bff67aad8a331d129fa473dc99d614dae75539bd52dec274f660a8be"
+    sha256 "29070197d186b6ac401050da71fbc8de7dd566763ffa8fb4ba6cee06cb2abbaf"
   end
 
   on_intel do
     url "https://github.com/sky-jiangcheng/repotory/releases/download/v#{version}/repotory-darwin-amd64.dmg"
-    sha256 "c7926d3838a67d20578c98135301a76273e4169dd45ca4c98f51bad7cbe2e3e9"
+    sha256 "6ca5a314bb8625558c9b9617f537fe4321c1f34c8330f2ade1aa8f51f143ca51"
   end
 
   # The bundle inside the DMG is named after wails.json's `name`
