@@ -67,8 +67,6 @@ const BRAND_SITES = [
   ['README.zh-CN.md', 'desktop', '产物表里的桌面端'],
   ['TODO.md', 'mother', '现状速查里的母品牌'],
   ['TODO.md', 'agent', '现状速查里的助手名'],
-  ['ide/vscode/package.json', 'mother', 'VS Code 插件的 displayName'],
-  ['ide/jetbrains/src/main/resources/META-INF/plugin.xml', 'mother', 'JetBrains 插件的 <name>'],
 ]
 for (const [file, key, where] of BRAND_SITES) {
   const word = brand[key]
@@ -82,6 +80,46 @@ for (const [file, key, where] of BRAND_SITES) {
   }
 }
 
+// ------------------------------------------------- ①b 市场名字：精确字段 ----
+//
+// The IDE plugins' marketplace name is not prose — it is a field a
+// marketplace can refuse. VS Code requires `displayName` to be globally
+// unique across every extension on the Marketplace, and "Cinder" was
+// already taken there by another extension: the publish job failed with
+// "This extension display name is taken." and the release went out with
+// the plugin missing.
+//
+// A "contains the mother word" check cannot catch that class of failure —
+// the broken value contained the word too. So this field is compared
+// exactly, and it lives in brand.json like every other name.
+const EXACT_NAMES = [
+  ['ide/vscode/package.json', /"displayName":\s*"([^"]*)"/, 'idePlugin', 'VS Code 插件的 displayName'],
+  [
+    'ide/jetbrains/src/main/resources/META-INF/plugin.xml',
+    /<name>([^<]*)<\/name>/,
+    'idePlugin',
+    'JetBrains 插件的 <name>',
+  ],
+]
+for (const [file, re, key, where] of EXACT_NAMES) {
+  const expected = brand[key]
+  if (!expected) {
+    issues.push(`${brandPath}: 读不到 "${key}"——${where}没有名字可比对`)
+    continue
+  }
+  if (!existsSync(join(root, file))) {
+    issues.push(`${file}: 文件不存在（${where}）`)
+    continue
+  }
+  const got = read(file).match(re)?.[1]
+  if (got !== expected) {
+    issues.push(
+      `${file}: ${where}是「${got ?? '读不到'}」，应为「${expected}」——` +
+        '市场名字是精确字段，「含有母品牌词」不算过'
+    )
+  }
+}
+
 // The desktop name is the mother name plus a qualifier. If that stops
 // holding, "Cinder Desktop" is two unrelated words and the family reads
 // as two brands.
@@ -89,6 +127,15 @@ if (brand.mother && brand.desktop && !brand.desktop.startsWith(`${brand.mother} 
   issues.push(
     `build/brand.json: 桌面名「${brand.desktop}」不是母品牌「${brand.mother}」加后缀——` +
       '一个品牌族里的两个面要读得出同源'
+  )
+}
+
+// The IDE plugins' name has the same requirement, for the same reason: the
+// qualifier is what keeps it inside the family.
+if (brand.mother && brand.idePlugin && !brand.idePlugin.startsWith(`${brand.mother} `)) {
+  issues.push(
+    `build/brand.json: 插件名「${brand.idePlugin}」不是母品牌「${brand.mother}」加后缀——` +
+      'Marketplace 上它是独立条目，名字得让人看得出它属于这个品牌族'
   )
 }
 

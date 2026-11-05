@@ -23,7 +23,7 @@
       binary name, the data directory and the MCP prefix are untouched.
     -->
     <id>dev.repotory.jetbrains</id>
-    <name>Cinder</name>
+    <name>Cinder Memory</name>
     <vendor email="sky-jiangcheng@users.noreply.github.com" url="https://github.com/sky-jiangcheng/repotory">Cinder</vendor>
     <!-- The Plugin Verifier rejects a descriptor without <description> (it is
          a required property of a valid plugin), and Marketplace shows it to
