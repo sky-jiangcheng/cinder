@@ -9,7 +9,7 @@ Cinder provides read channels and self-check tools for AI agents, all reusing th
 
 ## Value proposition: Cinder is a data source for AI, not an AI platform
 
-**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 18 MCP tools, fetching on demand and searching precisely.
+**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 20 MCP tools, fetching on demand and searching precisely.
 
 For the argument for why this layer is better than letting AI read git directly, see [Storage Optimization and AI Value](../storage-optimization.md).
 
@@ -114,7 +114,7 @@ go build -o repotory-server ./cmd/server
 - For browser development use `bash scripts/dev.sh`: it starts the headless API (default 18765) *and* Vite. Running `npx vite` alone yields a page that loads but 502s every request — that is a missing backend, not a broken app.
 - **Release assets contain only**: the desktop installers (4 platforms), `repotory-mcp-<platform>`, and the VS Code VSIX. `repotory-server`, `cmd/vector-init`, `cmd/abeval`, `cmd/repotory-capture` and `cmd/wiki-export` (the read-only wiki export) must be built yourself (`go build` / `go run`); they are not distributed with releases.
 
-MCP is the only AI execution interface (the `repotory` CLI is not shipped with releases). stdio protocol, the database is opened once per process, 18 tools (including 4 write operations: scan + note create/update + session handoff):
+MCP is the only AI execution interface (the `repotory` CLI is not shipped with releases). stdio protocol, the database is opened once per process, 20 tools (including 5 write operations: scan + note create/update + session handoff + shared conversation writes):
 
 The two ends of the session memory protocol, in sequence:
 
@@ -157,6 +157,8 @@ A **fully offline local model** (ollama / LM Studio) speaks the same MCP; the wi
 | `repotory_integrity` | Audit data trustworthiness (FTS index drift / orphan rows / cache freshness / coverage) | Read |
 | `repotory_ai_audit` | Show what this machine sent to an AI recently: time / endpoint / model / surface (mcp/http/desktop) / characters / whether a local rule blocked it. **Prompts and replies are not included** — the audit trail stores a hash and a size | Read |
 | `repotory_ai_review_rules` | Show the local AI review rules and the input/output review switches. Rules are the user's own regexes (one per line, `#` for comments), matched before sending and on arrival; no built-in blocklist | Read |
+| `repotory_chat` | **Shared conversations** across clients (topics and completed messages sync between Warden and the IDE plugins): `operation` is one of `list` / `create` / `read` / `append` / `rename`. IDs are client-generated UUIDs; replaying the same id with the same payload is **idempotent**, the same id with a different payload errors out and **never overwrites**; `reply_to` may only point at a user message in this thread. Fully **isolated** from knowledge notes, retrieval and approvals — no shared table | Write |
+| `repotory_metrics` | Reads the **stored** quantitative overview (repositories / lines of code / today's commits and added-deleted lines / notes / pages awaiting human review). Does not scan disk, run git or refresh caches; an empty `path` means the whole library, and an unknown path returns empty counts rather than global totals; `totalLines` is `null` unless the cached language LOC covers the scope completely (it would rather say nothing than invent a total) | Read |
 
 ### Readiness vs. data trustworthiness
 
@@ -378,7 +380,7 @@ Package contents:
 
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 14 tools, and the list of capabilities agents must not use |
+| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 20 tools, and the list of capabilities agents must not use |
 | `references/mcp-tools.md` | Exact parameter signatures per tool, plus the HTTP RPC method mapping |
 | `references/data-model.md` | Schema and invariants (topic ownership, migration rules, handoff protection, trigram boundaries) |
 | `scripts/repotory-query.py` | Read-only fallback queries when MCP is unavailable (search / list topics / list projects / library stats) |

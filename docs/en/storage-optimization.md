@@ -72,7 +72,7 @@ In one sentence: **AI reading git directly = re-understanding the world from scr
 
 ## 4. This layer itself makes no LLM calls
 
-To be clear: the storage structure, indexes, materialized statistics, and MCP interface — this data foundation **makes no large language model calls at all** (no API key / model / endpoint configuration). It is purely a data foundation, and AI consumes it through the 18 tools of [`repotory-mcp`](features/ai-integration.md). In other words, Cinder is **a data source for AI**, not the AI itself.
+To be clear: the storage structure, indexes, materialized statistics, and MCP interface — this data foundation **makes no large language model calls at all** (no API key / model / endpoint configuration). It is purely a data foundation, and AI consumes it through the 20 tools of [`repotory-mcp`](features/ai-integration.md). In other words, Cinder is **a data source for AI**, not the AI itself.
 
 Related docs:
 

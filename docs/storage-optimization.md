@@ -74,7 +74,7 @@ AI 的瓶颈不是「能不能读 git」，而是**读得贵、读得乱、读�
 
 ## 四、这层结构本身不调用 LLM
 
-需要强调：存储结构、索引、物化统计、MCP 接口——这套数据底座**不调用任何大语言模型**（无 API key / 模型 / endpoint 配置）。它纯粹是「数据底座」，AI 通过 [`repotory-mcp`](features/ai-integration.md) 的 18 个工具来消费它。换句话说，Cinder 是 **AI 的数据源**，而非 AI 本身。
+需要强调：存储结构、索引、物化统计、MCP 接口——这套数据底座**不调用任何大语言模型**（无 API key / 模型 / endpoint 配置）。它纯粹是「数据底座」，AI 通过 [`repotory-mcp`](features/ai-integration.md) 的 20 个工具来消费它。换句话说，Cinder 是 **AI 的数据源**，而非 AI 本身。
 
 相关文档：
 

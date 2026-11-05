@@ -131,7 +131,7 @@ flowchart TB
     end
     subgraph AGENT[🤖 AI agent user — tool surface]
         direction LR
-        MCP[repotory-mcp · 18 MCP tools]
+        MCP[repotory-mcp · 20 MCP tools]
         DSH[dsh Harness plugin · llms.txt]
     end
     subgraph CORE[🧠 Local knowledge base — single source of truth]
@@ -155,9 +155,9 @@ The brand presentation layer and the machine identity layer are **intentionally 
 
 | Layer | Value | Notes |
 |------|------|------|
-| Brand name | `Cinder` | `productName`, in-app logo, documentation copy |
-| Full display name | `Cinder: Local Git Knowledge Base` | Window title (the Wails `options.Title` in `main.go`) and the HTML `<title>` |
-| Repository and package identity | `repotory` | GitHub repo name, Go module name, npm package name |
+| Brand name | `Cinder` / `Cinder Desktop` | Parent brand; the desktop app's `productName` and documentation copy are `Cinder Desktop` |
+| Full display name | `Cinder Desktop: Local Git Knowledge Base` | Window title (the Wails `options.Title` in `main.go`) and the HTML `<title>` |
+| Repository and package identity | `sky-jiangcheng/cinder` / `repotory` | The GitHub repository followed the brand to `cinder`; the Go module and npm package names stay frozen as `repotory` |
 | Frozen identifiers | `repotory` | Binary/command name, user data directory (the `dirName` in `internal/platform`), MCP server name and tool prefix |
 
 Frozen identifiers are exempt from "brand unification": the data directory has already gone through two migrations (gitboard → gitbuddy → repotory; see the legacy migration logic in `internal/platform/platform.go`), and MCP tool names are an external contract with AI clients.

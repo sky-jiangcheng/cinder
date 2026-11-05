@@ -9,7 +9,7 @@ Cinder 面向 AI 代理提供读取通道与自检工具，全部复用同一 `i
 
 ## 价值定位：Cinder 是 AI 的数据源，而非 AI 平台
 
-**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 18 个工具来**消费**这层数据，按需取数、精确检索。
+**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 20 个工具来**消费**这层数据，按需取数、精确检索。
 
 这一层「为什么比让 AI 直接读 git 更优」的论证，见[存储结构优化与 AI 价值](../storage-optimization.md)。
 
@@ -116,7 +116,7 @@ go build -o repotory-server ./cmd/server
 
 ## MCP Server（`repotory-mcp`）
 
-MCP 是唯一的 AI 执行接口（`repotory` CLI 未随版本发布）。stdio 协议，进程内单次开库，18 个工具（含 4 个写操作：扫描 + 笔记创建/更新 + 会话交接）：
+MCP 是唯一的 AI 执行接口（`repotory` CLI 未随版本发布）。stdio 协议，进程内单次开库，20 个工具（含 5 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 共享会话写入）：
 
 会话记忆协议的两端在时序上是这样落位的：
 
@@ -159,6 +159,8 @@ sequenceDiagram
 | `repotory_integrity` | 审计数据可信度（FTS 索引漂移 / 孤儿行 / 缓存新鲜度 / 覆盖率） | 读 |
 | `repotory_ai_audit` | 查看本机最近向 AI 发了什么：时间 / 端点 / 模型 / 发起面（mcp/http/desktop）/ 字符数 / 是否被本地规则拦截。**不含提示词与回复原文**（审计只存哈希与长度） | 读 |
 | `repotory_ai_review_rules` | 查看本地 AI 审阅规则与输入/输出审阅开关。规则是用户自己的正则（每行一条，`#` 注释），命中即在发出前拦截/返回时标记；不内置黑名单 | 读 |
+| `repotory_chat` | 跨端**共享会话**（Warden 与 IDE 插件之间同步主题与已完成的消息）：`operation` ∈ `list` / `create` / `read` / `append` / `rename`。id 由客户端生成 UUID；同 id 同载荷重放**幂等**，同 id 不同载荷直接报错、**绝不覆盖**；`reply_to` 只能指向本主题内的 user 消息。与知识笔记、检索、审批**完全隔离**，不共享一张表 | 写 |
+| `repotory_metrics` | 读**已存库**的量化概览（仓库数 / 代码行 / 今日提交与增删 / 笔记数 / 待人工审批数）。不扫盘、不跑 git、不刷新缓存；`path` 空 = 全库，未知路径返回空计数而不是全库总量；缓存语言 LOC 覆盖不完整时 `totalLines` 为 `null`（宁可少给，不给假总数） | 读 |
 
 ### 就绪度 vs 数据可信度
 
@@ -380,7 +382,7 @@ unzip repotory.skill -d ~/.workbuddy/skills/
 
 | 文件 | 作用 |
 |------|------|
-| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、14 个工具的路由决策、agent 不可用的能力清单 |
+| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、20 个工具的路由决策、agent 不可用的能力清单 |
 | `references/mcp-tools.md` | 每个工具的精确参数签名、HTTP RPC 方法映射 |
 | `references/data-model.md` | schema 与不变量（主题归属、迁移规则、handoff 保护、trigram 边界） |
 | `scripts/repotory-query.py` | MCP 不可用时的只读兜底查询（检索 / 列主题 / 列项目 / 库概况） |

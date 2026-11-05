@@ -30,7 +30,7 @@ order: 2
 
 | 通道 | 说明 |
 |------|------|
-| MCP 服务器 | `repotory-mcp` stdio 服务器，18 个工具（仓库扫描 + 上下文注入 + 会话交接 + 笔记 CRUD/整理 + 项目查询 + 搜索 + 四项自检 + 知识页检索）；可接入 Claude Code / Cursor 等（AI 执行动作的唯一通道） |
+| MCP 服务器 | `repotory-mcp` stdio 服务器，20 个工具（仓库扫描 + 上下文注入 + 会话交接 + 笔记 CRUD/整理 + 项目查询 + 搜索 + 四项自检 + 知识页检索 + 跨端共享会话 + 量化指标）；可接入 Claude Code / Cursor 等（AI 执行动作的唯一通道） |
 | `repotory_scan` | 一次冷启动：播种默认扫描根并同步扫描，发现本地 Git 仓库。纯 MCP 安装（无桌面应用）也能把知识库从零建起来 |
 | `repotory_context` | 会话开始一次调用拉齐项目全貌：技术栈 / README 摘要 / 依赖 / 最近提交 / 未完成待办 / 高相关笔记（交接笔记优先）——替代 3-4 次链式查询 |
 | `repotory_handoff` | 会话结束时结构化交接：summary / changes / decisions / gotchas / next_steps 渲染统一模板并落库；下一个会话（任何 Agent）自动读到 |

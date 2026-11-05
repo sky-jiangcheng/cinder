@@ -5,7 +5,7 @@ order: 1
 
 # Getting Started
 
-Cinder is the local-first memory layer and workbench for AI coding agents. Its core value is establishing a **persistent, cross-agent project memory**: it automatically discovers local Git repositories and captures architecture decisions, gotchas, dependencies, and tech stacks, enabling any AI agent to access project context in a single tool call.
+Cinder is the local-first memory layer for AI coding agents, and Cinder Desktop is its workbench. Its core value is establishing a **persistent, cross-agent project memory**: it automatically discovers local Git repositories and captures architecture decisions, gotchas, dependencies, and tech stacks, enabling any AI agent to access project context in a single tool call.
 
 The project ships as a **multi-artifact suite**. You can choose the entry point that best matches your workflow:
 - **MCP-Only Mode**: No GUI required. Register local memory with Claude Code, Cursor, and Windsurf in a single command.
@@ -117,20 +117,18 @@ The real power of Cinder comes from saving reusable insights:
 
 If you already have memory logs from Claude, Codex, OpenCode, OpenClaw, or Hermes, you can import them idempotently under **Settings → Plugins**. See [Knowledge Source Import](plugins/overview.md).
 
-### 7. After You Close the Window: The App Stays, the Bot Stays
+### 7. After You Close the Window: The App Exits
 
-**Closing the window is not quitting the app.** The desktop app is resident by default: close the window and the process keeps running, ready to be summoned back.
+**Closing the window quits the app.** The desktop app is a workbench, not a resident process: there is no tray and no background daemon, so the window *is* the app (ADR-0047 decision ⑤). Starting it again launches a fresh process that takes over the same SQLite file.
 
-| Platform | After you close the window | How to get it back |
+| Platform | After you close the window | How to reopen |
 | :--- | :--- | :--- |
-| **macOS** | the window hides and **the menu bar keeps a "Cinder" menu** | menu bar → **Cinder** → Show Cinder / Ask Cinder… |
-| **Windows / Linux** | the window minimises and **the taskbar keeps an icon** | click the taskbar icon |
+| **macOS** | the process ends; the menu bar keeps only the system application menu | reopen Cinder Desktop from Applications or Spotlight |
+| **Windows / Linux** | the process ends; the taskbar icon disappears | reopen Cinder Desktop from the Start menu / launcher |
 
-The menu has three items: **Show Cinder** (summon the window), **Ask Cinder…** (summon the window and open the bot panel straight away) and **Quit Cinder** (the one that really ends the process).
+The `Cinder Desktop` item in the macOS menu bar is the system application menu (About / Hide / Quit); the app does not add its own Show / Ask / Quit items — that menu was removed in ADR-0047.
 
-> **There is no system tray icon.** Cinder runs on Wails v2, which has no tray (its `TrayMenu` type is never rendered by any platform frontend), so macOS relies on the **menu bar** and Windows / Linux on the **taskbar**. Stated plainly rather than pretending otherwise.
-
-**Starting the app again does not open a second process**: it wakes the one already running (and opens the bot), because only one process may own a given SQLite file.
+> **There is no system tray icon.** Wails v2 has no tray (its `TrayMenu` type is never rendered by any platform frontend).
 
 **The bot (the little draggable robot) now switches modules on its own**: a row of module chips sits at the top of its panel (Home / Dashboard / Knowledge / Review / Settings), and clicking one moves the main area there. **Its question scope is the whole library by default** — the desktop bot is a global assistant and the current page is only its current topic; use the **Scope** chip to lock it to one project when you want that.
 
@@ -143,7 +141,7 @@ The menu has three items: **Show Cinder** (summon the window), **Ask Cinder…**
 | **Knowledge Base** | Core | Cross-project note hub: Markdown `/` block editor, tags, pinning, FTS5 full-text search, version history |
 | **Repo Mining** | Core | Automatically extracts README, tech stack (20+ formats), language breakdown, dependencies, contributors |
 | **Project Retrieval** | Core | Global command palette `⌘/Ctrl+K`, global full-text search, fast project context jump |
-| **AI Memory Interfaces** | Core | llms.txt, note export, `repotory-mcp` with 18 tools (including `repotory_context` / `repotory_handoff`) |
+| **AI Memory Interfaces** | Core | llms.txt, note export, `repotory-mcp` with 20 tools (including `repotory_context` / `repotory_handoff`) |
 | **Dashboard & Metrics** | Supporting | Daily goal progress ring, project cards, activity trend lines, Git commit heatmap |
 | **Memory Importers** | Built-in | 8 idempotent agent memory importers (see [Knowledge Source Import](plugins/overview.md)) |
 

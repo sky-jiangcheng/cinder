@@ -131,7 +131,7 @@ flowchart TB
     end
     subgraph AGENT[🤖 AI Agent 用户 — 工具面]
         direction LR
-        MCP[repotory-mcp · 18 个 MCP 工具]
+        MCP[repotory-mcp · 20 个 MCP 工具]
         DSH[dsh Harness 插件 · llms.txt]
     end
     subgraph CORE[🧠 本地知识库 — 唯一事实源]
@@ -155,9 +155,9 @@ flowchart TB
 
 | 层 | 取值 | 说明 |
 |------|------|------|
-| 品牌名 | `Cinder` | `productName`、应用内 Logo、文档文案 |
-| 完整展示名 | `Cinder: Local Git Knowledge Base` | 窗口标题（`main.go` 的 Wails `options.Title`）与 HTML `<title>` |
-| 仓库与包标识 | `repotory` | GitHub 仓库名、Go module 名、npm 包名 |
+| 品牌名 | `Cinder` / `Cinder Desktop` | 母品牌；桌面应用的 `productName` 与文档文案是 `Cinder Desktop` |
+| 完整展示名 | `Cinder Desktop: Local Git Knowledge Base` | 窗口标题（`main.go` 的 Wails `options.Title`）与 HTML `<title>` |
+| 仓库与包标识 | `sky-jiangcheng/cinder` / `repotory` | GitHub 仓库名已随品牌改为 `cinder`；Go module 与 npm 包名仍冻结为 `repotory` |
 | 冻结标识 | `repotory` | 二进制/命令名、用户数据目录（`internal/platform` 的 `dirName`）、MCP server 名与工具前缀 |
 
 冻结标识不参与「品牌统一」：数据目录已经历 gitboard → gitbuddy → repotory 两轮迁移（`internal/platform/platform.go` 的 legacy 迁移逻辑），MCP 工具名是对 AI 客户端的对外契约。

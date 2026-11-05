@@ -30,7 +30,7 @@ order: 2
 
 | Channel | Description |
 |---------|-------------|
-| MCP Server | `repotory-mcp` stdio server, 18 tools (repo scan + context injection + session handoff + note CRUD/organize + project queries + search + four self-checks + knowledge-page retrieval); plugs into Claude Code / Cursor and more (the only interface AI executes through) |
+| MCP Server | `repotory-mcp` stdio server, 20 tools (repo scan + context injection + session handoff + note CRUD/organize + project queries + search + four self-checks + knowledge-page retrieval + cross-client shared conversations + workspace metrics); plugs into Claude Code / Cursor and more (the only interface AI executes through) |
 | `repotory_scan` | One-shot cold start: seeds default scan roots and scans synchronously to discover local Git repos. A pure-MCP install (no desktop app) can bootstrap the knowledge base |
 | `repotory_context` | One call at session start loads the project's full context: tech stack / README summary / dependencies / recent commits / open todos / highly relevant notes (handoff notes first) — replaces 3-4 chained queries |
 | `repotory_handoff` | Structured handoff at session end: summary / changes / decisions / gotchas / next_steps rendered into a unified template and stored; the next session (any agent) reads it automatically |

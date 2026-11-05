@@ -16,7 +16,7 @@ Cinder 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记住
 
 推论：各家 IDE / agent 自己的会话记录都是**各自生态内部的实现**（VS Code 的 session 索引，扩展至今读不到），跨 agent 的那一层因此需要一个**中立的落点**——这正是 Cinder 所在的位置。
 
-**两个产品，各担一件事**：Cinder 是**工作台**——浏览、编辑、**审批**、治理这份记忆；[Warden](https://github.com/sky-jiangcheng/warden) 是**助手**——一个跑在本机的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。两者共享同一份本地记忆、同一套协议，**审批永远在 Cinder 那边**（助手走 MCP，而 MCP 工具面里本来就没有 approve / reject）。
+**两个产品，各担一件事**：Cinder Desktop 是**工作台**——浏览、编辑、**审批**、治理这份记忆；[Warden](https://github.com/sky-jiangcheng/warden) 是**助手**——一个跑在本机的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。两者共享同一份本地记忆、同一套协议，**审批永远在 Cinder Desktop 那边**（助手走 MCP，而 MCP 工具面里本来就没有 approve / reject）。
 
 当前优先级声明：
 1. **本地项目理解与知识上下文** 是第一优先级
@@ -84,7 +84,7 @@ flowchart TB
 
     subgraph AGENT["🤖 AI Agent —— 工具面调用"]
         direction LR
-        MCP["repotory-mcp<br/>18 个工具"]
+        MCP["repotory-mcp<br/>20 个工具"]
         DSH["dsh 插件<br/>3 个工具"]
         LLMSTXT["llms.txt 导出"]
         MCP ~~~ DSH ~~~ LLMSTXT

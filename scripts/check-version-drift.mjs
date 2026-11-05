@@ -17,7 +17,7 @@
 //   ② TODO 现状速查 —— TODO.md 顶部那行的版本必须与 SSOT 相等（由 bump-version.sh 同步）
 //   ③ ADR 集合 —— docs/adr/ 的文件集合 = 中英两份索引列出的集合，且两份索引逐条对应
 //   ④ 扫描频率 —— SECURITY.md 承诺的扫描频率必须与 .github/dependabot.yml 一致
-//   ⑤ 工具数量 —— 随包分发的 skill 参考文档声称的工具数 = cmd/mcp 测试钉死的工具数
+//   ⑤ 工具数量 —— skill 参考文档与文档站里每一处工具数声称 = cmd/mcp 测试钉死的工具数
 //   ⑥ Node 版本 —— .nvmrc 是 SSOT，Dockerfile 的 ARG 默认值必须与它相等，
 //      且所有 setup-node 步骤必须读 .nvmrc 而不是各写一份字面量
 //   ⑦ Go 版本 —— 每个工作流的 go-version 必须钉到同一个确切补丁版，
@@ -231,8 +231,13 @@ if (intervals.length === 0) {
 // ------------------------------------------------------------ ⑤ 工具数量 ----
 
 // 工具清单的事实源是 cmd/mcp 的注册表，而注册表由 TestToolsRegistered 钉死。
-// 随包分发的 skill 参考文档与文档站首页各自声称一个数量——三者必须相等，
+// 随包分发的 skill 参考文档与文档站的每一处计数声称都必须等于它，
 // 否则装到用户机器上的文档、用户打开的文档站就在说谎。
+// 为什么逐个文件写正则而不是全文搜数字：历史上「13 → 18」那次漂移正是散落在
+// 七份手册里的计数各改各的，全文匹配会把 ADR 与过程记录里**当时的实测值**也算成
+// 漂移——那些是历史记录，不许按今天重写（docs/features/local-agent-recipe.md 里的
+// 「18 个 MCP 工具」是 2026-10-29 那次真机验证量到的，不在本清单里）。
+// 每个文件取**全部**匹配而不是第一个：一处改对、另一处漏改，才是这类漂移的常见形状。
 const mcpTest = read('cmd/mcp/main_test.go')
 const wantBlock = mcpTest.match(/want\s*:=\s*\[\]string\{([^}]*)\}/)?.[1]
 const toolNames = wantBlock
@@ -243,15 +248,31 @@ if (toolNames.length === 0) {
 } else {
   const toolCountClaims = [
     ['skill/repotory/references/mcp-tools.md', /(\d+)\s*个工具/],
+    ['skill/repotory/SKILL.md', /(\d+)\s*个工具，按意图选/],
     ['docs/index.md', /repotory-mcp<br\/>(\d+)\s*个工具/],
     ['docs/en/index.md', /repotory-mcp<br\/>(\d+)\s*tools/],
+    ['docs/features-overview.md', /stdio 服务器，(\d+)\s*个工具/],
+    ['docs/en/features-overview.md', /stdio server, (\d+)\s*tools/],
+    ['docs/storage-optimization.md', /的 (\d+)\s*个工具来消费它/],
+    ['docs/en/storage-optimization.md', /the (\d+)\s*tools of/],
+    ['docs/getting-started.md', /repotory-mcp` (\d+) 个 MCP 工具/],
+    ['docs/en/getting-started.md', /with (\d+)\s*tools/],
+    ['docs/architecture.md', /repotory-mcp · (\d+) 个 MCP 工具/],
+    ['docs/en/architecture.md', /repotory-mcp · (\d+) MCP tools/],
+    ['docs/features/ai-integration.md', /(\d+)\s*个工具/],
+    ['docs/en/features/ai-integration.md', /(\d+)(?: MCP)? tools/],
   ]
   for (const [file, re] of toolCountClaims) {
-    const claimed = read(file).match(re)?.[1]
-    if (!claimed) {
+    const text = read(file)
+    const claimed = [...text.matchAll(new RegExp(re.source, `${re.flags}g`))].map((m) => m[1])
+    if (claimed.length === 0) {
       issues.push(`${file}: 读不到声称的 MCP 工具数量`)
-    } else if (Number(claimed) !== toolNames.length) {
-      report(`${file} · 声称的 MCP 工具数`, toolNames.length, claimed)
+      continue
+    }
+    for (const c of claimed) {
+      if (Number(c) !== toolNames.length) {
+        report(`${file} · 声称的 MCP 工具数`, toolNames.length, c)
+      }
     }
   }
 }
