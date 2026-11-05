@@ -302,6 +302,68 @@ in this one.
 - **Whether the copilot should perform writes at all**: this ADR fixes "it goes over MCP, with one
   set of write tools", but "should the copilot write notes" is a product decision, not a technical one.
 
+## Addendum (2026-11-05)
+
+**Naming, unified**: the product name is **Repotory Agent** everywhere it faces users (the separate
+repo `repotory-agent`); "copilot" is a **role word** only, disambiguated at its first occurrence
+(**not** GitHub Copilot). **Every "copilot" in this ADR reads that way** — it means the product in the
+separate repository. This repo's README and documentation home now each carry a one-line statement of
+the relation in both directions (workbench vs assistant, approval lives in Repotory).
+
+**Where the four "not decided" items above stand now** (details in the separate repo's `docs/product.md`):
+
+| Left open back then | Settled as |
+|---|---|
+| The version compatibility strategy | **Settled (2026-11-05)**: **self-evident at runtime, warn in plain words** — catch the `serverInfo.version` in the `initialize` response (the server was reporting it all along; the client threw the whole response away), show "Repotory vX.Y.Z · N tools" on the first screen, warn when it is below the floor and **never hard-refuse**; **no real capability handshake** (that solves "a tool was removed or renamed", not "a tool was added" — and the added case is already covered by the dynamic fetch) |
+| Whether the copilot should perform writes at all | **Settled (2026-11-05)**: **layered** — `handoff` / `scan` are written automatically; **durable knowledge (`notes_create` / `notes_update` / `notes_organize`) needs a human confirmation first** (a note is retrievable the moment it is written, so the agent could write into the very memory it is about to read next; ADR-0015's own words describe exactly that shape) |
+| The distribution channel | **Still open** — Phase 6 of the separate repo |
+| The wake-up interaction | **Still open** — global shortcut / always-visible window, waiting for user feedback |
+
+**One more settled behaviour (what happens when the memory layer is unavailable)**: **the chat
+continues and a banner says so out loud** — a failed context assembly must reach the user, and **a
+silent fallback is never allowed** (silence means the model answers with no basis while the user
+cannot tell that this turn had none).
+
+## Addendum II (2026-11-05): no repo split, boundaries inside the repo
+
+**The question**: this repository holds both the **workbench** (the Wails desktop app) and the
+**services** (the headless HTTP server and the MCP server) — should everything except the server be
+split out?
+
+**The answer: no split.** The key fact is that **the server is not the core of this repository**: what
+is actually shared is `internal/service` + `internal/db`, and the server is only **one of three doors**
+onto it (the desktop Wails app, the headless HTTP API, the MCP stdio server); **the desktop app and
+the MCP server both open the same SQLite directly and call the service directly — neither goes through
+the HTTP server**. Splitting the repository would only turn "three doors onto one implementation" into
+cross-repository release coordination.
+
+**Why there is nothing to gain**: **the IDE plugins and the CLI were already pure HTTP clients**
+(`ide/vscode` is TypeScript, `ide/jetbrains` is Kotlin, `scripts/repotory-init` is node) with **zero
+coupling to the Go code** — they **are already split out**, they merely still live in the same
+repository. The coupling that does exist is **at the Go module level**: one `go.mod`, one version number
+(`wails.json` is the SSOT), and one release that produces the desktop bundle, the server bundle, the MCP
+binary, the VSIX and the JetBrains plugin together. After a split, **schema migrations would have to be
+released across repositories** (the desktop app would have to wait for a core release before it could
+consume a new migration) — pure overhead for a single maintainer.
+
+**Boundaries first — the first cut landed (2026-11-05)**: `internal/app` used to import the Wails
+runtime for two side effects only (`EventsEmit`, `BrowserOpenURL`), and `cmd/server` links
+`internal/app` too — so **the whole webview frontend stack (13 packages) was dragged into a binary that
+never opens a window**. Both side effects are now **injected** (`app.WithEmitter` / `app.WithOpener`),
+the Wails implementations moved back to the desktop entry point (`main.go`), and `internal/app` no longer
+imports Wails. **The behaviour is unchanged word for word**: with no emitter, events are dropped (the
+same outcome the old nil-ctx check produced); with no opener, `OpenBrowserURL` still returns the same
+"browser open unavailable outside the desktop runtime". **The guard**:
+`cmd/server/wails_free_test.go` walks the **module's own import graph** starting at `cmd/server` and
+asserts that the whole dependency chain contains no `github.com/wailsapp/*` package; it also carries a
+**reverse control** (walking from the repository root must find the desktop's own Wails import) so the
+guard cannot go green by walking nothing at all.
+
+**There are only two conditions that would trigger a split**: ① a third party needs to consume the core
+**as a Go library** (rather than over MCP / HTTP); ② the desktop app's release cadence must be decoupled
+from schema migrations. **"The repository looks too big" is not a reason** — that is a mood, not a
+constraint.
+
 ## Landing checklist
 
 | Surface | File / action |

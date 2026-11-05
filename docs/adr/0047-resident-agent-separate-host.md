@@ -265,6 +265,54 @@ schema 不变。
 | copilot 托盘 | 独立仓 `src-tauri/src/tray.rs`（**已落地**）：左键唤回窗口，右键 Show / Quit；`shell_status` 暴露 `tray.installed`，首屏有「唤回入口」卡片 |
 | schema / MCP 工具面 | **不动** |
 
+## 补注（2026-11-05）
+
+**称谓统一**：对外产品名一律 **Repotory Agent**（独立仓 `repotory-agent`）；「copilot」只作**角色词**，
+首次出现处消歧（**不是** GitHub Copilot）。**本篇正文里的「copilot」一律按此读**——它指独立仓那个产品。
+本仓 README 与文档站首屏已各加一行双向关系句（工作台 vs 助手，审批在 Repotory 那边）。
+
+**末尾「未决」四项的现状**（详见独立仓 `docs/product.md`）：
+
+| 当时未决 | 现在的结论 |
+|---|---|
+| 版本兼容策略 | **已定**（2026-11-05）：**运行时自证 + 人话警告**——接住 `initialize` 响应里的 `serverInfo.version`（服务端本来就在报，客户端此前把它整个丢了），首屏显示「Repotory vX.Y.Z · N 工具」，低于下界时提示升级、**不硬拒绝**；**不做真能力协商**（它只解决「工具被删/改名」，不解决「工具新增」——而新增已经由动态拉取覆盖） |
+| 要不要执行写操作 | **已定**（2026-11-05）：**分层**——`handoff` / `scan` 自动写；**长期知识（`notes_create` / `notes_update` / `notes_organize`）过一次人确认**（note 写完立刻进检索，agent 能往自己下一轮要读的记忆里写东西；ADR-0015 的原话正是这个形态） |
+| 分发渠道 | **仍未决**——独立仓 Phase 6 |
+| 唤回交互 | **仍未决**——全局快捷键 / 窗口常驻可见，等使用者反馈 |
+
+**另定一条（记忆层不可用时的行为）**：**聊天继续 + 显式横幅说明**——上下文装配失败必须让用户知道，
+**绝不静默降级**（静默等于让模型在没有依据的情况下回答，而用户看不出它这次没有依据）。
+
+## 补注二（2026-11-05）：仓不拆，先立仓内边界
+
+**问题**：本仓同时装着**工作台**（Wails 桌面 App）与**服务**（无头 HTTP server + MCP server）——
+要不要把 server 之外的部分拆出去？
+
+**结论：不拆。** 关键事实是——**「server」并不是这个仓的核心**：真正共享的是
+`internal/service` + `internal/db`，server 只是通往它的**三扇门之一**（桌面 Wails、无头 HTTP、
+MCP stdio）；**桌面与 MCP 都是直接开同一个 SQLite、直接调 service，并不经过 HTTP server**。
+拆仓只会把「同一份业务逻辑的三扇门」变成跨仓发布协调。
+
+**为什么拆不出好处**：**IDE 插件与 CLI 本来就是纯 HTTP 客户端**（`ide/vscode` 是 TypeScript、
+`ide/jetbrains` 是 Kotlin、`scripts/repotory-init` 是 node），**跟 Go 代码零耦合**——它们
+**已经拆出去了**，只是还住在同一个仓里。真正的耦合是 **Go module 级**的：一个 `go.mod`、
+一个版本号（`wails.json` 是 SSOT）、一次 release 同时产出桌面 bundle + server bundle + MCP 二进制 +
+VSIX + JetBrains 插件。拆仓之后 **schema 迁移要跨仓发布**（桌面必须等 core 发版才能吃到新迁移），
+对单人维护是纯开销。
+
+**先立边界——第一刀已落地（2026-11-05）**：`internal/app` 曾经 import Wails runtime，只为两个副作用
+（`EventsEmit` 发事件、`BrowserOpenURL` 开浏览器），而 `cmd/server` 也链接 `internal/app`——
+于是**整个 webview 前端栈（13 个包）被拖进了一个永远不开窗口的二进制**。现在这两个副作用改成**注入**
+（`app.WithEmitter` / `app.WithOpener`），Wails 实现放回桌面入口 `main.go`，
+`internal/app` 不再 import Wails。**行为逐字不变**：无 emitter 则事件丢弃（与旧的 nil-ctx 判断同结果），
+无 opener 则 `OpenBrowserURL` 仍报同一句「browser open unavailable outside the desktop runtime」。
+**守门**：`cmd/server/wails_free_test.go` 从 `cmd/server` 出发走**模块内 import 图**，断言整条依赖链
+不含任何 `github.com/wailsapp/*`；并带一个**反向对照**（从仓根出发必须能找出桌面那份 Wails 导入），
+防止这道门因为「什么都没走」而假绿。
+
+**触发拆仓的条件只有两个**：① 有第三方需要**以 Go 库**的方式消费 core（而不是走 MCP / HTTP）；
+② 桌面的发版节奏必须与 schema 迁移解耦。**「仓看起来太大」不是理由**——那是心情，不是约束。
+
 ## 后续路线
 
 1. 独立仓改名 + 定位重写 + 门禁 + 图标（让 copilot 先成为一个「能构建、能自证」的仓）。

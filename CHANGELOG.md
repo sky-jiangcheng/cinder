@@ -42,6 +42,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **无头 server 不再链接 Wails：13 个 webview 包从「永远不开窗口的二进制」里消失（2026-11-05）**：`cmd/server` 曾经 `import` **整个 Wails 前端栈**（`go list -deps ./cmd/server` 实测 13 个 `github.com/wailsapp/*` 包，含 `internal/frontend` 那套 webview）——而它**永远不开窗口**。根因只有一处，却很小：**`internal/app` 为了两个副作用 import 了 Wails runtime**（`EventsEmit` 发事件、`BrowserOpenURL` 开浏览器），而 `cmd/server` 也链接 `internal/app`（它反射同一个绑定对象，把 `/api/rpc` 暴露给浏览器与脚本）。**改法不是搬目录，是把副作用倒过来**：两个副作用改成**注入**（`app.WithEmitter` / `app.WithOpener`），Wails 实现放回桌面入口 `main.go`，`internal/app` 不再 import Wails——**`go list -deps ./cmd/server` 现在是 0 个 Wails 包**。**行为逐字不变**：没有 emitter 时事件照旧丢弃（与旧的 `ctx == nil` 判断同结果），没有 opener 时 `OpenBrowserURL` 照旧返回同一句「browser open unavailable outside the desktop runtime」，**桌面端的事件与开链接行为一字未变**。**新增守门** `cmd/server/wails_free_test.go`：从 `cmd/server` 出发走**模块内 import 图**（`go/parser` 静态解析，**不联网、不调工具链**），断言**整条依赖链不含任何 `github.com/wailsapp/*`**；并带一个**反向对照**（从仓根出发必须能找出桌面那份 Wails 导入），防止这道门因为「什么都没走」而假绿。**为什么做这一刀**：本仓同时装着工作台与服务，而**真正共享的是 `internal/service` + `internal/db`，server 只是三扇门之一**——桌面与 MCP 都是直接开同一个 SQLite、**不经过 HTTP server**；**IDE 插件与 CLI 本来就是纯 HTTP 客户端**（TS / Kotlin / node，零 Go 耦合），**它们已经拆出去了**，所以**拆仓换不来任何东西，只会多出跨仓的 schema 迁移发布**。**决策与代价记在 [ADR-0047](docs/adr/0047-resident-agent-separate-host.md) 补注二**（中英双份）：**暂不拆仓，先立仓内边界**；**触发拆仓的条件只有两个**——① 有第三方需要**以 Go 库**的方式消费 core；② 桌面发版节奏必须与 schema 迁移解耦。**不动 schema、不新增绑定、不改 `/api/rpc` 契约、不改桌面行为**
+
 ## [2.29.0] - 2026-11-04
 
 ### 变更
