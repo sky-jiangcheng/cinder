@@ -1,8 +1,8 @@
 ---
-title: Repotory 文档
+title: Cinder 文档
 ---
 
-# Repotory 文档
+# Cinder 文档
 
 <p class="subtitle"><strong>The local-first memory layer for AI coding agents</strong> — discover your Git repos, understand what changed, capture knowledge as searchable Markdown, and hand it to any agent in one tool call.<br><strong>面向 AI 编程 Agent 的本地优先记忆层</strong>：自动发现本地 Git 项目，理解每个项目「现在发生了什么、沉淀了哪些知识」，并在会话边界自动注入与收回，让任何 agent 复用同一份项目上下文。</p>
 
@@ -10,13 +10,13 @@ title: Repotory 文档
 
 ## 产品定位
 
-Repotory 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记住的东西留在本机，让下一个 agent 接着用——核心价值是**让本地 Git 项目从'散落在终端和记忆里'变成'可检索、可复用的上下文'**。
+Cinder 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记住的东西留在本机，让下一个 agent 接着用——核心价值是**让本地 Git 项目从'散落在终端和记忆里'变成'可检索、可复用的上下文'**。
 
-这一层是**agent 中立 / 协议中立**的：任何会讲 MCP 的编程 Agent（Claude Code / Cursor / Codex / Copilot 等）都能读写**同一份**记忆——Repotory 不是绑在某个 harness 上的插件，而是这些 Agent 共享的中立一层。**不需要账号、不需要云端**：整份记忆就是本机的一个 SQLite 文件。
+这一层是**agent 中立 / 协议中立**的：任何会讲 MCP 的编程 Agent（Claude Code / Cursor / Codex / Copilot 等）都能读写**同一份**记忆——Cinder 不是绑在某个 harness 上的插件，而是这些 Agent 共享的中立一层。**不需要账号、不需要云端**：整份记忆就是本机的一个 SQLite 文件。
 
-推论：各家 IDE / agent 自己的会话记录都是**各自生态内部的实现**（VS Code 的 session 索引，扩展至今读不到），跨 agent 的那一层因此需要一个**中立的落点**——这正是 Repotory 所在的位置。
+推论：各家 IDE / agent 自己的会话记录都是**各自生态内部的实现**（VS Code 的 session 索引，扩展至今读不到），跨 agent 的那一层因此需要一个**中立的落点**——这正是 Cinder 所在的位置。
 
-**两个产品，各担一件事**：Repotory 是**工作台**——浏览、编辑、**审批**、治理这份记忆；[Repotory Agent](https://github.com/sky-jiangcheng/repotory-agent) 是**助手**——一个跑在本机的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。两者共享同一份本地记忆、同一套协议，**审批永远在 Repotory 那边**（助手走 MCP，而 MCP 工具面里本来就没有 approve / reject）。
+**两个产品，各担一件事**：Cinder 是**工作台**——浏览、编辑、**审批**、治理这份记忆；[Warden](https://github.com/sky-jiangcheng/repotory-agent) 是**助手**——一个跑在本机的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。两者共享同一份本地记忆、同一套协议，**审批永远在 Cinder 那边**（助手走 MCP，而 MCP 工具面里本来就没有 approve / reject）。
 
 当前优先级声明：
 1. **本地项目理解与知识上下文** 是第一优先级
@@ -43,7 +43,7 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     participant Agent as AI Agent<br>(Claude Code / Cursor /<br>VS Code 扩展)
-    participant RN as Repotory<br>(MCP / headless /<br>桌面)
+    participant RN as Cinder<br>(MCP / headless /<br>桌面)
     participant KB as 本地知识库<br>(SQLite + FTS5)
     Agent->>RN: repotory_scan（首次，无需桌面应用）
     RN->>KB: 播种扫描根，发现<br>Git 仓库并挖掘知识
@@ -56,7 +56,7 @@ sequenceDiagram
     Note over KB,Agent: 下一个会话（任何 agent）自动读到
 ```
 
-读图：三个参与者是**三个独立进程**——AI 侧不持有数据，Repotory 不调度 agent，知识库是双方唯一交汇的地方。上半段是冷启动（`repotory_scan`）与开会话（`repotory_context`），下半段是收会话（`repotory_handoff`）；最后一条 Note 是闭环成立的证据：交接笔记落库后，**下一个会话（可能是另一个 agent）经 `repotory_context` 自动读到**，不需要人工搬运。
+读图：三个参与者是**三个独立进程**——AI 侧不持有数据，Cinder 不调度 agent，知识库是双方唯一交汇的地方。上半段是冷启动（`repotory_scan`）与开会话（`repotory_context`），下半段是收会话（`repotory_handoff`）；最后一条 Note 是闭环成立的证据：交接笔记落库后，**下一个会话（可能是另一个 agent）经 `repotory_context` 自动读到**，不需要人工搬运。
 
 其中「交给 AI 使用」落在**会话边界**：`repotory_scan` 建立知识库，`repotory_context` 开会话一次注入全上下文，`repotory_handoff` 收会话结构化交接，跨 agent 复用。
 
@@ -70,7 +70,7 @@ sequenceDiagram
 
 ## 全景图：两类用户，一套产物
 
-Repotory 的产物同时服务两类用户：**坐在 IDE 里的你**（需要看见它、点得到它）和 **AI agent**（需要读得到它、写得进它）。两条路径共享同一个本地知识库，这正是「换 agent 不丢上下文」的根基：
+Cinder 的产物同时服务两类用户：**坐在 IDE 里的你**（需要看见它、点得到它）和 **AI agent**（需要读得到它、写得进它）。两条路径共享同一个本地知识库，这正是「换 agent 不丢上下文」的根基：
 
 ```mermaid
 flowchart TB
@@ -116,7 +116,7 @@ flowchart TB
 
 ## 文档说明
 
-本手册覆盖 Repotory 的核心功能与使用场景。文档以 Markdown 编写（唯一内容源，存放于仓库 `docs/` 目录），由 `scripts/build-docs.mjs` 生成 HTML 后部署到 GitHub Pages。
+本手册覆盖 Cinder 的核心功能与使用场景。文档以 Markdown 编写（唯一内容源，存放于仓库 `docs/` 目录），由 `scripts/build-docs.mjs` 生成 HTML 后部署到 GitHub Pages。
 
 手册有**英文（默认）与中文两个版本**，通过侧栏顶部的语言切换器互跳；英文内容源在 `docs/en/`，中文在 `docs/`。
 

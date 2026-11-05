@@ -1,4 +1,4 @@
-# Repotory MCP server (Linux)
+# Cinder MCP server (Linux)
 #
 # The desktop app has no Linux installer artifact (it ships as a bare tarball),
 # but the MCP server is a pure Go / zero-CGO binary and installs cleanly, so the
@@ -7,7 +7,7 @@
 # Version is stamped by scripts/update-manifests.sh from wails.json
 # (info.productVersion) — never edit it by hand.
 class RepotoryMcp < Formula
-  desc "MCP stdio server exposing the Repotory local knowledge base to AI agents"
+  desc "MCP stdio server exposing the Cinder local knowledge base to AI agents"
   homepage "https://github.com/sky-jiangcheng/repotory"
   version "2.30.0"
   license "MIT"

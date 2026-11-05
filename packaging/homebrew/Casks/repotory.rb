@@ -1,4 +1,4 @@
-# Repotory desktop app (macOS)
+# Cinder Desktop app (macOS)
 #
 # Version is stamped by scripts/update-manifests.sh from wails.json
 # (info.productVersion) — never edit it by hand.
@@ -7,7 +7,7 @@
 # a mismatch, which is exactly what we want from a placeholder.
 cask "repotory" do
   version "2.30.0"
-  name "Repotory"
+  name "Cinder Desktop"
   desc "Local-first code project context base"
   homepage "https://github.com/sky-jiangcheng/repotory"
   # NOTE: no `license` stanza — `license` is a FORMULA method, not a Cask
@@ -25,14 +25,14 @@ cask "repotory" do
   end
 
   # The bundle inside the DMG is named after wails.json's `name`
-  # ("Repotory"), NOT after the `outputfilename` ("repotory"): the build
-  # produces build/bin/Repotory.app and create-dmg ships that bundle as-is.
+  # ("Cinder"), NOT after the `outputfilename` ("repotory"): the build
+  # produces build/bin/Cinder.app and create-dmg ships that bundle as-is.
   # macOS volumes are case-insensitive by default, so an earlier spelling
   # resolved anyway — but a case-sensitive volume would not find it, and the
   # tap's tests.yml asserts the installed path, so the two must agree
   # exactly. The BINARY inside the bundle stays "repotory" (a frozen
   # identifier); only the bundle directory carries the display name.
-  app "Repotory.app"
+  app "Cinder.app"
 
   # Application Support and Logs paths come from internal/platform; they are
   # where GetDbPath() and GetLogPath() point on macOS. A bundle-identifier

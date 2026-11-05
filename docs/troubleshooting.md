@@ -80,7 +80,7 @@ FTS5 trigram 索引最短匹配 3 字符；更短的查询自动降级为 LIKE �
 
 ## 数据安全须知
 
-- Repotory 是**本地优先**桌面应用：不监听网络端口、不上传任何数据；统计通过本机 `git` CLI 读取
+- Cinder 是**本地优先**桌面应用：不监听网络端口、不上传任何数据；统计通过本机 `git` CLI 读取
 - 数据库与配置存储在用户应用数据目录（位置见[快速开始](getting-started.md)），卸载不会自动删除；备份、迁移与彻底清除见[数据与备份](data-management.md)
 - 桌面 WebView 响应带 CSP 等安全头（`default-src 'self'` 等）
 

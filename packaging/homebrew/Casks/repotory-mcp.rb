@@ -1,14 +1,14 @@
-# Repotory MCP server (macOS)
+# Cinder MCP server (macOS)
 #
-# The MCP stdio server is the AI execution interface for Repotory — the desktop
+# The MCP stdio server is the AI execution interface for Cinder — the desktop
 # app is not required to use it, it reads the same local SQLite database.
 #
 # Version is stamped by scripts/update-manifests.sh from wails.json
 # (info.productVersion) — never edit it by hand.
 cask "repotory-mcp" do
   version "2.30.0"
-  name "Repotory MCP Server"
-  desc "MCP stdio server exposing the Repotory local knowledge base to AI agents"
+  name "Cinder MCP Server"
+  desc "MCP stdio server exposing the Cinder local knowledge base to AI agents"
   homepage "https://github.com/sky-jiangcheng/repotory"
   # NOTE: no `license` stanza — `license` is a FORMULA method, not a Cask
   # one. `brew install --cask` rejects the whole definition with

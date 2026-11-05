@@ -122,7 +122,7 @@ alias_manifest() {
 # lives in the bucket's README instead.
 alias_header() {
   cat <<'HEADER'
-# DEPRECATED NAME — the project was renamed from RepoNest to Repotory.
+# DEPRECATED NAME — the project was renamed from RepoNest to Cinder.
 #
 # This alias exists so a command saved before the rename keeps working. It
 # serves the CURRENT release: the previous version of this file pointed at

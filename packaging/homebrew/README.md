@@ -1,6 +1,6 @@
 # homebrew-repo
 
-Homebrew tap for [Repotory](https://github.com/sky-jiangcheng/repotory) — the
+Homebrew tap for [Cinder](https://github.com/sky-jiangcheng/repotory) — the
 local-first code project context base.
 
 ## What is in here

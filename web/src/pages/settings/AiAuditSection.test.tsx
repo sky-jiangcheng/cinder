@@ -237,7 +237,7 @@ describe('AiAuditSection the honest-limits copy', () => {
     expect(screen.getByText(/无法撤回/)).toBeTruthy()
   })
 
-  it('states that Repotory ships no built-in blocklist', async () => {
+  it('states that Cinder ships no built-in blocklist', async () => {
     renderSection()
     await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
 

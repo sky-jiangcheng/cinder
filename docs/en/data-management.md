@@ -5,7 +5,7 @@ order: 8
 
 # Data and Backup
 
-Repotory is a local-first app: there are no cloud services or accounts, and all knowledge data (notes, todos, project metadata, statistics) lives only in a single SQLite database on your machine. AI clients such as Claude Code read that same local data over MCP. That means **backing up = copying one directory, and migrating = moving one directory**.
+Cinder is a local-first app: there are no cloud services or accounts, and all knowledge data (notes, todos, project metadata, statistics) lives only in a single SQLite database on your machine. AI clients such as Claude Code read that same local data over MCP. That means **backing up = copying one directory, and migrating = moving one directory**.
 
 ```mermaid
 flowchart TB
@@ -22,7 +22,7 @@ How to read it: the box in the middle is the **single source of truth** — the 
 
 ## Boundary: this library belongs to one person
 
-Repotory's knowledge base is **single-user and local**: one data directory, one SQLite file, one person. There are no accounts, no server and no multi-tenancy.
+Cinder's knowledge base is **single-user and local**: one data directory, one SQLite file, one person. There are no accounts, no server and no multi-tenancy.
 
 **Out of scope**:
 
@@ -40,7 +40,7 @@ This is scope freeze, not unfinished work (see [ADR-0006](adr/0006-scope-freeze.
 | Two machines moving forward separately, reconciled occasionally | One library each; export the notes and import them when you want to merge |
 | One shared knowledge base for a team | Do not share this library — it is a personal memory layer, and team knowledge belongs in documents |
 
-In one line: Repotory is about **what your agents remember for you**, not about **a team's knowledge base**.
+In one line: Cinder is about **what your agents remember for you**, not about **a team's knowledge base**.
 
 ## Where the Data Lives
 
@@ -62,7 +62,7 @@ Data directory:
 
 ### Cold backup (copy the directory)
 
-1. **Quit Repotory** (the database runs in WAL mode; copying it while the app is running can lose WAL content that has not been flushed to disk)
+1. **Quit Cinder** (the database runs in WAL mode; copying it while the app is running can lose WAL content that has not been flushed to disk)
 2. Copy the entire data directory `repotory/` (or at least `repotory.db` together with `repotory.db-wal` / `repotory.db-shm`)
 
 We recommend taking a cold backup before swapping disks or upgrading to a major version; day to day, you can also include the data directory in your whole-disk backups such as Time Machine or File History.
@@ -105,7 +105,7 @@ bash scripts/verify-restore.sh --query "登录"                     # a specific
 What it does: it **copies** the snapshot into a temp directory, starts a headless server there with an isolated `HOME`, and asks it four questions — does `/health` answer, how many notes are left, how many approved pages are left, and does a full-text search for a term taken from the snapshot itself hit anything — and finally re-reads the snapshot's sha256 to prove the drill never wrote to it. The verdict is one of two lines:
 
 ```text
-== Repotory restore drill ==
+== Cinder restore drill ==
 snapshot : .../backups/repotory-2026-10-28.db
 sha256   : bf7de398462612c2179e61249c2f2a4fbd3d3872bd688be746084dfeabc781b4
 integrity: ok (sqlite quick_check)
@@ -137,7 +137,7 @@ docker compose up -d --build     # default port 18765, open http://localhost:187
 ## Migrating to a New Machine
 
 1. Old machine: quit the app and copy the data directory
-2. New machine: [install Repotory](getting-started.md#download-and-install), then **launch it once and quit** (so the app creates the directory structure and schema)
+2. New machine: [install Cinder](getting-started.md#download-and-install), then **launch it once and quit** (so the app creates the directory structure and schema)
 3. Replace the `repotory/` directory on the new machine with your backed-up copy, then start the app again
 
 Note: scan roots are stored in the database as **absolute paths**. If the new machine has a different username or directory layout, open **Settings → Scan Directories** after launch, update them to the local paths, and click **Rescan**. If repositories have moved, project grouping (monorepo split/merge records) is simply re-detected from the new paths; notes and todos are unaffected.
@@ -157,9 +157,9 @@ There is no built-in switch to clear statistics while keeping notes. If you need
 
 ## Uninstall
 
-1. Remove the binary (the install script puts it at `/usr/local/bin/repotory`; on Windows it is `%LOCALAPPDATA%\Repotory\repotory.exe`, or wherever you placed it manually)
+1. Remove the binary (the install script puts it at `/usr/local/bin/repotory`; on Windows it is `%LOCALAPPDATA%\Cinder\repotory.exe`, or wherever you placed it manually)
 2. Delete the data directory (see the table above) and the logs (`~/Library/Logs/repotory.log` and the other platform log paths)
-3. If you installed the PWA: remove Repotory from the system or browser app list
+3. If you installed the PWA: remove Cinder from the system or browser app list
 
 ## Related Pages
 

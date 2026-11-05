@@ -124,7 +124,7 @@ type ImportResult struct {
 }
 
 // ImportClaudeMemory imports notes from Claude's per-project memory directory
-// (~/.claude/projects/*/memory/*.md) into Repotory, matching each to a project
+// (~/.claude/projects/*/memory/*.md) into Cinder, matching each to a project
 // by name or repository path. The import is delegated to the built-in Claude
 // KnowledgeImporter through the plugin runtime, so it is idempotent and shares
 // the same upsert and statistics path as the other knowledge sources (issue #35).

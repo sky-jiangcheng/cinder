@@ -230,7 +230,7 @@ func noteTitle(title, id string) string {
 // renderNote composes the compact markdown body.
 func renderNote(s sessionFile, title, summary string) string {
 	var b strings.Builder
-	b.WriteString("> 由 Repotory 从 OpenCode 会话记录自动导入（source: opencode）\n\n")
+	b.WriteString("> 由 Cinder 从 OpenCode 会话记录自动导入（source: opencode）\n\n")
 	if title != "" {
 		b.WriteString("**标题**：" + title + "\n\n")
 	}

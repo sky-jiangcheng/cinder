@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "=== Repotory Build Script ==="
+echo "=== Cinder Build Script ==="
 echo ""
 
 # Step 1: Build frontend

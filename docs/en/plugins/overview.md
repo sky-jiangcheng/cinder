@@ -7,7 +7,7 @@ order: 8
 
 > **Note**: knowledge-source import is not open to user scripts — the in-process script-plugin runtime (yaegi, [ADR-0002](../adr/0002-c-end-repositioning.md)) was removed in C11. The source list is entirely built in and only grows with releases.
 
-Repotory imports documents into the knowledge base idempotently. All eight sources ship **built in** as ordinary Go implementations of `plugin.KnowledgeImporter`; the in-process script-plugin runtime (yaegi) was removed in C11, so there is no user-authored importer entry point.
+Cinder imports documents into the knowledge base idempotently. All eight sources ship **built in** as ordinary Go implementations of `plugin.KnowledgeImporter`; the in-process script-plugin runtime (yaegi) was removed in C11, so there is no user-authored importer entry point.
 
 ```mermaid
 flowchart TB

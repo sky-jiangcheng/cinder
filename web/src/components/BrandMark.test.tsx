@@ -85,16 +85,18 @@ describe('BrandMark', () => {
     expect(container.querySelector('path')!.getAttribute('stroke')).toBeNull()
   })
 
-  it('draws the mark as one filled path with a real counter', () => {
+  it('draws the mark as one filled path', () => {
     const { container } = render(<BrandMark />)
     const mark = container.querySelector('path')!
-    // The R is a fill, not a bundle of strokes: strokes at this size are what
+    // The letter is a fill, not a bundle of strokes: strokes at this size are what
     // made the previous mark lose its white and pinch at 16px. Nonzero winding
-    // is the typeface's own, so the counter stays a hole.
+    // is the typeface's own.
     expect(mark.getAttribute('fill-rule')).toBe('nonzero')
     expect(mark.getAttribute('stroke')).toBeNull()
-    // Two subpaths: outer silhouette + counter.
-    expect(mark.getAttribute('d')!.match(/M/g)).toHaveLength(2)
+    // One closed subpath. The R this replaced had two (silhouette + counter);
+    // the C's aperture opens to the outside, so the letter has no hole — and
+    // the count also pins WHICH letter the mark carries.
+    expect(mark.getAttribute('d')!.match(/M/g)).toHaveLength(1)
   })
 
   it('keeps the glyph inside the tile', () => {
@@ -113,8 +115,8 @@ describe('BrandMark', () => {
     // default — announcing it would double the name for screen readers.
     expect(container.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true')
 
-    rerender(<BrandMark title="Repotory" />)
-    const named = screen.getByRole('img', { name: 'Repotory' })
+    rerender(<BrandMark title="Cinder" />)
+    const named = screen.getByRole('img', { name: 'Cinder' })
     expect(named).toBeTruthy()
     expect(named.getAttribute('aria-hidden')).toBeNull()
   })

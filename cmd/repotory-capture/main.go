@@ -4,7 +4,7 @@
 // Claude Code runs a SessionEnd hook as an external command with the session's
 // working directory. Resolve cwd from (in order): -cwd flag, a JSON object on
 // stdin with a "cwd" field, then the process's own working dir. Then resolve the
-// matching Repotory project and run the same capture the desktop button does.
+// matching Cinder project and run the same capture the desktop button does.
 //
 // It is inert unless `claude_session_capture=1` AND the project matches — so a
 // hook installed but not enabled is a harmless no-op, and reading transcripts

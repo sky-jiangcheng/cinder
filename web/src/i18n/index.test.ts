@@ -42,13 +42,13 @@ describe('start-up', () => {
     expect(document.documentElement.lang).toBe('zh-CN')
   })
 
-  it('falls back to English for a browser language Repotory does not ship', async () => {
+  it('falls back to English for a browser language Cinder does not ship', async () => {
     setNavigatorLanguage('de-DE')
     await loadI18n()
     expect(document.documentElement.lang).toBe('en')
   })
 
-  it('ignores a stored value Repotory does not know', async () => {
+  it('ignores a stored value Cinder does not know', async () => {
     setNavigatorLanguage('zh-CN')
     localStorage.setItem('repotory-language', 'klingon')
     await loadI18n()

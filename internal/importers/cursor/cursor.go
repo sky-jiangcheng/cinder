@@ -17,7 +17,7 @@
 // never null, `createdAt` is an ISO-8601 string, `type` is Cursor's numeric
 // sender enum (1 = user, 2 = assistant), and `composerHeaders.workspaceId` is the
 // same 32-hex name as the workspaceStorage directory — which makes the
-// workspaceId → folder → Repotory project chain resolvable instead of guessed.
+// workspaceId → folder → Cinder project chain resolvable instead of guessed.
 //
 // BEST EFFORT, ON PURPOSE. This format is undocumented and versioned (every JSON
 // payload carries a `_v` field), so it drifts. Two rules follow from that and
@@ -115,7 +115,7 @@ type bubble struct {
 }
 
 // Import walks Cursor's state database and returns one note per session that can
-// be attributed to a known Repotory project.
+// be attributed to a known Cinder project.
 //
 // Ordering constraint, not style: the read-only handle allows ONE connection, so
 // composerHeaders must be fully collected and its rows closed before any per-
@@ -366,7 +366,7 @@ func docFor(c composer, wsPath string, pid int64, first, last string) plugin.Imp
 
 func renderNote(c composer, wsPath, first, last string) string {
 	var b strings.Builder
-	b.WriteString("> 由 Repotory 从 Cursor 会话记录自动导入（source: cursor，**best-effort**：格式未公开，只取首条提问与末条回复，不是完整转录）\n\n")
+	b.WriteString("> 由 Cinder 从 Cursor 会话记录自动导入（source: cursor，**best-effort**：格式未公开，只取首条提问与末条回复，不是完整转录）\n\n")
 	if wsPath != "" {
 		b.WriteString("**工作区**：`" + wsPath + "`\n\n")
 	}
@@ -429,7 +429,7 @@ func stateRoot(statePath string) string {
 	return filepath.Dir(filepath.Dir(statePath)) // .../User/globalStorage/state.vscdb -> .../User
 }
 
-// workspaceTarget is a resolved Cursor workspace: which Repotory project it
+// workspaceTarget is a resolved Cursor workspace: which Cinder project it
 // belongs to, and the folder path to print in the note.
 type workspaceTarget struct {
 	pid  int64

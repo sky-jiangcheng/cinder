@@ -5,7 +5,7 @@ order: 22
 
 # API Reference
 
-Repotory's external interface is the **Wails binding surface**: Go methods are exposed to the frontend via Wails Bind (`window.go.main.App.<MethodName>`), and the method names plus JSON payloads are the contract. The desktop app does not listen on an HTTP port by default; when an HTTP shape is needed, `cmd/server` provides a loopback-only JSON API (reusing the same service layer).
+Cinder's external interface is the **Wails binding surface**: Go methods are exposed to the frontend via Wails Bind (`window.go.main.App.<MethodName>`), and the method names plus JSON payloads are the contract. The desktop app does not listen on an HTTP port by default; when an HTTP shape is needed, `cmd/server` provides a loopback-only JSON API (reusing the same service layer).
 
 > The binding layer is a thin delegation (`internal/app`); all implementations live in `internal/service`, shared by the CLI and MCP.
 
@@ -224,7 +224,7 @@ Desktop-only: headless and MCP users update through their own deployment channel
 
 ## AI client wiring (desktop-only)
 
-Connects Repotory to the MCP clients of Claude Code / Cursor / VS Code / Windsurf. **No MCP counterpart**: these two bindings write files into the user's project directory — that is a "set up the machine" action, not an agent action.
+Connects Cinder to the MCP clients of Claude Code / Cursor / VS Code / Windsurf. **No MCP counterpart**: these two bindings write files into the user's project directory — that is a "set up the machine" action, not an agent action.
 
 | Method | Description |
 |------|------|

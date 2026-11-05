@@ -1,4 +1,4 @@
-// The Repotory chat console — the plugin's conversation panel.
+// The Cinder chat console — the plugin's conversation panel.
 //
 // ADR-0036 (Accepted 2026-11-02) rewrote this panel: it used to be a
 // SEARCHER (one query, a list of thumbnails, a detail pane) and it is now a
@@ -6,7 +6,7 @@
 // region:
 //
 //   ┌──────────────────────────────────────────────────────────┐
-//   │ ▪ Repotory  the local-first memory layer…    [● online][↻][▶]│  ① header
+//   │ ▪ Cinder  the local-first memory layer…    [● online][↻][▶]│  ① header
 //   ├──────────────────────────────────────────────────────────┤
 //   │ ⚠ announcement bar — one line, dismissible                │  ② announcement
 //   ├──────────────────────────────────────────────────────────┤
@@ -18,7 +18,7 @@
 //   │       ┌ note #42 ──────────────────────────────┐          │
 //   │       │ FTS5 quirk                             │          │
 //   │       │ content tables answer…                 │          │
-//   │       │ Open in Repotory · Copy · Edit …       │          │
+//   │       │ Open in Cinder · Copy · Edit …       │          │
 //   │       └────────────────────────────────────────┘          │
 //   ├──────────────────────────────────────────────────────────┤
 //   │ [ what do you want to know?                       ]        │  ⑤ input area
@@ -26,7 +26,7 @@
 //   └──────────────────────────────────────────────────────────┘
 //
 // Why it changed: a result that REPLACES the previous one cannot be read as
-// a sequence, and Repotory's value is in the sequence — a gotcha is the
+// a sequence, and Cinder's value is in the sequence — a gotcha is the
 // follow-up of a debugging session. The conversation feed keeps every turn,
 // folds the old ones away, and opens an item IN PLACE (there is no second
 // pane — ADR-0036 decision 7).
@@ -110,13 +110,13 @@ import javax.swing.event.HyperlinkEvent
 import kotlin.math.ceil
 
 /** The notification group the plugin posts its service problems to. */
-private const val NOTIFICATION_GROUP = "Repotory"
+private const val NOTIFICATION_GROUP = "Cinder"
 
 /** Where the desktop app is downloaded from, when it is not installed. */
 private const val RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases"
 
 /**
- * The state of the connection to the Repotory service.
+ * The state of the connection to the Cinder service.
  *
  * It is a closed set because the panel shows it as a pill and every state
  * needs its own wording: "offline" and "starting" mean different things to
@@ -263,7 +263,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         markLabel(JBUI.scale(18))?.let { brand.add(it, BorderLayout.WEST) }
         // The slogan line is gone (ADR-0044 decision 4): the panel says what
         // it does, not what the product is.
-        val name = JLabel("Repotory")
+        val name = JLabel("Cinder")
         name.font = name.font.deriveFont(Font.BOLD)
         brand.add(name, BorderLayout.CENTER)
 
@@ -306,13 +306,13 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             override fun actionPerformed(e: AnActionEvent) = openProviderSheet()
         },
         object :
-            AnAction("Diagnostics", "Check the Repotory environment", AllIcons.General.InspectionsWarning),
+            AnAction("Diagnostics", "Check the Cinder environment", AllIcons.General.InspectionsWarning),
             DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
             override fun actionPerformed(e: AnActionEvent) = openDiagnostics()
         },
-        object : AnAction("Desktop app", "Open the Repotory desktop app", AllIcons.General.Web), DumbAware {
+        object : AnAction("Desktop app", "Open the Cinder Desktop app", AllIcons.General.Web), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
             override fun actionPerformed(e: AnActionEvent) = openDesktopApp()
@@ -344,7 +344,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     }
 
     /**
-     * Open the Repotory desktop app.
+     * Open the Cinder Desktop app.
      *
      * The desktop app is the FULL product; the panel is a thin client over
      * it. Nothing is downloaded: when the app is not installed, the offer is
@@ -353,7 +353,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private fun openDesktopApp() {
         val os = System.getProperty("os.name", "").lowercase()
         val command = when {
-            os.contains("mac") -> listOf("open", "-a", "Repotory")
+            os.contains("mac") -> listOf("open", "-a", "Cinder Desktop")
             os.contains("win") -> listOf("repotory.exe")
             else -> listOf("repotory")
         }
@@ -371,11 +371,11 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             }
         }) { started ->
             if (started) {
-                showAnnouncement(ChatLevel.INFO, "Repotory desktop app launched.")
+                showAnnouncement(ChatLevel.INFO, "Cinder Desktop app launched.")
             } else {
                 val choice = Messages.showDialog(
-                    "The Repotory desktop app was not found. Install it from the releases page.",
-                    "Repotory: desktop app not found",
+                    "The Cinder Desktop app was not found. Install it from the releases page.",
+                    "Cinder: desktop app not found",
                     arrayOf("Open the releases page", "Cancel"),
                     0,
                     Messages.getWarningIcon(),
@@ -410,12 +410,12 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
 
     /** Refresh (re-probe the channel) and Start (bring the local service up). */
     private fun serviceActions(): ActionGroup = DefaultActionGroup(
-        object : AnAction("Refresh", "Re-check the Repotory channel", AllIcons.Actions.Refresh), DumbAware {
+        object : AnAction("Refresh", "Re-check the Cinder channel", AllIcons.Actions.Refresh), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
             override fun actionPerformed(e: AnActionEvent) = reconnect()
         },
-        object : AnAction("Start local service", "Start the local Repotory service", AllIcons.Actions.Execute), DumbAware {
+        object : AnAction("Start local service", "Start the local Cinder service", AllIcons.Actions.Execute), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
             override fun update(e: AnActionEvent) {
@@ -568,7 +568,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         val index = Messages.showChooseDialog(
             project,
             "Which project does this folder belong to?",
-            "Repotory: Choose a project",
+            "Cinder: Choose a project",
             null,
             names,
             names.first(),
@@ -653,9 +653,9 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                 val hasCandidates = session.candidates().isNotEmpty()
                 chip.text = if (hasCandidates) "Choose project" else "No project"
                 chip.toolTipText = if (hasCandidates) {
-                    "This workspace does not resolve to a Repotory project yet — click to pick one."
+                    "This workspace does not resolve to a Cinder project yet — click to pick one."
                 } else {
-                    "This workspace does not resolve to a Repotory project yet — " +
+                    "This workspace does not resolve to a Cinder project yet — " +
                         "the panel searches across all projects."
                 }
                 chip.isEnabled = true
@@ -812,7 +812,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             ?.cards?.firstOrNull { it.hit.type == cardType && it.hit.id == cardId }
 
     /**
-     * Deep-link a card into the Repotory web UI.
+     * Deep-link a card into the Cinder web UI.
      *
      * Deep links are best-effort (ADR-0035 decision 6): a headless server
      * started without `--web-dist` answers the API but 404s every other path,
@@ -844,13 +844,13 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      */
     private fun offerFallback(url: String) {
         val choice = Messages.showDialog(
-            "Repotory answered, but it is not serving its web UI, so this link lands on a 404 page.\n\n" +
+            "Cinder answered, but it is not serving its web UI, so this link lands on a 404 page.\n\n" +
                 "Either restart the running server with:\n" +
                 "  repotory-server --port 18765 --web-dist <release bundle>/web\n" +
                 "or stop it and press the start button, which launches the release bundle " +
                 "together with its web/ directory.\n\n" +
                 "URL: $url",
-            "Repotory: web UI not available",
+            "Cinder: web UI not available",
             arrayOf("Open Anyway", "Copy URL", "Cancel"),
             2,
             Messages.getWarningIcon(),
@@ -1054,7 +1054,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                 when {
                     outcome.moveError != null ->
                         "Fields saved, but the project move failed: ${outcome.moveError} " +
-                            "(moving a note between projects needs the local Repotory service)."
+                            "(moving a note between projects needs the local Cinder service)."
                     titleKept ->
                         "Saved note #${edited.id}, but the title could not be cleared — " +
                             "the MCP write path keeps the old title."
@@ -1135,7 +1135,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         }) { resolution ->
             if (resolution.found) {
                 pill.state = LinkState.ONLINE
-                showAnnouncement(ChatLevel.INFO, "Repotory MCP channel ready.")
+                showAnnouncement(ChatLevel.INFO, "Cinder MCP channel ready.")
             } else {
                 pill.state = LinkState.OFFLINE
                 showAnnouncement(ChatLevel.WARN, resolution.problem ?: "repotory-mcp was not found.")
@@ -1163,7 +1163,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         if (!manager.isGroupRegistered(NOTIFICATION_GROUP)) return
         val resolution = McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
         val notification = manager.getNotificationGroup(NOTIFICATION_GROUP).createNotification(
-            "Repotory: no MCP binary",
+            "Cinder: no MCP binary",
             "The plugin could not find repotory-mcp — it is what the panel talks to.\n" +
                 resolution.attempts.take(8).joinToString("\n"),
             NotificationType.WARNING,
@@ -1189,7 +1189,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     }
 
     /**
-     * Starts the local Repotory service.
+     * Starts the local Cinder service.
      *
      * The local service is an OPTIONAL enhancement since ADR-0035 decision 6:
      * the panel's data comes over MCP, and the service is only needed for the
@@ -1204,7 +1204,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         if (disposed || starting) return
         starting = true
         pill.state = LinkState.STARTING
-        showAnnouncement(ChatLevel.INFO, "Starting the local Repotory service…")
+        showAnnouncement(ChatLevel.INFO, "Starting the local Cinder service…")
         val serverUrl = RepotorySettings.serverUrl()
         background({
             repotoryServer.start(serverUrl) { message ->
@@ -1233,7 +1233,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                             if (outcome.webUi) {
                                 "Service on port ${outcome.port}."
                             } else {
-                                "Service on port ${outcome.port} (API-only — “Open in Repotory” would 404)."
+                                "Service on port ${outcome.port} (API-only — “Open in Cinder” would 404)."
                             },
                         )
                     }
@@ -1246,7 +1246,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                     pill.state = LinkState.OFFLINE
                     showAnnouncement(
                         ChatLevel.WARN,
-                        "No repotory-server binary found — set its path in Settings | Tools | Repotory.",
+                        "No repotory-server binary found — set its path in Settings | Tools | Cinder.",
                     )
                     // The user PRESSED the button, so a dialog is welcome
                     // here — this is not the panel interrupting itself. It
@@ -1403,7 +1403,7 @@ private class AnnouncementBar : JPanel(BorderLayout(JBUI.scale(6), 0)) {
 /**
  * The announcement bar's text.
  *
- * It wraps: the messages say things like "The local Repotory service is not
+ * It wraps: the messages say things like "The local Cinder service is not
  * reachable at http://127.0.0.1:18765 — the project lock needs it, so the
  * panel searches across all projects", and a label that cannot wrap either
  * clips that sentence or claims the whole width of the panel and pushes the
@@ -1485,20 +1485,20 @@ private class ConnectionPill : JPanel(BorderLayout(JBUI.scale(5), 0)) {
             LinkState.ONLINE -> Triple(
                 JBColor(Color(0x3F, 0x8F, 0x4E), Color(0x73, 0xBD, 0x79)),
                 "online",
-                "The Repotory MCP channel is ready — asking, searching, reading and writing work now. " +
+                "The Cinder MCP channel is ready — asking, searching, reading and writing work now. " +
                     "The local service is only needed for deep links and moving a note between projects. " +
                     "Click to re-check.",
             )
             LinkState.OFFLINE -> Triple(
                 JBColor(Color(0xC0, 0x3A, 0x2B), Color(0xE8, 0x6C, 0x5A)),
                 "offline",
-                "The Repotory MCP channel is not available — repotory-mcp was not found. " +
+                "The Cinder MCP channel is not available — repotory-mcp was not found. " +
                     "Click to locate it.",
             )
             LinkState.STARTING -> Triple(
                 JBColor(Color(0xB4, 0x8A, 0x2F), Color(0xE2, 0xC0, 0x6A)),
                 "starting…",
-                "The local Repotory service is starting. Click to re-check.",
+                "The local Cinder service is starting. Click to re-check.",
             )
             LinkState.CHECKING -> Triple(
                 JBColor.foreground(),
@@ -1535,7 +1535,7 @@ private class ColorDotIcon(private val size: Int, var color: Color) : Icon {
     }
 }
 
-/** "Open in Repotory" as a toolbar action, so the tool window has a title bar button. */
+/** "Open in Cinder" as a toolbar action, so the tool window has a title bar button. */
 class OpenRepotoryAction : AnAction(), DumbAware {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
@@ -1547,7 +1547,7 @@ class OpenRepotoryAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val toolWindow = ToolWindowManagerEx
             .getInstanceEx(project)
-            .getToolWindow("Repotory") ?: return
+            .getToolWindow("Cinder") ?: return
         toolWindow.activate(null)
     }
 }

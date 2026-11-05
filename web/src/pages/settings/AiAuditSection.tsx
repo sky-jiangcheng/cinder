@@ -23,7 +23,7 @@ interface Props {
  *  - Everything is OFF by default, and the switches say so.
  *  - The trail stores a HASH and a SIZE, never the prompt or the reply. The
  *    table below shows the hash so the user can see that is what is kept.
- *  - The rules are the user's own regexes. Repotory ships no blocklist,
+ *  - The rules are the user's own regexes. Cinder ships no blocklist,
  *    because a keyword list is a weak control — the panel says so rather
  *    than implying coverage it does not have.
  */
@@ -179,7 +179,7 @@ export default function AiAuditSection({ config, showMessage }: Props) {
       <p className={css.auditHint}>
         {t('settings.audit.rulesHint', {
           defaultValue:
-            '规则由你自己写，Repotory 不内置任何词表——关键词匹配是很弱的控制，容易被改写绕过，也会误伤正常内容。规则不区分大小写；写错的正则会被跳过并在日志中提示。',
+            '规则由你自己写，Cinder 不内置任何词表——关键词匹配是很弱的控制，容易被改写绕过，也会误伤正常内容。规则不区分大小写；写错的正则会被跳过并在日志中提示。',
         })}
       </p>
 

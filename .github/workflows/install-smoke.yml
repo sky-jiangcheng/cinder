@@ -136,17 +136,17 @@ jobs:
       # macOS install.sh attaches a .dmg with hdiutil; a fixture dmg built
       # with hdiutil is a real one, so the attach/detach path is exercised.
       # The .app bundle layout mirrors what Wails produces (a directory named
-      # Repotory.app/Contents/...), which is what the script looks for inside
+      # Cinder.app/Contents/...), which is what the script looks for inside
       # the dmg.
       - name: Pack fixture assets
         run: |
           TARGET="$(uname -m | sed 's/x86_64/amd64/;s/arm64/arm64/')"
           TARGET="darwin-$TARGET"
           echo "TARGET=$TARGET" >> "$GITHUB_ENV"
-          mkdir -p stage/Repotory.app/Contents/MacOS dist
-          printf '#!/bin/sh\necho repotory fixture\n' > stage/Repotory.app/Contents/MacOS/repotory
-          chmod +x stage/Repotory.app/Contents/MacOS/repotory
-          hdiutil create -volname Repotory -srcfolder stage -ov -format UDZO \
+          mkdir -p stage/Cinder.app/Contents/MacOS dist
+          printf '#!/bin/sh\necho repotory fixture\n' > stage/Cinder.app/Contents/MacOS/repotory
+          chmod +x stage/Cinder.app/Contents/MacOS/repotory
+          hdiutil create -volname Cinder -srcfolder stage -ov -format UDZO \
             "dist/repotory-$TARGET.dmg"
           tar -czf "dist/repotory-mcp-$TARGET.tar.gz" -C dist repotory-mcp
           # Same manifest shape release.yml uploads, so install.sh's verify
@@ -175,8 +175,8 @@ jobs:
 
       - name: Verify installed artifacts
         run: |
-          test -d "$RUNNER_TEMP/Applications/Repotory.app" || {
-            echo "Repotory.app missing" >&2; exit 1; }
+          test -d "$RUNNER_TEMP/Applications/Cinder.app" || {
+            echo "Cinder.app missing" >&2; exit 1; }
           test -x "$RUNNER_TEMP/bin/repotory-mcp" || {
             echo "repotory-mcp missing or not executable" >&2; exit 1; }
           # The MCP binary must actually run, not just exist.

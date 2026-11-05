@@ -1,28 +1,28 @@
 <p align="center">
-  <a href="https://github.com/sky-jiangcheng/repotory"><img src="build/icon.svg" width="88" alt="Repotory" /></a>
+  <a href="https://github.com/sky-jiangcheng/repotory"><img src="build/icon.svg" width="88" alt="Cinder" /></a>
 </p>
 
-<h1 align="center">Repotory</h1>
+<h1 align="center">Cinder</h1>
 
 <p align="center">
   <b>The local-first memory layer for AI coding agents.</b><br/>
   Stop agent amnesia. Your agents read code brilliantly, but forget decisions, gotchas, and next steps the moment the session ends.<br/>
-  Repotory keeps that knowledge on your machine in SQLite, searchable and versioned,<br/>
+  Cinder keeps that knowledge on your machine in SQLite, searchable and versioned,<br/>
   and hands it back to <i>any</i> agent in one tool call.
 </p>
 
 <p align="center">
   <b>Agent-neutral, protocol-neutral, account-free.</b><br/>
   Every coding agent that speaks MCP — Claude Code, Cursor, Codex, Copilot — reads and writes the same memory.<br/>
-  Repotory is not a plugin bolted onto one harness: it is the neutral layer the agents share.<br/>
+  Cinder is not a plugin bolted onto one harness: it is the neutral layer the agents share.<br/>
   No account, no cloud: the whole store is one SQLite file on your machine.<br/>
   Each IDE keeps its own session history inside its own ecosystem, so the cross-agent layer needs a neutral home of its own.
 </p>
 
 <p align="center">
   <b>Two products, one job each.</b><br/>
-  Repotory is the <b>workbench</b> — browse, edit, <b>approve</b> and govern this memory.<br/>
-  <a href="https://github.com/sky-jiangcheng/repotory-agent">Repotory Agent</a> is the <b>assistant</b> — a local copilot that reads this memory, chats about the project and runs commands over MCP.<br/>
+  Cinder is the <b>workbench</b> — browse, edit, <b>approve</b> and govern this memory.<br/>
+  <a href="https://github.com/sky-jiangcheng/repotory-agent">Warden</a> is the <b>assistant</b> — a local copilot that reads this memory, chats about the project and runs commands over MCP.<br/>
   One shared local memory, one protocol, and <b>approval happens here, never there</b>.
 </p>
 
@@ -42,11 +42,11 @@
 
 ---
 
-## 🎯 Why Repotory?
+## 🎯 Why Cinder?
 
-AI coding agents are revolutionizing development, but they suffer from **session amnesia** and **tool silos**. Repotory solves this at the local layer:
+AI coding agents are revolutionizing development, but they suffer from **session amnesia** and **tool silos**. Cinder solves this at the local layer:
 
-| The Problem Today | The Repotory Solution |
+| The Problem Today | The Cinder Solution |
 | :--- | :--- |
 | 🔄 **Agent Amnesia & Silos**: Claude Code writes a handoff; Cursor has no clue tomorrow. Knowledge is trapped in private formats. | **Unified Cross-Agent Memory**: One local SQLite database accessible by Claude Code, Cursor, Windsurf, or custom scripts via standard MCP. |
 | 💸 **Context Window Bloat**: Every session burns thousands of tokens re-explaining architecture, patterns, and historical gotchas. | **Instant Context Injection (`repotory_context`)**: Injects tech stack, gotchas, active todos, and the last handoff note in a single call. |
@@ -57,12 +57,12 @@ AI coding agents are revolutionizing development, but they suffer from **session
 
 ## 📦 Ecosystem & Product Matrix
 
-Repotory is engineered as a modular local knowledge suite. Choose the artifact that matches your workflow:
+Cinder is engineered as a modular local knowledge suite. Choose the artifact that matches your workflow:
 
 | Artifact | Type | Description & Best For | Quick Access |
 | :--- | :--- | :--- | :--- |
 | **`repotory-mcp`** | 🤖 Standalone MCP Server | **Core agent memory engine.** Runs via stdio. Connects Claude Code, Cursor, Windsurf, and any MCP client to local memory with **zero desktop app required**. | `node scripts/repotory-init/index.mjs` |
-| **Repotory Desktop** | 🖥️ Desktop Application | **Visual workspace & review hub.** Native single-file desktop app (Wails v2 + React 19) for macOS, Windows, and Linux. Browse notes, review LLM wiki drafts, explore repo metrics. | [Releases](https://github.com/sky-jiangcheng/repotory/releases) · `brew` · `scoop` |
+| **Cinder Desktop** | 🖥️ Desktop Application | **Visual workspace & review hub.** Native single-file desktop app (Wails v2 + React 19) for macOS, Windows, and Linux. Browse notes, review LLM wiki drafts, explore repo metrics. | [Releases](https://github.com/sky-jiangcheng/repotory/releases) · `brew` · `scoop` |
 | **IDE Extensions** | 🧩 VS Code & JetBrains | **In-editor lookup.** Search notes, todos, and project handoffs directly from your editor sidebar (VS Code / Cursor / Windsurf & IntelliJ family). | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) · JetBrains Plugins |
 | **CLI & Headless** | ⚡ Automation & Daemon | **Automated capture & headless mode.** `repotory-capture` (auto-session hook), `repotory-server` (headless API), vector setup, and data integrity audit tools. | Included with install script |
 
@@ -162,7 +162,7 @@ One VSIX covers VS Code, Cursor, and Windsurf as a lightweight client: commands 
 
 Installs into the IntelliJ family (IDEA, PyCharm, GoLand, WebStorm) using platform APIs. Provides a tool window to search notes and todos directly within your IDE.
 
-- Search for **Repotory** under **Settings | Plugins | Marketplace**, or download the plugin zip from [Releases](https://github.com/sky-jiangcheng/repotory/releases).
+- Search for **Cinder** under **Settings | Plugins | Marketplace**, or download the plugin zip from [Releases](https://github.com/sky-jiangcheng/repotory/releases).
 - Build from source:
   ```bash
   cd ide/jetbrains && gradle buildPlugin
@@ -216,7 +216,7 @@ Brand display and machine identifiers are deliberately separated layers:
 
 | Layer | Value | Used for |
 | :--- | :--- | :--- |
-| **Brand (display)** | `Repotory` | `productName`, in-app logo, documentation, and UI copy |
+| **Brand (display)** | `Cinder` | `productName`, in-app logo, documentation, and UI copy |
 | **Repo & package identifier** | `repotory` | GitHub repo name, Go module name, npm package names, docs site URL |
 | **Frozen identifiers** | `repotory` | Binary name, user data directory, MCP server `repotory-mcp`, tool prefix `repotory_*` |
 
@@ -261,5 +261,5 @@ node scripts/check-i18n-keys.mjs
 
 ## 📄 License
 
-[MIT](LICENSE) © 2026-present [sky-jiangcheng](https://github.com/sky-jiangcheng) and Repotory contributors.
-Repotory is free for personal and commercial use under the MIT License. The `Repotory` name and logo remain trademarks of the project.
+[MIT](LICENSE) © 2026-present [sky-jiangcheng](https://github.com/sky-jiangcheng) and Cinder contributors.
+Cinder is free for personal and commercial use under the MIT License. The `Cinder` name and logo remain trademarks of the project.

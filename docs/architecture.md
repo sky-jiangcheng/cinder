@@ -155,8 +155,8 @@ flowchart TB
 
 | 层 | 取值 | 说明 |
 |------|------|------|
-| 品牌名 | `Repotory` | `productName`、应用内 Logo、文档文案 |
-| 完整展示名 | `Repotory: Local Git Knowledge Base` | 窗口标题（`main.go` 的 Wails `options.Title`）与 HTML `<title>` |
+| 品牌名 | `Cinder` | `productName`、应用内 Logo、文档文案 |
+| 完整展示名 | `Cinder: Local Git Knowledge Base` | 窗口标题（`main.go` 的 Wails `options.Title`）与 HTML `<title>` |
 | 仓库与包标识 | `repotory` | GitHub 仓库名、Go module 名、npm 包名 |
 | 冻结标识 | `repotory` | 二进制/命令名、用户数据目录（`internal/platform` 的 `dirName`）、MCP server 名与工具前缀 |
 

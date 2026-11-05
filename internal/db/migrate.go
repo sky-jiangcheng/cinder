@@ -442,7 +442,7 @@ func upgradeSchema(db *sql.DB) error {
 		}},
 		// v28: the AI call audit log (ADR-0030).
 		//
-		// Repotory is the local-first memory layer for AI coding agents, and its
+		// Cinder is the local-first memory layer for AI coding agents, and its
 		// LLM exit converges into exactly three HTTP primitives in
 		// internal/service/ai.go — every outbound model call in the codebase
 		// passes through them, and all eight business paths funnel into them.

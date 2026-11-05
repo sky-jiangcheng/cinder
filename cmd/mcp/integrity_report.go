@@ -30,7 +30,7 @@ func runIntegrityReport(svc *service.Service) string {
 	report := svc.RunIntegrityChecks()
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "=== Repotory Data Integrity (v%s) ===\n\n", version.Version)
+	fmt.Fprintf(&sb, "=== Cinder Data Integrity (v%s) ===\n\n", version.Version)
 	fmt.Fprintf(&sb, "Trust score: %.0f/100 — %s\n\n", report.Score, report.Verdict)
 
 	for _, c := range report.Checks {

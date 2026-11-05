@@ -134,7 +134,7 @@ fi
 [ -f "$SNAPSHOT" ] || fail "no such snapshot: $SNAPSHOT"
 SNAPSHOT="$(cd "$(dirname "$SNAPSHOT")" && pwd)/$(basename "$SNAPSHOT")"
 
-echo "== Repotory restore drill =="
+echo "== Cinder restore drill =="
 echo "snapshot : $SNAPSHOT"
 echo "size     : $(wc -c < "$SNAPSHOT" | tr -d ' ') bytes"
 echo "written  : $(stat -c %y "$SNAPSHOT" 2>/dev/null || stat -f %Sm "$SNAPSHOT")"

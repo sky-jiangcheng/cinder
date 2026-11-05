@@ -11,7 +11,7 @@ import (
 )
 
 // Provider is the single abstraction for all Git interactions used by
-// Repotory. Any implementation must be safe for concurrent use because the
+// Cinder. Any implementation must be safe for concurrent use because the
 // scan engine and dashboard handlers call these methods from goroutines.
 type Provider interface {
 	// QueryStats runs a shortstat query for a single repo/date/author combo.

@@ -17,7 +17,7 @@
   <circle cx="80" cy="80" r="30" fill="#4caf50" opacity="0.1"/>
   <circle cx="520" cy="320" r="40" fill="#4caf50" opacity="0.08"/>
   <circle cx="550" cy="60" r="25" fill="#2196f3" opacity="0.1"/>
-  <text x="50" y="60" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="700" fill="white">Repotory</text>
-  <text x="50" y="90" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#8888aa">Git 代码提交统计面板</text>
+  <text x="50" y="60" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="28" font-weight="700" fill="white">Cinder Desktop</text>
+  <text x="50" y="90" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="14" fill="#8888aa">AI 编码 Agent 的本地记忆层</text>
   <text x="50" y="360" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" fill="#666688">将应用拖入 Applications 文件夹以安装</text>
 </svg>

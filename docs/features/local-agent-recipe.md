@@ -5,7 +5,7 @@ order: 8
 
 # 本地 Agent 配方：让完全离线的模型用上记忆层
 
-Repotory 的 MCP server 是一个 **stdio 进程**：它不关心对面是哪个模型、哪个客户端，也不联网。所以「完全离线的本地 Agent + Repotory」在技术上一直成立——缺的只是一页接线说明和一次真机验证。这页补上这两样。
+Cinder 的 MCP server 是一个 **stdio 进程**：它不关心对面是哪个模型、哪个客户端，也不联网。所以「完全离线的本地 Agent + Cinder」在技术上一直成立——缺的只是一页接线说明和一次真机验证。这页补上这两样。
 
 一句话版本：**本地模型跑在你机器上，知识库也在你机器上，两边用 MCP 在进程间通信，全程没有一条出网请求。**
 
@@ -13,11 +13,11 @@ Repotory 的 MCP server 是一个 **stdio 进程**：它不关心对面是哪个
 
 | 角色 | 干什么 | 不干什么 |
 |------|--------|----------|
-| Repotory（`repotory-mcp`） | 存上下文、检索、写交接笔记 | 不提供模型、不代持密钥、不联网 |
+| Cinder（`repotory-mcp`） | 存上下文、检索、写交接笔记 | 不提供模型、不代持密钥、不联网 |
 | 本地模型（ollama / LM Studio …） | 推理、决定调用哪个工具 | 不存持久状态（模型本身没有记忆） |
 | MCP 客户端（Claude Code / Cursor / opencode …） | 把两者连起来：注入工具、转发调用 | 不解释语义 |
 
-对话历史在模型进程退出时就没了；**跨会话记住的东西只能来自 Repotory**。这就是这层数据底座在你离线时唯一不可替代的原因。
+对话历史在模型进程退出时就没了；**跨会话记住的东西只能来自 Cinder**。这就是这层数据底座在你离线时唯一不可替代的原因。
 
 ## 三步接线
 
@@ -121,7 +121,7 @@ returns a `200` status code even when the account balance is negative.
 
 所以这是客户端侧的行为，与模型、与 `repotory-mcp` 都无关。opencode 自己的文档对「工具调用不工作」只给了一条线索（把 ollama 的 `num_ctx` 调到 16k–32k），本文的复现里调了上下文也不生效。
 
-在 opencode 修好之前，用 Claude Code / Cursor / 任何别的 MCP 客户端接入 Repotory；或者按下面「记录用的最小驱动」自己验证一遍链路。
+在 opencode 修好之前，用 Claude Code / Cursor / 任何别的 MCP 客户端接入 Cinder；或者按下面「记录用的最小驱动」自己验证一遍链路。
 
 ## 记录用的最小驱动
 
@@ -131,7 +131,7 @@ returns a `200` status code even when the account balance is negative.
 
 ## 边界
 
-- **Repotory 不提供模型**，也不替你选模型。离线是两件事相加：模型在你机器上 + 库在你机器上。
+- **Cinder 不提供模型**，也不替你选模型。离线是两件事相加：模型在你机器上 + 库在你机器上。
 - **不保证模型会主动调工具**。小模型需要把指令写死（「先调 repotory_context」）；把它写进客户端提示词或 hook 才是可靠做法。
 - **这是单用户本地库**。跨设备、多人协作不在范围内（见[数据与备份](../data-management.md)）。
 - 语义检索（可选）会打 embedding 端点——**如果你要全离线，就用本地的 ollama embedding**（`go run ./cmd/vector-init` 的默认推荐就是本地 Ollama），别填远端地址。

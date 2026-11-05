@@ -1,4 +1,4 @@
-// Thin HTTP helper for the Repotory headless service (repotory server).
+// Thin HTTP helper for the Cinder headless service (repotory server).
 // The headless API is loopback-only by design (see internal/httpapi/server.go).
 import * as http from "node:http";
 import type { AskAnswer, EvidenceSource, ProjectOption } from "./chatTypes.js";
@@ -164,7 +164,7 @@ export interface WikiPageDetail {
 }
 
 /**
- * True when the running server also serves the Repotory web UI.
+ * True when the running server also serves the Cinder web UI.
  *
  * A headless server started without `--web-dist` answers the API but 404s
  * every other path, so a deep link opened against it lands the user on a dead
@@ -310,8 +310,8 @@ export function parseOrganizeProposal(text: string): OrganizeProposal | undefine
  * backslash escapes ("a \"quoted\" title") and the id space is "page" or
  * "note" (service.EvidenceItem.Type). The shape is:
  *
- *     [P1] page "Some title" (id 42, slug some-slug, project Repotory)
- *     [N3] note "Another title" (id 7, project Repotory)
+ *     [P1] page "Some title" (id 42, slug some-slug, project Cinder)
+ *     [N3] note "Another title" (id 7, project Cinder)
  *
  * The slug and the project name are optional; the id is not.
  */

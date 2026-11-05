@@ -1,4 +1,4 @@
-// Repotory for JetBrains — the chat console's data contract (ADR-0036).
+// Cinder for JetBrains — the chat console's data contract (ADR-0036).
 //
 // The panel is a CONVERSATION, not a result list: a turn is one question and
 // its answer, the turns stay in the feed, the old ones fold away, and the
@@ -220,8 +220,8 @@ sealed interface ChatEvent {
  * backslash escapes ("a \"quoted\" title") and the id space is "page" or
  * "note" (service.EvidenceItem.Type). The shape is:
  *
- *     [P1] page "Some title" (id 42, slug some-slug, project Repotory)
- *     [N3] note "Another title" (id 7, project Repotory)
+ *     [P1] page "Some title" (id 42, slug some-slug, project Cinder)
+ *     [N3] note "Another title" (id 7, project Cinder)
  *
  * The slug and the project name are optional; the id is not.
  */

@@ -1,6 +1,6 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "Repotory",
+  "name": "Cinder",
   "outputfilename": "repotory",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
@@ -13,7 +13,7 @@
   },
   "info": {
     "companyName": "",
-    "productName": "Repotory",
+    "productName": "Cinder Desktop",
     "productVersion": "2.30.0",
     "copyright": "",
     "comments": "Local Git Knowledge Base"

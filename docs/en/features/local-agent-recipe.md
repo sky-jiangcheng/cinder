@@ -5,7 +5,7 @@ order: 8
 
 # Local Agent Recipe: a Memory Layer for a Fully Offline Model
 
-Repotory's MCP server is a **stdio process**: it does not care which model or which client is on the other end, and it never touches the network. So "fully offline local agent + Repotory" has always worked in principle — what was missing was one page of wiring instructions and one real-machine verification. This page supplies both.
+Cinder's MCP server is a **stdio process**: it does not care which model or which client is on the other end, and it never touches the network. So "fully offline local agent + Cinder" has always worked in principle — what was missing was one page of wiring instructions and one real-machine verification. This page supplies both.
 
 The one-line version: **the model runs on your machine, the knowledge base runs on your machine, and the two talk over MCP through a pipe — not a single outbound request anywhere in the loop.**
 
@@ -13,11 +13,11 @@ The one-line version: **the model runs on your machine, the knowledge base runs 
 
 | Role | Does | Does not |
 |------|------|----------|
-| Repotory (`repotory-mcp`) | Stores context, retrieves, writes handoff notes | Provide a model, hold API keys, go online |
+| Cinder (`repotory-mcp`) | Stores context, retrieves, writes handoff notes | Provide a model, hold API keys, go online |
 | Local model (ollama / LM Studio …) | Reasons, decides which tool to call | Persist state (the model itself has no memory) |
 | MCP client (Claude Code / Cursor / opencode …) | Connects the two: injects tools, forwards calls | Interpret semantics |
 
-Conversation history is gone the moment the model process exits; **anything remembered across sessions can only come from Repotory**. That is why this data layer is irreplaceable when you are offline.
+Conversation history is gone the moment the model process exits; **anything remembered across sessions can only come from Cinder**. That is why this data layer is irreplaceable when you are offline.
 
 ## Three steps to wire it up
 
@@ -121,7 +121,7 @@ The first client tried in this verification was opencode v2.0.29, and it **conne
 
 So this is client-side behavior, unrelated to the model or to `repotory-mcp`. opencode's own docs offer only one hint for "tool calling doesn't work" (raise ollama's `num_ctx` to 16k–32k); raising the context made no difference in this reproduction.
 
-Until opencode fixes it, connect Repotory through Claude Code / Cursor / any other MCP client — or verify the chain yourself with the minimal driver below.
+Until opencode fixes it, connect Cinder through Claude Code / Cursor / any other MCP client — or verify the chain yourself with the minimal driver below.
 
 ## The minimal driver used for recording
 
@@ -131,7 +131,7 @@ The two sessions in the table were run by a ~170-line recording script (full lis
 
 ## Boundaries
 
-- **Repotory does not provide a model** and does not pick one for you. Offline is the sum of two things: the model on your machine + the library on your machine.
+- **Cinder does not provide a model** and does not pick one for you. Offline is the sum of two things: the model on your machine + the library on your machine.
 - **It does not guarantee the model will call tools on its own.** Small models need hard instructions ("call repotory_context first"); putting that into the client prompt or a hook is the reliable approach.
 - **This is a single-user local library.** Cross-device and multi-user collaboration are out of scope (see [Data & Backup](../data-management.md)).
 - Semantic search (optional) hits an embedding endpoint — **if you want to stay fully offline, use a local ollama embedding** (`go run ./cmd/vector-init` already recommends local Ollama by default); do not point it at a remote address.

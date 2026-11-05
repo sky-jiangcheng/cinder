@@ -264,7 +264,7 @@ func sessionTitle(sid, firstUser string) string {
 // first prompt, last reply, and a footer pointing at the session row.
 func renderSessionNote(s sessionDoc) string {
 	var b strings.Builder
-	b.WriteString("> 由 Repotory 从 Hermes 会话记录自动导入（source: hermes，**best-effort**：只取首条提问与末条回复，不是完整转录）\n\n")
+	b.WriteString("> 由 Cinder 从 Hermes 会话记录自动导入（source: hermes，**best-effort**：只取首条提问与末条回复，不是完整转录）\n\n")
 	b.WriteString("**会话**：`" + s.sid + "`\n\n")
 	if s.firstUser != "" {
 		b.WriteString("## 首条提问\n\n")

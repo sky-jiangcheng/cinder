@@ -23,7 +23,7 @@ import (
 // defaultAppBundleName is the bundle's file name without the ".app" suffix,
 // used when the running build does not live inside a bundle (a dev build run
 // straight from the binary).
-const defaultAppBundleName = "Repotory"
+const defaultAppBundleName = "Cinder"
 
 // InstallInfo describes where this build lives and where update bundles land.
 type InstallInfo struct {
@@ -32,7 +32,7 @@ type InstallInfo struct {
 	// Platform is the OS this build runs on ("darwin", "windows", "linux").
 	Platform string `json:"platform"`
 	// InstallPath is the application bundle this build runs from
-	// ("/Applications/Repotory.app"), or the executable's own directory when
+	// ("/Applications/Cinder.app"), or the executable's own directory when
 	// the build does not live in a bundle.
 	InstallPath string `json:"install_path"`
 	// ExecutablePath is the running binary itself.
@@ -73,7 +73,7 @@ func runningExecutable() string {
 // appBundlePath returns the .app bundle containing the given executable, or
 // the executable's own directory when it does not live in one.
 //
-// The macOS layout is Repotory.app/Contents/MacOS/repotory, so three hops are
+// The macOS layout is Cinder.app/Contents/MacOS/repotory, so three hops are
 // enough; the walk is bounded so a deep symlink cannot turn into an
 // unbounded climb.
 func appBundlePath(exe string) string {
@@ -95,7 +95,7 @@ func appBundlePath(exe string) string {
 }
 
 // installerBundleName returns the installer bundle's file name without the
-// ".app" suffix ("Repotory"), derived from the bundle this build runs from.
+// ".app" suffix ("Cinder"), derived from the bundle this build runs from.
 //
 // It is derived rather than hardcoded so a renamed bundle still matches the
 // copy inside the mounted disk image.

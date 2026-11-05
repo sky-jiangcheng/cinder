@@ -1,4 +1,4 @@
-# Repotory headless server — single-container build (ADR-0025 Docker tier).
+# Cinder headless server — single-container build (ADR-0025 Docker tier).
 # The desktop app stays out of Docker; this image is for NAS/homelab users who
 # want `repotory-server` (same-origin web UI) on a volume they can back up.
 

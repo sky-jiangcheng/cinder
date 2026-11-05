@@ -1,11 +1,11 @@
 #!/bin/bash
-# Repotory install script for macOS and Linux.
+# Cinder Desktop install script for macOS and Linux.
 # Installs the desktop app and the MCP server (repotory-mcp), which AI clients
 # use to read the same local database.
 #
 # Release assets (see .github/workflows/release.yml):
 #   Linux   repotory-linux-amd64.tar.gz   -> bare `repotory` binary
-#   macOS   repotory-darwin-<arch>.dmg    -> Repotory.app
+#   macOS   repotory-darwin-<arch>.dmg    -> Cinder.app
 #   MCP     repotory-mcp-<target>.tar.gz  -> bare `repotory-mcp` binary
 set -e
 
@@ -144,8 +144,8 @@ APP_INSTALL_DIR="${APP_INSTALL_DIR:-/Applications}"
 
 if [ "$OS" = "darwin" ]; then
   DMG="$TMP_DIR/repotory.dmg"
-  APP_NAME="Repotory.app"
-  echo "Downloading Repotory for $TARGET (dmg)..."
+  APP_NAME="Cinder.app"
+  echo "Downloading Cinder Desktop for $TARGET (dmg)..."
   fetch "$RELEASES/repotory-$TARGET.dmg" "$DMG"
   verify_sha256 "$DMG" "repotory-$TARGET.dmg"
 
@@ -162,26 +162,26 @@ if [ "$OS" = "darwin" ]; then
   MOUNT_DIR=""
 
   echo ""
-  echo "Repotory installed to $APP_INSTALL_DIR/$APP_NAME"
+  echo "Cinder Desktop installed to $APP_INSTALL_DIR/$APP_NAME"
   echo "Run 'open -a \"$APP_INSTALL_DIR/$APP_NAME\"' to start!"
 else
   TARBALL="$TMP_DIR/repotory.tar.gz"
-  echo "Downloading Repotory for $TARGET (tar.gz)..."
+  echo "Downloading Cinder Desktop for $TARGET (tar.gz)..."
   fetch "$RELEASES/repotory-$TARGET.tar.gz" "$TARBALL"
   verify_sha256 "$TARBALL" "repotory-$TARGET.tar.gz"
   tar -xzf "$TARBALL" -C "$TMP_DIR" "$BINARY_NAME"
   install_binary "$TMP_DIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
 
   echo ""
-  echo "Repotory installed to $INSTALL_DIR/$BINARY_NAME"
+  echo "Cinder Desktop installed to $INSTALL_DIR/$BINARY_NAME"
   echo "Run '$BINARY_NAME' to start!"
 fi
 
 # --- MCP server ---------------------------------------------------------------
-# Ships as its own pure-Go archive, so AI clients can use Repotory without the
+# Ships as its own pure-Go archive, so AI clients can use Cinder without the
 # desktop app. Non-fatal: a release predating the split simply has no asset.
 echo ""
-echo "Downloading Repotory MCP server for $TARGET..."
+echo "Downloading Cinder MCP server for $TARGET..."
 
 MCP_ASSET="repotory-mcp-$TARGET.tar.gz"
 MCP_URL="$RELEASES/$MCP_ASSET"
@@ -203,7 +203,7 @@ else
   verify_sha256 "$TMP_DIR/$MCP_ASSET" "$MCP_ASSET"
   if tar -xzf "$TMP_DIR/$MCP_ASSET" -C "$TMP_DIR" "$MCP_BINARY_NAME" \
     && install_binary "$TMP_DIR/$MCP_BINARY_NAME" "$INSTALL_DIR/$MCP_BINARY_NAME"; then
-    echo "Repotory MCP server installed to $INSTALL_DIR/$MCP_BINARY_NAME"
+    echo "Cinder MCP server installed to $INSTALL_DIR/$MCP_BINARY_NAME"
     echo "Register it with an AI client: claude mcp add repotory -- $INSTALL_DIR/$MCP_BINARY_NAME"
   else
     mcp_install_hint "extract or install failed"

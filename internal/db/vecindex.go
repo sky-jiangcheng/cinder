@@ -4,7 +4,7 @@ package db
 // `vec0` virtual table and `vec_*` functions available on every connection
 // (verified zero-CGO in internal/vecprobe). Its only global side effect is that
 // sqlite3_auto_extension initialises SQLite, which rules out
-// sqlite.RegisterPageCache — Repotory never uses a custom page cache, so this is
+// sqlite.RegisterPageCache — Cinder never uses a custom page cache, so this is
 // safe (ADR-0012 决策 1).
 import (
 	"database/sql"

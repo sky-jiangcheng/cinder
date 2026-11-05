@@ -155,8 +155,8 @@ The brand presentation layer and the machine identity layer are **intentionally 
 
 | Layer | Value | Notes |
 |------|------|------|
-| Brand name | `Repotory` | `productName`, in-app logo, documentation copy |
-| Full display name | `Repotory: Local Git Knowledge Base` | Window title (the Wails `options.Title` in `main.go`) and the HTML `<title>` |
+| Brand name | `Cinder` | `productName`, in-app logo, documentation copy |
+| Full display name | `Cinder: Local Git Knowledge Base` | Window title (the Wails `options.Title` in `main.go`) and the HTML `<title>` |
 | Repository and package identity | `repotory` | GitHub repo name, Go module name, npm package name |
 | Frozen identifiers | `repotory` | Binary/command name, user data directory (the `dirName` in `internal/platform`), MCP server name and tool prefix |
 

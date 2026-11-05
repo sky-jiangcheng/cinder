@@ -1,4 +1,4 @@
-// Repotory for JetBrains — Gradle build.
+// Cinder for JetBrains — Gradle build.
 //
 // ADR-0027 decision 3: Kotlin + Gradle (IntelliJ Platform Plugin), an
 // INDEPENDENT code base. The double maintenance surface ADR-0009 warned about

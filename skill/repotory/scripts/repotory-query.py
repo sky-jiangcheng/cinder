@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repotory 兜底只读查询工具（通道 C）。
+"""Cinder 兜底只读查询工具（通道 C）。
 
 当 MCP server 不可用、headless server 也没在跑时，用它直接查本地 SQLite。
 
@@ -111,7 +111,7 @@ def build_match(query):
 
 def connect(path):
     if not os.path.exists(path):
-        sys.exit(f"error: 数据库不存在: {path}\n提示：先装 Repotory 并跑一次扫描，或设置 REPOTORY_DB 指向库文件。")
+        sys.exit(f"error: 数据库不存在: {path}\n提示：先装 Cinder 并跑一次扫描，或设置 REPOTORY_DB 指向库文件。")
     # 只读 URI：WAL 模式下桌面应用开着也能读，且这里杜绝任何写入意图。
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row

@@ -1,4 +1,4 @@
-// Package service contains Repotory's business logic: project aggregation,
+// Package service contains Cinder's business logic: project aggregation,
 // the repository scan pipeline, stats refresh, knowledge notes, search and
 // AI-facing exports. It is the single layer that talks to the database
 // (internal/db) and the git provider (internal/core/git); the Wails binding
@@ -22,7 +22,7 @@ import (
 // ImportEventPayload is the data broadcast after a knowledge-source import.
 type ImportEventPayload map[string]any
 
-// Service carries all Repotory business logic and its runtime state (scan
+// Service carries all Cinder business logic and its runtime state (scan
 // progress, status-bar cache). It is safe for concurrent use.
 type Service struct {
 	db    *sql.DB

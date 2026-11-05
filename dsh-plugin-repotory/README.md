@@ -1,13 +1,13 @@
 # dsh-plugin-repotory
 
-DeepSeek Harness (`dsh`) 插件：把 Repotory 本地的 git 分析能力暴露给 Harness 作为
-三个模型可见的工具（Tool）。所有分析逻辑都在 Repotory 共享的 Go service 层
+DeepSeek Harness (`dsh`) 插件：把 Cinder 本地的 git 分析能力暴露给 Harness 作为
+三个模型可见的工具（Tool）。所有分析逻辑都在 Cinder 共享的 Go service 层
 （`internal/service`），本插件只是薄客户端，**桌面 App 与 Harness 共用同一份代码，零逻辑复制**。
 
 ## 架构
 
 ```
-Repotory 桌面 App  ─┐
+Cinder 桌面 App  ─┐
                     ├─→ internal/service（单一事实源）
 dsh-plugin-repotory ─┴─→ Headless HTTP 服务 (repotory server) ─→ SQLite/FTS5
 ```
@@ -18,7 +18,7 @@ dsh-plugin-repotory ─┴─→ Headless HTTP 服务 (repotory server) ─→ S
 
 ## 提供的工具
 
-| Tool | 对应 Repotory 能力 | 说明 |
+| Tool | 对应 Cinder 能力 | 说明 |
 |---|---|---|
 | `repotory_ai_context` | Copy AI Context / llms.txt | 返回整库 AI 可读上下文（项目目录、技术栈、README 摘要、知识笔记） |
 | `repotory_repo_overview` | 项目概览 | 技术栈 / 语言分布 / 依赖 / 主要贡献者 / 活跃度(Heatmap) / 最近提交 |
@@ -27,7 +27,7 @@ dsh-plugin-repotory ─┴─→ Headless HTTP 服务 (repotory server) ─→ S
 ## 构建 headless 服务
 
 ```bash
-# 在 Repotory 仓库根目录
+# 在 Cinder 仓库根目录
 GOPROXY=https://goproxy.cn,direct GOSUMDB=off CGO_ENABLED=0 \
   go build -o repotory-server ./cmd/server
 ```

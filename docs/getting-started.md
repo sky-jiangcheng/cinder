@@ -5,7 +5,7 @@ order: 1
 
 # 快速开始
 
-Repotory 是面向 AI 编程 Agent 的本地优先记忆层与工作台。其核心价值在于建立**跨 Agent 的持久化项目记忆**：自动发现本机 Git 仓库，沉淀架构决策、避坑记录、依赖与技术栈，让任何 AI Agent 一次工具调用即可接入上下文。
+Cinder 是面向 AI 编程 Agent 的本地优先记忆层与工作台。其核心价值在于建立**跨 Agent 的持久化项目记忆**：自动发现本机 Git 仓库，沉淀架构决策、避坑记录、依赖与技术栈，让任何 AI Agent 一次工具调用即可接入上下文。
 
 本项目提供**多形态产物**，你可以根据实际需要选择最适合的上手方式：
 - **纯 MCP 模式**：无需桌面界面，一条命令为 Claude Code / Cursor / Windsurf 注册本地记忆；
@@ -44,7 +44,7 @@ claude mcp add repotory -- "$(which repotory-mcp)"
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
 ```
-> macOS 安装到 `/Applications/Repotory.app`，Linux 安装到 `/usr/local/bin/repotory`；同时都会把 `repotory-mcp` 放入 PATH。
+> macOS 安装到 `/Applications/Cinder.app`，Linux 安装到 `/usr/local/bin/repotory`；同时都会把 `repotory-mcp` 放入 PATH。
 
 #### Windows 一键脚本
 ```powershell
@@ -121,12 +121,12 @@ flowchart TB
 
 | 平台 | 关掉窗口后 | 怎么叫回来 |
 | :--- | :--- | :--- |
-| **macOS** | 窗口隐藏，**菜单栏留下「Repotory」菜单** | 菜单栏 → **Repotory** → 显示 Repotory / 问 Repotory… |
+| **macOS** | 窗口隐藏，**菜单栏留下「Cinder」菜单** | 菜单栏 → **Cinder** → 显示 Cinder / 问 Cinder… |
 | **Windows / Linux** | 窗口最小化，**任务栏留一个图标** | 点任务栏图标 |
 
-菜单里三项：**显示 Repotory**（唤起窗口）、**问 Repotory…**（唤起窗口并直接打开机器人面板）、**退出 Repotory**（真正退出进程）。
+菜单里三项：**显示 Cinder**（唤起窗口）、**问 Cinder…**（唤起窗口并直接打开机器人面板）、**退出 Cinder**（真正退出进程）。
 
-> **没有系统托盘图标。** Repotory 用的 Wails v2 没有托盘能力（它的 `TrayMenu` 类型没有任何平台前端会去渲染），所以 macOS 靠**菜单栏**、Windows / Linux 靠**任务栏**。这里写实说，不假装有。
+> **没有系统托盘图标。** Cinder 用的 Wails v2 没有托盘能力（它的 `TrayMenu` 类型没有任何平台前端会去渲染），所以 macOS 靠**菜单栏**、Windows / Linux 靠**任务栏**。这里写实说，不假装有。
 
 **再次启动应用不会开第二个进程**：它会唤醒已在运行的那一个（并打开机器人），因为同一个 SQLite 文件只能有一个进程拥有。
 

@@ -1,6 +1,6 @@
 # packaging/
 
-Homebrew and Scoop manifests for Repotory release artifacts.
+Homebrew and Scoop manifests for Cinder release artifacts.
 
 The release workflow (`.github/workflows/release.yml`) publishes these assets per
 tag, and the manifests below point at them:

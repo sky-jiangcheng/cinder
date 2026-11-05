@@ -1,7 +1,7 @@
 ---
 name: repotory
 description: |
-  Use Repotory as a cross-agent memory layer: read and write the local project knowledge base
+  Use Cinder as a cross-agent memory layer: read and write the local project knowledge base
   (notes, projects, topics, todos) that survives across sessions and is shared by every agent
   on this machine.
 
@@ -12,7 +12,7 @@ description: |
   - starts work on a tracked repo and wants prior context ("继续昨天的活");
   - asks about a project's history, tech stack, open TODOs, or contributors;
   - wants the knowledge base audited ("知识库是不是坏了", "搜索为什么搜不到");
-  - mentions Repotory itself (the app, repotory-mcp, llms.txt, the knowledge base).
+  - mentions Cinder itself (the app, repotory-mcp, llms.txt, the knowledge base).
 
   Also use when a search comes back suspiciously thin — an FTS index that drifted out of sync
   makes every query under-report while the readiness check still says everything is fine.
@@ -22,22 +22,22 @@ metadata:
   version: "1.0.0"
   upstream: "https://github.com/sky-jiangcheng/repotory"
   description_en: |
-    Use Repotory as a cross-agent memory layer: read and write the local project knowledge base
+    Use Cinder as a cross-agent memory layer: read and write the local project knowledge base
     (notes, projects, topics, todos) that survives across sessions and is shared by every agent
     on this machine.
 
     Trigger scenarios — use when the user:
     - asks what you know / were told / decided about a project, topic, file, or past decision;
     - asks you to record a conclusion, gotcha, decision, or handoff for future sessions;
-    - starts work on a repository that Repotory already tracks and wants prior context;
+    - starts work on a repository that Cinder already tracks and wants prior context;
     - asks about the shape of a project's history, tech stack, open TODOs, or contributors;
     - wants the knowledge base audited or checked for drift;
-    - mentions Repotory itself (the app, the MCP server, repotory-mcp, llms.txt, the knowledge base).
+    - mentions Cinder itself (the app, the MCP server, repotory-mcp, llms.txt, the knowledge base).
 ---
 
-# Repotory — 跨 agent 的本地记忆层
+# Cinder — 跨 agent 的本地记忆层
 
-Repotory 是单机 SQLite 知识库 + 独立 MCP server。**知识不属于某个 agent，而属于这台机器上的所有 agent。**
+Cinder 是单机 SQLite 知识库 + 独立 MCP server。**知识不属于某个 agent，而属于这台机器上的所有 agent。**
 Claude Code 写的交接，Cursor 明天就能读；这不是某个工具的私有记忆格式。
 
 本 skill 负责三件事：把知识**取出来**、把结论**写回去**、以及在 MCP 不可用时**不空手而归**。
@@ -88,7 +88,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 
 ## 二、会话记忆协议（每次开工都走）
 
-这是 Repotory 存在的理由。**不要把它当成一个「搜索工具」用** —— 那样就退化成了普通搜索框。
+这是 Cinder 存在的理由。**不要把它当成一个「搜索工具」用** —— 那样就退化成了普通搜索框。
 
 ```
 会话开始 ──▶ repotory_context   ──▶ [干活]  ──▶ repotory_handoff ──▶ 会话结束
@@ -253,11 +253,11 @@ python3 "$SKILL_DIR/scripts/repotory-query.py" --stats    # 库概况 + FTS 漂�
 
 ---
 
-## 六、Repotory 与资料库的分工
+## 六、Cinder 与资料库的分工
 
 两套存储都是「公共的」，但语义不同。**别把它们当同一个东西的两份副本。**
 
-| | **Repotory** | **资料库（Library）** |
+| | **Cinder** | **资料库（Library）** |
 |---|---|---|
 | 位置 | 本机 SQLite（`~/Library/Application Support/repotory/`） | 云端空间（个人 / 团队） |
 | 面向 | **代码项目**的工程知识：决策、坑、技术栈、交接 | **通用工作产物**：文档、表格、汇报页、剪藏、附件 |
@@ -270,19 +270,19 @@ python3 "$SKILL_DIR/scripts/repotory-query.py" --stats    # 库概况 + FTS 漂�
 
 | 用户要做的事 | 去哪 |
 |---|---|
-| 「我之前在这个项目里记过什么」 | Repotory |
-| 「上次那个会话的交接是什么」 | Repotory（`repotory_context`） |
-| 「把这个坑记下来，下个 agent 别再踩」 | Repotory（`repotory_handoff`） |
+| 「我之前在这个项目里记过什么」 | Cinder |
+| 「上次那个会话的交接是什么」 | Cinder（`repotory_context`） |
+| 「把这个坑记下来，下个 agent 别再踩」 | Cinder（`repotory_handoff`） |
 | 「把这篇笔记发给我同事 / 存成团队文档」 | 资料库（`library_upload` → 拿分享链接） |
 | 「查一下团队文档里关于 X 的说法」 | 资料库（`library_search`） |
-| 「从 Repotory 导出成一篇对外的说明文档」 | Repotory 读 → 整理 → `library_upload` |
+| 「从 Cinder 导出成一篇对外的说明文档」 | Cinder 读 → 整理 → `library_upload` |
 
 ### 桥接做法（公共存储用起来）
 
-**导出**：把 Repotory 的笔记导出成文件，再上传到资料库。
+**导出**：把 Cinder 的笔记导出成文件，再上传到资料库。
 
 ```bash
-# Repotory 的 llms.txt / 单笔记导出有 CLI；或走 HTTP RPC 读出正文
+# Cinder 的 llms.txt / 单笔记导出有 CLI；或走 HTTP RPC 读出正文
 curl -s -X POST http://127.0.0.1:18765/api/rpc \
   -H 'Content-Type: application/json' -d '{"method":"GetNote","args":[184]}' > note.json
 ```
@@ -293,7 +293,7 @@ curl -s -X POST http://127.0.0.1:18765/api/rpc \
 让下一个 agent 在 `repotory_context` 里就能看到。
 
 > 两边**不会自动同步**。同步是显式动作：读一边、写另一边。
-> 不要假设「资料库里搜到的东西，Repotory 里一定有」。
+> 不要假设「资料库里搜到的东西，Cinder 里一定有」。
 
 ---
 
@@ -304,7 +304,7 @@ curl -s -X POST http://127.0.0.1:18765/api/rpc \
 3. **决策与坑 > 流水账** —— `decisions` 和 `gotchas` 是下个 agent 真正需要的
 4. **分类用 tags** —— agent 不能改主题层，`tags` 是 agent 可用的分类维度
 5. **机器写的知识要过审** —— `notes_organize` 只给提案；wiki 编译产出的一律 pending
-6. **要分享的走资料库** —— 需要链接、团队可见、跨设备，就上传，别指望 Repotory 笔记能分享
+6. **要分享的走资料库** —— 需要链接、团队可见、跨设备，就上传，别指望 Cinder 笔记能分享
 
 ---
 

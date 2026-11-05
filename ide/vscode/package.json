@@ -1,6 +1,6 @@
 {
   "name": "repotory-vscode",
-  "displayName": "Repotory",
+  "displayName": "Cinder",
   "publisher": "sky-jiangcheng",
   "version": "2.30.0",
   "description": "The local-first memory layer for AI coding agents. Browse, search and hand off your local knowledge base without leaving the editor. One VSIX covers VS Code, Cursor and Windsurf.",
@@ -20,15 +20,15 @@
     "commands": [
       {
         "command": "repotory.loadContext",
-        "title": "Repotory: Load Session Context"
+        "title": "Cinder: Load Session Context"
       },
       {
         "command": "repotory.handoff",
-        "title": "Repotory: Record Session Handoff"
+        "title": "Cinder: Record Session Handoff"
       },
       {
         "command": "repotory.search",
-        "title": "Repotory: Search Knowledge",
+        "title": "Cinder: Search Knowledge",
         "icon": {
           "light": "media/icon-search-light.svg",
           "dark": "media/icon-search-dark.svg"
@@ -36,19 +36,19 @@
       },
       {
         "command": "repotory.ask",
-        "title": "Repotory: Ask the Knowledge Base"
+        "title": "Cinder: Ask the Knowledge Base"
       },
       {
         "command": "repotory.searchWiki",
-        "title": "Repotory: Search Approved Knowledge Pages"
+        "title": "Cinder: Search Approved Knowledge Pages"
       },
       {
         "command": "repotory.registerMcp",
-        "title": "Repotory: Register MCP Server (repotory-init)"
+        "title": "Cinder: Register MCP Server (repotory-init)"
       },
       {
         "command": "repotory.diagnose",
-        "title": "Repotory: Setup & Diagnostics",
+        "title": "Cinder: Setup & Diagnostics",
         "icon": {
           "light": "media/icon-setup-light.svg",
           "dark": "media/icon-setup-dark.svg"
@@ -56,11 +56,11 @@
       },
       {
         "command": "repotory.setMcpPath",
-        "title": "Repotory: Set repotory-mcp Path"
+        "title": "Cinder: Set repotory-mcp Path"
       },
       {
         "command": "repotory.openDesktop",
-        "title": "Repotory: Open Desktop App",
+        "title": "Cinder: Open Desktop App",
         "icon": {
           "light": "media/icon-desktop-light.svg",
           "dark": "media/icon-desktop-dark.svg"
@@ -85,17 +85,17 @@
       }
     ],
     "configuration": {
-      "title": "Repotory",
+      "title": "Cinder",
       "properties": {
         "repotory.serverUrl": {
           "type": "string",
           "default": "http://127.0.0.1:18765",
-          "description": "Repotory headless service URL (repotory server)."
+          "description": "Cinder headless service URL (repotory server)."
         },
         "repotory.mcpPath": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to the repotory-mcp executable. Leave empty to auto-detect from PATH, Homebrew/Scoop directories and the extension storage. Set it from the Command Palette with \"Repotory: Set repotory-mcp Path\"."
+          "description": "Absolute path to the repotory-mcp executable. Leave empty to auto-detect from PATH, Homebrew/Scoop directories and the extension storage. Set it from the Command Palette with \"Cinder: Set repotory-mcp Path\"."
         }
       }
     },
@@ -103,7 +103,7 @@
       "repotory-explorer": [
         {
           "id": "repotory.notesSearch",
-          "name": "Repotory Chat",
+          "name": "Cinder Chat",
           "type": "webview"
         }
       ]
@@ -112,7 +112,7 @@
       "activitybar": [
         {
           "id": "repotory-explorer",
-          "title": "Repotory",
+          "title": "Cinder",
           "icon": "media/repotory.svg"
         }
       ]

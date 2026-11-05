@@ -311,7 +311,7 @@ func (i *Importer) docFor(dir string, projects []db.Project, repos []db.Reposito
 	}
 	title += " · " + id8
 	var b strings.Builder
-	fmt.Fprintf(&b, "> 由 Repotory 从 CodeBuddy 会话记录自动导入（source: codebuddy，**best-effort**：只取首条提问与末条回复，不是完整转录）\n\n")
+	fmt.Fprintf(&b, "> 由 Cinder 从 CodeBuddy 会话记录自动导入（source: codebuddy，**best-effort**：只取首条提问与末条回复，不是完整转录）\n\n")
 	fmt.Fprintf(&b, "**工作目录**：`%s`\n\n", p.workspace)
 	if p.firstUser != "" {
 		b.WriteString("## 首条提问\n\n" + truncateRunes(p.firstUser, maxFieldRunes) + "\n\n")

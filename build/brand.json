@@ -1,0 +1,6 @@
+{
+  "note": "The brand words, in one place. Everything that shows a name to a user reads from here (or is checked against it by scripts/check-brand.mjs). The identifier layer is NOT here and is NOT free to move: repotory_* tool prefixes, the repotory / repotory-mcp / repotory-server binaries, the repotory data directory and repotory.db, the MCP server name, the plugin ids, the npm package and the DB sentinel are interfaces, not brands — changing any of them breaks every existing installation. ADR-0049.",
+  "mother": "Cinder",
+  "desktop": "Cinder Desktop",
+  "agent": "Warden"
+}

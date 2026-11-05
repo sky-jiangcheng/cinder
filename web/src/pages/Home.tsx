@@ -23,7 +23,7 @@ export default function Home() {
   const [projectsReady, setProjectsReady] = useState(false)
 
   useEffect(() => {
-    document.title = 'Home - Repotory'
+    document.title = 'Home - Cinder Desktop'
   }, [])
 
   useEffect(() => {

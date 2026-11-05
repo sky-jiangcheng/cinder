@@ -1,4 +1,4 @@
-// Repotory for JetBrains — the thin HTTP half of the plugin.
+// Cinder for JetBrains — the thin HTTP half of the plugin.
 //
 // ADR-0027 (Accepted 2026-10-22): the plugin is a THIN SHELL. Everything it
 // shows comes from the shared service layer, and the plugin holds no retrieval
@@ -159,7 +159,7 @@ data class NoteDraft(
 )
 
 /**
- * Thin HTTP client for the Repotory headless service.
+ * Thin HTTP client for the Cinder headless service.
  *
  * Two endpoints only:
  *   GET  /health    — liveness (the settings page "test connection" button)
@@ -193,12 +193,12 @@ class RepotoryClient {
     }
 
     /**
-     * True when the running server also serves the Repotory web UI, i.e. it was
+     * True when the running server also serves the Cinder web UI, i.e. it was
      * started with `--web-dist` (see cmd/server/main.go: without it the process
      * is API-only and every non-/api path 404s).
      *
      * Results deep-link into that UI, so a plain API-only server answers the API
-     * but turns every "Open in Repotory" click into a 404. The plugin starts its
+     * but turns every "Open in Cinder" click into a 404. The plugin starts its
      * own local server with the sibling `web/` directory when the release bundle
      * ships one (see RepotoryServer.kt); for a server the user started, the
      * plugin asks this question and says the answer out loud.
@@ -270,19 +270,19 @@ class RepotoryClient {
                 }
                 Logger.getInstance(LOG).warn("repotory rpc $method -> HTTP $code ${reason ?: ""}")
                 throw RepotoryRpcException(
-                    "Repotory answered HTTP $code for $method" + (if (reason.isNullOrBlank()) "" else ": $reason"),
+                    "Cinder answered HTTP $code for $method" + (if (reason.isNullOrBlank()) "" else ": $reason"),
                 )
             }
             val body = conn.inputStream.bufferedReader(StandardCharsets.UTF_8).readText()
             val envelope = JsonParser.parseString(body)
             if (!envelope.isJsonObject) {
-                throw RepotoryRpcException("Repotory returned a non-object response for $method")
+                throw RepotoryRpcException("Cinder returned a non-object response for $method")
             }
             val obj = envelope.asJsonObject
             if (obj.has("error") && !obj.get("error").isJsonNull) {
                 val reason = obj.get("error").toString()
                 Logger.getInstance(LOG).warn("repotory rpc $method -> $reason")
-                throw RepotoryRpcException("Repotory refused $method: $reason")
+                throw RepotoryRpcException("Cinder refused $method: $reason")
             }
             return if (obj.has("result")) obj.get("result") else null
         } finally {

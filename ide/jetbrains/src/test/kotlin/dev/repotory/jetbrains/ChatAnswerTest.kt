@@ -22,8 +22,8 @@ class ChatAnswerTest {
             "The 503 retry lives in the gateway, not in the client.",
             "",
             "Sources:",
-            "[P1] page \"Retry policy\" (id 42, slug retry-policy, project Repotory)",
-            "[N3] note \"503 notes\" (id 7, project Repotory)",
+            "[P1] page \"Retry policy\" (id 42, slug retry-policy, project Cinder)",
+            "[N3] note \"503 notes\" (id 7, project Cinder)",
             "",
         ).joinToString("\n")
         val parsed = parseAskAnswer(text)
@@ -31,11 +31,11 @@ class ChatAnswerTest {
         assertEquals("The 503 retry lives in the gateway, not in the client.", parsed.answer)
         assertEquals(2, parsed.sources.size)
         assertEquals(
-            EvidenceSource("P1", "page", "Retry policy", 42L, "retry-policy", "Repotory"),
+            EvidenceSource("P1", "page", "Retry policy", 42L, "retry-policy", "Cinder"),
             parsed.sources[0],
         )
         assertEquals(
-            EvidenceSource("N3", "note", "503 notes", 7L, null, "Repotory"),
+            EvidenceSource("N3", "note", "503 notes", 7L, null, "Cinder"),
             parsed.sources[1],
         )
     }

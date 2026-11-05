@@ -239,7 +239,7 @@ jobs:
       # need it as a release asset (ADR-0027 usability revision). The bundle
       # ships the SPA next to the binary: the plugin passes
       # `--web-dist <binary dir>/web` automatically, which is what makes
-      # "Open in Repotory" deep links work out of the box. The server build of
+      # "Open in Cinder" deep links work out of the box. The server build of
       # the web assets has base "/" — the desktop `web/dist` (base "./") is not
       # interchangeable, hence the separate build:server invocation.
       - name: Build headless server bundle
@@ -315,7 +315,7 @@ jobs:
           sips -s format png "build/dmg-background.svg" --out "$STAGING/.background/background.png"
           pip install create-dmg 2>/dev/null || brew install create-dmg 2>/dev/null || curl -sL https://github.com/create-dmg/create-dmg/archive/refs/tags/v1.0.0.tar.gz | tar -xz && cd create-dmg-1.0.0 && sudo make install && cd ..
           create-dmg \
-            --volname "Repotory" \
+            --volname "Cinder Desktop" \
             --window-size 600 400 \
             --icon-size 80 \
             --icon "$APP_NAME" 100 280 \

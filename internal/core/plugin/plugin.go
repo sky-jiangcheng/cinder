@@ -1,4 +1,4 @@
-// Package plugin defines the knowledge-source SPI for Repotory.
+// Package plugin defines the knowledge-source SPI for Cinder.
 //
 // The in-process script-plugin system (ADR-0002, yaegi interpreter) has been
 // removed (C11 方案B): there is no user-authored plugin loader anymore. What
@@ -10,7 +10,7 @@
 package plugin
 
 // KnowledgeImporter imports knowledge (e.g. notes) from an external source
-// into the Repotory knowledge base.
+// into the Cinder knowledge base.
 type KnowledgeImporter interface {
 	// Source returns a stable source identifier, e.g. "claude".
 	Source() string

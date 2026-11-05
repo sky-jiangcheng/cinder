@@ -1,8 +1,8 @@
-# Repotory 定位与叙事重构简报
+# Cinder 定位与叙事重构简报
 
 ## 一句话定位（对外）
 
-**Repotory 是本地优先的“跨 agent 项目记忆层”**：帮你快速理解本地 Git 项目最近发生了什么、沉淀了哪些可检索知识，并在会话边界自动把这些记忆交给任何 AI agent 继续使用。
+**Cinder 是本地优先的“跨 agent 项目记忆层”**：帮你快速理解本地 Git 项目最近发生了什么、沉淀了哪些可检索知识，并在会话边界自动把这些记忆交给任何 AI agent 继续使用。
 
 ## 用户价值（做减法后的承诺）
 
@@ -42,18 +42,18 @@
 
 **中文（三句定位）**
 
-> Repotory 是本地优先的跨 agent 项目记忆层：开会话一次注入上下文（`repotory_context`）、收会话结构化交接（`repotory_handoff`），让任何 agent 都从上一次结束的地方继续。
+> Cinder 是本地优先的跨 agent 项目记忆层：开会话一次注入上下文（`repotory_context`）、收会话结构化交接（`repotory_handoff`），让任何 agent 都从上一次结束的地方继续。
 
 **English**
 
-> Repotory is the local-first memory layer for AI coding agents: one call injects full project context at session start (`repotory_context`), one call records a structured handoff at session end (`repotory_handoff`) — any agent picks up where the last one stopped.
+> Cinder is the local-first memory layer for AI coding agents: one call injects full project context at session start (`repotory_context`), one call records a structured handoff at session end (`repotory_handoff`) — any agent picks up where the last one stopped.
 
 **Release note**
 
-> Positioning release: Repotory is reframed as the local-first, cross-agent project memory layer; the session loop (`repotory_scan` → `repotory_context` → `repotory_handoff`) becomes the headline capability. Dashboard/statistics stay supporting capabilities.
+> Positioning release: Cinder is reframed as the local-first, cross-agent project memory layer; the session loop (`repotory_scan` → `repotory_context` → `repotory_handoff`) becomes the headline capability. Dashboard/statistics stay supporting capabilities.
 
 ### 推荐（完整）
-> Repotory 帮你把本地 Git 项目从“散落在终端和记忆里”变成“可检索、可复用的记忆层”。它能快速发现你关心的项目，理解每个项目当前状态，并把笔记、依赖、技术栈和活跃信息沉淀下来；随后在会话开始时一次注入给 AI（`repotory_context`），在会话结束时结构化收回（`repotory_handoff`），跨 agent 复用。
+> Cinder 帮你把本地 Git 项目从“散落在终端和记忆里”变成“可检索、可复用的记忆层”。它能快速发现你关心的项目，理解每个项目当前状态，并把笔记、依赖、技术栈和活跃信息沉淀下来；随后在会话开始时一次注入给 AI（`repotory_context`），在会话结束时结构化收回（`repotory_handoff`），跨 agent 复用。
 
 ### 暂停（容易误导）
 - “代码提交仪表盘 / 数据大盘”

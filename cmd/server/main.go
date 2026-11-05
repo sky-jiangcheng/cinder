@@ -1,4 +1,4 @@
-// Command server runs Repotory as a headless HTTP service, exposing the shared
+// Command server runs Cinder as a headless HTTP service, exposing the shared
 // internal/service business logic over a JSON API. It is the bridge that lets
 // the DeepSeek Harness dsh-plugin (and any other HTTP client) reuse the exact
 // same analysis code the desktop App uses, without duplicating logic.
@@ -74,7 +74,7 @@ func main() {
 	webDist := flag.String("web-dist", envOr("REPOTORY_WEB_DIST", ""), "directory of the built web frontend to serve (optional, API-only when empty)")
 	flag.Parse()
 
-	log.Printf("Repotory headless server %s starting on 127.0.0.1:%s (memory-layer contract %s)",
+	log.Printf("Cinder headless server %s starting on 127.0.0.1:%s (memory-layer contract %s)",
 		version.Version, *port, version.CoreVersion)
 
 	database, err := openDatabase(platform.GetDbPath())
@@ -138,7 +138,7 @@ func main() {
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- srv.ListenAndServe() }()
 
-	log.Printf("Repotory headless API listening at http://127.0.0.1:%s", *port)
+	log.Printf("Cinder headless API listening at http://127.0.0.1:%s", *port)
 	select {
 	case err := <-serverErr:
 		if err != nil && err != http.ErrServerClosed {
@@ -157,7 +157,7 @@ func main() {
 	if err := svc.Close(); err != nil {
 		log.Printf("close database: %v", err)
 	}
-	log.Printf("Repotory headless server stopped")
+	log.Printf("Cinder headless server stopped")
 }
 
 func envOr(key, def string) string {
@@ -167,7 +167,7 @@ func envOr(key, def string) string {
 	return def
 }
 
-// openDatabase opens the knowledge base, retrying while another Repotory
+// openDatabase opens the knowledge base, retrying while another Cinder
 // process holds the write lock.
 //
 // The desktop app and this server share one SQLite file, and OPENING it
@@ -199,7 +199,7 @@ func openDatabase(path string) (*sql.DB, error) {
 			break
 		}
 		wait := time.Duration(attempt) * time.Second
-		log.Printf("database is locked by another Repotory process (attempt %d/%d); retrying in %s", attempt, attempts, wait)
+		log.Printf("database is locked by another Cinder process (attempt %d/%d); retrying in %s", attempt, attempts, wait)
 		time.Sleep(wait)
 	}
 	return nil, fmt.Errorf("database stayed locked after %d attempts: %w", attempts, err)

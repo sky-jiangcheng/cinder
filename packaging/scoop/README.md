@@ -1,6 +1,6 @@
 # scoop-repo
 
-Scoop bucket for [Repotory](https://github.com/sky-jiangcheng/repotory) — the
+Scoop bucket for [Cinder](https://github.com/sky-jiangcheng/repotory) — the
 local-first code project context base.
 
 ## What is in here

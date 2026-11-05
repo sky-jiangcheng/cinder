@@ -1,4 +1,4 @@
-// Repotory chat console — the IDE panel, rewritten as a CONVERSATION.
+// Cinder chat console — the IDE panel, rewritten as a CONVERSATION.
 //
 // ADR-0036 is the design source. The panel used to be a searcher: a box, a
 // list of thumbnails, a detail pane. It is now a conversation feed:

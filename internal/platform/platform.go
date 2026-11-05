@@ -20,6 +20,12 @@ import (
 )
 
 // dirName is the user data directory and the log file basename.
+//
+// The brand changed (Repotory -> Cinder, ADR-0049) but this string did not:
+// the data directory is a frozen identifier, not a display name — renaming it
+// would move every user's database, plugins and logs for no user-visible gain,
+// and the migration chain handles one generation back per rename. The command
+// line keeps the old word for the same reason (repotory-mcp, repotory_*).
 const dirName = "repotory"
 
 // legacyDirName is the data directory used before the RepoNest -> Repotory

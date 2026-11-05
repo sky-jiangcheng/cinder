@@ -5,15 +5,15 @@ order: 7
 
 # AI 集成
 
-Repotory 面向 AI 代理提供读取通道与自检工具，全部复用同一 `internal/service` 实现（与桌面端行为一致）。
+Cinder 面向 AI 代理提供读取通道与自检工具，全部复用同一 `internal/service` 实现（与桌面端行为一致）。
 
-## 价值定位：Repotory 是 AI 的数据源，而非 AI 平台
+## 价值定位：Cinder 是 AI 的数据源，而非 AI 平台
 
-**Repotory 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 18 个工具来**消费**这层数据，按需取数、精确检索。
+**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 18 个工具来**消费**这层数据，按需取数、精确检索。
 
 这一层「为什么比让 AI 直接读 git 更优」的论证，见[存储结构优化与 AI 价值](../storage-optimization.md)。
 
-需要明说的边界：早期版本这里写的是「Repotory 不调用任何大语言模型」。**这句话已经被产品自己推翻**——AI 问答（v1.15.0）会打 OpenAI 兼容的 `/chat/completions`，可选的语义检索会打 `/v1/embeddings`。真实的定位是上面那句：模型与端点**由用户自备**，相应能力**默认关**，密钥只存不外传。之所以要较真这个区别，是因为它决定了隐私责任的落点——「不内置 AI」意味着没有任何一行笔记会在你没显式开启、没填自己端点的情况下离开这台机器；而「内置了 AI」就不是这个承诺了。
+需要明说的边界：早期版本这里写的是「Cinder 不调用任何大语言模型」。**这句话已经被产品自己推翻**——AI 问答（v1.15.0）会打 OpenAI 兼容的 `/chat/completions`，可选的语义检索会打 `/v1/embeddings`。真实的定位是上面那句：模型与端点**由用户自备**，相应能力**默认关**，密钥只存不外传。之所以要较真这个区别，是因为它决定了隐私责任的落点——「不内置 AI」意味着没有任何一行笔记会在你没显式开启、没填自己端点的情况下离开这台机器；而「内置了 AI」就不是这个承诺了。
 
 ### 配置项
 
@@ -26,7 +26,7 @@ Repotory 面向 AI 代理提供读取通道与自检工具，全部复用同一 
 | `scan_depth` | 整数 | `2` | 扫描目录深度 |
 | `git_author` | 字符串 | 系统 git 用户 | 影响「我的」统计 / 热力图归属 |
 
-**AI 侧配置全部可选、全部默认关**，且都要你自己填端点——Repotory 不带任何服务：
+**AI 侧配置全部可选、全部默认关**，且都要你自己填端点——Cinder 不带任何服务：
 
 | 键 | 默认 | 用途 | 开了会把什么发出去 |
 |----|------|------|-------------------|
@@ -234,7 +234,7 @@ repository 层（1、2）压过 project 层（3、4），因为命中 repository
 node scripts/repotory-init/index.mjs --with-hook
 ```
 
-**在任意项目里都能跑**：VS Code 扩展的 `Repotory: Register MCP Server` 命令用的是随扩展打包的那份 `repotory-init`（事实源仍是 `scripts/repotory-init/index.mjs`，由 `compile` 拷入 VSIX，CI 用 `git diff --exit-code` 钉住两者一致），所以不必先克隆本仓库；执行时也不弹终端——扩展在宿主进程内静默跑完安装器（仅 `ENOENT`/`EACCES` 时才回退到 `node`）。上面的裸命令则需要你在本仓库目录内执行。
+**在任意项目里都能跑**：VS Code 扩展的 `Cinder: Register MCP Server` 命令用的是随扩展打包的那份 `repotory-init`（事实源仍是 `scripts/repotory-init/index.mjs`，由 `compile` 拷入 VSIX，CI 用 `git diff --exit-code` 钉住两者一致），所以不必先克隆本仓库；执行时也不弹终端——扩展在宿主进程内静默跑完安装器（仅 `ENOENT`/`EACCES` 时才回退到 `node`）。上面的裸命令则需要你在本仓库目录内执行。
 
 - 自动探测 `repotory-mcp`（`--bin` 可显式指定），向 Claude Code（`.mcp.json`）、Cursor（`.cursor/mcp.json`）、VS Code（`.vscode/mcp.json`）、Windsurf 写入注册（配置只落在对应客户端目录已存在的地方），JetBrains 打印手动指引
 - `--with-hook` 同时安装下方的 SessionEnd hook（脚本 + `settings.json` 合并，改前备份）
@@ -312,7 +312,7 @@ SessionEnd hook 只存在于 Claude Code。**换任何一个别的 agent，那�
 
 ```markdown
 <!-- repotory:begin -->
-## Repotory memory layer
+## Cinder memory layer
 …开局调用 repotory_context…收尾调用 repotory_handoff…
 <!-- repotory:end -->
 ```
@@ -342,13 +342,13 @@ agent-score 已合并为 MCP 工具 `repotory_agent_score`，无需独立构建�
 
 ## 为什么不直接让 AI 读 git 仓库
 
-一个常见疑问：既然 Claude Code / Cursor 都能直接 `git log`、读文件，为什么还要经过 Repotory？核心答案是**成本与确定性**：
+一个常见疑问：既然 Claude Code / Cursor 都能直接 `git log`、读文件，为什么还要经过 Cinder？核心答案是**成本与确定性**：
 
 - **读得贵**：每次让 AI 直接 `git log` 或逐文件扫描都是一次性消费，重复读 = 重复 token；
 - **读得乱 / 不全**：大仓必超上下文窗口、被截断，模型还可能幻觉或漏读二进制 / `.gitignore`；
 - **读得慢**：每次重算统计，秒级任务退化成分钟级。
 
-Repotory 在**扫描时一次性**把 git 原始数据解析并物化进本地 SQLite（`daily_stats` 预聚合统计、`repo_meta` 缓存挖掘结果、`project_notes_fts` 建全文索引），之后 AI 只通过 MCP 工具**按需取数、精确命中**。完整对比与存储结构细节见[存储结构优化与 AI 价值](../storage-optimization.md)。
+Cinder 在**扫描时一次性**把 git 原始数据解析并物化进本地 SQLite（`daily_stats` 预聚合统计、`repo_meta` 缓存挖掘结果、`project_notes_fts` 建全文索引），之后 AI 只通过 MCP 工具**按需取数、精确命中**。完整对比与存储结构细节见[存储结构优化与 AI 价值](../storage-optimization.md)。
 
 ## 面向 AI 代理的技能卡
 

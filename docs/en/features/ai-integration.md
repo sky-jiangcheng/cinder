@@ -5,15 +5,15 @@ order: 7
 
 # AI Integration
 
-Repotory provides read channels and self-check tools for AI agents, all reusing the same `internal/service` implementation (behavior identical to the desktop app).
+Cinder provides read channels and self-check tools for AI agents, all reusing the same `internal/service` implementation (behavior identical to the desktop app).
 
-## Value proposition: Repotory is a data source for AI, not an AI platform
+## Value proposition: Cinder is a data source for AI, not an AI platform
 
-**Repotory does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 18 MCP tools, fetching on demand and searching precisely.
+**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 18 MCP tools, fetching on demand and searching precisely.
 
 For the argument for why this layer is better than letting AI read git directly, see [Storage Optimization and AI Value](../storage-optimization.md).
 
-A boundary that needs stating: earlier versions of this page claimed "**Repotory does not call any large language model**". **The product has since disproved that sentence** — AI Q&A (v1.15.0) calls an OpenAI-compatible `/chat/completions`, and optional semantic search calls `/v1/embeddings`. The accurate positioning is the sentence above: models and endpoints are **user-supplied**, the capabilities are **off by default**, and keys stay local. The distinction is worth being pedantic about because it decides where privacy responsibility lies — "we don't ship AI" means not one line of your notes leaves this machine unless you explicitly enabled it and typed in your own endpoint; "we ship AI" would not be that promise.
+A boundary that needs stating: earlier versions of this page claimed "**Cinder does not call any large language model**". **The product has since disproved that sentence** — AI Q&A (v1.15.0) calls an OpenAI-compatible `/chat/completions`, and optional semantic search calls `/v1/embeddings`. The accurate positioning is the sentence above: models and endpoints are **user-supplied**, the capabilities are **off by default**, and keys stay local. The distinction is worth being pedantic about because it decides where privacy responsibility lies — "we don't ship AI" means not one line of your notes leaves this machine unless you explicitly enabled it and typed in your own endpoint; "we ship AI" would not be that promise.
 
 ### Configuration keys
 
@@ -26,7 +26,7 @@ The whitelist in `internal/service/config.go` splits into two groups. **Core con
 | `scan_depth` | integer | `2` | Scan directory depth |
 | `git_author` | string | System git user | Affects "My" statistics / heatmap attribution |
 
-**The AI-side keys are all optional, all off by default, and all require you to supply the endpoint** — Repotory brings no service of its own:
+**The AI-side keys are all optional, all off by default, and all require you to supply the endpoint** — Cinder brings no service of its own:
 
 | Key | Default | Purpose | What leaves the machine if enabled |
 |-----|---------|---------|-----------------------------------|
@@ -232,7 +232,7 @@ Step one of [ADR-0009](../adr/0009-ide-presence.md): detect the binary and regis
 node scripts/repotory-init/index.mjs --with-hook
 ```
 
-**It runs in any project**: the extension's `Repotory: Register MCP Server` command uses the copy of `repotory-init` bundled inside the VSIX (the source of truth stays at `scripts/repotory-init/index.mjs`, copied in by `compile` and pinned to it by a CI `git diff --exit-code`), so cloning this repository first is not required; nor does it open a terminal — the extension runs the installer silently inside its host process (falling back to `node` only on `ENOENT`/`EACCES`). The bare command above does require you to be inside this repository.
+**It runs in any project**: the extension's `Cinder: Register MCP Server` command uses the copy of `repotory-init` bundled inside the VSIX (the source of truth stays at `scripts/repotory-init/index.mjs`, copied in by `compile` and pinned to it by a CI `git diff --exit-code`), so cloning this repository first is not required; nor does it open a terminal — the extension runs the installer silently inside its host process (falling back to `node` only on `ENOENT`/`EACCES`). The bare command above does require you to be inside this repository.
 
 - Detects `repotory-mcp` (override with `--bin`) and registers it with Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), VS Code (`.vscode/mcp.json`) and Windsurf (configs land only where the client's directory exists); JetBrains gets printed manual guidance
 - `--with-hook` also installs the SessionEnd hook below (script + merged `settings.json`, backed up before changes)
@@ -310,7 +310,7 @@ The SessionEnd hook exists only in Claude Code. **Switch to any other agent and 
 
 ```markdown
 <!-- repotory:begin -->
-## Repotory memory layer
+## Cinder memory layer
 ...call repotory_context at the start...call repotory_handoff before finishing...
 <!-- repotory:end -->
 ```
@@ -340,13 +340,13 @@ agent-score has been merged into the MCP tool `repotory_agent_score`; no separat
 
 ## Why not just let AI read the git repository
 
-A common question: since Claude Code / Cursor can run `git log` and read files directly, why route through Repotory at all? The core answer is **cost and determinism**:
+A common question: since Claude Code / Cursor can run `git log` and read files directly, why route through Cinder at all? The core answer is **cost and determinism**:
 
 - **Reading is expensive**: every direct `git log` or file-by-file scan is a one-off expense — repeated reads mean repeated tokens;
 - **Reading is messy / incomplete**: large repositories inevitably exceed the context window and get truncated, and the model may hallucinate or skip binary files / `.gitignore`;
 - **Reading is slow**: recomputing statistics on every call turns a seconds-scale task into a minutes-scale one.
 
-Repotory parses and materializes the raw git data into local SQLite **once at scan time** (`daily_stats` pre-aggregates statistics, `repo_meta` caches mined results, `project_notes_fts` builds the full-text index); after that, AI only fetches on demand and hits precisely through the MCP tools. For the full comparison and storage structure details, see [Storage Optimization and AI Value](../storage-optimization.md).
+Cinder parses and materializes the raw git data into local SQLite **once at scan time** (`daily_stats` pre-aggregates statistics, `repo_meta` caches mined results, `project_notes_fts` builds the full-text index); after that, AI only fetches on demand and hits precisely through the MCP tools. For the full comparison and storage structure details, see [Storage Optimization and AI Value](../storage-optimization.md).
 
 ## Skill card for AI agents
 

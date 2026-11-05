@@ -1,4 +1,4 @@
-// Package agentinit registers Repotory's MCP server with the AI clients a
+// Package agentinit registers Cinder's MCP server with the AI clients a
 // user actually runs — Claude Code, Cursor, VS Code, Windsurf — and installs
 // the Claude Code SessionEnd hook that writes the handoff note when a session
 // ends.
@@ -349,7 +349,7 @@ type hookEntry struct {
 // The bytes must match the mjs's HOOK_SCRIPT exactly; the contract check
 // compares the sha256 of the two files.
 const hookScript = `#!/bin/sh
-# Repotory SessionEnd hook: write the handoff note when a session ends.
+# Cinder SessionEnd hook: write the handoff note when a session ends.
 # Installed by repotory-init. Delete this file and the matching
 # .claude/settings.json entry to uninstall.
 command -v claude >/dev/null 2>&1 || exit 0

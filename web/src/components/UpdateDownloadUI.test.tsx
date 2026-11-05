@@ -103,8 +103,8 @@ beforeEach(() => {
   vi.mocked(getInstallInfo).mockResolvedValue({
     version: '2.13.1',
     platform: 'darwin',
-    install_path: '/Applications/Repotory.app',
-    executable_path: '/Applications/Repotory.app/Contents/MacOS/repotory',
+    install_path: '/Applications/Cinder.app',
+    executable_path: '/Applications/Cinder.app/Contents/MacOS/repotory',
     download_dir: '/Users/me/Downloads',
   })
   vi.mocked(ejectInstallerVolume).mockResolvedValue(true)

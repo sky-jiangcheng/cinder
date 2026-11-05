@@ -112,7 +112,7 @@ test("notes mode filters by the locked project and says how many were dropped", 
     { type: "note", id: 2, project_id: 9, title: "other", snippet: "s" },
     { type: "note", id: 3, project_id: 7, title: "mine too", snippet: "s" },
   ]);
-  const transport = fakeTransport({ repotory_notes_search: hits }, { id: 7, name: "Repotory" });
+  const transport = fakeTransport({ repotory_notes_search: hits }, { id: 7, name: "Cinder" });
   const { messages, post } = collector();
   const session = new ChatSession(transport, post);
   await session.refreshScope();
@@ -121,7 +121,7 @@ test("notes mode filters by the locked project and says how many were dropped", 
   assert.equal(turn.state, "done");
   assert.equal(turn.cards?.length, 2);
   assert.ok(turn.scopeNote?.includes("2 of 3"));
-  assert.ok(turn.scopeNote?.includes("Repotory"));
+  assert.ok(turn.scopeNote?.includes("Cinder"));
 });
 
 test("notes mode without a lock keeps every hit and says nothing about scope", async () => {
@@ -138,7 +138,7 @@ test("notes mode without a lock keeps every hit and says nothing about scope", a
 test("pages mode passes the project id to the tool — the filter is server-side", async () => {
   const transport = fakeTransport(
     { repotory_wiki_search: '[{"id":1,"slug":"s","title":"P","kind":"concept","project_id":7}]' },
-    { id: 7, name: "Repotory" },
+    { id: 7, name: "Cinder" },
   );
   const { messages, post } = collector();
   const session = new ChatSession(transport, post);
@@ -151,7 +151,7 @@ test("pages mode passes the project id to the tool — the filter is server-side
 });
 
 test("ask mode passes the project id to the tool too", async () => {
-  const transport = fakeTransport({ repotory_ask: "no evidence" }, { id: 7, name: "Repotory" });
+  const transport = fakeTransport({ repotory_ask: "no evidence" }, { id: 7, name: "Cinder" });
   const { messages, post } = collector();
   const session = new ChatSession(transport, post);
   await session.refreshScope();
@@ -161,7 +161,7 @@ test("ask mode passes the project id to the tool too", async () => {
 });
 
 test("unlocking drops the project id from the calls", async () => {
-  const transport = fakeTransport({ repotory_ask: "no evidence" }, { id: 7, name: "Repotory" });
+  const transport = fakeTransport({ repotory_ask: "no evidence" }, { id: 7, name: "Cinder" });
   const { messages, post } = collector();
   const session = new ChatSession(transport, post);
   await session.refreshScope();

@@ -42,7 +42,7 @@ func newFixture(t *testing.T) (appDB *sql.DB, statePath string) {
 	writeCursorState(t, statePath)
 
 	// workspaceStorage/<hash>/workspace.json — the VS Code layout Cursor shares.
-	// The sample tree holds both workspaces: the one that matches a Repotory
+	// The sample tree holds both workspaces: the one that matches a Cinder
 	// project, and one that matches none (its sessions must not be guessed
 	// onto a project).
 	imptest.CopySample(t, "testdata/workspaceStorage", filepath.Join(userDir, "workspaceStorage"))

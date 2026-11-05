@@ -100,7 +100,7 @@ func seedHealthyDB(t *testing.T) (*sql.DB, int64) {
 	if _, err := db.CreateTodo(database, projectID, "verify the integrity checks"); err != nil {
 		t.Fatalf("CreateTodo: %v", err)
 	}
-	if err := db.UpsertRepoMeta(database, repoID, `["Go"]`, "# Repotory", `{"Go": 100}`, "[]", "[]", "{}"); err != nil {
+	if err := db.UpsertRepoMeta(database, repoID, `["Go"]`, "# Cinder", `{"Go": 100}`, "[]", "[]", "{}"); err != nil {
 		t.Fatalf("UpsertRepoMeta: %v", err)
 	}
 	return database, projectID

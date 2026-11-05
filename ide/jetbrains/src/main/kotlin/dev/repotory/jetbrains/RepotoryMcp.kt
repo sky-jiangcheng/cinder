@@ -1,4 +1,4 @@
-// Repotory for JetBrains — the plugin's data channel, over MCP.
+// Cinder for JetBrains — the plugin's data channel, over MCP.
 //
 // ADR-0035 (Accepted 2026-10-30) decision 2: the plugin's EIGHT data
 // capabilities go over MCP, and only two things stay on HTTP — MoveNote

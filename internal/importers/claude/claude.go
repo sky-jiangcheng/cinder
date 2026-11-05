@@ -1,6 +1,6 @@
 // Package claude implements the built-in Claude memory KnowledgeImporter
 // (issue #35). It reads notes from ~/.claude/projects/*/memory/*.md, matches
-// each to a Repotory project by name or repository path, and produces
+// each to a Cinder project by name or repository path, and produces
 // plugin.ImportDoc values that the plugin runtime upserts into the knowledge
 // base. Imports are idempotent: the runtime updates existing notes rather than
 // duplicating them.
@@ -84,7 +84,7 @@ func (i *Importer) Probe() plugin.ProbeResult {
 }
 
 // Import scans ~/.claude/projects/*/memory/*.md and returns documents to
-// upsert. Files whose project cannot be matched to a Repotory project are
+// upsert. Files whose project cannot be matched to a Cinder project are
 // returned with ProjectID 0, which the runtime counts as skipped.
 func (i *Importer) Import() ([]plugin.ImportDoc, error) {
 	home, err := os.UserHomeDir()
@@ -181,7 +181,7 @@ func NoteTitle(filename string) string {
 	}
 }
 
-// MatchProject finds the Repotory project id for a Claude memory dir name. It
+// MatchProject finds the Cinder project id for a Claude memory dir name. It
 // is a thin wrapper over the shared memsrc matcher, kept exported so the Claude
 // importer's own tests and callers remain stable while the matching rules stay
 // common across all built-in importers.

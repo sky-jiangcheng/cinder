@@ -56,7 +56,7 @@ jobs:
       - name: verify installed app
         run: |
           set -euo pipefail
-          APP="/Applications/Repotory.app"
+          APP="/Applications/Cinder.app"
           if [ ! -d "$APP" ]; then
             echo "::error::$APP was not installed"
             ls -la /Applications || true

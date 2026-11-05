@@ -2,7 +2,7 @@
   "name": "repotory-init",
   "version": "1.0.0",
   "private": true,
-  "description": "One-command MCP registration for Repotory: detect repotory-mcp, register Claude Code / Cursor / VS Code / Windsurf, optionally install the SessionEnd handoff hook. (ADR-0009 step one / TODO M4)",
+  "description": "One-command MCP registration for Cinder: detect repotory-mcp, register Claude Code / Cursor / VS Code / Windsurf, optionally install the SessionEnd handoff hook. (ADR-0009 step one / TODO M4)",
   "type": "module",
   "bin": {
     "repotory-init": "./index.mjs"

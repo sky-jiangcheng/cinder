@@ -5,7 +5,7 @@ order: 1
 
 # Getting Started
 
-Repotory is the local-first memory layer and workbench for AI coding agents. Its core value is establishing a **persistent, cross-agent project memory**: it automatically discovers local Git repositories and captures architecture decisions, gotchas, dependencies, and tech stacks, enabling any AI agent to access project context in a single tool call.
+Cinder is the local-first memory layer and workbench for AI coding agents. Its core value is establishing a **persistent, cross-agent project memory**: it automatically discovers local Git repositories and captures architecture decisions, gotchas, dependencies, and tech stacks, enabling any AI agent to access project context in a single tool call.
 
 The project ships as a **multi-artifact suite**. You can choose the entry point that best matches your workflow:
 - **MCP-Only Mode**: No GUI required. Register local memory with Claude Code, Cursor, and Windsurf in a single command.
@@ -46,7 +46,7 @@ If you prefer a visual knowledge base, block-based Markdown editor, and human re
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.sh | bash
 ```
-> Installs to `/Applications/Repotory.app` on macOS and `/usr/local/bin/repotory` on Linux; also places `repotory-mcp` in your PATH.
+> Installs to `/Applications/Cinder.app` on macOS and `/usr/local/bin/repotory` on Linux; also places `repotory-mcp` in your PATH.
 
 #### Windows One-Line Script
 ```powershell
@@ -109,7 +109,7 @@ Click **Backfill History** on starred cards to asynchronously fetch the past 365
 
 ### 5. Write Your First Knowledge Note
 
-The real power of Repotory comes from saving reusable insights:
+The real power of Cinder comes from saving reusable insights:
 - **Desktop**: Select a project in **Quick create note** on the home page and record gotchas or setup instructions (see [Knowledge Base and Notes](features/knowledge.md));
 - **AI Side**: At session end, calling `repotory_handoff` automatically saves a handoff note, which is pinned to the top of subsequent sessions via `repotory_context` (see [AI Integration](features/ai-integration.md)).
 
@@ -123,12 +123,12 @@ If you already have memory logs from Claude, Codex, OpenCode, OpenClaw, or Herme
 
 | Platform | After you close the window | How to get it back |
 | :--- | :--- | :--- |
-| **macOS** | the window hides and **the menu bar keeps a "Repotory" menu** | menu bar → **Repotory** → Show Repotory / Ask Repotory… |
+| **macOS** | the window hides and **the menu bar keeps a "Cinder" menu** | menu bar → **Cinder** → Show Cinder / Ask Cinder… |
 | **Windows / Linux** | the window minimises and **the taskbar keeps an icon** | click the taskbar icon |
 
-The menu has three items: **Show Repotory** (summon the window), **Ask Repotory…** (summon the window and open the bot panel straight away) and **Quit Repotory** (the one that really ends the process).
+The menu has three items: **Show Cinder** (summon the window), **Ask Cinder…** (summon the window and open the bot panel straight away) and **Quit Cinder** (the one that really ends the process).
 
-> **There is no system tray icon.** Repotory runs on Wails v2, which has no tray (its `TrayMenu` type is never rendered by any platform frontend), so macOS relies on the **menu bar** and Windows / Linux on the **taskbar**. Stated plainly rather than pretending otherwise.
+> **There is no system tray icon.** Cinder runs on Wails v2, which has no tray (its `TrayMenu` type is never rendered by any platform frontend), so macOS relies on the **menu bar** and Windows / Linux on the **taskbar**. Stated plainly rather than pretending otherwise.
 
 **Starting the app again does not open a second process**: it wakes the one already running (and opens the bot), because only one process may own a given SQLite file.
 

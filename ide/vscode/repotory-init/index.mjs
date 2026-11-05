@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// repotory-init — one-command MCP registration for Repotory.
+// repotory-init — one-command MCP registration for Cinder.
 // ADR-0009 step one / TODO M4: detect the repotory-mcp binary, register it with
 // the MCP clients found in this project (Claude Code / Cursor / VS Code /
 // Windsurf), and optionally install the Claude Code SessionEnd handoff hook.
@@ -21,7 +21,7 @@ const BACKUP_SUFFIX = ".repotory-init.bak";
 
 const RELEASES_URL = "https://github.com/sky-jiangcheng/repotory/releases";
 
-const USAGE = `repotory-init — register Repotory's MCP server with your AI clients (ADR-0009)
+const USAGE = `repotory-init — register Cinder's MCP server with your AI clients (ADR-0009)
 
 Usage: node index.mjs [options]
 
@@ -189,7 +189,7 @@ function registerJetBrains() {
 // ---------------------------------------------------------------- hook (M4)
 
 const HOOK_SCRIPT = `#!/bin/sh
-# Repotory SessionEnd hook: write the handoff note when a session ends.
+# Cinder SessionEnd hook: write the handoff note when a session ends.
 # Installed by repotory-init. Delete this file and the matching
 # .claude/settings.json entry to uninstall.
 command -v claude >/dev/null 2>&1 || exit 0
@@ -271,9 +271,9 @@ const INSTRUCTIONS_END = "<!-- repotory:end -->";
 // scripts/check-agent-init-contract.mjs compares the two against one fixture.
 const INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md"];
 
-const INSTRUCTIONS_BODY = `## Repotory memory layer
+const INSTRUCTIONS_BODY = `## Cinder memory layer
 
-This project's knowledge and session memory live in Repotory, a local SQLite
+This project's knowledge and session memory live in Cinder, a local SQLite
 database, reachable through the repotory_* MCP tools.
 
 - At the start of work, call repotory_context with the current repository path
@@ -287,7 +287,7 @@ database, reachable through the repotory_* MCP tools.
   shows: a list of files touched is not a handoff, and the notes that bury the
   useful signal are the ones that stop the next session from reading them.
 
-Installed by Repotory. To remove, delete everything between the repotory:begin
+Installed by Cinder. To remove, delete everything between the repotory:begin
 and repotory:end markers (this block is plain text in your repository, and it
 will show up in git status until you commit or delete it).
 `;
@@ -395,7 +395,7 @@ function main() {
     }
   }
 
-  console.log("repotory-init — Repotory MCP registration (ADR-0009 / TODO M4)\n");
+  console.log("repotory-init — Cinder MCP registration (ADR-0009 / TODO M4)\n");
 
   // --with-hook only makes sense for Claude Code; keep it regardless of --client.
   let bin = findBinary();

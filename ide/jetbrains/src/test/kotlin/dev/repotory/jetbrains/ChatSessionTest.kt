@@ -162,7 +162,7 @@ class ChatSessionTest {
              {"type":"note","id":2,"project_id":9,"title":"other","snippet":"s"},
              {"type":"note","id":3,"project_id":7,"title":"mine too","snippet":"s"}]
         """.trimIndent()
-        val transport = FakeTransport(mapOf("repotory_notes_search" to hits), 7L to "Repotory")
+        val transport = FakeTransport(mapOf("repotory_notes_search" to hits), 7L to "Cinder")
         val (events, post) = collector()
         val session = ChatSession(transport, post)
         session.refreshScope()
@@ -172,7 +172,7 @@ class ChatSessionTest {
         assertEquals(2, turn.cards.size)
         assertNotNull(turn.scopeNote)
         assertTrue(turn.scopeNote!!.contains("2 of 3"))
-        assertTrue(turn.scopeNote!!.contains("Repotory"))
+        assertTrue(turn.scopeNote!!.contains("Cinder"))
         assertTrue(
             turn.scopeNote!!.contains("The notes tool has no project filter, so the panel filtered the list."),
         )
@@ -206,7 +206,7 @@ class ChatSessionTest {
     fun `pages mode passes the project id to the tool - the filter is server-side`() {
         val transport = FakeTransport(
             mapOf("repotory_wiki_search" to """[{"id":1,"slug":"s","title":"P","kind":"concept","project_id":7}]"""),
-            7L to "Repotory",
+            7L to "Cinder",
         )
         val (events, post) = collector()
         val session = ChatSession(transport, post)
@@ -216,7 +216,7 @@ class ChatSessionTest {
         assertEquals(7L, call.second["project_id"])
         val turn = lastTurn(events)
         assertEquals(1, turn.cards.size)
-        assertTrue(turn.scopeNote.contains("Scoped to Repotory"))
+        assertTrue(turn.scopeNote.contains("Scoped to Cinder"))
         assertTrue(turn.scopeNote.contains("that project's pages and the global ones."))
     }
 
@@ -224,7 +224,7 @@ class ChatSessionTest {
 
     @Test
     fun `ask mode passes the project id to the tool too`() {
-        val transport = FakeTransport(mapOf("repotory_ask" to "no evidence"), 7L to "Repotory")
+        val transport = FakeTransport(mapOf("repotory_ask" to "no evidence"), 7L to "Cinder")
         val (events, post) = collector()
         val session = ChatSession(transport, post)
         session.refreshScope()
@@ -235,7 +235,7 @@ class ChatSessionTest {
 
     @Test
     fun `unlocking drops the project id from the calls`() {
-        val transport = FakeTransport(mapOf("repotory_ask" to "no evidence"), 7L to "Repotory")
+        val transport = FakeTransport(mapOf("repotory_ask" to "no evidence"), 7L to "Cinder")
         val (events, post) = collector()
         val session = ChatSession(transport, post)
         session.refreshScope()
@@ -267,7 +267,7 @@ class ChatSessionTest {
         val warned = announcements(events).last()
         assertEquals(ChatLevel.WARN, warned.level)
         assertEquals(
-            "The local Repotory service is not reachable at http://127.0.0.1:18765 — " +
+            "The local Cinder service is not reachable at http://127.0.0.1:18765 — " +
                 "the project lock needs it, so the panel searches across all projects.",
             warned.message,
         )
@@ -357,7 +357,7 @@ class ChatSessionTest {
 
     @Test
     fun `a resolved workspace clears the candidates - there is nothing to pick`() {
-        val transport = FakeTransport(tools = emptyMap(), project = 7L to "Repotory")
+        val transport = FakeTransport(tools = emptyMap(), project = 7L to "Cinder")
         val (events, post) = collector()
         val session = ChatSession(transport, post)
         session.refreshScope()
@@ -368,7 +368,7 @@ class ChatSessionTest {
     fun `picking a project files the workspace under it`() {
         val transport = FakeTransport(
             tools = emptyMap(),
-            project = 7L to "Repotory",
+            project = 7L to "Cinder",
         )
         val (events, post) = collector()
         val session = ChatSession(transport, post)

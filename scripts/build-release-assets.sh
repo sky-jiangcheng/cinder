@@ -38,7 +38,7 @@ mkdir -p "$OUT"
 TARGETS=(linux-amd64 darwin-amd64 darwin-arm64 windows-amd64)
 LDFLAGS="-s -w -X repotory/internal/version.Version=$VERSION"
 
-echo "=== Repotory $VERSION ==="
+echo "=== Cinder $VERSION ==="
 echo "output: $OUT"
 echo
 

@@ -1,6 +1,6 @@
 # 贡献指南
 
-Repotory（仓库与包标识 `repotory`）是本地优先的 Git 知识库桌面应用。欢迎 Issue 与 PR——动手前请花两分钟读完本文，尤其是「范围冻结」与「命名分层」两节，它们是本仓库最容易被好心 PR 违反的约定。
+Cinder（仓库与包标识 `repotory`）是本地优先的 Git 知识库桌面应用。欢迎 Issue 与 PR——动手前请花两分钟读完本文，尤其是「范围冻结」与「命名分层」两节，它们是本仓库最容易被好心 PR 违反的约定。
 
 ## 环境要求
 
@@ -92,7 +92,7 @@ node scripts/check-i18n-keys.mjs    # locale 词条覆盖守卫（key 缺失 / �
 
 品牌展示层与机器标识**有意不一致**，完整规约见 [README 命名分层](README.md#命名分层)。速记：
 
-- 品牌文案写 `Repotory`，完整展示名 `Repotory: Local Git Knowledge Base`，仓库/包标识写 `repotory`
+- 品牌文案写 `Cinder`，完整展示名 `Cinder: Local Git Knowledge Base`，仓库/包标识写 `repotory`
 - **不要「顺手统一」冻结标识**：二进制/命令名 `repotory`、数据目录 `repotory`（`internal/platform` 的 `dirName`）、MCP server 名 `repotory-mcp` 与工具前缀 `repotory_*`。它们绑定用户数据迁移史与 AI 客户端对外契约，改名是破坏性变更
 
 ## 默认值变更须先过评测门

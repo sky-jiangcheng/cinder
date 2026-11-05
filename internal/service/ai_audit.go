@@ -40,7 +40,7 @@ import (
 // The fourth deserves a note: the rules are the user's, not the product's.
 // Shipping a built-in blocklist would be a false promise — keyword matching
 // is trivially bypassed and blocks legitimate work at the same time. What
-// Repotory provides is the MECHANISM; what it screens for is the user's
+// Cinder provides is the MECHANISM; what it screens for is the user's
 // decision, expressed as regexes they write for their own organisation.
 
 // Review verdicts stored in ai_call_log. An empty verdict means the

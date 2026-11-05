@@ -1,10 +1,10 @@
-// Repotory for JetBrains — minimal MCP stdio client.
+// Cinder for JetBrains — minimal MCP stdio client.
 //
 // ADR-0035 (Accepted 2026-10-30) decision 2: the plugin's data calls go over
 // MCP, with HTTP filling two deliberate gaps (MoveNote and the web-UI probe).
 // This file is the Kotlin twin of ide/vscode/src/mcpClient.ts: the same wire
 // contract, the same discipline (ADR-0009 thin client — it knows the MCP
-// protocol and nothing about Repotory's internals).
+// protocol and nothing about Cinder's internals).
 //
 // The transport is newline-delimited JSON-RPC 2.0 over the child's stdin and
 // stdout, which is the MCP stdio transport. stdout carries protocol traffic
@@ -36,7 +36,7 @@ class McpException(message: String, cause: Throwable? = null) : Exception(messag
  * A thin MCP client over a child process's stdio.
  *
  * It does exactly three things: the `initialize` handshake, `tools/call`, and
- * reading the answers back. Everything Repotory-specific lives in the callers
+ * reading the answers back. Everything Cinder-specific lives in the callers
  * — a file that grew a notion of notes would be a file that has to grow again
  * with every new MCP capability.
  */

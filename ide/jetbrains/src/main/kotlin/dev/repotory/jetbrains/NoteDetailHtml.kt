@@ -46,14 +46,14 @@ internal fun detailHtmlKit(): HTMLEditorKit {
 internal fun promoHtml(): String = """
     <html><body style="padding:6px">
     <h2>Knowledge, where you already are.</h2>
-    <p>Repotory keeps what your coding agents learn — why a decision was
+    <p>Cinder keeps what your coding agents learn — why a decision was
     made, what gotcha you hit, what to do next — in a local, searchable
     store.</p>
     <p>Type a query on the left. Results open in full, right here — the
-    first one is selected for you. Double-click (or <b>Open in Repotory</b>)
-    jumps to the item in the Repotory web app.</p>
+    first one is selected for you. Double-click (or <b>Open in Cinder</b>)
+    jumps to the item in the Cinder web app.</p>
     <p style="color:${metaColorHex()}">Everything stays on this machine: the
-    plugin talks to the loopback-only Repotory service and never uploads
+    plugin talks to the loopback-only Cinder service and never uploads
     anything.</p>
     </body></html>
 """.trimIndent()
@@ -89,7 +89,7 @@ internal fun noteHtml(detail: NoteDetail): String {
  *
  * The edges are plain text, not links: a JEditorPane renders an <a> as blue
  * underlined text but does not follow it, so a link here would look clickable
- * and do nothing. "Open in Repotory" is the way out of the pane.
+ * and do nothing. "Open in Cinder" is the way out of the pane.
  */
 internal fun wikiPageHtml(detail: WikiPageDetail): String {
     val meta = buildString {
@@ -177,7 +177,7 @@ internal object MarkdownLite {
             if (lang == "mermaid") {
                 blocks.add(
                     "<p style=\"color:${metaColorHex()};font-size:8pt;margin:6px 0 2px 0\">" +
-                        "流程图 · mermaid 源码（在 Repotory 桌面应用中渲染为图形）</p>" +
+                        "流程图 · mermaid 源码（在 Cinder 桌面应用中渲染为图形）</p>" +
                         "<pre>" + esc(code) + "</pre>",
                 )
             } else {

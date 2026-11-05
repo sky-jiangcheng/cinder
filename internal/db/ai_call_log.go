@@ -8,7 +8,7 @@ import (
 
 // AI call audit log (ADR-0030, schema v28).
 //
-// Repotory is the local-first memory layer for AI coding agents, and the LLM
+// Cinder is the local-first memory layer for AI coding agents, and the LLM
 // exit is unusually well converged: every outbound model call in the codebase
 // goes through one of three HTTP primitives in internal/service/ai.go (aiGet,
 // aiPostJSON, aiPostJSONStream), and all eight business paths funnel into

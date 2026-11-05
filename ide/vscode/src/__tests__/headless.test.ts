@@ -15,8 +15,8 @@ test("an answer with sources splits into the reply and the source list", () => {
     "The 503 retry lives in the gateway, not in the client.",
     "",
     "Sources:",
-    '[P1] page "Retry policy" (id 42, slug retry-policy, project Repotory)',
-    '[N3] note "503 notes" (id 7, project Repotory)',
+    '[P1] page "Retry policy" (id 42, slug retry-policy, project Cinder)',
+    '[N3] note "503 notes" (id 7, project Cinder)',
     "",
   ].join("\n");
   const parsed = parseAskAnswer(text);
@@ -29,7 +29,7 @@ test("an answer with sources splits into the reply and the source list", () => {
     title: "Retry policy",
     id: 42,
     slug: "retry-policy",
-    project: "Repotory",
+    project: "Cinder",
   });
   assert.deepEqual(parsed.sources[1], {
     ref: "N3",
@@ -37,7 +37,7 @@ test("an answer with sources splits into the reply and the source list", () => {
     title: "503 notes",
     id: 7,
     slug: undefined,
-    project: "Repotory",
+    project: "Cinder",
   });
 });
 

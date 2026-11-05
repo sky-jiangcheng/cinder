@@ -1,6 +1,6 @@
 <idea-plugin>
     <!--
-      Repotory for JetBrains — thin client over the Repotory headless service.
+      Cinder for JetBrains — thin client over the Cinder headless service.
 
       ADR-0027 (Accepted 2026-10-22), decisions 2 and 3:
         · IntelliJ IDEA CE first, platform-level compatibility: the plugin
@@ -23,18 +23,18 @@
       binary name, the data directory and the MCP prefix are untouched.
     -->
     <id>dev.repotory.jetbrains</id>
-    <name>Repotory</name>
-    <vendor email="sky-jiangcheng@users.noreply.github.com" url="https://github.com/sky-jiangcheng/repotory">Repotory</vendor>
+    <name>Cinder</name>
+    <vendor email="sky-jiangcheng@users.noreply.github.com" url="https://github.com/sky-jiangcheng/repotory">Cinder</vendor>
     <!-- The Plugin Verifier rejects a descriptor without <description> (it is
          a required property of a valid plugin), and Marketplace shows it to
          the user, so it says what the plugin actually does. -->
     <description><![CDATA[
         The local-first memory layer for AI coding agents.
 
-        Ask your Repotory knowledge base a question from inside the IDE and
+        Ask your Cinder knowledge base a question from inside the IDE and
         read the answer with its sources, without leaving the editor.
 
-        Repotory keeps what your coding agents learn — why a decision was
+        Cinder keeps what your coding agents learn — why a decision was
         made, what gotcha you hit, what to do next — in a local, searchable
         store. This plugin is the console for it:
 
@@ -55,14 +55,14 @@
           offers the projects it could belong to — one click files it.
         • Your own AI provider, configured in place: the panel's gear button
           opens the endpoint, the key and the model, and writes them to the
-          local Repotory service — the same settings the desktop app uses, so
+          local Cinder service — the same settings the desktop app uses, so
           the two never disagree. "List models" asks the endpoint what it
           offers; "Test" proves the answer comes back before you save.
         • Full-text search (FTS5) over every note and todo you ever captured,
-          ranked exactly as the Repotory desktop app ranks it — the plugin
+          ranked exactly as the Cinder Desktop app ranks it — the plugin
           reimplements no ranking, no snippet extraction, no gating.
-        • One-click jump: "Open in Repotory" deep-links the item into the
-          Repotory web app.
+        • One-click jump: "Open in Cinder" deep-links the item into the
+          Cinder Desktop app.
         • A diagnostics report: the panel's third button answers "why does
           this not work?" — the MCP binary, the local service and the
           workspace's resolution, each with what it found.
@@ -80,7 +80,7 @@
 
         The plugin is a thin client: its data goes over MCP to repotory-mcp,
         which opens the same local database the desktop app uses, and the two
-        things that still speak HTTP talk to the loopback-only Repotory
+        things that still speak HTTP talk to the loopback-only Cinder
         service. Everything stays on your machine — there is nothing to
         authenticate and nothing that leaves it. One build covers the whole
         IntelliJ family (IDEA, PyCharm, WebStorm, GoLand and the rest), on
@@ -90,7 +90,7 @@
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="Repotory"
+        <toolWindow id="Cinder"
                     anchor="right"
                     icon="/icons/repotory.svg"
                     factoryClass="dev.repotory.jetbrains.RepotoryToolWindowFactory"/>
@@ -100,18 +100,18 @@
         <applicationConfigurable parentId="tools"
                                  instance="dev.repotory.jetbrains.RepotoryConfigurable"
                                  id="dev.repotory.jetbrains.settings"
-                                 displayName="Repotory"/>
+                                 displayName="Cinder"/>
         <!-- The tool window posts its service problems here (no local server
              binary, the port is taken) instead of opening a modal dialog the
              user did not ask for. -->
-        <notificationGroup id="Repotory" displayType="BALLOON"/>
+        <notificationGroup id="Cinder" displayType="BALLOON"/>
     </extensions>
 
     <actions>
         <action id="dev.repotory.jetbrains.OpenToolWindow"
                 class="dev.repotory.jetbrains.OpenRepotoryAction"
-                text="Repotory"
-                description="Open the Repotory chat console">
+                text="Cinder"
+                description="Open the Cinder chat console">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

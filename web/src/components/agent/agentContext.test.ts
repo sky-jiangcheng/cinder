@@ -82,8 +82,8 @@ beforeEach(() => {
   vi.mocked(listRecentHandoffs).mockResolvedValue([])
   vi.mocked(listPendingWikiPages).mockResolvedValue([])
   vi.mocked(getInstallInfo).mockResolvedValue({
-    version: '2.25.0', platform: 'darwin', install_path: '/Applications/Repotory.app',
-    executable_path: '/Applications/Repotory.app/Contents/MacOS/repotory',
+    version: '2.25.0', platform: 'darwin', install_path: '/Applications/Cinder.app',
+    executable_path: '/Applications/Cinder.app/Contents/MacOS/repotory',
     download_dir: '/Users/me/Downloads',
   })
 })
@@ -200,7 +200,7 @@ describe('the other cards', () => {
   it('reports where the app is installed', async () => {
     const ctx = buildAgentContext('/settings', t)
     const card = await ctx.actions[0].load()
-    expect(card.items?.some(i => i.meta === '/Applications/Repotory.app')).toBe(true)
+    expect(card.items?.some(i => i.meta === '/Applications/Cinder.app')).toBe(true)
   })
 })
 

@@ -1,7 +1,7 @@
 // Minimal MCP stdio client — just enough for repotory-mcp: initialize
 // handshake + tools/call. Speaks newline-delimited JSON-RPC 2.0 over stdio,
 // which is the MCP stdio transport. Thin-client rule (ADR-0009): this file
-// evolves only with the MCP wire contract, never with Repotory internals.
+// evolves only with the MCP wire contract, never with Cinder internals.
 import { spawn, type ChildProcess } from "node:child_process";
 
 export interface McpOptions {

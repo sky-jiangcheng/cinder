@@ -20,7 +20,7 @@
 // has afterwards: WHERE the bundle went (the full path is shown), WHICH
 // version it is (the version is in the file name and in the progress header),
 // and how to get rid of the mounted installer volume (macOS mounts a disk
-// image, and a mounted volume is a second "Repotory" in the Finder sidebar).
+// image, and a mounted volume is a second "Cinder" in the Finder sidebar).
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'

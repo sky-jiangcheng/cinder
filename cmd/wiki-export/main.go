@@ -1,4 +1,4 @@
-// Command wiki-export renders Repotory's derived wiki layer into a Markdown tree
+// Command wiki-export renders Cinder's derived wiki layer into a Markdown tree
 // (ADR-0014 决策 2: one-way export; TODO M6-W1b).
 //
 // It is its own binary because the desktop `repotory` executable has no
@@ -57,7 +57,7 @@ func main() {
 		log.Fatalf("export failed: %v", err)
 	}
 
-	fmt.Printf("Repotory %s — exported %d page(s) to %s\n", version.Version, report.Pages, report.Root)
+	fmt.Printf("Cinder %s — exported %d page(s) to %s\n", version.Version, report.Pages, report.Root)
 	fmt.Printf("  files=%d skipped_pages=%d dangling_links=%d\n",
 		len(report.Files), report.SkippedPages, report.DanglingLinks)
 	for _, f := range report.Files {

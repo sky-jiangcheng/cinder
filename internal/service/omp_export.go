@@ -10,7 +10,7 @@ import (
 // OMP-compatible memory export (ADR-0013 outlook). OMP — the Open Memory
 // Protocol — is an emerging, vendor-neutral standard for portable AI memory
 // (Memory Object: id/content/type/source/tags/created_at/updated_at). Emitting
-// this shape gives Repotory a portable export/import seam that could replace
+// this shape gives Cinder a portable export/import seam that could replace
 // per-tool importer guessing once OMP matures.
 //
 // PROVISIONAL: OMP is v0.4 (pre-1.0). We export a superset-compatible object and
@@ -34,7 +34,7 @@ type OMPSource struct {
 	Timestamp string `json:"timestamp,omitempty"`
 }
 
-// ompType maps a Repotory note to an OMP memory type. Repotory kinds are
+// ompType maps a Cinder note to an OMP memory type. Cinder kinds are
 // knowledge|log|idea|other; a note tagged "handoff" is a session exit record.
 // Projection: handoff/log -> episodic (what happened); idea -> procedural
 // (intended how-to); knowledge/other -> semantic (facts).

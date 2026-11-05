@@ -5,7 +5,7 @@
 // 所以 P0 的 26 篇 ADR 导入 + LLM 编译 + 页面批准全程在可写副本上完成。
 // 本工具是「最后一公里」：在普通终端（无 sandbox）里把副本增量迁进 live 库。
 //
-// 用法（在仓库根目录，普通终端；务必先关闭 Repotory 桌面端，避免 WAL 写竞争）：
+// 用法（在仓库根目录，普通终端；务必先关闭 Cinder Desktop，避免 WAL 写竞争）：
 //
 //	go run ./cmd/promote-m7 \
 //	  -from .agnes/work/p0run/live-copy/repotory.db \
@@ -45,7 +45,7 @@ func main() {
 	//    与桌面 App 打开 live 库完全一致。
 	database, err := db.InitDB(*to)
 	if err != nil {
-		log.Fatalf("打开 live db: %v（先确认已关闭 Repotory 桌面端）", err)
+		log.Fatalf("打开 live db: %v（先确认已关闭 Cinder Desktop）", err)
 	}
 	defer database.Close()
 

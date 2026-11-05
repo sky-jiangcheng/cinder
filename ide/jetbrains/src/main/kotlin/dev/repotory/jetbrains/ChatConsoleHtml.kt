@@ -1,4 +1,4 @@
-// Repotory for JetBrains — the chat console's HTML.
+// Cinder for JetBrains — the chat console's HTML.
 //
 // The Swing half of the conversation feed (ADR-0036 decision 8: the two IDE
 // surfaces must LOOK the same; only "how Swing draws HTML" may differ).
@@ -74,7 +74,7 @@ internal object ChatConsoleHtml {
      */
     private fun emptyStateHtml(): String = """
         <p style="font-size:12pt; font-weight:bold; margin-top:8px;">Ask what your project knows.</p>
-        <p>Repotory answers from the notes your coding agents left behind, with the sources listed.</p>
+        <p>Cinder answers from the notes your coding agents left behind, with the sources listed.</p>
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
         <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/ask">Why was the retry budget raised?</a></td></tr>
         <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/notes">Search the notes &amp; todos</a></td></tr>
@@ -258,7 +258,7 @@ internal object ChatConsoleHtml {
     private fun cardActionsHtml(turn: ChatTurn, hit: RepotoryHit): String {
         val sb = StringBuilder()
         sb.append("<p style=\"font-size:9pt; margin-top:6px;\">")
-        sb.append("<a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/open\">Open in Repotory</a>")
+        sb.append("<a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/open\">Open in Cinder</a>")
         sb.append(" · <a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/copy\">Copy</a>")
         if (hit.type == "note") {
             sb.append(" · <a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/edit\">Edit</a>")

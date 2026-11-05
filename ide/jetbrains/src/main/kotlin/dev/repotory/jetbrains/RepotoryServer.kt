@@ -321,8 +321,8 @@ fun offerServerBinaryHelp(searched: String): Boolean {
     val choice = Messages.showDialog(
         "No repotory-server executable was found. Looked in:\n\n$searched\n\n" +
             "Download the release bundle (the binary plus its web UI) and point the plugin at it, " +
-            "or set repotory.serverBinaryPath in Settings | Tools | Repotory.",
-        "Repotory: local service binary not found",
+            "or set repotory.serverBinaryPath in Settings | Tools | Cinder.",
+        "Cinder: local service binary not found",
         arrayOf("Set Path…", "Open Download Page", "Cancel"),
         0,
         Messages.getWarningIcon(),

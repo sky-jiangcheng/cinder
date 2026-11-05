@@ -120,7 +120,7 @@ export class ChatSession {
     return this.scope;
   }
 
-  /** A one-line description of the scope ("Repotory · pay-common"). */
+  /** A one-line description of the scope ("Cinder · pay-common"). */
   scopeLabel(): string {
     if (!this.scope.projectId) return "";
     return this.scope.repository
@@ -174,7 +174,7 @@ export class ChatSession {
       this.setScope({ projectId: 0, projectName: "", repository: "", locked: false });
       this.announce(
         "warn",
-        `The local Repotory service is not reachable at ${this.transport.serverUrl()} — the project lock needs it, so the panel searches across all projects.`,
+        `The local Cinder service is not reachable at ${this.transport.serverUrl()} — the project lock needs it, so the panel searches across all projects.`,
       );
     }
   }
@@ -261,7 +261,7 @@ export class ChatSession {
       this.post({
         type: "aiStatus",
         level: "error",
-        message: `The local Repotory service is not reachable at ${this.transport.serverUrl()} — the provider settings live there.`,
+        message: `The local Cinder service is not reachable at ${this.transport.serverUrl()} — the provider settings live there.`,
       });
       void err;
     }
@@ -285,7 +285,7 @@ export class ChatSession {
         type: "aiStatus",
         level: "info",
         message: apiKey.trim()
-          ? "Provider saved — Repotory will use it for the next question."
+          ? "Provider saved — Cinder will use it for the next question."
           : "Provider saved — the stored key was left untouched.",
       });
       await this.loadAISettings();
@@ -428,7 +428,7 @@ export class ChatSession {
     if (text.startsWith(ASK_NO_ENDPOINT_PREFIX)) {
       this.announce(
         "warn",
-        "No AI endpoint is configured — Repotory answered with keyword matches, not an answer.",
+        "No AI endpoint is configured — Cinder answered with keyword matches, not an answer.",
       );
     }
 
@@ -516,7 +516,7 @@ export class ChatSession {
     if (!this.scope.projectId) {
       this.announce(
         "warn",
-        "This workspace does not resolve to a Repotory project yet — pick one from the project chip to lock the panel to it.",
+        "This workspace does not resolve to a Cinder project yet — pick one from the project chip to lock the panel to it.",
       );
       return;
     }
@@ -639,7 +639,7 @@ export class ChatSession {
   }
 
   /**
-   * Deep-link a hit into the Repotory web UI.
+   * Deep-link a hit into the Cinder web UI.
    *
    * Deep links are best-effort (ADR-0035 decision 6): a headless server
    * started without `--web-dist` answers the API but 404s every other path, so

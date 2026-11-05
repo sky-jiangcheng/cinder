@@ -43,7 +43,7 @@ export function consoleHtml(nonce: string): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-<title>Repotory Chat</title><style>
+<title>Cinder Chat</title><style>
   :root {
     --r-border: var(--vscode-panel-border, var(--vscode-contrastBorder, #444));
     --r-muted: var(--vscode-descriptionForeground, #888);
@@ -393,12 +393,12 @@ export function consoleHtml(nonce: string): string {
 <body>
 <header class="bar">
   <span class="mark">${MARK_SVG}</span>
-  <span class="wordmark">Repotory</span>
+  <span class="wordmark">Cinder</span>
   <span class="actions">
     <button class="icon-btn" id="act-search" type="button" title="Search notes &amp; todos" aria-label="Search notes and todos">${ICON_SEARCH}</button>
     <button class="icon-btn" id="act-settings" type="button" title="AI provider" aria-label="AI provider">${ICON_SETTINGS}</button>
     <button class="icon-btn" id="act-diagnose" type="button" title="Setup &amp; diagnostics" aria-label="Setup and diagnostics">${ICON_DIAGNOSE}</button>
-    <button class="icon-btn" id="act-desktop" type="button" title="Open the Repotory desktop app" aria-label="Open the Repotory desktop app">${ICON_DESKTOP}</button>
+    <button class="icon-btn" id="act-desktop" type="button" title="Open the Cinder Desktop app" aria-label="Open the Cinder Desktop app">${ICON_DESKTOP}</button>
   </span>
 </header>
 <div class="announce" id="announce" hidden>
@@ -427,7 +427,7 @@ export function consoleHtml(nonce: string): string {
       <b>AI provider</b>
       <button class="x" id="sheet-x" type="button" title="Close" aria-label="Close">✕</button>
     </div>
-    <p class="sheet-note">Repotory keeps these in its local service. The desktop app and this panel use the same ones.</p>
+    <p class="sheet-note">Cinder keeps these in its local service. The desktop app and this panel use the same ones.</p>
     <label>Base URL<input id="ai-base" type="text" spellcheck="false" placeholder="http://127.0.0.1:1234/v1"></label>
     <label>API key<input id="ai-key" type="password" spellcheck="false" placeholder="leave empty to keep the stored key"></label>
     <label>Model<input id="ai-model" type="text" spellcheck="false" placeholder="the model id to ask"></label>
@@ -492,7 +492,7 @@ function md(src) {
     if (lang.trim().toLowerCase() === 'mermaid') {
       blocks.push('<div class="diagram"><div class="diagram-head">Flowchart · mermaid source</div>' +
         '<pre>' + esc(code.replace(/^\\n/, '')) + '</pre>' +
-        '<div class="diagram-note">Renders as a diagram in the Repotory desktop app; the source stays editable here.</div></div>');
+        '<div class="diagram-note">Renders as a diagram in the Cinder Desktop app; the source stays editable here.</div></div>');
     } else {
       blocks.push('<pre><code>' + esc((lang ? lang + '\\n' : '') + code.replace(/^\\n/, '')) + '</code></pre>');
     }
@@ -543,7 +543,7 @@ function renderScope() {
   if (!scope.projectId) {
     chip.textContent = candidates.length ? 'Choose project' : 'All projects';
     chip.className = 'chip pick';
-    chip.title = 'This workspace does not resolve to a Repotory project yet — click to pick one.';
+    chip.title = 'This workspace does not resolve to a Cinder project yet — click to pick one.';
     return;
   }
   if (scope.locked) {
@@ -615,7 +615,7 @@ function renderFeed() {
     // product instead of telling the reader what to do.
     empty.innerHTML = MARK_SVG +
       '<h2>Ask what your project knows.</h2>' +
-      '<p>Repotory answers from the notes your coding agents left behind, with the sources listed.</p>' +
+      '<p>Cinder answers from the notes your coding agents left behind, with the sources listed.</p>' +
       '<ul class="examples">' +
       '<li><button type="button" data-example="ask">Why was the retry budget raised?</button></li>' +
       '<li><button type="button" data-example="notes">Search the notes &amp; todos</button></li>' +
@@ -855,7 +855,7 @@ function renderCardActions(turn, card) {
     b.addEventListener('click', (ev) => { ev.stopPropagation(); fn(b); });
     return b;
   };
-  bar.appendChild(mk('Open in Repotory', '', () => {
+  bar.appendChild(mk('Open in Cinder', '', () => {
     vscode.postMessage({ type: 'open', turnId: turn.id, card });
   }));
   bar.appendChild(mk('Copy', 'secondary', () => {

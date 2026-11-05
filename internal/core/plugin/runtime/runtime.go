@@ -1,4 +1,4 @@
-// Package runtime implements the knowledge-source runtime for Repotory.
+// Package runtime implements the knowledge-source runtime for Cinder.
 //
 // There are no user-authored plugins: the yaegi script-plugin runtime was
 // removed (C11 方案B, amending ADR-0002). What lives here is the registry the

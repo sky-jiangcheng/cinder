@@ -5,12 +5,12 @@ order: 22
 
 # Storage Structure Optimization and AI Value
 
-What Repotory does to git repositories is not compression/dedup-style storage optimization. Instead, it **models vast, unstructured raw git information into a structured, indexable, materializable, incrementally maintainable local knowledge base**. It solves the problem that reading a git repository directly is expensive, messy, incomplete, and slow for AI.
+What Cinder does to git repositories is not compression/dedup-style storage optimization. Instead, it **models vast, unstructured raw git information into a structured, indexable, materializable, incrementally maintainable local knowledge base**. It solves the problem that reading a git repository directly is expensive, messy, incomplete, and slow for AI.
 
 This page targets two audiences:
 
-- Developers who want to understand where Repotory actually stores data, and how
-- Decision makers who want to understand why a repository should go through Repotory first instead of being handed straight to AI
+- Developers who want to understand where Cinder actually stores data, and how
+- Decision makers who want to understand why a repository should go through Cinder first instead of being handed straight to AI
 
 ## 1. Storage structure optimizations for git repositories
 
@@ -24,7 +24,7 @@ This page targets two audiences:
 | 6 | **Mining result cache** | `repo_meta` uses `ON CONFLICT DO UPDATE` + `updated_at` for invalidation and re-mines incrementally, avoiding repeated filesystem scans |
 | 7 | **Engineering-level tuning** | SQLite WAL + single-connection tuning, so concurrent reads and writes don't block; 12 versioned migrations applied automatically; migrations are immutable and append-only |
 
-> Item 5 is the fundamental source of the "AI value": raw git information (commit history, file paths, file contents) is **volatile and expensive** — every direct `git log` or file-by-file read is a one-off, throwaway consumption. Repotory parses everything **once at scan time**; after that, queries never touch the `git` command.
+> Item 5 is the fundamental source of the "AI value": raw git information (commit history, file paths, file contents) is **volatile and expensive** — every direct `git log` or file-by-file read is a one-off, throwaway consumption. Cinder parses everything **once at scan time**; after that, queries never touch the `git` command.
 
 ## 2. Advantages over reading git repositories directly with AI
 
@@ -32,7 +32,7 @@ This page targets two audiences:
 flowchart TB
     Q["One query<br/>stats / search / aggregation"]
     Q --> G1["AI reads git directly"]
-    Q --> G2["Repotory reads materialized data"]
+    Q --> G2["Cinder reads materialized data"]
     G1 -.->|"re-runs every time"| GL["git log per-file reads,<br/>whole-repo dumping"]
     GL --> R1["slow · burns tokens,<br/>may overflow the context"]
     G2 --> MAT[("SQLite<br/>pre-aggregated · cached · FTS5")]
@@ -45,9 +45,9 @@ flowchart TB
     class G1,GL,R1 bad
 ```
 
-How to read it: the two paths **diverge at "one query"**. When AI reads git directly, every query re-executes `git log` / per-file scanning (left), so the cost scales linearly with the number of queries and large repos hit the context window ceiling. Repotory materializes raw git data into SQLite **once at scan time** (right), after which queries only land on that table — the materialized layer is not a cache, it is the **single source of truth**. The table below compares dimension by dimension.
+How to read it: the two paths **diverge at "one query"**. When AI reads git directly, every query re-executes `git log` / per-file scanning (left), so the cost scales linearly with the number of queries and large repos hit the context window ceiling. Cinder materializes raw git data into SQLite **once at scan time** (right), after which queries only land on that table — the materialized layer is not a cache, it is the **single source of truth**. The table below compares dimension by dimension.
 
-| Dimension | AI reading git directly | Repotory structured storage |
+| Dimension | AI reading git directly | Cinder structured storage |
 |------|--------------------|----------------------|
 | **Retrieval** | File-by-file scans / whole-repo dumps; the context explodes | FTS5 trigram exact retrieval, Chinese-friendly, millisecond-level |
 | **Statistics** | `git log` recomputed every time — slow and token-hungry | `daily_stats` is materialized; a `GROUP BY` returns it instantly, zero recomputation |
@@ -62,17 +62,17 @@ The two tables are two views of the same fact: **the upper one** says what is st
 
 ## 3. The core argument
 
-The bottleneck for AI is not whether it can read git — it is that reading is **expensive, messy, incomplete, and slow**. At its core, Repotory gives AI a layer of **structured memory**:
+The bottleneck for AI is not whether it can read git — it is that reading is **expensive, messy, incomplete, and slow**. At its core, Cinder gives AI a layer of **structured memory**:
 
 - Volatile raw git data (commits, paths, files) is parsed once at scan time → materialized into `daily_stats` / `repo_meta`; queries never touch the `git` command afterward;
 - Knowledge notes live in tables backed by FTS5 indexes + version snapshots, so AI hits precisely with `repotory_notes_search` / `repotory_ask` instead of guessing semantically;
 - The MCP interface lets AI **fetch data on demand** instead of dumping the whole repository into its context window every time.
 
-In one sentence: **AI reading git directly = re-understanding the world from scratch every time; Repotory = pre-organizing the world into an index AI can query precisely**. The former burns tokens and misses things; the latter organizes once, gets reused endlessly, and is deterministic and reliable.
+In one sentence: **AI reading git directly = re-understanding the world from scratch every time; Cinder = pre-organizing the world into an index AI can query precisely**. The former burns tokens and misses things; the latter organizes once, gets reused endlessly, and is deterministic and reliable.
 
 ## 4. This layer itself makes no LLM calls
 
-To be clear: the storage structure, indexes, materialized statistics, and MCP interface — this data foundation **makes no large language model calls at all** (no API key / model / endpoint configuration). It is purely a data foundation, and AI consumes it through the 18 tools of [`repotory-mcp`](features/ai-integration.md). In other words, Repotory is **a data source for AI**, not the AI itself.
+To be clear: the storage structure, indexes, materialized statistics, and MCP interface — this data foundation **makes no large language model calls at all** (no API key / model / endpoint configuration). It is purely a data foundation, and AI consumes it through the 18 tools of [`repotory-mcp`](features/ai-integration.md). In other words, Cinder is **a data source for AI**, not the AI itself.
 
 Related docs:
 

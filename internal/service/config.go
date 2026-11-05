@@ -115,7 +115,7 @@ var allowedConfigKeys = map[string]bool{
 	// screens the reply as it arrives (streaming output review can only
 	// withhold the tail — the head is already on screen).
 	// ai_review_rules holds the user's own patterns, one regex per line;
-	// Repotory ships no built-in blocklist, because a keyword list is a weak
+	// Cinder ships no built-in blocklist, because a keyword list is a weak
 	// control and a false promise of coverage.
 	"ai_audit_enabled": true,
 	"ai_review_input":  true,

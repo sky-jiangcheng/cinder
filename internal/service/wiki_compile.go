@@ -12,7 +12,7 @@ import (
 
 // Compile at ingest — the minimal loop (ADR-0015 / TODO M6-W3).
 //
-// This is the first code in Repotory that lets a model write into the knowledge
+// This is the first code in Cinder that lets a model write into the knowledge
 // base, so the shape of it is the safety model, not an implementation detail:
 //
 //   - output lands ONLY as pending pages (status='pending', source='wiki-compile');

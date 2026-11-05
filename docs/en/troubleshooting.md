@@ -7,7 +7,7 @@ order: 10
 
 ## Common issues
 
-### The dashboard shows "Repotory has not found any Git repositories yet"
+### The dashboard shows "Cinder has not found any Git repositories yet"
 
 **Cause**: No scan roots are configured, or the configured directories contain no Git repositories.
 
@@ -80,7 +80,7 @@ Logs also record the PATH environment and plugin runtime state; attach them when
 
 ## Data safety notes
 
-- Repotory is a **local-first** desktop app: it listens on no network ports and uploads no data; statistics are read through the local `git` CLI
+- Cinder is a **local-first** desktop app: it listens on no network ports and uploads no data; statistics are read through the local `git` CLI
 - The database and configuration live in the user application data directory (see [Getting Started](getting-started.md) for the location); uninstalling does not remove them automatically. For backup, migration, and full removal, see [Data and Backup](data-management.md)
 - Desktop WebView responses carry security headers such as CSP (`default-src 'self'` and others)
 

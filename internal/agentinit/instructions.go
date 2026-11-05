@@ -58,9 +58,9 @@ var InstructionFiles = []string{"AGENTS.md", "CLAUDE.md"}
 // instruction makes agents log activity — the shape this product's upstream
 // already starved on (idea notes 0, manual notes 1) — instead of carrying over
 // the state a later session would otherwise re-discover the hard way.
-const instructionsBlockBody = `## Repotory memory layer
+const instructionsBlockBody = `## Cinder memory layer
 
-This project's knowledge and session memory live in Repotory, a local SQLite
+This project's knowledge and session memory live in Cinder, a local SQLite
 database, reachable through the repotory_* MCP tools.
 
 - At the start of work, call repotory_context with the current repository path
@@ -74,7 +74,7 @@ database, reachable through the repotory_* MCP tools.
   shows: a list of files touched is not a handoff, and the notes that bury the
   useful signal are the ones that stop the next session from reading them.
 
-Installed by Repotory. To remove, delete everything between the repotory:begin
+Installed by Cinder. To remove, delete everything between the repotory:begin
 and repotory:end markers (this block is plain text in your repository, and it
 will show up in git status until you commit or delete it).
 `

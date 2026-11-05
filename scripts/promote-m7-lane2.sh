@@ -10,7 +10,7 @@
 #   4) 诊断  abevaldiag 逐案（条件 10③：增益形如「命中种子页→沿白名单边带出邻接页」）
 #
 # 前置（务必）：
-#   - 先完全退出 Repotory 桌面端（WAL 写竞争）
+#   - 先完全退出 Cinder Desktop（WAL 写竞争）
 #   - 本地 embedding 端点可用（默认 LM Studio http://localhost:1234/v1）
 #   - 工作副本在 .agnes/work/p0run/live-copy/repotory.db（agent 会话产物）
 #
@@ -33,8 +33,8 @@ CASES=".annotation-prep/evidence-cases-enriched.jsonl"
 
 echo "== 前置检查 =="
 [ -f "$FROM" ] || { echo "✗ 工作副本不存在: $FROM（agent 会话产物，路径可传第一个参数覆盖）"; exit 1; }
-if pgrep -x repotory >/dev/null 2>&1 || pgrep -f "Repotory.app" >/dev/null 2>&1; then
-  echo "✗ 检测到 Repotory 桌面端在运行——请先完全退出再跑（WAL 写竞争会污染迁移）"; exit 1
+if pgrep -x repotory >/dev/null 2>&1 || pgrep -f "Cinder.app" >/dev/null 2>&1; then
+  echo "✗ 检测到 Cinder Desktop 在运行——请先完全退出再跑（WAL 写竞争会污染迁移）"; exit 1
 fi
 command -v go >/dev/null || { echo "✗ 找不到 go"; exit 1; }
 pgrep -f "lmstudio|LM Studio" >/dev/null 2>&1 || echo "（提示）LM Studio 未见运行——门②③需要本地 embedding 端点"

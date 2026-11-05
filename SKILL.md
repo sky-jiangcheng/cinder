@@ -1,10 +1,10 @@
-# Repotory Skill
+# Cinder Skill
 
-Repotory is a local-first, cross-agent project memory layer. It discovers local Git repositories, maintains a cross-project knowledge base (Markdown notes, FTS5 search, version history), mines repository knowledge, and exposes it to AI agents via the MCP server and llms.txt export.
+Cinder is a local-first, cross-agent project memory layer. It discovers local Git repositories, maintains a cross-project knowledge base (Markdown notes, FTS5 search, version history), mines repository knowledge, and exposes it to AI agents via the MCP server and llms.txt export.
 
 ## Session Memory Protocol
 
-The tools form a session loop. Use it in every working session on a Repotory-tracked project:
+The tools form a session loop. Use it in every working session on a Cinder-tracked project:
 
 ```mermaid
 flowchart TB
@@ -54,7 +54,7 @@ installation readiness, not whether the data is true.
 2. `repotory_ask({ query: "Y" })` — semantic search with top-5 results
 3. `repotory_notes_read({ id })` — read the most relevant note in detail
 
-## What Repotory Does
+## What Cinder Does
 
 - **Repository discovery**: Automatically finds Git repos under configurable scan roots
 - **Daily activity tracking**: Lines added/deleted, files changed, commit counts per repo (365-day backfill on demand)

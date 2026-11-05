@@ -1,4 +1,4 @@
-// Repotory for VS Code — thin client over Repotory (ADR-0009 step two / TODO M5).
+// Cinder for VS Code — thin client over Cinder (ADR-0009 step two / TODO M5).
 //
 // Commands: load session context, write the session handoff and ask the
 // knowledge base; a status-bar item and the chat console make the product
@@ -189,7 +189,7 @@ async function pickMcpBinary(): Promise<string | undefined> {
   const file = picked?.[0];
   if (!file) return undefined;
   if (!isExecutable(file.fsPath)) {
-    void vscode.window.showWarningMessage(`Repotory: 该文件不可执行：${file.fsPath}`);
+    void vscode.window.showWarningMessage(`Cinder: 该文件不可执行：${file.fsPath}`);
     return undefined;
   }
   await vscode.workspace
@@ -209,7 +209,7 @@ async function getMcp(): Promise<McpStdioClient> {
   const resolved = resolveMcpBinary();
   if (!resolved.path) {
     const choice = await vscode.window.showErrorMessage(
-      `Repotory: 未找到 repotory-mcp。${resolved.problem ?? ""}`,
+      `Cinder: 未找到 repotory-mcp。${resolved.problem ?? ""}`,
       "定位可执行文件…",
       "打开下载页",
       "环境诊断",
@@ -254,8 +254,8 @@ function showScopeInStatusBar(scope: { projectId: number; projectName: string; r
   const dir = workspacePath();
   if (!scope.projectId) {
     statusItem.tooltip = dir
-      ? `Repotory: ${dir} is not in the knowledge base yet\n\nClick to load the session context`
-      : "Repotory: click to load the session context";
+      ? `Cinder: ${dir} is not in the knowledge base yet\n\nClick to load the session context`
+      : "Cinder: click to load the session context";
     return;
   }
   const label = scope.repository ? `${scope.projectName} / ${scope.repository}` : scope.projectName;
@@ -285,21 +285,21 @@ async function refreshLastHandoff(): Promise<void> {
     const handoff = response.result;
     const at = handoff?.updated_at ? new Date(handoff.updated_at) : undefined;
     if (handoff && at && !Number.isNaN(at.getTime())) {
-      statusItem.text = `$(repo) Repotory · ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      statusItem.text = `$(repo) Cinder · ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
       statusItem.tooltip = `Last handoff record: ${handoff.title ?? "session"}\n${at.toLocaleString()}\n\nClick to load the session context`;
     } else {
-      statusItem.text = "$(repo) Repotory";
-      statusItem.tooltip = "Repotory: no session handoff record yet. Click to load the session context";
+      statusItem.text = "$(repo) Cinder";
+      statusItem.tooltip = "Cinder: no session handoff record yet. Click to load the session context";
     }
   } catch {
-    statusItem.text = "$(repo) Repotory";
-    statusItem.tooltip = "Repotory: click to load the session context";
+    statusItem.text = "$(repo) Cinder";
+    statusItem.tooltip = "Cinder: click to load the session context";
   }
 }
 
 function withProgress<T>(title: string, task: () => Promise<T>): Thenable<T> {
   return vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: `Repotory: ${title}` },
+    { location: vscode.ProgressLocation.Notification, title: `Cinder: ${title}` },
     task,
   );
 }
@@ -330,12 +330,12 @@ async function writeHandoff(): Promise<void> {
   const dir = workspacePath();
   if (!dir) {
     void vscode.window.showErrorMessage(
-      "Repotory: open a folder — the handoff record is attached to the project your workspace resolves to.",
+      "Cinder: open a folder — the handoff record is attached to the project your workspace resolves to.",
     );
     return;
   }
   const summary = await vscode.window.showInputBox({
-    prompt: "Repotory session handoff record — one paragraph: what was this session about?",
+    prompt: "Cinder session handoff record — one paragraph: what was this session about?",
     placeHolder: "e.g. Wired the FTS5 rebuild path; tests green",
     ignoreFocusOut: true,
   });
@@ -343,7 +343,7 @@ async function writeHandoff(): Promise<void> {
 
   const askList = async (label: string): Promise<string[]> => {
     const raw = await vscode.window.showInputBox({
-      prompt: `Repotory session handoff record — ${label} (comma-separated, empty to skip)`,
+      prompt: `Cinder session handoff record — ${label} (comma-separated, empty to skip)`,
       ignoreFocusOut: true,
     });
     return raw
@@ -439,14 +439,14 @@ async function registerMcp(context: vscode.ExtensionContext): Promise<void> {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
     void vscode.window.showErrorMessage(
-      "Repotory: 请先打开一个项目文件夹——MCP 注册会写入该项目的 .mcp.json / .vscode/mcp.json / .cursor/mcp.json。",
+      "Cinder: 请先打开一个项目文件夹——MCP 注册会写入该项目的 .mcp.json / .vscode/mcp.json / .cursor/mcp.json。",
     );
     return;
   }
   const script = await findInitScript(context);
   if (!script) {
     const choice = await vscode.window.showWarningMessage(
-      "Repotory: 扩展内没有找到 repotory-init，请重新安装扩展。",
+      "Cinder: 扩展内没有找到 repotory-init，请重新安装扩展。",
       "打开文档",
     );
     if (choice === "打开文档") {
@@ -465,7 +465,7 @@ async function registerMcp(context: vscode.ExtensionContext): Promise<void> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const choice = await vscode.window.showErrorMessage(
-        `Repotory: 自动注册失败（${message}）。`,
+        `Cinder: 自动注册失败（${message}）。`,
         "查看日志",
         "在终端手动运行",
       );
@@ -484,7 +484,7 @@ async function registerMcp(context: vscode.ExtensionContext): Promise<void> {
       return;
     }
     const choice = await vscode.window.showInformationMessage(
-      "Repotory: MCP 服务器已写入当前项目的客户端配置（Claude Code / Cursor / VS Code / Windsurf），重载窗口后生效。",
+      "Cinder: MCP 服务器已写入当前项目的客户端配置（Claude Code / Cursor / VS Code / Windsurf），重载窗口后生效。",
       "查看日志",
     );
     if (choice === "查看日志") output.show(true);
@@ -625,7 +625,7 @@ async function diagnose(context: vscode.ExtensionContext): Promise<void> {
         }
         if (!workspaceState.resolution?.Project) {
           void vscode.window.showInformationMessage(
-            "该文件夹还不在知识库中：先在 Repotory 桌面应用里扫描/导入；命令本身仍可用。",
+            "该文件夹还不在知识库中：先在 Cinder 桌面应用里扫描/导入；命令本身仍可用。",
           );
           return;
         }
@@ -657,18 +657,18 @@ async function diagnose(context: vscode.ExtensionContext): Promise<void> {
   ];
 
   const picked = await vscode.window.showQuickPick(items, {
-    title: "Repotory 环境诊断",
+    title: "Cinder 环境诊断",
     placeHolder: "选择一项查看详情或修复",
   });
   if (picked) await picked.run();
 }
 
-// 打开 Repotory 桌面应用：优先用平台原生方式启动，找不到时引导到 Releases 下载。
+// 打开 Cinder 桌面应用：优先用平台原生方式启动，找不到时引导到 Releases 下载。
 async function openDesktop(): Promise<void> {
   let cmd: string;
   switch (process.platform) {
     case "darwin":
-      cmd = "open -a Repotory";
+      cmd = "open -a Cinder";
       break;
     case "win32":
       cmd = "start \"\" repotory.exe";
@@ -681,7 +681,7 @@ async function openDesktop(): Promise<void> {
     if (err) {
       void vscode.window
         .showErrorMessage(
-          "Repotory: 桌面应用未找到。请先从 GitHub Releases 下载并安装 Repotory 桌面应用。",
+          "Cinder: 桌面应用未找到。请先从 GitHub Releases 下载并安装 Cinder 桌面应用。",
           "打开 Releases 页面",
         )
         .then((choice) => {
@@ -697,13 +697,13 @@ async function openDesktop(): Promise<void> {
   });
 }
 
-// 首次安装引导：让新用户一眼看出这是 Repotory 扩展，并一步进入配置向导。
+// 首次安装引导：让新用户一眼看出这是 Cinder 扩展，并一步进入配置向导。
 async function onboard(context: vscode.ExtensionContext): Promise<void> {
   const already = context.globalState.get<boolean>("repotory.onboarded");
   if (already) return;
 
   const choice = await vscode.window.showInformationMessage(
-    "👋 欢迎使用 Repotory。\n\n" +
+    "👋 欢迎使用 Cinder。\n\n" +
       "配置向导会自动检测 repotory-mcp、检查本地服务、并把 MCP 写入当前项目——" +
       "不需要手动敲命令。",
     "开始配置",
@@ -721,10 +721,10 @@ async function onboard(context: vscode.ExtensionContext): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   extensionContext = context;
-  output = vscode.window.createOutputChannel("Repotory", { log: true });
+  output = vscode.window.createOutputChannel("Cinder", { log: true });
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 60);
-  statusItem.text = "$(repo) Repotory";
-  statusItem.tooltip = "Repotory: click to load the session context";
+  statusItem.text = "$(repo) Cinder";
+  statusItem.tooltip = "Cinder: click to load the session context";
   statusItem.command = "repotory.loadContext";
   void refreshLastHandoff();
 
@@ -783,7 +783,7 @@ export function activate(context: vscode.ExtensionContext): void {
           await fn();
         } catch (err) {
           void vscode.window.showErrorMessage(
-            `Repotory: ${err instanceof Error ? err.message : String(err)}`,
+            `Cinder: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }),
@@ -805,13 +805,13 @@ export function activate(context: vscode.ExtensionContext): void {
   register("repotory.loadContext", loadContext);
   register("repotory.handoff", writeHandoff);
   register("repotory.ask", () =>
-    askInConsole("ask", "Repotory — ask the knowledge base (answer with sources)"),
+    askInConsole("ask", "Cinder — ask the knowledge base (answer with sources)"),
   );
   register("repotory.search", () =>
-    askInConsole("notes", "Repotory — search notes & todos (FTS5)"),
+    askInConsole("notes", "Cinder — search notes & todos (FTS5)"),
   );
   register("repotory.searchWiki", () =>
-    askInConsole("pages", "Repotory — search the approved knowledge pages"),
+    askInConsole("pages", "Cinder — search the approved knowledge pages"),
   );
   register("repotory.registerMcp", () => registerMcp(context));
   register("repotory.diagnose", () => diagnose(context));

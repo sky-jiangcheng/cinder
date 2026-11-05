@@ -28,7 +28,7 @@ var assets embed.FS
 
 func main() {
 	platform.SetPrivateUmask() // owner-only files: DB sidecars, logs, exports
-	log.Printf("Repotory %s starting... (memory-layer contract %s)", version.Version, version.CoreVersion)
+	log.Printf("Cinder %s starting... (memory-layer contract %s)", version.Version, version.CoreVersion)
 
 	// Check storage safety before opening database
 	dbPath := platform.GetDbPath()
@@ -69,7 +69,7 @@ func main() {
 
 	// Launch Wails
 	err = wails.Run(&options.App{
-		Title:     "Repotory: Local Git Knowledge Base",
+		Title:     "Cinder: Local Git Knowledge Base",
 		Width:     1360,
 		Height:    860,
 		MinWidth:  900,
@@ -84,7 +84,7 @@ func main() {
 		},
 		// The application menu (ADR-0047 decision 1). The desktop app is no
 		// longer resident — closing the window ends the process — so there is
-		// no status bar to keep and no "Show Repotory" item.
+		// no status bar to keep and no "Show Cinder" item.
 		//
 		// The Edit and Window role menus stay, and they are NOT optional:
 		// Wails' darwin frontend always calls SetAsApplicationMenu, and with
@@ -157,7 +157,7 @@ func main() {
 //     localized name, and it carries About / Hide / Quit). Putting Edit first
 //     instead makes macOS render "Edit" as the application menu — the app
 //     name then replaces the Edit title and the whole Edit group collapses
-//     into the application menu, so the bar shows only "Repotory | Window"
+//     into the application menu, so the bar shows only "Cinder | Window"
 //     and the copy/paste items are no longer where they belong.
 func appMenu() *menu.Menu {
 	m := menu.NewMenu()
@@ -233,7 +233,7 @@ func setupLogging() {
 		log.SetOutput(f)
 	}
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Printf("=== Repotory log started ===")
+	log.Printf("=== Cinder log started ===")
 	log.Printf("log file: %s", logFile)
 	log.Printf("PATH=%s", os.Getenv("PATH"))
 }

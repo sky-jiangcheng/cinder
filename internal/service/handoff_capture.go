@@ -50,7 +50,7 @@ func (s *Service) CaptureClaudeHandoff(projectID int64) (*HandoffResult, error) 
 }
 
 // CaptureClaudeSessionByCwd resolves the project for a working directory (its
-// last path segment matched against Repotory projects/repos via the shared
+// last path segment matched against Cinder projects/repos via the shared
 // matcher) and runs the same gated on-demand capture. It exists for the B-end
 // SessionEnd hook: Claude Code runs `repotory-capture` with the closing
 // session's cwd; this turns that into a handoff without the caller needing the
@@ -60,7 +60,7 @@ func (s *Service) CaptureClaudeSessionByCwd(cwd string) (*HandoffResult, error) 
 	repos, _ := db.GetAllRepositories(s.db)
 	pid := memsrc.MatchProject(memsrc.LastPathSegment(cwd), projects, repos)
 	if pid == 0 {
-		return nil, fmt.Errorf("no Repotory project matches cwd %q", cwd)
+		return nil, fmt.Errorf("no Cinder project matches cwd %q", cwd)
 	}
 	return s.CaptureClaudeHandoff(pid)
 }

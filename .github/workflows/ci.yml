@@ -292,6 +292,30 @@ jobs:
       - name: Check version & count drift
         run: node scripts/check-version-drift.mjs
 
+  # ------------------------------------------------------------ 品牌漂移 ----
+  # ADR-0049 划了一条线：**显示层全换、标识层冻结**。这条线两边都会漂，而且
+  # 方向相反——显示层漏一处，用户就看到一个旧名字（DMG 窗口上写着「Repotory」
+  # 就是这么来的）；标识层被「顺手清理」一处，每个用户的 MCP 客户端配置就断一次。
+  #
+  # 所以一道门查两头：品牌词有唯一真相源（build/brand.json）、冻结的标识层
+  # 逐条仍在原处、当前面不再出现旧品牌词（历史面故意保留旧名）、App 里的
+  # BrandMark 是母图的字形而不是手抄副本。
+  brand:
+    name: Brand drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Check brand drift
+        run: node scripts/check-brand.mjs
+
   # ------------------------------------------------------- Release notes ----
   # The GitHub Release body is the CHANGELOG section for that version,
   # reduced to its entry headlines (scripts/release-notes.mjs). The reduction
@@ -464,7 +488,7 @@ jobs:
       - name: Check skill package
         run: node scripts/check-skill-package.mjs
 
-  # The desktop app and the CLI both wire Repotory's MCP server into the
+  # The desktop app and the CLI both wire Cinder's MCP server into the
   # user's AI clients, and they are two implementations of ONE wire format:
   # the desktop app is a self-contained binary with no node, the CLI is a node
   # script. Two implementations of one format drift silently — the button says

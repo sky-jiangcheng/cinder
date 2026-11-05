@@ -105,7 +105,7 @@ func dumpWorksheet(database *sql.DB) error {
 	w := bufio.NewWriter(os.Stdout)
 	defer w.Flush()
 
-	fmt.Fprintln(w, "# Repotory 检索标注工作表")
+	fmt.Fprintln(w, "# Cinder 检索标注工作表")
 	fmt.Fprintln(w, "#")
 	fmt.Fprintln(w, "# 步骤 1：给每条笔记起一个真实的问题——你确实会问的问题。")
 	fmt.Fprintln(w, "#         已有的问题比编造的更真实；只写你真会问的。")

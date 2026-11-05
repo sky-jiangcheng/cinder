@@ -1,4 +1,4 @@
-// Package httpapi exposes Repotory's shared business logic (internal/service)
+// Package httpapi exposes Cinder's shared business logic (internal/service)
 // over a small HTTP/JSON surface so that external runtimes — most importantly
 // the DeepSeek Harness dsh-plugin — can call the same analysis code the
 // desktop App uses, with zero logic duplication.
@@ -34,7 +34,7 @@ import (
 	"repotory/internal/service"
 )
 
-// New returns an http.Handler (ServeMux) that serves Repotory's capabilities
+// New returns an http.Handler (ServeMux) that serves Cinder's capabilities
 // as JSON endpoints. The supplied service must already be constructed with a
 // valid database; callers do not need to invoke service.Startup for read-only
 // endpoints. `bound` is the same object the desktop Wails App binds (its

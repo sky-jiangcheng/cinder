@@ -1,4 +1,4 @@
-// BrandMark — the Repotory mark, drawn from the same construction as the
+// BrandMark — the Cinder mark, drawn from the same construction as the
 // brand SSOT (build/icon.svg) that generates the app icon, the favicons
 // and the IDE extension icons.
 //
@@ -9,8 +9,8 @@
 // UI on the same mark as the icon in the dock.
 //
 // The design is the brand card: warm-paper field, one hairline ink frame,
-// near-black R. The frame is what makes it read as a printed object rather
-// than a drawn square — keep it if you touch this file.
+// near-black letter. The frame is what makes it read as a printed object
+// rather than a drawn square — keep it if you touch this file.
 //
 // Two size regimes (ADR-0037):
 //
@@ -133,11 +133,11 @@ export default function BrandMark({ size = 26, className, title }: Props) {
           />
         </>
       )}
-      {/* Same geometry as build/icon.svg — a filled R at a 320-unit cap
-          height, shifted 6 right / 2 up because an R is heavier on the stem
-          side and bounding-box centring reads left-heavy. The letterform is
-          the R from IBM Plex Sans Bold (© IBM Corp., SIL OFL 1.1), outlined.
-          Process: outputs/icon-redesign-v4.
+      {/* Same geometry as build/icon.svg — a filled C at a 320-unit cap
+          height, shifted 9 right / 2 up because the C's aperture opens to
+          the right and the ink reads left-heavy. The letterform is the C
+          from IBM Plex Sans Bold (© IBM Corp., SIL OFL 1.1), outlined.
+          Process: outputs/icon-redesign-v5.
 
           In the glyph-only regime it takes currentColor instead of the brand
           ink: a monochrome letter belongs to its surface, and the fixed
@@ -146,7 +146,7 @@ export default function BrandMark({ size = 26, className, title }: Props) {
         <path
           fill={glyphOnly ? 'currentColor' : '#1B1B1B'}
           fillRule="nonzero"
-          d="M195.6 426H121.56V86H282.79Q306.17 86 325.17 93.79Q344.17 101.59 357.56 115.96Q370.96 130.33 378.26 150.3Q385.57 170.27 385.57 194.62Q385.57 229.21 370.23 255.03Q354.88 280.84 323.71 292.53L390.44 426H308.12L248.69 301.3H195.6ZM273.54 238.95Q290.1 238.95 299.6 230.43Q309.09 221.9 309.09 205.34V183.91Q309.09 167.35 299.6 158.82Q290.1 150.3 273.54 150.3H195.6V238.95Z"
+          d="M270.36 431.85Q235.78 431.85 208.01 420.89Q180.25 409.93 160.76 388.25Q141.28 366.57 130.56 334.18Q119.85 301.79 119.85 258.44Q119.85 215.57 130.56 182.2Q141.28 148.84 160.76 126.19Q180.25 103.54 208.01 91.85Q235.78 80.15 270.36 80.15Q317.61 80.15 348.3 99.4Q378.99 118.64 397.5 160.04L333.69 193.16Q326.87 171.73 312.5 158.82Q298.13 145.91 270.36 145.91Q237.73 145.91 218 167.1Q198.27 188.29 198.27 228.72V283.28Q198.27 323.71 218 344.9Q237.73 366.09 270.36 366.09Q297.64 366.09 313.96 351.23Q330.28 336.37 338.07 315.43L398.47 350.5Q379.47 389.47 348.54 410.66Q317.61 431.85 270.36 431.85Z"
         />
       </g>
     </svg>

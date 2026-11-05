@@ -65,8 +65,8 @@ beforeEach(() => {
   vi.mocked(getInstallInfo).mockResolvedValue({
     version: '2.12.3',
     platform: 'darwin',
-    install_path: '/Applications/Repotory.app',
-    executable_path: '/Applications/Repotory.app/Contents/MacOS/repotory',
+    install_path: '/Applications/Cinder.app',
+    executable_path: '/Applications/Cinder.app/Contents/MacOS/repotory',
     download_dir: '/Users/me/Downloads',
   })
   vi.mocked(getUpdateState).mockReturnValue({ phase: 'idle', info: null, error: '' })
@@ -127,7 +127,7 @@ describe('UpdatesTab', () => {
     renderTab()
     // The two questions a user has after an install: "where did it install?"
     // and "where did the download go?". Both have an answer now.
-    expect(await screen.findByText('/Applications/Repotory.app')).toBeTruthy()
+    expect(await screen.findByText('/Applications/Cinder.app')).toBeTruthy()
     expect(await screen.findByText('/Users/me/Downloads')).toBeTruthy()
   })
 

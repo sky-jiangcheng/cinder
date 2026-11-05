@@ -98,7 +98,7 @@ type DownloadState struct {
 	// digest (never for a verified one).
 	ChecksumVerified bool `json:"checksum_verified"`
 	// InstallerEjected reports whether the mounted installer disk image has
-	// been unmounted. A mounted DMG shows up as a second "Repotory" in the
+	// been unmounted. A mounted DMG shows up as a second "Cinder" in the
 	// Finder sidebar, so the app ejects it once the install is detected (or
 	// when the user asks for it).
 	InstallerEjected bool `json:"installer_ejected"`
@@ -735,7 +735,7 @@ func (s *Service) OpenDownloadedUpdate(path string) error {
 	}
 	// The installer is on screen now; watch for the install so the mounted
 	// disk image can be ejected afterwards (a mounted DMG is the second
-	// "Repotory" icon the user is left with).
+	// "Cinder" icon the user is left with).
 	s.watchInstallerInstall(st.Version)
 	return nil
 }
@@ -795,7 +795,7 @@ func (s *Service) EjectInstallerVolume() (bool, error) {
 // installer bundle, or "" when none is mounted.
 //
 // macOS keeps a mounted DMG in /Volumes until it is ejected, and that volume
-// shows up as a second "Repotory" in the Finder sidebar — the "two app
+// shows up as a second "Cinder" in the Finder sidebar — the "two app
 // icons" a user sees after installing. Nothing unmounts it on its own:
 // closing the DMG window does not eject the volume.
 func installerVolume() string {

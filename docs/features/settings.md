@@ -33,7 +33,7 @@ order: 5
 
 - **自动导入开关**：启动时是否自动运行所有**可自动导入**的知识源——只有"整理型"源（Claude 记忆）会进这一趟，其余四源始终是手动。**默认关**，且只有显式设为开才会跑（关掉不影响你在本页单点某个源立即导入）。注意这是一次**行为变更**：升级时旧库若处于"开"，会被一次性归零——因为旧版本无法区分「用户主动开启」与「程序种下的默认值」，宁可让所有人重新点一次，也不替你做那个隐私决定。
 - **Claude 会话自动捕捉（M1，默认关）**：开关（`claude_session_capture`）+「按项目 ID 捕捉最近会话」——把某项目最新的 Claude Code 会话逐字稿按需捕捉为一条交接笔记。**默认关**，开启前不读任何会话文件；B 端另有 `repotory-capture` hook 做会话结束自动捕捉（见 [ADR-0010](../adr/0010-session-auto-capture.md)）。
-- **全局记忆源目标项目**：OpenClaw / Hermes 的记忆是**跨项目全局**的，导入前需在此指定挂到哪个 Repotory 项目（项目名或 ID，`openclaw_project`/`hermes_project`）；不设则该源跳过，绝不乱挂。
+- **全局记忆源目标项目**：OpenClaw / Hermes 的记忆是**跨项目全局**的，导入前需在此指定挂到哪个 Cinder 项目（项目名或 ID，`openclaw_project`/`hermes_project`）；不设则该源跳过，绝不乱挂。
 - **知识导入源**：内置 + 插件注册的导入器，各自可**单独立即导入**。当前内置六源——**claude**（可进启动自动导入，但需上面那个开关显式打开）、**codex / opencode / openclaw / hermes / cursor**（**opt-in 手动**：逐字稿/全局记忆敏感，不进启动自动导入，仅在此点击或经通用配置触发）。`cursor` 是 best-effort 源：未公开格式，只取首条提问与末条回复，结构不认识时整源报错而非静默导 0 条。远程向量库（Qdrant/Weaviate）与 embedding provider 的配置见 [ADR-0012](../adr/0012-semantic-search.md)/[ADR-0013](../adr/0013-vector-database-selection.md)，属进阶项。
 - **AI 设置页的语义检索**：AI tab 提供 `semantic_search`、embedding endpoint/model/key、向量存储与“重建索引”。它默认关闭；开启即表示同意把笔记文本发给配置端点。真实标注 A/B 门未过前不改变默认值，评测仍用 `cmd/abeval`（见 [ADR-0012](../adr/0012-semantic-search.md)）。lint 的模型侧检查（`wiki_lint_llm`）、摄入时编译（`wiki_compile`）、合并判等（`wiki_merge_suggest`，另需 `wiki_lint_llm`）与社区综述（`wiki_community_summary`）这四个开关**本页都还没有**，按[知识源导入](../plugins/overview.md) 与 [AI 集成](ai-integration.md) 的说明用配置键开启。待审核页面已有独立「审核」tab（批准 / 标记不合格 / 彻底删除 + 编译任务进度，并挂出合并建议与"开始综述"按钮）；但**开启编译 / 合并判等 / 综述本身的开关这里仍然没有**——审核 tab 上的这些动作在对应配置键未设 `=1` 时不会外发也不写页，需先按上面的配置键打开。
 - **已加载插件**：各插件目录加载状态与错误，**重新加载** 热重载。
@@ -50,7 +50,7 @@ order: 5
 
 ## 更新
 
-- **检查更新**：向 GitHub Releases 询问最新稳定版，比对当前运行版本，给出「已是最新」或新版本卡片（含发布日期与更新说明）。**纯建议式**——Repotory 不会自行下载或替换程序，只把当前平台的安装包直链给你，由你决定何时安装。
+- **检查更新**：向 GitHub Releases 询问最新稳定版，比对当前运行版本，给出「已是最新」或新版本卡片（含发布日期与更新说明）。**纯建议式**——Cinder 不会自行下载或替换程序，只把当前平台的安装包直链给你，由你决定何时安装。
 - **下载新版本**：在系统浏览器中打开与本机匹配的安装包（macOS `.dmg` / Windows `.zip` / Linux `.tar.gz`）。该版本没有本平台产物时（例如 CI 不构建的 linux/arm64）回落到发布页。同一 release 里的 MCP server 与 IDE 插件产物**不会**被当作「应用新版本」提供。
 - **启动时自动检查更新**（`update_check_enabled`，默认开）：启动后在后台检查一次，发现新版本会在左侧栏「设置」图标上点亮一个小圆点。关掉后仅在此页手动点击才访问 GitHub。检查失败不会在启动时弹错——那台访问不到 GitHub 的机器不该每次开 app 都看红字。
 - **更新代理**（`update_proxy`）：`api.github.com` 在部分网络下不可达，可填本地代理（如 `http://127.0.0.1:7890`），留空则直连。

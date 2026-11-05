@@ -25,7 +25,7 @@ import (
 // a measurement.
 //
 // So: open the source strictly read-only, copy it with VACUUM INTO a temp file, and
-// hand the caller a database that is a real Repotory database at the CURRENT schema
+// hand the caller a database that is a real Cinder database at the CURRENT schema
 // — with every write, migration and index rebuild landing on the copy. This is the
 // same shape cmd/wiki-rehearse already used; promoting it here means the next
 // analysis tool starts safe instead of rediscovering why.
@@ -73,7 +73,7 @@ func CopyForTooling(srcPath string, opt OpenCopyOptions) (*Copy, error) {
 	defer func() { _ = src.Close() }()
 
 	// A single probe gives a far better error than "VACUUM INTO: no such table"
-	// when the path is not a Repotory database at all.
+	// when the path is not a Cinder database at all.
 	var probe int
 	if err := src.QueryRow(`SELECT COUNT(*) FROM sqlite_master`).Scan(&probe); err != nil {
 		return nil, fmt.Errorf("db: %s is not a readable SQLite database: %w", abs, err)

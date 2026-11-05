@@ -1,4 +1,4 @@
-// Settings page for the Repotory plugin.
+// Settings page for the Cinder plugin.
 //
 // ADR-0027 decision 2③ and its 2026-10-22 usability revision: the server
 // address (default http://127.0.0.1:18765), the optional path to a local
@@ -23,7 +23,7 @@ class RepotoryConfigurable : Configurable {
     private var mcpBinaryField: JBTextField? = null
     private var statusLabel: JBLabel? = null
 
-    override fun getDisplayName(): String = "Repotory"
+    override fun getDisplayName(): String = "Cinder"
 
     override fun createComponent(): JComponent {
         val url = JBTextField(RepotorySettings.serverUrl(), 32)
@@ -78,10 +78,10 @@ class RepotoryConfigurable : Configurable {
             // click. The probe distinguishes the two cases.
             status.text = when {
                 target.isEmpty() -> "Enter a server address first."
-                !repotoryClient.ping(target) -> "No response from $target. Is the Repotory server running?"
+                !repotoryClient.ping(target) -> "No response from $target. Is the Cinder server running?"
                 repotoryClient.servesWebUi(target) -> "Connected: $target — API and web UI both reachable."
                 else ->
-                    "Connected: $target, but API-only: \"Open in Repotory\" would 404. " +
+                    "Connected: $target, but API-only: \"Open in Cinder\" would 404. " +
                         "Use Start local service (release bundle) or restart it with --web-dist."
             }
         }
@@ -183,7 +183,7 @@ class RepotoryConfigurable : Configurable {
 /**
  * Persistent settings.
  *
- * The address is stored in the IDE's own properties store (not in Repotory's
+ * The address is stored in the IDE's own properties store (not in Cinder's
  * database): the plugin is a client, and a client must not write into the
  * service's storage.
  */

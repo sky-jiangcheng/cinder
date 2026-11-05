@@ -123,13 +123,13 @@ for (const [file, extract] of versionSites) {
 
 // ------------------------------------------------------- ② TODO 现状速查 ----
 
-// 只认「现状速查」那一行（以 "- 品牌 **Repotory**" 开头），不扫全文——TODO.md 里
+// 只认「现状速查」那一行（以 "- 品牌 **Cinder**" 开头），不扫全文——TODO.md 里
 // 还有大量「随 v2.15.0 发布改为……」这类历史叙述，它们本来就该停在过去。
 const todoLine = read('TODO.md')
   .split('\n')
-  .find((l) => l.startsWith('- 品牌 **Repotory**'))
+  .find((l) => l.startsWith('- 品牌 **Cinder**'))
 if (!todoLine) {
-  issues.push('TODO.md: 找不到「- 品牌 **Repotory**」开头的现状速查行')
+  issues.push('TODO.md: 找不到「- 品牌 **Cinder**」开头的现状速查行')
 } else {
   const todoVersion = todoLine.match(/版本 \*\*v([^*]+)\*\*/)?.[1]?.trim()
   if (!todoVersion) {

@@ -102,7 +102,7 @@ func AgentClientNames() []string {
 	return out
 }
 
-// SetupAgentClients registers Repotory's MCP server with the AI clients the
+// SetupAgentClients registers Cinder's MCP server with the AI clients the
 // user picked, for one project.
 //
 // projectID names the project whose directory receives the client-local

@@ -1,6 +1,6 @@
-# Repotory for VS Code
+# Cinder for VS Code
 
-**The local-first memory layer for AI coding agents.** Repotory keeps what your coding agents learn — why a decision was made, what gotcha you hit, what to do next — in a local, searchable store. This extension surfaces it where you work: load a project's full session context, write a structured handoff when you stop, and **ask your project's knowledge base a question** — in a chat console that remembers the conversation, without leaving VS Code.
+**The local-first memory layer for AI coding agents.** Cinder keeps what your coding agents learn — why a decision was made, what gotcha you hit, what to do next — in a local, searchable store. This extension surfaces it where you work: load a project's full session context, write a structured handoff when you stop, and **ask your project's knowledge base a question** — in a chat console that remembers the conversation, without leaving VS Code.
 
 One VSIX covers the whole fork family — **VS Code, Cursor and Windsurf**.
 
@@ -8,16 +8,16 @@ One VSIX covers the whole fork family — **VS Code, Cursor and Windsurf**.
 
 | Surface | What it does |
 |---|---|
-| Command `Repotory: Load Session Context` | Pulls the working context for your project (tech stack, README excerpt, recent commits, open todos, the last session handoff) via `repotory_context`, sending the current workspace path so a subdirectory resolves to the repository it belongs to; shows it in the Repotory output channel |
-| Command `Repotory: Record Session Handoff` | Prompts for summary / changes / next steps, then records a structured handoff (`repotory_handoff`) — the project is resolved from the workspace path — the next session, yours or any agent's, starts from it |
-| Command `Repotory: Ask the Knowledge Base` | Asks `repotory_ask` and appends the answer — with its sources — to the chat console |
-| Command `Repotory: Search Knowledge` | Full-text search (FTS5) across every note you captured; the workspace path is sent so notes recorded in the matched repository rank first (ranking only, nothing filtered). The hits are appended to the chat console as a **Notes** turn |
-| Command `Repotory: Search Approved Knowledge Pages` | Searches the approved knowledge pages (`repotory_wiki_search`) and appends them as a **Pages** turn |
-| Sidebar view "Repotory Chat" (Repotory activity bar) | The chat console — see below. The panel is a conversation: one turn per question, the old turns folded away, every detail opened in place. Its scope chip is **locked to the current project** by default; click it to search across all projects. The panel draws its **own** header row — brand plus four inline icon buttons: **Search notes**, **AI provider**, **Diagnostics** and **Desktop app**. They live inside the panel, not in the view's title bar, so the host cannot clip them (ADR-0044) |
-| Status bar `$(repo) Repotory` | Click = load context; the tooltip names the resolved workspace (project / repository and its path) once resolved |
-| Command `Repotory: Register MCP Server` | Runs the bundled `repotory-init --with-hook` silently in the background (no terminal): registers the MCP server for Claude Code / Cursor / VS Code / Windsurf and installs the SessionEnd hook. The installer ships inside the extension, so this works in any project — it is not limited to the Repotory repository |
-| Command `Repotory: Setup & Diagnostics` | One panel showing four checks — `repotory-mcp` binary, local service, workspace resolution, MCP client config — each with the fix action next to it. Use this instead of guessing why something is not working |
-| Command `Repotory: Set repotory-mcp Path` | File picker for the `repotory-mcp` executable; writes `repotory.mcpPath` so no PATH editing is needed |
+| Command `Cinder: Load Session Context` | Pulls the working context for your project (tech stack, README excerpt, recent commits, open todos, the last session handoff) via `repotory_context`, sending the current workspace path so a subdirectory resolves to the repository it belongs to; shows it in the Cinder output channel |
+| Command `Cinder: Record Session Handoff` | Prompts for summary / changes / next steps, then records a structured handoff (`repotory_handoff`) — the project is resolved from the workspace path — the next session, yours or any agent's, starts from it |
+| Command `Cinder: Ask the Knowledge Base` | Asks `repotory_ask` and appends the answer — with its sources — to the chat console |
+| Command `Cinder: Search Knowledge` | Full-text search (FTS5) across every note you captured; the workspace path is sent so notes recorded in the matched repository rank first (ranking only, nothing filtered). The hits are appended to the chat console as a **Notes** turn |
+| Command `Cinder: Search Approved Knowledge Pages` | Searches the approved knowledge pages (`repotory_wiki_search`) and appends them as a **Pages** turn |
+| Sidebar view "Cinder Chat" (Cinder activity bar) | The chat console — see below. The panel is a conversation: one turn per question, the old turns folded away, every detail opened in place. Its scope chip is **locked to the current project** by default; click it to search across all projects. The panel draws its **own** header row — brand plus four inline icon buttons: **Search notes**, **AI provider**, **Diagnostics** and **Desktop app**. They live inside the panel, not in the view's title bar, so the host cannot clip them (ADR-0044) |
+| Status bar `$(repo) Cinder` | Click = load context; the tooltip names the resolved workspace (project / repository and its path) once resolved |
+| Command `Cinder: Register MCP Server` | Runs the bundled `repotory-init --with-hook` silently in the background (no terminal): registers the MCP server for Claude Code / Cursor / VS Code / Windsurf and installs the SessionEnd hook. The installer ships inside the extension, so this works in any project — it is not limited to the Cinder repository |
+| Command `Cinder: Setup & Diagnostics` | One panel showing four checks — `repotory-mcp` binary, local service, workspace resolution, MCP client config — each with the fix action next to it. Use this instead of guessing why something is not working |
+| Command `Cinder: Set repotory-mcp Path` | File picker for the `repotory-mcp` executable; writes `repotory.mcpPath` so no PATH editing is needed |
 
 ## The chat console
 
@@ -25,7 +25,7 @@ The panel is a **conversation**, not a result list (ADR-0036). You ask a questio
 
 ```
 ┌──────────────────────────────────────────────┐
-│ Repotory                        ⌕  ⚙  ⚠  ↗   │  ← brand + four icon buttons
+│ Cinder                        ⌕  ⚙  ⚠  ↗   │  ← brand + four icon buttons
 ├──────────────────────────────────────────────┤
 │ ▸ 3 earlier turns                            │  ← the folded history
 │                                              │
@@ -41,21 +41,21 @@ The panel is a **conversation**, not a result list (ADR-0036). You ask a questio
 │ ┌──────────────────────────────────────────┐ │
 │ │ Ask about this project…            [➤]   │ │  ← the send key sits in the box
 │ └──────────────────────────────────────────┘ │
-│ [Ask][Notes][Pages]                   [🔒 Repotory] │
+│ [Ask][Notes][Pages]                   [🔒 Cinder] │
 └──────────────────────────────────────────────┘
 ```
 
 - **Four modes.** **Ask** (the default) calls `repotory_ask` and gives an *answer* with its sources — not a list of titles. **Notes** calls `repotory_notes_search`, **Pages** calls `repotory_wiki_search`. The mode switch sits in the composer, next to the scope chip.
 - **Locked to this project.** The chip shows `🔒 <project>`: the panel asks about the project your workspace belongs to. Click the chip to unlock it and search across all projects — the lock is a default, not a restriction. For **Ask** and **Pages** the project is a real server-side filter; **Notes** has no project parameter in the tool surface, so the panel filters the returned hits itself and says how many of them belong to the locked project (the count is never dressed up as "everything").
 - **The history folds.** Only the two most recent turns stay open; older ones collapse into one row (`▸ N earlier turns`). Every answer's source list collapses into `Sources (N)`. The fold state is explicit and sticks — a collapsed turn stays collapsed while the next turn arrives.
-- **Details open in place.** Clicking a card fetches the full body over `repotory_notes_read` / `repotory_wiki_read` and opens it inside the card, with **Open in Repotory**, **Copy**, and — for notes — **Edit**, **New note here** and **AI Tidy**. **Open in Repotory** deep-links the item into the Repotory web UI (`/project/<id>?noteId=<id>` for a note, `?tab=todos` for a todo, `/wiki/<id>` for a page); it is best-effort — the extension asks the local service whether it actually serves the web UI first, and says so instead of dropping you on a 404 when it does not.
+- **Details open in place.** Clicking a card fetches the full body over `repotory_notes_read` / `repotory_wiki_read` and opens it inside the card, with **Open in Cinder**, **Copy**, and — for notes — **Edit**, **New note here** and **AI Tidy**. **Open in Cinder** deep-links the item into the Cinder web UI (`/project/<id>?noteId=<id>` for a note, `?tab=todos` for a todo, `/wiki/<id>` for a page); it is best-effort — the extension asks the local service whether it actually serves the web UI first, and says so instead of dropping you on a 404 when it does not.
 - **Status and errors live in an announcement bar** at the top of the feed, not in a status line at the bottom — dismissible, and the bottom belongs to the composer.
 
 The panel follows your editor theme — every surface is a VS Code theme color — so it looks native in light and dark alike.
 
 ## The external AI provider
 
-The **AI provider** icon in the panel header opens a sheet that configures the model the panel talks to: **Base URL**, **API key** and **Model**, plus **List models** (ask the endpoint what it serves) and **Test** (send one minimal completion and show what came back). Save writes it to the Repotory service.
+The **AI provider** icon in the panel header opens a sheet that configures the model the panel talks to: **Base URL**, **API key** and **Model**, plus **List models** (ask the endpoint what it serves) and **Test** (send one minimal completion and show what came back). Save writes it to the Cinder service.
 
 Three things worth knowing:
 
@@ -93,20 +93,20 @@ All commands remain in the Command Palette; rebind them in *Preferences → Keyb
 
 ## Requirements
 
-- The `repotory-mcp` binary — install it via Homebrew, Scoop or the GitHub Releases page. It does **not** have to be on your PATH: the extension resolves it in this order and stops at the first hit — `repotory.mcpPath`, `REPOTORY_MCP_BIN`, the extension's own storage, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. If none matches, **"Repotory: Set repotory-mcp Path"** opens a file picker. The desktop app is optional; the MCP server alone is enough.
+- The `repotory-mcp` binary — install it via Homebrew, Scoop or the GitHub Releases page. It does **not** have to be on your PATH: the extension resolves it in this order and stops at the first hit — `repotory.mcpPath`, `REPOTORY_MCP_BIN`, the extension's own storage, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. If none matches, **"Cinder: Set repotory-mcp Path"** opens a file picker. The desktop app is optional; the MCP server alone is enough.
 - Optional: a running `repotory server`. The chat console works without it over `repotory-mcp` alone — but the **project lock needs it**: the panel asks the read-only `ResolveWorkspacePath` binding which project your folder belongs to, and without the service there is no project to lock to, so the panel says so and searches across all projects instead (set `repotory.serverUrl` if you changed the port).
 
 ## First launch
 
-On first activation the extension opens **"Repotory: Setup & Diagnostics"** instead of a wall of instructions: it shows whether the binary was found (and from where), whether the local service answers, what the current folder resolves to, and whether the MCP client config exists. Each row carries its fix — locate the binary, open the download page, re-run registration, or open the folder.
+On first activation the extension opens **"Cinder: Setup & Diagnostics"** instead of a wall of instructions: it shows whether the binary was found (and from where), whether the local service answers, what the current folder resolves to, and whether the MCP client config exists. Each row carries its fix — locate the binary, open the download page, re-run registration, or open the folder.
 
-To wire the MCP server into your AI clients, run **"Repotory: Register MCP Server"**. It executes the bundled `repotory-init --with-hook` in the extension host (Electron-as-node), so no terminal opens; if that fails, the output channel has the full log and a "run it manually" fallback.
+To wire the MCP server into your AI clients, run **"Cinder: Register MCP Server"**. It executes the bundled `repotory-init --with-hook` in the extension host (Electron-as-node), so no terminal opens; if that fails, the output channel has the full log and a "run it manually" fallback.
 
 ## Settings
 
 | Setting | Default | Description |
 |---|---|---|
-| `repotory.serverUrl` | `http://127.0.0.1:18765` | Repotory headless service URL |
+| `repotory.serverUrl` | `http://127.0.0.1:18765` | Cinder headless service URL |
 | `repotory.mcpPath` | `""` (auto-detect) | Explicit path to the `repotory-mcp` executable; empty means auto-detect. Pointing at a missing/unexecutable file is reported by the diagnostics panel instead of silently falling back |
 
 That is the whole surface. No project id to configure: the extension sends the workspace path and the service resolves it into a project and a repository, so there is no setting to keep in sync with your knowledge base. **The AI provider is not here either** — it lives in the service's configuration and is edited from the panel (see *The external AI provider*), so there is nothing to keep in sync between the editor and the desktop app.
@@ -121,7 +121,7 @@ When the service **is** reachable but the folder matches nothing, the chip offer
 
 ## Install
 
-**Marketplace**: search "Repotory" in the Extensions view, or:
+**Marketplace**: search "Cinder" in the Extensions view, or:
 
 ```bash
 code --install-extension repotory-vscode.vsix
@@ -129,7 +129,7 @@ code --install-extension repotory-vscode.vsix
 
 One VSIX works in VS Code, Cursor and Windsurf (use the fork's own CLI: `cursor --install-extension …`, `windsurf --install-extension …`).
 
-The extension is a thin client — every answer comes from the same `internal/service` layer as the Repotory desktop app, read from your local SQLite knowledge base. Nothing leaves your machine.
+The extension is a thin client — every answer comes from the same `internal/service` layer as the Cinder Desktop app, read from your local SQLite knowledge base. Nothing leaves your machine.
 
 ## Development
 

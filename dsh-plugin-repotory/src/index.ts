@@ -1,7 +1,7 @@
 // dsh-plugin-repotory
 //
-// Exposes Repotory's local git analysis to DeepSeek Harness as three model-
-// visible tools. All heavy lifting happens in Repotory's shared Go service
+// Exposes Cinder's local git analysis to DeepSeek Harness as three model-
+// visible tools. All heavy lifting happens in Cinder's shared Go service
 // (internal/service), reached through the headless HTTP server (cmd/server,
 // `repotory server`). This plugin is a thin, model-facing client — it owns no
 // analysis logic of its own, so the desktop App and Harness never diverge.
@@ -78,7 +78,7 @@ export function apply(ctx: Context) {
   ctx.tools.register(defineTool({
     name: 'repotory_ai_context',
     description:
-      "Return Repotory's AI-readable knowledge-base context (llms.txt style) for this machine: a catalog of discovered projects, their tech stacks, README excerpts and recent knowledge notes. Use when you need background on the user's local repositories before proposing changes.",
+      "Return Cinder's AI-readable knowledge-base context (llms.txt style) for this machine: a catalog of discovered projects, their tech stacks, README excerpts and recent knowledge notes. Use when you need background on the user's local repositories before proposing changes.",
     parameters: {},
     output: {
       schema: { type: 'string' },
@@ -93,9 +93,9 @@ export function apply(ctx: Context) {
   ctx.tools.register(defineTool({
     name: 'repotory_repo_overview',
     description:
-      'Get mined knowledge for a Repotory project: tech stack, language breakdown, dependencies, top contributors, activity/heatmap stats and recent commits. Use to understand a specific local project before modifying it.',
+      'Get mined knowledge for a Cinder project: tech stack, language breakdown, dependencies, top contributors, activity/heatmap stats and recent commits. Use to understand a specific local project before modifying it.',
     parameters: {
-      project_id: { type: 'number', required: true, description: 'Repotory project ID (integer).' },
+      project_id: { type: 'number', required: true, description: 'Cinder project ID (integer).' },
     },
     output: {
       schema: { type: 'json' },
@@ -109,7 +109,7 @@ export function apply(ctx: Context) {
   ctx.tools.register(defineTool({
     name: 'repotory_search',
     description:
-      "Full-text search across the user's local Repotory knowledge base (notes and todos). Use to recall prior decisions, notes or tasks by keyword.",
+      "Full-text search across the user's local Cinder knowledge base (notes and todos). Use to recall prior decisions, notes or tasks by keyword.",
     parameters: {
       query: { type: 'string', required: true, description: 'Search keywords.' },
       include_todos: { type: 'boolean', description: 'Also search todos (default false: notes only).' },

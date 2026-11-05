@@ -172,7 +172,7 @@ fi
 
 # 4b. TODO.md 现状速查的版本行.
 #
-#     Only the "版本 **vX.Y.Z**" token on the "- 品牌 **Repotory**" line is
+#     Only the "版本 **vX.Y.Z**" token on the "- 品牌 **Cinder**" line is
 #     rewritten. TODO.md also mentions older versions in historical narrative
 #     ("随 v2.15.0 发布改为…"), and those must stay in the past — so the
 #     pattern is anchored on the wording, not on a bare version number.

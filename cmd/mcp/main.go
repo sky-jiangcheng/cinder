@@ -1,4 +1,4 @@
-// repotory-mcp is the Repotory MCP server: it exposes the local Git knowledge
+// repotory-mcp is the Cinder MCP server: it exposes the local Git knowledge
 // base (notes, projects, search) to AI agents over the Model Context
 // Protocol on stdio. The database is opened once at startup and every tool
 // call shares the same service instance as the desktop app.
@@ -50,7 +50,7 @@ func main() {
 	// repositories via repotory_scan without ever opening the desktop app.
 	svc.EnsureDefaultScanRoots()
 
-	log.Printf("Repotory MCP server v%s starting on stdio... (release %s, memory-layer contract %s)",
+	log.Printf("Cinder MCP server v%s starting on stdio... (release %s, memory-layer contract %s)",
 		version.CoreVersion, version.Version, version.CoreVersion)
 	if err := server.ServeStdio(mcpServer); err != nil {
 		log.Fatalf("MCP server error: %v", err)
@@ -400,7 +400,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 
 	mcpServer.AddTool(mcp.Tool{
 		Name:        "repotory_agent_score",
-		Description: "Check AI-readiness of the local Repotory installation (database, notes, search, MCP, llms.txt, SKILL.md, i18n)",
+		Description: "Check AI-readiness of the local Cinder installation (database, notes, search, MCP, llms.txt, SKILL.md, i18n)",
 		InputSchema: mcp.ToolInputSchema{
 			Type:       "object",
 			Properties: map[string]any{},
@@ -419,7 +419,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 	// knowledge base.
 	mcpServer.AddTool(mcp.Tool{
 		Name: "repotory_integrity",
-		Description: "Audit how much the local Repotory knowledge base can be trusted: FTS index drift, orphan rows, schema shape vs version stamp, scan coverage, mined-cache freshness. " +
+		Description: "Audit how much the local Cinder knowledge base can be trusted: FTS index drift, orphan rows, schema shape vs version stamp, scan coverage, mined-cache freshness. " +
 			"Use when search results look incomplete or you need to know whether the data is current. Complements repotory_agent_score, which checks installation readiness, not data integrity.",
 		InputSchema: mcp.ToolInputSchema{
 			Type:       "object",

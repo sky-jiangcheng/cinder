@@ -1,4 +1,4 @@
-// Repotory for JetBrains — parsers for the MCP tool payloads.
+// Cinder for JetBrains — parsers for the MCP tool payloads.
 //
 // ADR-0035 decision 2 moves the plugin's eight data calls onto MCP. The
 // payloads it has to read are the SAME structs the HTTP bridge used to
@@ -37,12 +37,12 @@ object McpPayloads {
     fun parseJson(tool: String, text: String): JsonElement {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) {
-            throw McpException("Repotory tool $tool returned an empty answer")
+            throw McpException("Cinder tool $tool returned an empty answer")
         }
         return try {
             JsonParser.parseString(trimmed)
         } catch (e: Exception) {
-            throw McpException("Repotory tool $tool said: $trimmed", e)
+            throw McpException("Cinder tool $tool said: $trimmed", e)
         }
     }
 
@@ -51,7 +51,7 @@ object McpPayloads {
     fun parseArray(tool: String, text: String): JsonArray {
         val element = parseJson(tool, text)
         if (!element.isJsonArray) {
-            throw McpException("Repotory tool $tool returned ${element.shape()}, expected a list")
+            throw McpException("Cinder tool $tool returned ${element.shape()}, expected a list")
         }
         return element.asJsonArray
     }
@@ -61,7 +61,7 @@ object McpPayloads {
     fun parseObject(tool: String, text: String): JsonObject {
         val element = parseJson(tool, text)
         if (!element.isJsonObject) {
-            throw McpException("Repotory tool $tool returned ${element.shape()}, expected an object")
+            throw McpException("Cinder tool $tool returned ${element.shape()}, expected an object")
         }
         return element.asJsonObject
     }
@@ -144,7 +144,7 @@ object McpPayloads {
         val obj = parseObject(tool, text)
         val content = obj.str("content")
         if (content.isBlank()) {
-            throw McpException("Repotory tool $tool returned an empty proposal")
+            throw McpException("Cinder tool $tool returned an empty proposal")
         }
         return NoteOrganizeResult(
             noteId = obj.long("note_id"),

@@ -1,4 +1,4 @@
-// Package integrity answers the question nothing else in Repotory can answer:
+// Package integrity answers the question nothing else in Cinder can answer:
 // how much of the knowledge base can be trusted?
 //
 // The product promise is a structured, searchable, trustworthy model of the

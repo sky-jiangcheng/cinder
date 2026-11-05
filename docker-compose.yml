@@ -1,4 +1,4 @@
-# Repotory headless server (ADR-0025 Docker tier): one container, one volume.
+# Cinder headless server (ADR-0025 Docker tier): one container, one volume.
 # The volume holds /data/repotory/repotory.db plus its daily snapshots under
 # /data/repotory/backups/ — include that path in your host backup plan.
 #

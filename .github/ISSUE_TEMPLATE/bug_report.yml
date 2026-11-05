@@ -32,7 +32,7 @@ body:
       label: 复现步骤
       description: 从打开应用到出现问题的完整步骤
       placeholder: |
-        1. 打开 Repotory
+        1. 打开 Cinder
         2. 点击「重新扫描」
         3. 观察到崩溃
     validations:

@@ -74,7 +74,7 @@ class NoteEditorDialog(
         // first entry (which would MOVE the note on save).
         val index = projects.indexOfFirst { it.id == draft.projectId }
         if (index >= 0) projectCombo.selectedIndex = index
-        title = if (draft.id == 0L) "Repotory: New Note" else "Repotory: Edit Note"
+        title = if (draft.id == 0L) "Cinder: New Note" else "Cinder: Edit Note"
         setOKButtonText(if (draft.id == 0L) "Create" else "Save")
         init()
     }

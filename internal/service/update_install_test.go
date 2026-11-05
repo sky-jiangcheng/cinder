@@ -248,8 +248,8 @@ func TestRevealDownloadedUpdateRequiresCompletedDownload(t *testing.T) {
 // disk image must survive this.
 func TestInstallerVolumeOnlyMatchesOwnBundle(t *testing.T) {
 	root := t.TempDir()
-	ours := filepath.Join(root, "Repotory")
-	if err := os.MkdirAll(filepath.Join(ours, "Repotory.app"), 0755); err != nil {
+	ours := filepath.Join(root, "Cinder")
+	if err := os.MkdirAll(filepath.Join(ours, "Cinder.app"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	other := filepath.Join(root, "SomeOtherDisk")
@@ -257,12 +257,12 @@ func TestInstallerVolumeOnlyMatchesOwnBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := installerVolumeIn(root, "Repotory"); got != ours {
+	if got := installerVolumeIn(root, "Cinder"); got != ours {
 		t.Fatalf("installerVolumeIn = %q, want %q", got, ours)
 	}
 
 	// With only a foreign volume mounted, nothing is ours to eject.
-	if got := installerVolumeIn(filepath.Join(root, "empty"), "Repotory"); got != "" {
+	if got := installerVolumeIn(filepath.Join(root, "empty"), "Cinder"); got != "" {
 		t.Fatalf("installerVolumeIn = %q, want empty", got)
 	}
 }
@@ -321,7 +321,7 @@ func TestInstallInfoReportsPaths(t *testing.T) {
 // uses to notice that the install happened.
 func TestBundleVersionReadsInfoPlist(t *testing.T) {
 	root := t.TempDir()
-	contents := filepath.Join(root, "Repotory.app", "Contents")
+	contents := filepath.Join(root, "Cinder.app", "Contents")
 	if err := os.MkdirAll(contents, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestBundleVersionReadsInfoPlist(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(contents, "Info.plist"), []byte(plist), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if got := bundleVersion(filepath.Join(root, "Repotory.app")); got != "2.25.0" {
+	if got := bundleVersion(filepath.Join(root, "Cinder.app")); got != "2.25.0" {
 		t.Errorf("bundleVersion = %q, want 2.25.0", got)
 	}
 	if got := bundleVersion(filepath.Join(root, "NotAnApp")); got != "" {

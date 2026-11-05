@@ -1,4 +1,4 @@
-// Repotory for JetBrains — the conversation model behind the chat console.
+// Cinder for JetBrains — the conversation model behind the chat console.
 //
 // ADR-0036: the panel is a CONVERSATION. A question goes in, a turn comes
 // out, and the turns stay in the feed. This file owns that model — the data,
@@ -140,7 +140,7 @@ class ChatSession(
             setScope(ScopeState())
             announce(
                 ChatLevel.WARN,
-                "The local Repotory service is not reachable at ${transport.serverUrl()} — " +
+                "The local Cinder service is not reachable at ${transport.serverUrl()} — " +
                     "the project lock needs it, so the panel searches across all projects.",
             )
         }
@@ -156,7 +156,7 @@ class ChatSession(
         if (scope.projectId <= 0) {
             announce(
                 ChatLevel.WARN,
-                "This workspace does not resolve to a Repotory project yet — " +
+                "This workspace does not resolve to a Cinder project yet — " +
                     "pick one from the project chip to lock the panel to it.",
             )
             return
@@ -263,7 +263,7 @@ class ChatSession(
             ProviderOutcome(
                 ok = true,
                 message = if (apiKey.isNotBlank()) {
-                    "Provider saved — Repotory will use it for the next question."
+                    "Provider saved — Cinder will use it for the next question."
                 } else {
                     "Provider saved — the stored key was left untouched."
                 },
@@ -370,7 +370,7 @@ class ChatSession(
         if (text.startsWith(ASK_NO_ENDPOINT_PREFIX)) {
             announce(
                 ChatLevel.WARN,
-                "No AI endpoint is configured — Repotory answered with keyword matches, not an answer.",
+                "No AI endpoint is configured — Cinder answered with keyword matches, not an answer.",
             )
         }
 

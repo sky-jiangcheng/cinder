@@ -63,7 +63,7 @@ func registerAuditTools(mcpServer *server.MCPServer, svc *service.Service) {
 		Name: "repotory_ai_review_rules",
 		Description: "Show the local AI review rules and whether input/output review is enabled. " +
 			"The rules are the user's own regular expressions (one per line, '#' for comments), matched case-insensitively against prompts before they leave and against replies as they arrive. " +
-			"Repotory ships no built-in blocklist — a keyword list is a weak control — so this returns exactly what is configured, or an empty list if there are none.",
+			"Cinder ships no built-in blocklist — a keyword list is a weak control — so this returns exactly what is configured, or an empty list if there are none.",
 		InputSchema: mcp.ToolInputSchema{
 			Type:       "object",
 			Properties: map[string]any{},

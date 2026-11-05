@@ -1,25 +1,25 @@
-# Repotory for JetBrains
+# Cinder for JetBrains
 
-**The local-first memory layer for AI coding agents.** Repotory keeps what your coding agents learn — why a decision was made, what gotcha you hit, what to do next — in a local, searchable store. This plugin puts it where you work: a **Repotory** tool window that is a **conversation console** — you ask a question, read the answer with its sources, and browse what is already there.
+**The local-first memory layer for AI coding agents.** Cinder keeps what your coding agents learn — why a decision was made, what gotcha you hit, what to do next — in a local, searchable store. This plugin puts it where you work: a **Cinder** tool window that is a **conversation console** — you ask a question, read the answer with its sources, and browse what is already there.
 
 One build covers the whole IntelliJ family — it declares `com.intellij.modules.platform`, so IntelliJ IDEA, PyCharm, WebStorm, GoLand and the rest all install the same zip.
 
 ## What it does
 
-The panel is a **conversation console**, not a result list (ADR-0036). One question goes in, one turn comes out, and the turns stay in the feed — a result that replaces the previous one cannot be read as a sequence, and Repotory's value is in the sequence.
+The panel is a **conversation console**, not a result list (ADR-0036). One question goes in, one turn comes out, and the turns stay in the feed — a result that replaces the previous one cannot be read as a sequence, and Cinder's value is in the sequence.
 
 | Surface | What it does |
 |---|---|
-| Tool window **Repotory** | The chat console. Five regions: a header (brand + channel state), an **announcement bar** (one line, dismissible — it replaced the old status line), the **conversation feed** (the only scroll area), the **folded history** (older turns fold into one row) and the **input area** at the bottom (always there) |
+| Tool window **Cinder** | The chat console. Five regions: a header (brand + channel state), an **announcement bar** (one line, dismissible — it replaced the old status line), the **conversation feed** (the only scroll area), the **folded history** (older turns fold into one row) and the **input area** at the bottom (always there) |
 | Brand header | The mark and the wordmark, plus the channel state (a pill: `online` / `offline` / `checking…`), the **service actions** — **Refresh** and **Start local service** — and the **panel actions**: **Search notes**, **AI provider**, **Diagnostics** and **Desktop app**. Clicking the pill re-checks the channel |
 | Conversation feed | One turn per question: the mode it was asked in (`ASK` / `NOTES` / `PAGES`), the question, and the answer or the cards it produced. The newest **2** turns stay open; everything older folds into `▸ N earlier turns` and opens on click |
 | **Ask** mode (default) | `repotory_ask` answers with prose plus a `Sources:` list. The answer is the body; the sources are its footnote, folded behind `Sources (N) ▸`. A source list that cannot be parsed is shown **verbatim** — the raw text — so nothing is ever swallowed |
 | **Notes** mode | `repotory_notes_search` answers with cards (notes / todos). Clicking a title opens the item **in place**, inside the turn that produced it — there is no separate detail pane |
 | **Pages** mode | `repotory_wiki_search` answers with the approved knowledge pages, opened in place the same way |
-| Card actions | **Open in Repotory** (deep link into the web UI), **Copy** (title + body), and for notes **Edit** / **New note here** / **AI Tidy** — see *Maintaining notes without leaving the IDE* below |
+| Card actions | **Open in Cinder** (deep link into the web UI), **Copy** (title + body), and for notes **Edit** / **New note here** / **AI Tidy** — see *Maintaining notes without leaving the IDE* below |
 | Scope chip | The panel is **locked to the current project** by default. The chip shows `🔒 <project>`; clicking it unlocks the panel back to cross-project. A workspace that resolves to no project offers the candidate projects to pick from instead of a dead end — see *When the folder is not in the knowledge base yet* |
-| **Tools → Repotory** | Opens the tool window (also on its title bar) |
-| **Settings → Tools → Repotory** | The **`repotory-mcp`** binary (the plugin's data channel) with a **Check MCP channel** diagnostic that lists every place it looked, plus the optional server address, server binary path, a **Test connection** button that tells "API and web UI both reachable" from "API-only, the link would 404", and **Start local service** for a one-click launch |
+| **Tools → Cinder** | Opens the tool window (also on its title bar) |
+| **Settings → Tools → Cinder** | The **`repotory-mcp`** binary (the plugin's data channel) with a **Check MCP channel** diagnostic that lists every place it looked, plus the optional server address, server binary path, a **Test connection** button that tells "API and web UI both reachable" from "API-only, the link would 404", and **Start local service** for a one-click launch |
 
 The layout is the same console the VS Code extension ships, so the two IDE surfaces feel like one product (ADR-0036 decision 8): same regions, same wording, same fold rules.
 
@@ -37,7 +37,7 @@ A project that resolves to no project, or a service that is not running, leaves 
 
 ## The external AI provider
 
-The **AI provider** action in the panel header opens a dialog that configures the model the panel talks to: **Base URL**, **API key** and **Model**, plus **List models** (ask the endpoint what it serves) and **Test** (send one minimal completion and show what came back). Save writes it to the Repotory service.
+The **AI provider** action in the panel header opens a dialog that configures the model the panel talks to: **Base URL**, **API key** and **Model**, plus **List models** (ask the endpoint what it serves) and **Test** (send one minimal completion and show what came back). Save writes it to the Cinder service.
 
 Three things worth knowing:
 
@@ -56,8 +56,8 @@ If there are no candidates either (the service is unreachable, or nothing matche
 ## Requirements
 
 - **IntelliJ IDEA 2024.2 or newer** (any IntelliJ-family IDE). The plugin runs on the JRE the IDE ships with (JBR 21 on 2024.2+), **independently of your project's JDK**. A project that compiles with **JDK 8** is fully supported — the plugin never loads your project's JDK, never compiles your code, and never needs Java 8 APIs. Building the plugin from source is the only Java-21 task (see Development).
-- A **`repotory-mcp`** binary — this is the plugin's **data channel**: searching, reading, editing, creating and organizing all go through it over MCP stdio, exactly like the VS Code extension. The plugin looks for the binary in this order — **Settings | Tools | Repotory → MCP binary**, `REPOTORY_MCP_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. It ships with the release (`install.sh`, Homebrew and Scoop all carry it) and the plugin **never downloads it**: if no binary is found, the tool window offers the file picker and the release page instead.
-- A **`repotory-server`** binary — **optional**. The server is no longer a prerequisite: the plugin talks to your knowledge base through `repotory-mcp`, which opens the same local SQLite database the desktop app uses. The server is only needed for the two things that still speak HTTP: **deep links** into the web UI, and **moving a note between projects**. The plugin can start a local one with one click; it looks for the binary in this order — **Settings | Tools | Repotory → Server binary**, `REPOTORY_SERVER_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories.
+- A **`repotory-mcp`** binary — this is the plugin's **data channel**: searching, reading, editing, creating and organizing all go through it over MCP stdio, exactly like the VS Code extension. The plugin looks for the binary in this order — **Settings | Tools | Cinder → MCP binary**, `REPOTORY_MCP_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. It ships with the release (`install.sh`, Homebrew and Scoop all carry it) and the plugin **never downloads it**: if no binary is found, the tool window offers the file picker and the release page instead.
+- A **`repotory-server`** binary — **optional**. The server is no longer a prerequisite: the plugin talks to your knowledge base through `repotory-mcp`, which opens the same local SQLite database the desktop app uses. The server is only needed for the two things that still speak HTTP: **deep links** into the web UI, and **moving a note between projects**. The plugin can start a local one with one click; it looks for the binary in this order — **Settings | Tools | Cinder → Server binary**, `REPOTORY_SERVER_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories.
 
 Everything is loopback-only by design, so there is nothing to authenticate and nothing that leaves your machine.
 
@@ -73,18 +73,18 @@ The one-click start is just a shortcut for:
 
 ## First launch
 
-1. Open the **Repotory** tool window from the right-hand tool window bar, or **Tools | Repotory**.
+1. Open the **Cinder** tool window from the right-hand tool window bar, or **Tools | Cinder**.
 2. Pick a mode — **Ask** (default), **Notes** or **Pages** — type a question and press **Enter** (Shift+Enter breaks the line). The turn appears in the feed; asking does **not** need a server — the plugin talks to `repotory-mcp`, which reads your local knowledge base directly.
 3. The panel locks itself to the project your IDE project belongs to. The chip next to the modes says `🔒 <project>`; click it to search across all projects, click it again to lock back.
 4. If the plugin cannot find `repotory-mcp`, the announcement bar says so and offers **Locate…** (file picker) or **Open settings**. Point it at the binary and the next question works.
-5. **Open in Repotory** (on an opened card) jumps into the Repotory web UI, and that one DOES need a local server that serves the UI. The plugin starts one for you with **Start local service**: it looks for `repotory-server` (see Requirements), starts it on the configured port with its bundled `web/` directory and waits for `/health`.
-6. Prefer to check things by hand? **Settings | Tools | Repotory** has the MCP binary, the address, the server binary path, **Check MCP channel**, **Test connection** and **Start local service**:
+5. **Open in Cinder** (on an opened card) jumps into the Cinder web UI, and that one DOES need a local server that serves the UI. The plugin starts one for you with **Start local service**: it looks for `repotory-server` (see Requirements), starts it on the configured port with its bundled `web/` directory and waits for `/health`.
+6. Prefer to check things by hand? **Settings | Tools | Cinder** has the MCP binary, the address, the server binary path, **Check MCP channel**, **Test connection** and **Start local service**:
    - *repotory-mcp found at … (via …).* → the data channel is ready.
    - *Connected: … — API and web UI both reachable.* → deep links work.
-   - *Connected: …, but API-only: "Open in Repotory" would 404.* → the running server has no web UI; restart it with `--web-dist` or use the release bundle.
+   - *Connected: …, but API-only: "Open in Cinder" would 404.* → the running server has no web UI; restart it with `--web-dist` or use the release bundle.
    - *No response from …* → nothing is listening; press **Start local service**.
 
-If you click **Open in Repotory** while the service is API-only, you do not land on a bare 404: the plugin says so and offers **Open Anyway** / **Copy URL** / **Cancel**.
+If you click **Open in Cinder** while the service is API-only, you do not land on a bare 404: the plugin says so and offers **Open Anyway** / **Copy URL** / **Cancel**.
 
 ## Maintaining notes without leaving the IDE
 
@@ -106,10 +106,10 @@ The tidy proposal is generated server-side by the shared service layer (`Organiz
 | Setting | Default | Description |
 |---|---|---|
 | MCP binary | empty (auto-detect) | Path to `repotory-mcp` — the plugin's data channel; empty means `REPOTORY_MCP_BIN`, then `PATH`, then common install directories |
-| Server address | `http://127.0.0.1:18765` | Repotory headless service URL (deep links and moving notes) |
+| Server address | `http://127.0.0.1:18765` | Cinder headless service URL (deep links and moving notes) |
 | Server binary | empty (auto-detect) | Path to `repotory-server`; empty means `REPOTORY_SERVER_BIN`, then `PATH`, then common install directories |
 
-All three values are stored in the IDE's own properties store (`repotory.xml`), not in Repotory's database — a client must not write into the service's storage. **The AI provider is not here either**: it lives in the service's configuration and is edited from the panel (see *The external AI provider*), so there is nothing to keep in sync between the IDE and the desktop app.
+All three values are stored in the IDE's own properties store (`repotory.xml`), not in Cinder's database — a client must not write into the service's storage. **The AI provider is not here either**: it lives in the service's configuration and is edited from the panel (see *The external AI provider*), so there is nothing to keep in sync between the IDE and the desktop app.
 
 ## Scope
 
@@ -129,11 +129,11 @@ One difference from the desktop app is worth knowing: the MCP surface **cannot c
 
 ## Install
 
-**From the JetBrains Marketplace** (2026-10-22): **Settings | Plugins | Marketplace**, search for **Repotory**, install, restart the IDE. Every released version is published there with the same version number as the desktop app.
+**From the JetBrains Marketplace** (2026-10-22): **Settings | Plugins | Marketplace**, search for **Cinder**, install, restart the IDE. Every released version is published there with the same version number as the desktop app.
 
 **From disk** (offline / pre-release builds): download the zip attached to a GitHub Release and use **Settings | Plugins | ⚙ | Install Plugin from Disk…**, then restart.
 
-The plugin is a thin client — every answer comes from the same `internal/service` layer as the Repotory desktop app, read from your local SQLite knowledge base. Nothing leaves your machine.
+The plugin is a thin client — every answer comes from the same `internal/service` layer as the Cinder Desktop app, read from your local SQLite knowledge base. Nothing leaves your machine.
 
 ## Compatibility
 

@@ -1,4 +1,4 @@
-// Repotory for JetBrains — where the `repotory-mcp` binary is.
+// Cinder for JetBrains — where the `repotory-mcp` binary is.
 //
 // ADR-0035 decision 7: the plugin resolves the binary the same way the VS
 // extension does — setting -> `REPOTORY_MCP_BIN` -> PATH -> the common

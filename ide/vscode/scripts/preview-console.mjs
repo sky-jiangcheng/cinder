@@ -97,7 +97,7 @@ const html = consoleHtml(nonce)
     var api = { type: 'init', mode: 'ask', scope: { projectId: 4, projectName: 'CBiPay', repository: 'pay-common', locked: true }, turns: ${JSON.stringify(turns)} };
     window.postMessage(api, '*');
     setTimeout(function () {
-      window.postMessage({ type: 'announce', level: 'warn', message: 'The local Repotory service is not reachable at http://127.0.0.1:18765 — the project lock needs it, so the panel searches across all projects.' }, '*');
+      window.postMessage({ type: 'announce', level: 'warn', message: 'The local Cinder service is not reachable at http://127.0.0.1:18765 — the project lock needs it, so the panel searches across all projects.' }, '*');
     }, 50);
   });
 </script>

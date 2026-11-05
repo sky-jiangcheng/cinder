@@ -152,7 +152,7 @@ func runAgentScore(svc *service.Service) string {
 
 	// Build report
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "=== Repotory Agent Score (v%s) ===\n\n", version.Version)
+	fmt.Fprintf(&sb, "=== Cinder Agent Score (v%s) ===\n\n", version.Version)
 	for _, p := range parts {
 		fmt.Fprintln(&sb, p)
 	}
@@ -162,11 +162,11 @@ func runAgentScore(svc *service.Service) string {
 	fmt.Fprintf(&sb, "AI-readiness: %.0f%%\n\n", pct)
 
 	if pct >= 75 {
-		fmt.Fprintln(&sb, "✅ Repotory is agent-ready! MCP and tools are functional.")
+		fmt.Fprintln(&sb, "✅ Cinder is agent-ready! MCP and tools are functional.")
 	} else if pct >= 50 {
-		fmt.Fprintln(&sb, "⚠️  Repotory is partially ready. Review warnings above.")
+		fmt.Fprintln(&sb, "⚠️  Cinder is partially ready. Review warnings above.")
 	} else {
-		fmt.Fprintln(&sb, "❌ Repotory needs setup before agents can use it effectively.")
+		fmt.Fprintln(&sb, "❌ Cinder needs setup before agents can use it effectively.")
 	}
 	return sb.String()
 }

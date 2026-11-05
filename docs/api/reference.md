@@ -5,7 +5,7 @@ order: 22
 
 # API 参考
 
-Repotory 的对外接口是 **Wails 绑定面**：Go 方法经 Wails Bind 暴露给前端（`window.go.main.App.<方法名>`），方法名与 JSON 载荷即契约。桌面应用默认不监听 HTTP 端口；需要 HTTP 形态时由 `cmd/server` 提供仅限 loopback 的 JSON API（复用同一 service 层）。
+Cinder 的对外接口是 **Wails 绑定面**：Go 方法经 Wails Bind 暴露给前端（`window.go.main.App.<方法名>`），方法名与 JSON 载荷即契约。桌面应用默认不监听 HTTP 端口；需要 HTTP 形态时由 `cmd/server` 提供仅限 loopback 的 JSON API（复用同一 service 层）。
 
 > 绑定层是薄委托（`internal/app`），实现全部在 `internal/service`；CLI 与 MCP 复用同一实现。
 
@@ -224,7 +224,7 @@ cd .. && go build -o repotory-server ./cmd/server
 
 ## AI 客户端接入（desktop-only）
 
-把 Repotory 接进 Claude Code / Cursor / VS Code / Windsurf 的 MCP 客户端。**没有 MCP 对应面**：这两个绑定往用户的项目目录里写文件，是「装机器」的动作，不是 agent 的动作。
+把 Cinder 接进 Claude Code / Cursor / VS Code / Windsurf 的 MCP 客户端。**没有 MCP 对应面**：这两个绑定往用户的项目目录里写文件，是「装机器」的动作，不是 agent 的动作。
 
 | 方法 | 说明 |
 |------|------|

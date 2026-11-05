@@ -1,4 +1,4 @@
-# Repotory 数据模型与不变量
+# Cinder 数据模型与不变量
 
 给 agent 用的速查。只列**会影响 agent 行为**的部分 —— 完整 schema 见
 [上游文档](https://sky-jiangcheng.github.io/repotory/)。

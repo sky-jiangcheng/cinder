@@ -1,28 +1,28 @@
 <p align="center">
-  <a href="https://github.com/sky-jiangcheng/repotory"><img src="build/icon.svg" width="88" alt="Repotory" /></a>
+  <a href="https://github.com/sky-jiangcheng/repotory"><img src="build/icon.svg" width="88" alt="Cinder" /></a>
 </p>
 
-<h1 align="center">Repotory</h1>
+<h1 align="center">Cinder</h1>
 
 <p align="center">
   <b>面向 AI 编程 Agent 的本地优先记忆层。</b><br/>
   告别 Agent「会话失忆症」。Agent 读代码很聪明，但会话一结束就忘光——为什么这样设计、踩过什么坑、下一步做什么。<br/>
-  Repotory 把这些项目知识留在你的本地 SQLite 中：可搜索、有版本、有备份，<br/>
+  Cinder 把这些项目知识留在你的本地 SQLite 中：可搜索、有版本、有备份，<br/>
   并让<i>任何</i>一个 Agent 一次工具调用就能无缝接回上下文。
 </p>
 
 <p align="center">
   <b>Agent 中立、协议中立、不需要账号。</b><br/>
   任何会讲 MCP 的编程 Agent——Claude Code / Cursor / Codex / Copilot——都能读写同一份记忆。<br/>
-  Repotory 不是绑在某个 harness 上的插件，而是这些 Agent 共享的中立一层。<br/>
+  Cinder 不是绑在某个 harness 上的插件，而是这些 Agent 共享的中立一层。<br/>
   不需要账号、不需要云端：整份记忆就是本机的一个 SQLite 文件。<br/>
   各家 IDE 的会话记录都锁在自家生态里，所以跨 agent 的那一层，需要一个中立的落点。
 </p>
 
 <p align="center">
   <b>两个产品，各担一件事。</b><br/>
-  Repotory 是<b>工作台</b>——浏览、编辑、<b>审批</b>、治理这份记忆。<br/>
-  <a href="https://github.com/sky-jiangcheng/repotory-agent">Repotory Agent</a> 是<b>助手</b>——一个本地的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。<br/>
+  Cinder 是<b>工作台</b>——浏览、编辑、<b>审批</b>、治理这份记忆。<br/>
+  <a href="https://github.com/sky-jiangcheng/repotory-agent">Warden</a> 是<b>助手</b>——一个本地的 copilot，读这份记忆、聊当前项目、在 MCP 上执行命令。<br/>
   共享同一份本地记忆、同一套协议，<b>审批在这里发生，不在那里</b>。
 </p>
 
@@ -42,11 +42,11 @@
 
 ---
 
-## 🎯 为什么是 Repotory？
+## 🎯 为什么是 Cinder？
 
-AI 编程正在重构开发模式，但目前的 Agent 普遍存在**会话孤岛**与**记忆断层**。Repotory 在本地提供了最关键的记忆拼图：
+AI 编程正在重构开发模式，但目前的 Agent 普遍存在**会话孤岛**与**记忆断层**。Cinder 在本地提供了最关键的记忆拼图：
 
-| 现状痛点 | Repotory 的解法 |
+| 现状痛点 | Cinder 的解法 |
 | :--- | :--- |
 | 🔄 **Agent 失忆与孤岛**：Claude Code 写的交接，Cursor 明天读不到。知识被锁死在各工具私有格式里。 | **跨 Agent 共享记忆**：统一本地 SQLite 数据库，Claude Code、Cursor、Windsurf 通过标准 MCP 协议读写同一份记忆。 |
 | 💸 **Token 浪费与上下文挤爆**：每次开启新会话都要消耗几千 Token 重复灌输项目背景、架构设计和历史踩坑。 | **一键注入上下文 (`repotory_context`)**：单次工具调用立即注入项目技术栈、避坑指南、当前待办与最新交接。 |
@@ -57,12 +57,12 @@ AI 编程正在重构开发模式，但目前的 Agent 普遍存在**会话孤�
 
 ## 📦 产物生态全景
 
-Repotory 不仅是一个应用，而是一套模块化的本地项目知识套件。根据你的工作流自由组合：
+Cinder 不仅是一个应用，而是一套模块化的本地项目知识套件。根据你的工作流自由组合：
 
 | 产物 | 形态 | 核心作用 & 适用场景 | 快速接入 |
 | :--- | :--- | :--- | :--- |
 | **`repotory-mcp`** | 🤖 独立 MCP 服务器 | **Agent 记忆引擎核心**。通过 stdio 运行。为 Claude Code、Cursor、Windsurf 等提供标准工具接口，**无需打开桌面应用即可独立使用**。 | `node scripts/repotory-init/index.mjs` |
-| **Repotory 桌面端** | 🖥️ 桌面应用 | **可视化工作台与审核中心**。单文件原生跨平台桌面应用（Wails v2 + React 19），提供笔记浏览、待办看板、LLM Wiki 审核队列与仓库指标。 | [Releases](https://github.com/sky-jiangcheng/repotory/releases) · `brew` · `scoop` |
+| **Cinder Desktop** | 🖥️ 桌面应用 | **可视化工作台与审核中心**。单文件原生跨平台桌面应用（Wails v2 + React 19），提供笔记浏览、待办看板、LLM Wiki 审核队列与仓库指标。 | [Releases](https://github.com/sky-jiangcheng/repotory/releases) · `brew` · `scoop` |
 | **IDE 扩展插件** | 🧩 VS Code & JetBrains | **编辑器内就地检索**。在 VS Code、Cursor、Windsurf 侧边栏及 IntelliJ 系列 IDE 工具窗中直接搜索笔记、待办与交接记录。 | [VS Code 商店](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) · JetBrains 插件 |
 | **CLI 自动化与守护** | ⚡ 终端工具与服务 | **自动交接钩子与无头服务**。包含 `repotory-capture`（会话结束自动交接 Hook）、`repotory-server`（无头 HTTP API）、向量配置与数据审计工具。 | 随安装脚本自动下发 |
 
@@ -161,7 +161,7 @@ flowchart TB
 
 适用于 IntelliJ 全家桶（IDEA, PyCharm, GoLand, WebStorm 等）。提供专用的工具窗口进行笔记与待办检索。
 
-- 在 IDE 的 **Settings | Plugins | Marketplace** 搜索 **Repotory**，或从 [Releases](https://github.com/sky-jiangcheng/repotory/releases) 下载 zip 包离线安装。
+- 在 IDE 的 **Settings | Plugins | Marketplace** 搜索 **Cinder**，或从 [Releases](https://github.com/sky-jiangcheng/repotory/releases) 下载 zip 包离线安装。
 - 源码构建：
   ```bash
   cd ide/jetbrains && gradle buildPlugin
@@ -215,7 +215,7 @@ web/src/           # React 19 + TypeScript：api · hooks · pages · components
 
 | 分层 | 取值 | 用途 |
 | :--- | :--- | :--- |
-| **品牌（展示）** | `Repotory` | `productName`、应用内 Logo、文档与 UI 文案 |
+| **品牌（展示）** | `Cinder` | `productName`、应用内 Logo、文档与 UI 文案 |
 | **仓库与包标识** | `repotory` | GitHub 仓库名、Go module 名、npm 包名、文档站 URL |
 | **冻结标识** | `repotory` | 二进制名、用户数据目录、MCP 服务器 `repotory-mcp`、工具前缀 `repotory_*` |
 
@@ -260,5 +260,5 @@ node scripts/check-i18n-keys.mjs
 
 ## 📄 开源许可证
 
-[MIT](LICENSE) © 2026-present [sky-jiangcheng](https://github.com/sky-jiangcheng) 与 Repotory 贡献者。
-Repotory 在 MIT 许可证下发布，完全免费供个人与商业使用。`Repotory` 名称与 Logo 属于项目保留商标。
+[MIT](LICENSE) © 2026-present [sky-jiangcheng](https://github.com/sky-jiangcheng) 与 Cinder 贡献者。
+Cinder 在 MIT 许可证下发布，完全免费供个人与商业使用。`Cinder` 名称与 Logo 属于项目保留商标。

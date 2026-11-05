@@ -14,7 +14,7 @@ import (
 // Periodic knowledge sync: a background ticker that re-runs the enabled
 // knowledge importers on a schedule, alongside the manual per-source triggers
 // and the one-shot startup auto-import. It exists because an agent's memory
-// files accumulate while Repotory is closed — without it, notes silently age
+// files accumulate while Cinder is closed — without it, notes silently age
 // until the user clicks each source again.
 //
 // The design keeps three promises:

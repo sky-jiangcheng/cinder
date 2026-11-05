@@ -1,4 +1,4 @@
-# Repotory MCP 工具完整参考（通道 A）
+# Cinder MCP 工具完整参考（通道 A）
 
 18 个工具的精确参数签名（取自 `repotory-mcp` 的 `tools/list` 实际响应，非手写推测）。
 

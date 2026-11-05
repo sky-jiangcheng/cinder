@@ -1,9 +1,12 @@
-# Repotory install script for Windows
+# Cinder Desktop install script for Windows
 # Installs both the desktop app (repotory.exe) and the MCP server (repotory-mcp.exe).
 # Run in PowerShell: iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/repotory/master/scripts/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
+# The install FOLDER keeps the old word on purpose: it holds the frozen
+# binaries (repotory.exe / repotory-mcp.exe — ADR-0049 decision 3), and
+# renaming it would orphan every existing Windows install for no gain.
 $InstallDir = "$env:LOCALAPPDATA\Repotory"
 $BinaryName = "repotory.exe"
 $McpBinaryName = "repotory-mcp.exe"
@@ -55,7 +58,7 @@ function Test-AssetSha256 {
     Write-Host "Verified $AssetName (sha256)."
 }
 
-Write-Host "Downloading Repotory for Windows..."
+Write-Host "Downloading Cinder Desktop for Windows..."
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
@@ -76,7 +79,7 @@ try {
 
 # MCP server: separate release asset, so AI clients can run it without the desktop
 # app. Non-fatal: older releases may not have the asset yet.
-Write-Host "Downloading Repotory MCP server for Windows..."
+Write-Host "Downloading Cinder MCP server for Windows..."
 $McpZip = "$env:TEMP\repotory-mcp-$Target.zip"
 $McpDownloaded = $false
 try {
@@ -94,7 +97,7 @@ if ($McpDownloaded) {
     try {
         Expand-Archive -Path $McpZip -DestinationPath $InstallDir -Force
         if (Test-Path "$InstallDir\$McpBinaryName") {
-            Write-Host "Repotory MCP server installed to $InstallDir\$McpBinaryName"
+            Write-Host "Cinder MCP server installed to $InstallDir\$McpBinaryName"
         } else {
             Write-Warning "archive did not contain $McpBinaryName"
         }
@@ -113,7 +116,7 @@ if ($UserPath -notlike "*$InstallDir*") {
 }
 
 Write-Host ""
-Write-Host "Repotory installed to $InstallDir"
+Write-Host "Cinder Desktop installed to $InstallDir"
 Write-Host "Run 'repotory' in a new terminal to start!"
 Write-Host ""
 Write-Host "You can also create a desktop shortcut to: $InstallDir\$BinaryName"

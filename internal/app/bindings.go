@@ -402,7 +402,7 @@ func (a *App) CheckBackupCopyTarget(path string) (service.BackupCopyTargetReport
 // later must appear without a frontend release.
 func (a *App) ListAgentClients() []string { return service.AgentClientNames() }
 
-// SetupAgentClients registers Repotory's MCP server with the AI clients the
+// SetupAgentClients registers Cinder's MCP server with the AI clients the
 // user picked, for one project, and optionally installs the Claude Code
 // SessionEnd hook that writes the handoff note when a session ends and writes
 // the managed repotory_* instruction block into the project's AGENTS.md /
@@ -902,7 +902,7 @@ func (a *App) RevealDownloadedUpdate(path string) error {
 
 // EjectInstallerVolume unmounts the installer disk image on macOS.
 //
-// A mounted DMG shows up as a second "Repotory" in the Finder sidebar, and
+// A mounted DMG shows up as a second "Cinder" in the Finder sidebar, and
 // closing its window does not unmount it. The app ejects it automatically
 // once it detects the install; this is the user's manual way to do the same
 // thing. It reports whether a volume was actually ejected.

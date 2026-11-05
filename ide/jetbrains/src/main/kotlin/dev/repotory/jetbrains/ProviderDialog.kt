@@ -51,7 +51,7 @@ class ProviderDialog(project: Project?, private val session: ChatSession) : Dial
     private val saveButton = JButton("Save")
 
     init {
-        title = "Repotory: AI provider"
+        title = "Cinder: AI provider"
         // The sheet saves on its own button, so the dialog's own button only
         // closes it. Calling it "Save" would promise a write that the button
         // does not do.
@@ -66,7 +66,7 @@ class ProviderDialog(project: Project?, private val session: ChatSession) : Dial
 
         root.add(
             JBLabel(
-                "Repotory keeps these in its local service. The desktop app and this panel " +
+                "Cinder keeps these in its local service. The desktop app and this panel " +
                     "use the same ones.",
             ),
             BorderLayout.NORTH,

@@ -144,7 +144,7 @@ func (i *Importer) importMemories() ([]plugin.ImportDoc, error) {
 			continue
 		}
 		name := strings.TrimSuffix(e.Name(), ".md")
-		content := "> 由 Repotory 从 Hermes 全局记忆导入（source: hermes，allowlist: memories/*.md）\n\n" + body
+		content := "> 由 Cinder 从 Hermes 全局记忆导入（source: hermes，allowlist: memories/*.md）\n\n" + body
 		content = memsrc.ClipToBytes(content, db.MaxNoteContentLen)
 		docs = append(docs, plugin.ImportDoc{
 			ProjectID: pid,

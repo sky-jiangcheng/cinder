@@ -1001,7 +1001,7 @@ export default function HomeKnowledgeAssistant({
                           ? 'You'
                           : msg.kind === 'search'
                             ? t('search:results', { defaultValue: '搜索结果' })
-                            : 'Repotory AI'}
+                            : 'Cinder AI'}
                       </span>
                       <span>·</span>
                       <span>{msg.timestamp}</span>

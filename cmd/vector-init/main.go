@@ -1,4 +1,4 @@
-// Command vector-init is Repotory's vector-store onboarding guide (ADR-0013).
+// Command vector-init is Cinder's vector-store onboarding guide (ADR-0013).
 // It defaults to the LOCAL sqlite-vec store (already the app's storage layer),
 // verifies it works with a health check, records the chosen embedding provider,
 // and then points the user at Settings → Plugins to review / enable / rebuild.

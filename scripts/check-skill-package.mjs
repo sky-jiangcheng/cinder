@@ -6,7 +6,7 @@
 //
 //   1. the frontmatter (name / description) going malformed or over the
 //      loader's length limit — the skill then stops being discovered, and
-//      the only symptom is that an agent never mentions Repotory;
+//      the only symptom is that an agent never mentions Cinder;
 //   2. the query script referencing a schema column that no longer exists
 //      (the "kind" vs "category" rename already happened once) — the script
 //      then dies at query time, on a machine where nobody is watching;

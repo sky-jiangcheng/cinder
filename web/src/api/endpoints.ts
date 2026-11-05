@@ -978,7 +978,7 @@ export function revealDownloadedUpdate(path: string): Promise<void> {
 /**
  * Unmount the installer disk image on macOS.
  *
- * A mounted DMG shows up as a second "Repotory" in the Finder sidebar, and
+ * A mounted DMG shows up as a second "Cinder" in the Finder sidebar, and
  * closing its window does not unmount it. The app ejects it automatically once
  * it detects the install; this is the manual way to do the same thing.
  *

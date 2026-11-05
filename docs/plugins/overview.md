@@ -7,7 +7,7 @@ order: 8
 
 > **说明**：知识源导入不对用户脚本开放——进程内脚本插件运行时（yaegi，[ADR-0002](../adr/0002-c-end-repositioning.md)）已随 C11 移除，源清单全部内置、只随版本增长。
 
-Repotory 向知识库幂等导入文档。8 个源全部**内置**，都是普通的 Go 实现（`plugin.KnowledgeImporter`）；进程内脚本插件运行时（yaegi）已随 C11 移除，不存在用户自定义导入源的入口。
+Cinder 向知识库幂等导入文档。8 个源全部**内置**，都是普通的 Go 实现（`plugin.KnowledgeImporter`）；进程内脚本插件运行时（yaegi）已随 C11 移除，不存在用户自定义导入源的入口。
 
 ```mermaid
 flowchart TB

@@ -1,4 +1,4 @@
-// Package domain defines the plain data types shared across Repotory layers:
+// Package domain defines the plain data types shared across Cinder layers:
 // persistence (internal/db), business logic (internal/service) and the
 // bindings exposed to the frontend, CLI and MCP server. The types carry no
 // behaviour and no storage semantics so every layer can depend on them

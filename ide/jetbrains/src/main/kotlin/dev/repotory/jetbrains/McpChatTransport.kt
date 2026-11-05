@@ -1,4 +1,4 @@
-// Repotory for JetBrains — the chat console's transport.
+// Cinder for JetBrains — the chat console's transport.
 //
 // The port the conversation model talks to (ChatSession.kt). It is the ONE
 // place where the two channels meet:

@@ -38,7 +38,7 @@ class DiagnosticsDialog(private val project: Project?) : DialogWrapper(project) 
     private val recheckButton = JButton("Re-check")
 
     init {
-        title = "Repotory: environment"
+        title = "Cinder: environment"
         setOKButtonText("Close")
         init()
         check()

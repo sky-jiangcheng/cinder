@@ -53,8 +53,8 @@ func (s *Service) GenerateLLMsTxt() string {
 	}
 
 	var b strings.Builder
-	b.WriteString("# Repotory Knowledge Base\n\n")
-	b.WriteString("This file is an AI-readable summary of the local Repotory knowledge base. ")
+	b.WriteString("# Cinder Knowledge Base\n\n")
+	b.WriteString("This file is an AI-readable summary of the local Cinder knowledge base. ")
 	b.WriteString("It catalogs discovered projects, their inferred technology stacks, README excerpts, and notable knowledge notes.\n\n")
 
 	// Project catalog
