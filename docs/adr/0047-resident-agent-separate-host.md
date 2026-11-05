@@ -364,6 +364,17 @@ VSIX + JetBrains 插件。拆仓之后 **schema 迁移要跨仓发布**（桌面
 | Dock 菜单「隐藏」→ 再点 Dock 图标 | **主窗口回来**（同一区域截图前后对比：隐藏后是后面的窗口，点击后是 App 界面） |
 | `osascript` 的 `quit` | 进程退出，但 AppleScript 侧报 **-128「用户已取消」**——那是 Wails 的 `applicationShouldTerminate:` 返回 `NSTerminateCancel` 的回声，**不是故障**（进程照样退出） |
 
+**已在这台机器上换掉**：装着的那个 v2.29.0 bundle 已换成 **v2.31.1**——取的是 release 下的
+`repotory-darwin-arm64.dmg`，**`SHA256SUMS` 逐字节对上**（`c788c6ff…53c`）。DMG 里的 bundle
+叫 `Cinder.app`（**显示层改名的结果**），而**标识层一个字没动**：bundle 内的可执行文件仍叫
+`repotory`，数据目录仍叫 `repotory`。**数据目录原样在位**——
+`~/Library/Application Support/repotory` 下面**没有长出 `cinder` 目录**，
+`repotory.db` 照常打开、内容照常读出（界面上 MiddlePlatform / CBiPay / ADR-0021 那几条都在），
+**schema 没变、契约版本没变**（`CoreVersion` 保持 `1.0.0`）。
+**那三条路径在换上去的真机 bundle 上又验了一遍**（不是只在测试 bundle 上验）：
+红按钮 → 进程退出、Dock 右键「退出」→ 进程退出、Dock「隐藏」后再点 Dock 图标 → 主窗口回来。
+旧 bundle 没有删，挪到 `/tmp/Repotory.app-v2.29.0.bak` 备查。
+
 **新增守门**：`main_test.go` 的 `TestDesktopAppMustNotBecomeResident`——
 用 `go/parser` 解析 `main.go`（不是 grep 文本：注释掉的那行不该决定门红不红），
 断言 `options.App` 上**不得出现** `OnBeforeClose` / `SingleInstanceLock`、

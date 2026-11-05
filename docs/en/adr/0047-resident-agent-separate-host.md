@@ -433,6 +433,19 @@ icon, clicking items in the Dock's right-click menu):
 | Dock menu "Hide" → click the Dock icon | **the main window comes back** (same screen region captured before and after: after hiding it shows the window behind, after the click it shows the app UI) |
 | `osascript`'s `quit` | the process exits, but AppleScript reports **-128 "user cancelled"** — that is the echo of Wails' `applicationShouldTerminate:` returning `NSTerminateCancel`, **not a failure** (the process exits anyway) |
 
+**Swapped in on this machine**: the v2.29.0 bundle that was installed has been replaced with
+**v2.31.1** — taken from the release's `repotory-darwin-arm64.dmg`, **byte-for-byte matching
+`SHA256SUMS`** (`c788c6ff…53c`). The bundle inside the DMG is called `Cinder.app` (the **display-layer
+rename**), while the **identifier layer is untouched**: the executable inside the bundle is still called
+`repotory`, and so is the data directory. **The data directory stayed exactly where it was** —
+**no `cinder` directory grew** under `~/Library/Application Support/repotory`, `repotory.db` opens
+normally and its content reads back normally (MiddlePlatform / CBiPay / ADR-0021 are all on screen),
+**the schema did not change and neither did the contract version** (`CoreVersion` stays `1.0.0`).
+**Those three paths were exercised once more on the bundle actually installed** (not only on the test
+bundle): red button → process exits, Dock right-click "Quit" → process exits, Dock "Hide" then click the
+Dock icon → the main window comes back. The old bundle was not deleted — it was moved to
+`/tmp/Repotory.app-v2.29.0.bak` in case it is needed.
+
 **New guard**: `TestDesktopAppMustNotBecomeResident` in `main_test.go` — it parses `main.go` with
 `go/parser` (not a text grep: a commented-out line must not decide whether the gate is red) and asserts
 that `options.App` carries **neither** `OnBeforeClose` **nor** `SingleInstanceLock`, that `mac.Options`
