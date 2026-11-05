@@ -326,6 +326,66 @@ VSIX + JetBrains 插件。拆仓之后 **schema 迁移要跨仓发布**（桌面
 
 **原文保留作历史。**
 
+## 补注四（2026-11-05）：那个故障是旧版的，当前版实测三条 Dock 路径全通；并加一道守门
+
+**起因**：用户报「之前的版本 Repotory 在 dock 栏无法退出也无法显示主窗口」。
+这两个症状正是 ADR-0045 常驻版的两个特征，所以第一件事是查**装在机器上的到底是哪个版本**。
+
+**查实**：`/Applications/Repotory.app` 是 **v2.29.0**（2026-11-04 发布），
+二进制里留着 `com.repotory.desktop` 这个字符串——那是 ADR-0045 决策① 里
+`SingleInstanceLock` 的 `UniqueId`。**所以用户手上跑的就是常驻版**。
+而撤掉常驻的那次提交（`5f205b7`，本篇决策①）**是在 v2.30.0 才进的 release**：
+`git merge-base --is-ancestor 5f205b7 v2.30.0` 为真，**v2.29.0 为假**。
+**结论不是「代码没修」，是「装着的还是修之前的那一版」。**
+
+**旧版为什么恰好是这两个症状**（机制已逐行核实，不是推测）：
+
+- **「无法退出」**：`OnBeforeClose` 返回 `true` 时，Wails 的 `frontend.Quit()` 走的是
+  `if !f.frontendOptions.OnBeforeClose(f.ctx) { f.mainWindow.Quit() }`——
+  返回 true 就**永远不退出**。而 Dock 的「退出」与 Cmd+Q 走的是
+  `applicationShouldTerminate:` → `processMessage("Q")` → 同一个 `frontend.Quit()`，
+  **同一条拦截**。常驻版还自建了一个「Quit Repotory」菜单项，但它绕不开这道拦截吗？绕得开——
+  它先置 `quitting` 再调 `runtime.Quit`，`OnBeforeClose` 见到 `quitting` 才放行。
+  **也就是说旧版其实有得退，只是入口藏在一个自建菜单项里**；
+  用户在 Dock 上右键「退出」走的是系统那条路，被拦了。
+- **「无法显示主窗口」**：关闭时旧版调 `wailsruntime.WindowHide(ctx)`，
+  Wails 的隐藏把窗口 `orderOut:`——**摘出屏幕列表**，不是「藏起来还在」。
+  点 Dock 图标派发的是 reopen 事件，而 **Wails v2 没有 `applicationShouldHandleReopen`**
+  （ADR-0046 的核实结论，至今成立）→ **无人接收**。
+
+**当前版实测（三条路径全通，实测而非推演）**：用当前代码构建的桌面 App 打成 `.app` bundle，
+以 `LSEnvironment` 隔离 HOME 跑起来，然后用**用户真实手势**（System Events 点 Dock 图标、
+点 Dock 右键菜单项）逐条验：
+
+| 手势 | 结果 |
+|---|---|
+| 点窗口左上角红按钮 | **进程退出**（`pgrep` 查不到） |
+| Dock 右键菜单 →「退出」 | **进程退出** |
+| Dock 菜单「隐藏」→ 再点 Dock 图标 | **主窗口回来**（同一区域截图前后对比：隐藏后是后面的窗口，点击后是 App 界面） |
+| `osascript` 的 `quit` | 进程退出，但 AppleScript 侧报 **-128「用户已取消」**——那是 Wails 的 `applicationShouldTerminate:` 返回 `NSTerminateCancel` 的回声，**不是故障**（进程照样退出） |
+
+**新增守门**：`main_test.go` 的 `TestDesktopAppMustNotBecomeResident`——
+用 `go/parser` 解析 `main.go`（不是 grep 文本：注释掉的那行不该决定门红不红），
+断言 `options.App` 上**不得出现** `OnBeforeClose` / `SingleInstanceLock`、
+`mac.Options` 上**不得出现** `HideWindowOnClose`、
+且**不得调用** `runtime.WindowHide` / `runtime.WindowMinimise`。
+**负例已验**：三个字段分别塞回去，测试各红一次，恢复后绿。
+另带一条**反向对照**：`options.App` 字面量找不到就红——
+防止这道门因为「什么都没看」而假绿。
+
+**为什么这道门值得加**：常驻那条路**看起来像个合理功能**（「用户去浏览器时机器人还留着」），
+而它产生的后果（不能退、不能唤回）恰恰是这次用户报的那个故障。
+**决策① 当时靠的是一次人工复盘，没有任何东西拦着它被「顺手加回来」。**
+
+**明确不做**：**不把 ADR-0046 的 reopen 钩子加回来**。决策⑤ 的理由仍然成立——
+桌面 App 不再有「窗口被隐藏但进程还活着」的状态，reopen 钩子**没有消费者**；
+真要加，等于把一段「已验证正确但没有消费者」的 cgo + Objective-C 注入代码请回来。
+**（真正需要常驻唤回的是独立仓那个 copilot，而它走 Tauri 托盘，不走 Wails 的 `orderOut:` 那条路。）**
+
+**处置**：用户机器上的 `Repotory.app` 升级到 v2.31.1。
+**数据目录一个字不动**（标识层冻结，`~/Library/Application Support/repotory` 原样保留），
+**schema 不变、契约版本不变**。
+
 ## 后续路线
 
 1. 独立仓改名 + 定位重写 + 门禁 + 图标（让 copilot 先成为一个「能构建、能自证」的仓）。

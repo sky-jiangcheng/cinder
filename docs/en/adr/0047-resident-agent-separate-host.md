@@ -394,6 +394,68 @@ whether the tool surface changed.
 
 **The original text is kept as history.**
 
+## Addendum IV (2026-11-05): the failure was the old build — all three Dock paths verified working now, plus a guard
+
+**Trigger**: the user reported that "the previous Repotory could not be quit from the Dock and could not
+show the main window". Those two symptoms are exactly the two signatures of the ADR-0045 resident build,
+so the first thing to check was **which version is actually installed on the machine**.
+
+**What was found**: `/Applications/Repotory.app` is **v2.29.0** (released 2026-11-04), and its binary
+still carries the string `com.repotory.desktop` — the `UniqueId` of ADR-0045 decision 1's
+`SingleInstanceLock`. **So the machine was running the resident build.** The commit that removed the
+residency (`5f205b7`, decision 1 of this ADR) only reached a release in **v2.30.0**:
+`git merge-base --is-ancestor 5f205b7 v2.30.0` is true, **and false for v2.29.0**.
+**The conclusion was not "the code was never fixed" — it is "the installed copy predates the fix".**
+
+**Why the old build produced exactly those two symptoms** (mechanism verified line by line, not guessed):
+
+- **"Cannot be quit"**: when `OnBeforeClose` returns `true`, Wails' `frontend.Quit()` takes the branch
+  `if !f.frontendOptions.OnBeforeClose(f.ctx) { f.mainWindow.Quit() }` — returning true means
+  **it never quits**. The Dock's "Quit" and Cmd+Q both arrive through
+  `applicationShouldTerminate:` → `processMessage("Q")` → that same `frontend.Quit()`,
+  **so the same interception covers them**. The resident build did have a way out — its own
+  "Quit Repotory" menu item, which sets `quitting` first and is therefore let through —
+  but the route the user tried (Dock → Quit) is the system one, and that one was blocked.
+- **"Cannot show the main window"**: closing called `wailsruntime.WindowHide(ctx)`, and Wails' hide
+  does `orderOut:` — the window is **removed from the screen list**, not merely covered.
+  Clicking the Dock icon dispatches a reopen event, and **Wails v2 has no
+  `applicationShouldHandleReopen`** (the ADR-0046 finding, still true) → **nobody receives it**.
+
+**Verified on the current build (all three paths pass — measured, not reasoned about)**: the desktop app
+was built from the current code, packaged as an `.app` bundle, run with an isolated `HOME` (via
+`LSEnvironment`), and then exercised with the **user's real gestures** (System Events clicking the Dock
+icon, clicking items in the Dock's right-click menu):
+
+| Gesture | Result |
+|---|---|
+| Click the window's red close button | **process exits** (`pgrep` finds nothing) |
+| Dock right-click menu → "Quit" | **process exits** |
+| Dock menu "Hide" → click the Dock icon | **the main window comes back** (same screen region captured before and after: after hiding it shows the window behind, after the click it shows the app UI) |
+| `osascript`'s `quit` | the process exits, but AppleScript reports **-128 "user cancelled"** — that is the echo of Wails' `applicationShouldTerminate:` returning `NSTerminateCancel`, **not a failure** (the process exits anyway) |
+
+**New guard**: `TestDesktopAppMustNotBecomeResident` in `main_test.go` — it parses `main.go` with
+`go/parser` (not a text grep: a commented-out line must not decide whether the gate is red) and asserts
+that `options.App` carries **neither** `OnBeforeClose` **nor** `SingleInstanceLock`, that `mac.Options`
+carries **no** `HideWindowOnClose`, and that **no** `runtime.WindowHide` / `runtime.WindowMinimise` call
+is made. **Negative cases verified**: putting each of the three fields back turns the test red once,
+and restoring it turns it green again. A **reverse control** comes with it: if the `options.App` literal
+cannot be found the test goes red, so the gate cannot pass by looking at nothing.
+
+**Why the guard is worth adding**: the residency route **looks like a reasonable feature**
+("keep the bot warm while the user is in the browser"), and its consequence (cannot quit, cannot be
+brought back) is precisely the failure the user reported. **Decision 1 relied on one manual review
+session; nothing stopped it from being "helpfully added back".**
+
+**Explicitly not done**: **the ADR-0046 reopen hook is not coming back**. Decision 5's reasoning still
+holds — the desktop app no longer has a "window hidden while the process lives" state, so the reopen
+hook has **no consumer**; adding it would mean inviting back cgo + Objective-C injection code that is
+"verified correct but unused". **(The thing that genuinely needs residency-based wake-up is the separate
+repo's copilot, and that one uses Tauri's tray, not Wails' `orderOut:` route.)**
+
+**Disposal**: `Repotory.app` on the user's machine is upgraded to v2.31.1. **The data directory is not
+touched** (the identifier layer is frozen — `~/Library/Application Support/repotory` stays as it is),
+**the schema does not change, and the contract version does not change**.
+
 ## Roadmap
 
 1. Rename the separate repo + rewrite its positioning + add gates + icons (make the copilot a repo that
