@@ -16,12 +16,12 @@ cask "repotory-mcp" do
 
   on_arm do
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-mcp-darwin-arm64.tar.gz"
-    sha256 "25ab8d91ec0da8265e95e5fca7783f671b3547d780ead6ec4d89e6ae3d743f94"
+    sha256 "3355a40b7a9abcda8ae66f03455153d7602cad9a83c1aabe00b1a801f235b34a"
   end
 
   on_intel do
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-mcp-darwin-amd64.tar.gz"
-    sha256 "f888a43db508ee78d592f5047ed5cbecbd0e721c89153862249016e067c530d1"
+    sha256 "e014dd4a132385cad8c44917ae34b160f83e831000fb99457cf2c6c995a7fe89"
   end
 
   # The tarball stages a single bare `repotory-mcp` at its root; `binary` links

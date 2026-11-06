@@ -4,7 +4,7 @@
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
   "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.32.1/repotory-windows-amd64.zip",
-  "hash": "sha256:1fd60072fb421a2a01e044c4fcc3894838340cda732caf6a4712122ddb95695f",
+  "hash": "sha256:0527bda8fd589cd145d6abe7c677a4ab5e378671428abf497a9ec352dd768899",
   "bin": "repotory.exe",
   "checkver": {
     "url": "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest",
