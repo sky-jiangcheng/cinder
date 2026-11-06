@@ -709,24 +709,32 @@ func (s *Service) AskAIWithEvidence(projectID int64, question string, budget Evi
 	ev := s.GatherEvidence(projectID, question, budget)
 	messages := s.evidenceMessages(projectID, question, ev.Render())
 
-	result, err := s.chatWithAudit(cfg, messages, aiAskTimeout)
+	reply, finishReason, err := s.askWithTools(cfg, messages, s.toolRegistry.definitions(), aiAskTimeout)
 	if err != nil {
 		return nil, err
 	}
 	return &EvidenceAnswer{
-		Reply:     result.Reply,
+		Reply:     reply,
 		Evidence:  ev,
-		Truncated: truncatedHint(result.FinishReason) != "",
+		Truncated: truncatedHint(string(finishReason)) != "",
 	}, nil
 }
 
 // AskAIWithEvidenceStream is the streaming version of AskAIWithEvidence:
 // identical evidence retrieval and prompt assembly (via evidenceMessages), but
 // the completion is requested with stream:true and every content delta is
-// delivered to onDelta as it decodes, so the caller can render the reply as it
-// forms instead of after a multi-minute wait. It still returns the fully
-// received answer, so callers that want to store it keep one code path.
-func (s *Service) AskAIWithEvidenceStream(projectID int64, question string, budget EvidenceBudget, onDelta func(string)) (*EvidenceAnswer, error) {
+// delivered to onDelta as it decodes. When the model calls tools (Function
+// Calling), each tool call start and result is delivered to onToolCall /
+// onToolResult so the UI can render "querying yesterday's code volume" etc.
+// It still returns the fully received answer.
+func (s *Service) AskAIWithEvidenceStream(
+	projectID int64,
+	question string,
+	budget EvidenceBudget,
+	onDelta func(string),
+	onToolCall func(id, name string),
+	onToolResult func(id string, result any),
+) (*EvidenceAnswer, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
@@ -738,7 +746,7 @@ func (s *Service) AskAIWithEvidenceStream(projectID int64, question string, budg
 	ev := s.GatherEvidence(projectID, question, budget)
 	messages := s.evidenceMessages(projectID, question, ev.Render())
 
-	reply, reason, err := s.streamChatWithAudit(cfg, messages, aiAskTimeout, onDelta)
+	reply, reason, err := s.streamAskWithTools(cfg, messages, s.toolRegistry.definitions(), onDelta, onToolCall, onToolResult, aiAskTimeout)
 	if err != nil {
 		return nil, err
 	}

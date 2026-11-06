@@ -6,6 +6,7 @@ import { call, isDesktopRuntime } from './transport'
 import type {
   AICallLogEntry,
   AIAuditStatus,
+  QueryProjectStatsBatchResult,
   AgentSetupReport,
   AppConfig,
   BackupCopyTargetReport,
@@ -118,6 +119,14 @@ export function getProjectStats(id: number, date?: string): Promise<DailyStat[]>
     method: 'GetProjectStats',
     args: [id, date ?? ''],
     path: `/projects/${id}/stats${params}`,
+  }).then(d => d ?? [])
+}
+
+export function queryProjectStatsBatch(projectIDs: number[], date?: string): Promise<QueryProjectStatsBatchResult[]> {
+  return call<QueryProjectStatsBatchResult[]>({
+    method: 'QueryProjectStatsBatch',
+    args: [projectIDs, date ?? ''],
+    path: '/ai/project-stats-batch?' + new URLSearchParams({ date: date ?? '' }),
   }).then(d => d ?? [])
 }
 

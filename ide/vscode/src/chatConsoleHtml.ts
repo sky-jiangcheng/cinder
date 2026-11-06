@@ -13,11 +13,8 @@ export const VISIBLE_TURNS = 2;
 // `localResourceRoots`, so an external file 404s — and a 404 icon shows up in
 // VS Code as an empty box, which is harder to diagnose than a missing button.
 // All four draw with `currentColor`, so they follow the theme by themselves.
-const ICON_SEARCH = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 
-const ICON_SETTINGS = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.6v1.9M8 12.5v1.9M1.6 8h1.9M12.5 8h1.9M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
 
-const ICON_DIAGNOSE = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 4.5h12M2 8h12M2 11.5h12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="5.5" cy="4.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="10" cy="8" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="6.5" cy="11.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>`;
 
 const ICON_DESKTOP = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 13.5h5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
 
@@ -334,57 +331,6 @@ export function consoleHtml(nonce: string): string {
   }
   .pop-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.18)); }
   .pop-empty { padding: 8px 10px; font-size: 11px; color: var(--r-muted); }
-  /* ---------- the provider sheet (ADR-0044 decision 5) ---------- */
-  .sheet {
-    position: absolute; inset: 0; z-index: 10;
-    display: flex; align-items: flex-start; justify-content: center;
-    padding: 24px 12px; overflow-y: auto;
-    background: rgba(0,0,0,.32);
-  }
-  .sheet[hidden] { display: none; }
-  /* The inputs below set display: block, which would beat the UA's
-     display: none for [hidden] — the model picker would show up empty. */
-  .sheet [hidden] { display: none; }
-  .sheet-panel {
-    width: 100%; max-width: 360px; padding: 12px 14px 14px;
-    border: 1px solid var(--r-border); border-radius: 8px;
-    background: var(--vscode-editorWidget-background, var(--vscode-editor-background, #fff));
-  }
-  .sheet-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .sheet-head b { flex: 1; font-size: 13px; }
-  .sheet-head .x {
-    flex: none; background: none; border: none; cursor: pointer; color: inherit;
-    font-size: 14px; line-height: 1; padding: 0 2px; opacity: .7;
-  }
-  .sheet-head .x:hover { opacity: 1; }
-  .sheet-note { margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: var(--r-muted); }
-  .sheet label {
-    display: block; margin-bottom: 8px; font-size: 10px; font-weight: 600;
-    letter-spacing: .05em; text-transform: uppercase; color: var(--r-muted);
-  }
-  .sheet input[type=text], .sheet input[type=password], .sheet select {
-    display: block; width: 100%; margin-top: 3px; padding: 4px 7px; font-size: 12px;
-    font-family: var(--vscode-font-family, sans-serif);
-    color: var(--vscode-input-foreground, #333);
-    background: var(--vscode-input-background, #fff);
-    border: 1px solid var(--vscode-input-border, #ccc); border-radius: 4px; outline: none;
-  }
-  .sheet input:focus, .sheet select:focus { border-color: var(--r-accent); }
-  .sheet-row { display: flex; gap: 6px; margin-top: 4px; }
-  .sheet-row button {
-    flex: 1; padding: 5px 8px; font-size: 11px; cursor: pointer;
-    border: 1px solid var(--r-border); border-radius: 4px;
-    color: var(--vscode-foreground, #333);
-    background: var(--vscode-button-secondaryBackground, rgba(128,128,128,.15));
-  }
-  .sheet-row button.primary {
-    color: var(--vscode-button-foreground, #fff);
-    background: var(--vscode-button-background, #06c); border-color: transparent;
-  }
-  .sheet-row button:disabled { opacity: .55; cursor: default; }
-  .sheet-status { margin-top: 9px; font-size: 11px; line-height: 1.5; color: var(--r-muted); overflow-wrap: anywhere; }
-  .sheet-status.error { color: var(--vscode-errorForeground, #c33); }
-  .sheet-status.info { color: var(--vscode-foreground, #333); }
   .shared-topics { padding: 8px 12px; border-bottom: 1px solid var(--r-border); }
   .topic-row { display: flex; gap: 6px; align-items: center; min-width: 0; }
   .topic-row[hidden] { display: none; }
@@ -419,9 +365,6 @@ export function consoleHtml(nonce: string): string {
   <span class="mark">${MARK_SVG}</span>
   <span class="wordmark">Cinder</span>
   <span class="actions">
-    <button class="icon-btn" id="act-search" type="button" title="Search notes &amp; todos" aria-label="Search notes and todos">${ICON_SEARCH}</button>
-    <button class="icon-btn" id="act-settings" type="button" title="AI provider" aria-label="AI provider">${ICON_SETTINGS}</button>
-    <button class="icon-btn" id="act-diagnose" type="button" title="Setup &amp; diagnostics" aria-label="Setup and diagnostics">${ICON_DIAGNOSE}</button>
     <button class="icon-btn" id="act-desktop" type="button" title="Open the Cinder Desktop app" aria-label="Open the Cinder Desktop app">${ICON_DESKTOP}</button>
   </span>
 </header>
@@ -458,25 +401,6 @@ export function consoleHtml(nonce: string): string {
     <button class="chip" id="chip" type="button">All projects</button>
   </div>
 </footer>
-<div class="sheet" id="sheet" hidden>
-  <div class="sheet-panel">
-    <div class="sheet-head">
-      <b>AI provider</b>
-      <button class="x" id="sheet-x" type="button" title="Close" aria-label="Close">✕</button>
-    </div>
-    <p class="sheet-note">Cinder keeps these in its local service. The desktop app and this panel use the same ones.</p>
-    <label>Base URL<input id="ai-base" type="text" spellcheck="false" placeholder="http://127.0.0.1:1234/v1"></label>
-    <label>API key<input id="ai-key" type="password" spellcheck="false" placeholder="leave empty to keep the stored key"></label>
-    <label>Model<input id="ai-model" type="text" spellcheck="false" placeholder="the model id to ask"></label>
-    <select id="ai-picker" hidden></select>
-    <div class="sheet-row">
-      <button id="ai-models" type="button">List models</button>
-      <button id="ai-test" type="button">Test</button>
-      <button id="ai-save" class="primary" type="button">Save</button>
-    </div>
-    <div class="sheet-status" id="ai-status"></div>
-  </div>
-</div>
 <script nonce="${nonce}">
 const MARK_SVG = ${JSON.stringify(MARK_SVG)};
 const KINDS = ${JSON.stringify(KINDS)};
@@ -490,12 +414,6 @@ const sendBtn = document.getElementById('send');
 const chip = document.getElementById('chip');
 const modeBtns = Array.from(document.querySelectorAll('.mode-btn'));
 const popEl = document.getElementById('project-pop');
-const sheetEl = document.getElementById('sheet');
-const aiBase = document.getElementById('ai-base');
-const aiKey = document.getElementById('ai-key');
-const aiModel = document.getElementById('ai-model');
-const aiPicker = document.getElementById('ai-picker');
-const aiStatus = document.getElementById('ai-status');
 
 // ---- state -----------------------------------------------------------------
 // The host owns the DATA (the turns); this side owns the FOLD STATE. A
@@ -902,10 +820,6 @@ function renderCardActions(turn, card) {
   bar.appendChild(mk('Open in Cinder', '', () => {
     vscode.postMessage({ type: 'open', turnId: turn.id, card });
   }));
-  bar.appendChild(mk('Copy', 'secondary', () => {
-    const body = (card.detail && card.detail.body) || card.snippet || '';
-    vscode.postMessage({ type: 'copy', text: card.title + '\\n\\n' + body });
-  }));
   if (card.type === 'note') {
     bar.appendChild(mk('Edit', 'secondary', () => {
       vscode.postMessage({ type: 'edit', turnId: turn.id, cardType: card.type, cardId: card.id });
@@ -1048,51 +962,10 @@ chip.addEventListener('click', () => {
 sendBtn.addEventListener('click', submit);
 
 // ---- the panel's own action strip -----------------------------------------
-document.getElementById('act-search').addEventListener('click', () => {
-  setMode('notes');
-  vscode.postMessage({ type: 'mode', mode: 'notes' });
-  q.focus();
-});
-document.getElementById('act-settings').addEventListener('click', () => {
-  sheetEl.hidden = false;
-  aiStatus.textContent = '';
-  aiStatus.className = 'sheet-status';
-  vscode.postMessage({ type: 'openSettings' });
-});
-document.getElementById('act-diagnose').addEventListener('click', () => {
-  vscode.postMessage({ type: 'openDiagnostics' });
-});
 document.getElementById('act-desktop').addEventListener('click', () => {
   vscode.postMessage({ type: 'openDesktop' });
 });
 
-// ---- the provider sheet ----------------------------------------------------
-document.getElementById('sheet-x').addEventListener('click', () => {
-  sheetEl.hidden = true;
-  vscode.postMessage({ type: 'closeSettings' });
-});
-document.getElementById('ai-save').addEventListener('click', () => {
-  vscode.postMessage({
-    type: 'saveAISettings',
-    baseUrl: aiBase.value,
-    model: aiModel.value,
-    apiKey: aiKey.value,
-  });
-});
-document.getElementById('ai-test').addEventListener('click', () => {
-  vscode.postMessage({
-    type: 'testAIChat',
-    baseUrl: aiBase.value,
-    model: aiModel.value,
-    apiKey: aiKey.value,
-  });
-});
-document.getElementById('ai-models').addEventListener('click', () => {
-  vscode.postMessage({ type: 'listAIModels', baseUrl: aiBase.value, apiKey: aiKey.value });
-});
-aiPicker.addEventListener('change', () => {
-  if (aiPicker.value) aiModel.value = aiPicker.value;
-});
 
 document.getElementById('announce-x').addEventListener('click', () => {
   announcement = null;
@@ -1215,30 +1088,6 @@ window.addEventListener('message', (event) => {
     candidates = msg.candidates || [];
     renderScope();
     if (!popEl.hidden) renderPop();
-  } else if (msg.type === 'aiSettings') {
-    aiBase.value = msg.settings.baseUrl || '';
-    aiModel.value = msg.settings.model || '';
-    aiKey.value = '';
-    aiKey.placeholder = msg.settings.hasKey
-      ? 'a key is stored — leave empty to keep it'
-      : 'no key stored yet';
-  } else if (msg.type === 'aiModels') {
-    const models = msg.models || [];
-    aiPicker.innerHTML = '';
-    if (models.length) {
-      for (const m of models) {
-        const opt = document.createElement('option');
-        opt.value = m;
-        opt.textContent = m;
-        aiPicker.appendChild(opt);
-      }
-      aiPicker.hidden = false;
-    } else {
-      aiPicker.hidden = true;
-    }
-  } else if (msg.type === 'aiStatus') {
-    aiStatus.textContent = msg.message || '';
-    aiStatus.className = 'sheet-status ' + (msg.level || 'info');
   }
 });
 

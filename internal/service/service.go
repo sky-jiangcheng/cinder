@@ -121,6 +121,10 @@ type Service struct {
 	// update_download.go). It is state, not a dependency, so it lives here
 	// rather than being threaded through every constructor.
 	updates *updateDownloader
+
+	// toolRegistry holds the callable tools exposed to the AI conversation
+	// (Function Calling). Populated once at construction.
+	toolRegistry *toolRegistry
 }
 
 // New creates a Service with production dependencies: the local git CLI
@@ -135,6 +139,11 @@ func NewWithDeps(database *sql.DB, provider git.Provider, runtime *pluginruntime
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	s := &Service{db: database, git: provider, rt: runtime, guser: gitUser, bgCtx: bgCtx, bgCancel: bgCancel}
 	s.updates = newUpdateDownloader()
+	// Initialize the Function Calling tool registry and register the
+	// dashboard / code-stats tools so the AI conversation can query them.
+	s.toolRegistry = newToolRegistry()
+	s.registerDashboardTools(s.toolRegistry)
+	s.registerDashboardToolsExtra(s.toolRegistry)
 	// Every finished download is written to disk, so a bundle the user
 	// downloaded stays reachable after a restart (update_state.go). The hook
 	// itself is installed when a download STARTS: it carries the state file's

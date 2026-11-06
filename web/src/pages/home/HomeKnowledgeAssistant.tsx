@@ -504,6 +504,12 @@ export default function HomeKnowledgeAssistant({
     // Direct LLM mode when configured
     if (configured) {
       const cancel = askAIWithEvidenceStream(scopeProjectId, promptText, {
+      // Multi-round tool use: each round's preamble must not accumulate into
+      // the visible message — the final round's text is the answer.
+      onToolCall: () => {
+        setMessages(prev => prev.map(m => (m.id === assistantMsgId ? { ...m, content: '' } : m)))
+      },
+      onToolResult: (_id, _result) => {},
         onDelta: delta => {
           setMessages(prev =>
             prev.map(m =>

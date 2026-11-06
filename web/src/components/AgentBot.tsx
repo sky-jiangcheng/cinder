@@ -129,6 +129,7 @@ export default function AgentBot({ onToast }: Props) {
   const [answer, setAnswer] = useState('')
   const [asking, setAsking] = useState(false)
   const [evidence, setEvidence] = useState<Evidence | null>(null)
+  const [toolCalls, setToolCalls] = useState<Array<{ id: string; name: string; done: boolean }>>([])
   const [configured, setConfigured] = useState<boolean | null>(null)
   // Project names, fetched per project page: the name belongs to the
   // PROJECT, and a project page can change while the panel is open.
@@ -316,8 +317,19 @@ export default function AgentBot({ onToast }: Props) {
     setAsking(true)
     setAnswer('')
     setEvidence(null)
+    setToolCalls([])
     askAIWithEvidenceStream(context.projectId, q, {
       onDelta: delta => setAnswer(prev => prev + delta),
+      // A tool round's text is a preamble, not the answer: the visible text
+      // restarts so the final round reads alone — the same text `onDone`
+      // receives. The tool chips above the answer card make the wait legible.
+      onToolCall: (id, name) => {
+        setAnswer('')
+        setToolCalls(prev => [...prev, { id, name, done: false }])
+      },
+      onToolResult: id => {
+        setToolCalls(prev => prev.map(tc => (tc.id === id ? { ...tc, done: true } : tc)))
+      },
       onDone: res => {
         setEvidence(res.evidence)
         setAsking(false)
@@ -567,6 +579,25 @@ export default function AgentBot({ onToast }: Props) {
                   />
                 ))}
               </div>
+
+              {toolCalls.length > 0 && (
+                <ul className={s.toolCallList} aria-live="polite" aria-label={t('ai.toolCalling.title')}>
+                  {toolCalls.map(tc => {
+                    // Known tools get their display name from the locales; an
+                    // unknown one falls back to its raw function name.
+                    const key = `ai.tool.${tc.name}`
+                    const label = t(key)
+                    return (
+                      <li key={tc.id || tc.name} className={`${s.toolCallItem} ${tc.done ? s.toolCallDone : ''}`}>
+                        <span className={s.toolCallName}>{label === key ? tc.name : label}</span>
+                        {tc.done
+                          ? <span className={s.toolCallDoneLabel}>{t('ai.toolCalling.done')}</span>
+                          : <span className={s.toolCallPendingLabel}>{t('ai.toolCalling.calling')}</span>}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
 
               {answer.trim() && (
                 <div className={s.card}>

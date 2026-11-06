@@ -148,6 +148,8 @@ describe('askAIWithEvidenceStream (browser/standalone, SSE)', () => {
     await new Promise<void>((resolve) => {
       askAIWithEvidenceStream(9, 'how does this work?', {
         onDelta: d => deltas.push(d),
+        onToolCall: (_id, _name) => {},
+        onToolResult: (_id, _result) => {},
         onDone: ans => {
           done = { reply: ans.reply, truncated: ans.truncated ?? false }
           resolve()
@@ -183,6 +185,8 @@ describe('askAIWithEvidenceStream (browser/standalone, SSE)', () => {
     await new Promise<void>((resolve) => {
       askAIWithEvidenceStream(9, 'q', {
         onDelta: d => deltas.push(d),
+        onToolCall: (_id, _name) => {},
+        onToolResult: (_id, _result) => {},
         onDone: () => resolve(),
         onError: e => { errMsg = e.message; resolve() },
       })
@@ -196,6 +200,8 @@ describe('askAIWithEvidenceStream (browser/standalone, SSE)', () => {
     let called = false
     const cancel = askAIWithEvidenceStream(9, 'q', {
       onDelta: () => { called = true },
+      onToolCall: (_id, _name) => {},
+      onToolResult: (_id, _result) => {},
       onDone: () => { called = true },
       onError: () => { called = true },
     })
@@ -226,6 +232,8 @@ describe('askAIWithEvidenceStream (Wails)', () => {
     await new Promise<void>((resolve) => {
       askAIWithEvidenceStream(9, 'q', {
         onDelta: d => deltas.push(d),
+        onToolCall: (_id, _name) => {},
+        onToolResult: (_id, _result) => {},
         onDone: ans => { doneReply = ans.reply; resolve() },
         onError: e => { errs.push(e); resolve() },
       })
@@ -252,6 +260,8 @@ describe('askAIWithEvidenceStream (Wails)', () => {
     await new Promise<void>((resolve) => {
       askAIWithEvidenceStream(9, 'q', {
         onDelta: () => {},
+        onToolCall: (_id, _name) => {},
+        onToolResult: (_id, _result) => {},
         onDone: () => resolve(),
         onError: e => { errMsg = e.message; resolve() },
       })

@@ -171,7 +171,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private val threadPicker = JComboBox<ThreadChoice>()
     private val sharedControls = JPanel(BorderLayout(4, 4))
     private val sharedStatus = JLabel("Not synced")
-    private val renameThread = JButton("Rename")
     private var sharedSection = false
     private var updatingThreads = false
     private var displayedThread: String? = null
@@ -287,13 +286,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                 if (title.isNotEmpty()) background { shared.create(title) }
             }
         })
-        renameThread.addActionListener {
-            val thread = shared.snapshot().selected ?: return@addActionListener
-            val title = Messages.showInputDialog(project, "New conversation title:",
-                "Rename shared conversation", null, thread.title, null)?.trim().orEmpty()
-            if (title.isNotEmpty()) background { shared.rename(thread.id, title) }
-        }
-        actions.add(renameThread)
         actions.add(JButton("Refresh").apply { addActionListener { sharedPolling.refreshNow() } })
         sharedControls.add(actions, BorderLayout.CENTER)
         sharedControls.add(sharedStatus, BorderLayout.SOUTH)
@@ -350,7 +342,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         } finally {
             updatingThreads = false
         }
-        renameThread.isEnabled = state.selected != null
         sharedStatus.text = when {
             state.syncError.isNotEmpty() -> "Not synced — check/upgrade Cinder"
             state.pending.any { it.error.isNotBlank() } -> "Request failed — retained locally; retry in the feed"
@@ -369,13 +360,11 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      * A slim native strip, not a printed card: every region has a flexible
      * width, so a narrow tool window reflows instead of clipping.
      *
-     * The action strip is the SAME set the VS Code panel draws in its header
-     * (ADR-0044 decision 2): search, the AI provider sheet, diagnostics and
-     * the desktop app. The VS Code side had to move them out of the host's
-     * title bar, where the third one was cropped off the panel edge; Swing
-     * draws its own chrome, so here they were always the panel's own — but
-     * they have to be the same four, or the two IDEs stop being the same
-     * product.
+     * The action strip is the desktop app action the VS Code panel draws in
+     * its header (ADR-0044 decision 2): opening Cinder Desktop. VS Code had
+     * to move its panel actions out of the host title bar, where the host
+     * crops them; Swing draws its own chrome, so here it stays in-panel —
+     * but it is the same single action on both IDEs.
      */
     private fun headerStrip(): JPanel {
         val header = JPanel(BorderLayout(JBUI.scale(8), 0))
@@ -412,32 +401,10 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     }
 
     /**
-     * The panel's own action strip.
-     *
-     * The four actions the VS Code panel shows in its header, in the same
-     * order, with the same wording in their tooltips.
+     * The panel's own action strip: the desktop app action, the same action
+     * the VS Code panel draws in its header, with the same tooltip wording.
      */
     private fun actionActions(): ActionGroup = DefaultActionGroup(
-        object : AnAction("Search notes", "Search notes and todos", AllIcons.Actions.Search), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) {
-                switchMode(ChatMode.NOTES)
-                inputField.requestFocusInWindow()
-            }
-        },
-        object : AnAction("AI provider", "Configure the external AI provider", AllIcons.General.Settings), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) = openProviderSheet()
-        },
-        object :
-            AnAction("Diagnostics", "Check the Cinder environment", AllIcons.General.InspectionsWarning),
-            DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) = openDiagnostics()
-        },
         object : AnAction("Desktop app", "Open the Cinder Desktop app", AllIcons.General.Web), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
@@ -452,22 +419,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      *
      * It is a dialog because Swing has no inline form surface, and it reads
      * and writes the LOCAL SERVICE's settings — the plugin keeps no second
-     * copy, so the desktop app and this panel always use the same endpoint.
-     */
-    private fun openProviderSheet() {
-        ProviderDialog(project, session).show()
-    }
-
-    /**
-     * The environment report.
-     *
-     * It answers "why does this not work?" with facts: the MCP binary, the
-     * local service and the workspace's resolution — the three things that
-     * decide whether the panel can work at all.
-     */
-    private fun openDiagnostics() {
-        DiagnosticsDialog(project).show()
-    }
 
     /**
      * Open the Cinder Desktop app.
@@ -929,7 +880,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                 when (parts.getOrNull(4)) {
                     "toggle" -> toggleCard(turnId, cardType, cardId)
                     "open" -> openCard(turnId, cardType, cardId)
-                    "copy" -> copyCard(turnId, cardType, cardId)
                     "edit" -> editCard(turnId, cardType, cardId)
                     "create" -> newNoteUnder(turnId, cardType, cardId)
                     "organize" -> organizeCard(turnId, cardType, cardId)
@@ -1022,17 +972,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     }
 
     /** Copy the card's title and body to the clipboard. */
-    private fun copyCard(turnId: String, cardType: String, cardId: Long) {
-        val found = card(turnId, cardType, cardId) ?: return
-        val hit = found.hit
-        val body = when (val cardBody = found.body) {
-            null -> hit.snippet
-            is CardBody.NoteBody -> cardBody.note.body
-            is CardBody.PageBody -> cardBody.page.content
-            is CardBody.TextBody -> cardBody.text
-        }
-        val text = buildString {
-            appendLine(hit.title.ifBlank { "(untitled)" })
             appendLine()
             append(body)
         }

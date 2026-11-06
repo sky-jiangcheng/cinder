@@ -31,16 +31,9 @@ const AI_INTEGRATION_DOC =
 const CONSOLE_VIEW_ID = "repotory.notesSearch";
 
 export let output: vscode.OutputChannel;
-let statusItem: vscode.StatusBarItem;
 let mcp: McpStdioClient | null = null;
 let extensionContext: vscode.ExtensionContext | undefined;
 
-interface HandoffStatus {
-  note_id?: number;
-  project_id?: number;
-  title?: string;
-  updated_at?: string;
-}
 
 function serverUrl(): string {
   return (
@@ -244,56 +237,12 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
   }
 }
 
-// The scope lives in the chat session now (ADR-0036): the panel locks to the
-// workspace's project, and the status bar shows what it resolved to. The
-// matching rules live server-side on purpose: the MCP tools resolve the same
-// path, and a TypeScript reimplementation would let the panel and an agent's
-// repotory_context disagree about which knowledge a session gets.
-function showScopeInStatusBar(scope: { projectId: number; projectName: string; repository: string }): void {
-  if (!statusItem) return;
-  const dir = workspacePath();
-  if (!scope.projectId) {
-    statusItem.tooltip = dir
-      ? `Cinder: ${dir} is not in the knowledge base yet\n\nClick to load the session context`
-      : "Cinder: click to load the session context";
-    return;
-  }
-  const label = scope.repository ? `${scope.projectName} / ${scope.repository}` : scope.projectName;
-  statusItem.tooltip = `Workspace: ${label}\n${dir ?? ""}\n\nClick to load the session context`;
-}
-
 async function pingHeadless(): Promise<boolean> {
   try {
     await getJson(serverUrl(), "/health");
     return true;
   } catch {
     return false;
-  }
-}
-
-async function refreshLastHandoff(): Promise<void> {
-  if (!statusItem) return;
-  try {
-    const response = (await postJson(serverUrl(), "/api/rpc", {
-      method: "LatestHandoff",
-      // 0 = unscoped: the newest handoff across all projects. The status bar is
-      // chrome about "when did I last hand anything off", so an unscoped answer
-      // is what it wants; the workspace's own project would need the resolution
-      // result, which is not this call's business.
-      args: [0],
-    })) as { result?: HandoffStatus | null };
-    const handoff = response.result;
-    const at = handoff?.updated_at ? new Date(handoff.updated_at) : undefined;
-    if (handoff && at && !Number.isNaN(at.getTime())) {
-      statusItem.text = `$(repo) Cinder · ${at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-      statusItem.tooltip = `Last handoff record: ${handoff.title ?? "session"}\n${at.toLocaleString()}\n\nClick to load the session context`;
-    } else {
-      statusItem.text = "$(repo) Cinder";
-      statusItem.tooltip = "Cinder: no session handoff record yet. Click to load the session context";
-    }
-  } catch {
-    statusItem.text = "$(repo) Cinder";
-    statusItem.tooltip = "Cinder: click to load the session context";
   }
 }
 
@@ -370,7 +319,6 @@ async function writeHandoff(): Promise<void> {
     callTool("repotory_handoff", handoffArgs),
   );
   showOutput("Handoff record saved", noteText);
-  void refreshLastHandoff();
 }
 
 // `repotory-init` is private and is not installed globally, so a shipped VSIX
@@ -722,11 +670,6 @@ async function onboard(context: vscode.ExtensionContext): Promise<void> {
 export function activate(context: vscode.ExtensionContext): void {
   extensionContext = context;
   output = vscode.window.createOutputChannel("Cinder", { log: true });
-  statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 60);
-  statusItem.text = "$(repo) Cinder";
-  statusItem.tooltip = "Cinder: click to load the session context";
-  statusItem.command = "repotory.loadContext";
-  void refreshLastHandoff();
 
   const chatConsole = new RepotoryChatConsoleProvider();
   const transport: Transport = {
@@ -769,7 +712,6 @@ export function activate(context: vscode.ExtensionContext): void {
   };
   chatConsole.onVisibilityChanged = visible => session.setVisible(visible);
   context.subscriptions.push(session);
-  session.onScopeChanged = (scope) => showScopeInStatusBar(scope);
   void session.refreshScope();
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => void session.refreshScope()),
@@ -778,8 +720,6 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  const handoffTimer = setInterval(() => void refreshLastHandoff(), 60_000);
-  context.subscriptions.push({ dispose: () => clearInterval(handoffTimer) });
 
   const register = (id: string, fn: () => Promise<void>) =>
     context.subscriptions.push(
@@ -826,22 +766,12 @@ export function activate(context: vscode.ExtensionContext): void {
   register("repotory.openDesktop", () => openDesktop());
 
   context.subscriptions.push(
-    statusItem,
     vscode.window.registerWebviewViewProvider(CONSOLE_VIEW_ID, chatConsole, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     { dispose: () => mcp?.stop() },
   );
 
-  statusItem.show();
-  void pingHeadless().then((ok) => {
-    if (!ok) {
-      statusItem.tooltip =
-        "Headless service not reachable at " +
-        serverUrl() +
-        " — commands still work through repotory-mcp";
-    }
-  });
   void onboard(context);
 }
 

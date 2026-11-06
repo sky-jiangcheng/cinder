@@ -1008,7 +1008,30 @@
     "saveAsPageHint": "Store the Q&A as a query page linked to what the answer cited",
     "pageSaved": "Filed as page",
     "pageSavedDetail": "page #{{id}}, linked to {{refs}} citation(s)",
-    "pageSaveFailed": "Could not file the page"
+    "pageSaveFailed": "Could not file the page",
+    "toolCalling": {
+      "title": "AI is calling tools",
+      "calling": "calling…",
+      "done": "done"
+    },
+    "projectPicker": {
+      "title": "Pick projects",
+      "selectAll": "Select all",
+      "onlyStarred": "Starred only",
+      "selected": "selected",
+      "querySelected": "Query selected projects' code volume",
+      "noMatch": "No matching projects",
+      "favorite": "favorite"
+    },
+    "tool": {
+      "queryDailyStats": "Query yesterday's code volume",
+      "listProjects": "List projects",
+      "getProjectStats": "Get project stats",
+      "searchNotes": "Search knowledge base",
+      "getRecentCommits": "Get recent commits",
+      "getHeatmap": "Get heatmap",
+      "getProjectOverview": "Get project overview"
+    }
   },
   "review": {
     "title": "Knowledge Review & Compile Progress",

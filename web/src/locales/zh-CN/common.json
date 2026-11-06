@@ -1007,7 +1007,30 @@
     "saveAsPageHint": "把问答存成 query 页面，并链到答案引用的依据",
     "pageSaved": "已存为页面",
     "pageSavedDetail": "页面 #{{id}}，链到 {{refs}} 条引用",
-    "pageSaveFailed": "存页失败"
+    "pageSaveFailed": "存页失败",
+    "toolCalling": {
+      "title": "AI 正在调用工具",
+      "calling": "调用中…",
+      "done": "已完成"
+    },
+    "projectPicker": {
+      "title": "选择项目",
+      "selectAll": "全选",
+      "onlyStarred": "仅显示已收藏",
+      "selected": "个已选",
+      "querySelected": "查询选中项目代码量",
+      "noMatch": "没有匹配的项目",
+      "favorite": "已收藏"
+    },
+    "tool": {
+      "queryDailyStats": "查询昨日代码量",
+      "listProjects": "列出项目",
+      "getProjectStats": "获取项目统计",
+      "searchNotes": "搜索知识库",
+      "getRecentCommits": "获取最近提交",
+      "getHeatmap": "获取热力图",
+      "getProjectOverview": "获取项目概览"
+    }
   },
   "review": {
     "title": "知识页面审核与编译进度",

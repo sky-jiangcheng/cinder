@@ -142,22 +142,6 @@ internal class SharedChatSession(
         }
     }
 
-    fun rename(id: String, title: String) {
-        if (title.isBlank()) return
-        try {
-            val thread = chat("rename", mapOf("thread_id" to id, "title" to title.trim())).get("thread").thread()
-            check(thread.id == id) { "The service returned a different conversation." }
-            synchronized(lock) {
-                if (disposed) return
-                remember(thread)
-                revision++
-                errors.remove(id)
-                changed()
-            }
-        } catch (e: Exception) {
-            operationFailed(id, e)
-        }
-    }
 
     /** Capture the destination on the UI thread, BEFORE queuing network work. */
     fun prepareSend(question: String): SharedPending? = synchronized(lock) {

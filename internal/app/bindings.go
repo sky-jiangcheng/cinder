@@ -98,6 +98,43 @@ func (a *App) GetProjectStats(id int64, date string) []domain.DailyStat {
 	return a.svc.GetProjectStats(id, date)
 }
 
+// QueryProjectStatsBatchResult is the per-project payload returned by
+// QueryProjectStatsBatch.
+type QueryProjectStatsBatchResult struct {
+	ProjectID int64  `json:"project_id"`
+	Project   string `json:"project"`
+	Date      string `json:"date"`
+	Total     struct {
+		LinesAdded   int `json:"lines_added"`
+		LinesDeleted int `json:"lines_deleted"`
+		FilesChanged int `json:"files_changed"`
+	} `json:"total"`
+	ByAuthor map[string]map[string]int `json:"by_author"`
+	Repos    []map[string]any          `json:"repos"`
+}
+
+// QueryProjectStatsBatch returns a per-project summary of daily code-change
+// stats for the requested project ids. Used when the user selects several
+// projects from the tool-calling project picker.
+func (a *App) QueryProjectStatsBatch(projectIDs []int64, date string) ([]QueryProjectStatsBatchResult, error) {
+	stats, err := a.svc.QueryProjectStatsBatch(projectIDs, date)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]QueryProjectStatsBatchResult, 0, len(stats))
+	for _, s := range stats {
+		out = append(out, QueryProjectStatsBatchResult{
+			ProjectID: s.ProjectID,
+			Project:   s.ProjectName,
+			Date:      s.Date,
+			Total:     s.Total,
+			ByAuthor:  s.ByAuthor,
+			Repos:     s.Repos,
+		})
+	}
+	return out, nil
+}
+
 // GetRepoCommits returns one repository's commit log, newest first. Backs the
 // repo row's commit list: the stored daily_stats rows carry no message or SHA,
 // so the list is read from git on demand and works without a forge remote.
@@ -570,12 +607,34 @@ type AskStreamResult struct {
 func (a *App) StartAskStream(projectID int64, question string) (*AskStreamResult, error) {
 	streamID := fmt.Sprintf("ask-%d", time.Now().UnixNano())
 	go func() {
-		ans, err := a.svc.AskAIWithEvidenceStream(projectID, question, service.DefaultEvidenceBudget, func(delta string) {
-			a.emitEvent("ai.ask.stream", map[string]any{
-				"stream_id": streamID,
-				"delta":     delta,
-			})
-		})
+		ans, err := a.svc.AskAIWithEvidenceStream(
+			projectID, question, service.DefaultEvidenceBudget,
+			func(delta string) {
+				a.emitEvent("ai.ask.stream", map[string]any{
+					"stream_id": streamID,
+					"type":      "delta",
+					"delta":     delta,
+				})
+			},
+			func(id, name string) {
+				a.emitEvent("ai.ask.stream", map[string]any{
+					"stream_id": streamID,
+					"type":      "tool_call",
+					"tool_call": map[string]any{
+						"id":   id,
+						"name": name,
+					},
+				})
+			},
+			func(id string, result any) {
+				a.emitEvent("ai.ask.stream", map[string]any{
+					"stream_id":    streamID,
+					"type":         "tool_result",
+					"tool_call_id": id,
+					"content":      result,
+				})
+			},
+		)
 		if a.ctx == nil {
 			return
 		}

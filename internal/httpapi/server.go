@@ -151,7 +151,7 @@ func (h *handler) aiAskStream(w http.ResponseWriter, r *http.Request) {
 
 	ans, err := h.svc.AskAIWithEvidenceStream(req.ProjectID, req.Question, service.DefaultEvidenceBudget, func(delta string) {
 		_ = writeEvent(map[string]any{"delta": delta})
-	})
+	}, func(_id, _name string) {}, func(_id string, _result any) {})
 	if err != nil {
 		_ = writeEvent(map[string]any{"error": err.Error()})
 		return

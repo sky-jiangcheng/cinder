@@ -99,8 +99,14 @@ func (s *Service) aiChatConfig() (aiChatConfig, error) {
 }
 
 type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string `json:"role"`
+	Content    string `json:"content"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	// ToolCalls rides on the assistant echo of a tool-calling turn. The
+	// protocol pairs every tool message with the PRECEDING assistant
+	// message's tool_calls; omitting them there makes strict providers
+	// reject the whole follow-up request.
+	ToolCalls []toolCall `json:"tool_calls,omitempty"`
 }
 
 type chatRequest struct {
@@ -765,11 +771,11 @@ func (s *Service) AskAI(projectID int64, question string) (string, error) {
 	}
 	messages = append(messages, chatMessage{Role: "user", Content: question})
 
-	result, err := s.chatWithAudit(cfg, messages, aiChatTimeout)
+	reply, _, err := s.askWithTools(cfg, messages, s.toolRegistry.definitions(), aiChatTimeout)
 	if err != nil {
 		return "", err
 	}
-	return result.Reply, nil
+	return reply, nil
 }
 
 // streamChatWithTimeout is testAIChatWithTimeout with stream:true: it probes the

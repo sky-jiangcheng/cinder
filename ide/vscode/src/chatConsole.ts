@@ -65,10 +65,6 @@ export class RepotoryChatConsoleProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = consoleHtml(nonce());
 
     webviewView.webview.onDidReceiveMessage((msg: ExtMessage) => {
-      if (msg.type === "copy") {
-        void vscode.env.clipboard.writeText(msg.text);
-        return;
-      }
       if (msg.type === "ready") {
         // The webview's script is up: now it can receive the state.
         this.onReady?.();

@@ -174,6 +174,10 @@ import type { Evidence, EvidenceAnswer } from './types'
 export interface AskStreamHandlers {
   /** Called once per content fragment as it decodes. */
   onDelta: (delta: string) => void
+  /** The model requested a tool call — id + name (e.g. "query_daily_stats"). */
+  onToolCall: (id: string, name: string) => void
+  /** A tool call finished — id and its JSON-serializable result. */
+  onToolResult: (id: string, result: unknown) => void
   /** Terminal success — reply, evidence and truncation flag. */
   onDone: (ans: EvidenceAnswer) => void
   /** Terminal failure (transport or backend-reported error). */
@@ -202,8 +206,14 @@ function wailAskStream(projectId: number, question: string, handlers: AskStreamH
       off = w.runtime.EventsOn('ai.ask.stream', (data) => {
         const ev = (data ?? {}) as Record<string, unknown>
         if (String(ev.stream_id) !== stream_id) return
-        if (typeof ev.delta === 'string') {
-          handlers.onDelta(ev.delta)
+        const type = String(ev.type ?? '')
+        if (type === 'delta' || typeof ev.delta === 'string') {
+          handlers.onDelta(String(ev.delta ?? ''))
+        } else if (type === 'tool_call') {
+          const tc = (ev.tool_call ?? {}) as Record<string, unknown>
+          handlers.onToolCall(String(tc.id ?? ''), String(tc.name ?? ''))
+        } else if (type === 'tool_result') {
+          handlers.onToolResult(String(ev.tool_call_id ?? ''), ev.content)
         } else if (ev.error) {
           handlers.onError(new Error(String(ev.error)))
         } else if (ev.done) {
@@ -244,8 +254,14 @@ function httpAskStream(projectId: number, question: string, handlers: AskStreamH
           } catch {
             continue // non-JSON data: line (e.g. a stray comment) — skip
           }
-          if (typeof ev.delta === 'string') {
-            handlers.onDelta(ev.delta)
+          const type = String(ev.type ?? '')
+          if (type === 'delta' || typeof ev.delta === 'string') {
+            handlers.onDelta(String(ev.delta ?? ''))
+          } else if (type === 'tool_call') {
+            const tc = (ev.tool_call ?? {}) as Record<string, unknown>
+            handlers.onToolCall(String(tc.id ?? ''), String(tc.name ?? ''))
+          } else if (type === 'tool_result') {
+            handlers.onToolResult(String(ev.tool_call_id ?? ''), ev.content)
           } else if (ev.error) {
             handlers.onError(new Error(String(ev.error)))
           } else if (ev.done) {

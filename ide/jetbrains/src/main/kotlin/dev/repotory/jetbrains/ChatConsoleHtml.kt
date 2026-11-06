@@ -313,7 +313,6 @@ internal object ChatConsoleHtml {
         val sb = StringBuilder()
         sb.append("<p style=\"font-size:9pt; margin-top:6px;\">")
         sb.append("<a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/open\">Open in Cinder</a>")
-        sb.append(" · <a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/copy\">Copy</a>")
         if (hit.type == "note") {
             sb.append(" · <a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/edit\">Edit</a>")
             sb.append(" · <a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/create\">New note here</a>")

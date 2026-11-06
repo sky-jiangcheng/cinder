@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **桌面机器人 Function Calling 循环修了两处协议级问题（2026-11-06）**：模型请求工具时，助手把工具调用回灌给模型的那条助手消息漏掉了 `tool_calls` 本身——严格按 OpenAI 协议实现的端点会把「工具回复必须对应上一条带 `tool_calls` 的助手消息」拒掉，整条对话就断了；流式与非流式两条路径都补上了回灌，并把「轮数用完后返回空回答」改成「多跑一轮纯文本，逼模型用话收尾」。同时把并行会话里重名注册的 `registerDashboardToolsExtra` 合并成一处，把 `QueryProjectStatsBatch` 里不存在的字段 `r.Name` 改成 `r.Path`，把 `GetRepoCommits` 被意外截断的文档注释还回去。`go test ./internal/service/... ./internal/app/...` 全绿，`go build ./...` 绿，新增 `internal/service/aitools_test.go` 三测（回灌配对、SSE 片段重组、上限强制文本轮）全过。
+
+### 变更
+
+- **两个 IDE 插件的对话面板做减法（ADR-0051，2026-11-06）**：「对话即界面」——只留对话承载不了的东西。VS Code 撤掉 provider sheet/设置齿轮、与 Notes 模式重复的搜索钮、卡片内 Copy、诊断面板钮、状态栏 handoff 计时器；JetBrains 撤掉 `ProviderDialog.kt`/`DiagnosticsDialog.kt` 整两个文件、Search notes/AI provider/Diagnostics 动作、Rename 钮、卡片 Copy；留输入框+Send、消息流、scope chip、公告条、Sources 折叠、线程下拉；顺手修四处跨端不一致（`open -a` 应用名、共享问答的 scope 传参、轮询口径 2.5s/3s）。VS Code `npm test`（tsc + vitest）37 例全绿；JetBrains 本机无 Gradle，未能编译，改为逐处核对引用（见本轮文件清单）。
+
+### 文档
+
+- **ADR-0051「对话即界面：以 Function Calling 工具面作为统一操作层做界面减法」**（中英，2026-11-06 已拍板）：Warden 的 Function Calling 循环与只读白名单、Cinder 助手的通用工具卡片、插件纯做减法、四个不可替代清单、P1-P3 落地计划；已落地 P1，Warden 两仓门禁全绿。
+
+---
+
 ## [2.32.1] - 2026-11-06
 
 ### 修复

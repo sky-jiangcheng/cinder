@@ -201,7 +201,7 @@
   left: 0;
   z-index: 220;
   min-width: 180px;
-  max-height: 240px;
+  max-height: 500px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -556,4 +556,163 @@
   color: var(--text-tertiary);
   text-align: center;
   padding: 16px 0;
+}
+
+/* ---- tool calling display ---- */
+
+.toolCallList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.toolCallItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.toolCallItem .toolCallName {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.toolCallPendingLabel {
+  font-size: 11px;
+  color: var(--accent);
+  animation: pulse 1.5s infinite;
+}
+
+.toolCallDoneLabel {
+  font-size: 11px;
+  color: var(--text-success);
+}
+
+.toolCallDone {
+  border-color: var(--border-success);
+  background: var(--bg-success-soft);
+  color: var(--text-primary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ---- project picker ---- */
+
+.projectPickerOverlay {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.projectPickerHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.projectPickerTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.projectPickerOptions {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.projectPickerSelectAll,
+.projectPickerFilter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.projectPickerSummary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.projectPickerList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.projectItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+}
+
+.projectItem input[type="checkbox"] {
+  margin: 0;
+}
+
+.projectItemText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.projectItemName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.projectItemMeta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.projectStar {
+  font-size: 10px;
+  color: var(--warning);
+}
+
+.projectPickerEmpty {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 8px 0;
+}
+
+.projectPickerFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
 }

@@ -108,6 +108,23 @@ export interface DailyStat {
   lines_deleted: number
 }
 
+export interface QueryProjectStatsBatchResult {
+  project_id: number
+  project: string
+  date: string
+  total: {
+    lines_added: number
+    lines_deleted: number
+    files_changed: number
+  }
+  by_author: Record<string, Record<string, number>>
+  repos: Array<{
+    repo_id: number
+    path: string
+    name: string
+  }>
+}
+
 export interface Summary {
   date: string
   repo_count: number
