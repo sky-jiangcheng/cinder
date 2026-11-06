@@ -419,6 +419,8 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      *
      * It is a dialog because Swing has no inline form surface, and it reads
      * and writes the LOCAL SERVICE's settings — the plugin keeps no second
+     * copy, so the desktop app and this panel always use the same endpoint.
+     */
 
     /**
      * Open the Cinder Desktop app.
