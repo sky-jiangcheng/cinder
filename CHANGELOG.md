@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.32.1] - 2026-11-06
+
+### 修复
+
+- **发布后 master 的 macos CI 红了——不是产品缺陷，是测试的临时目录清理与下载 goroutine 抢跑（2026-11-06）**：v2.32.0 的 tag 构建与 Release 都成功，但发布后 master 上的 `Go build & test (macos-latest)` 挂了，报 `TempDir RemoveAll cleanup: unlinkat .../001: directory not empty`。根因在 `stubDownloadDir` 的清理顺序：校验失败路径里 `os.Remove(partPath)` 在**下载 goroutine** 内执行，慢盘上会晚于 phase 翻成 `failed`，而 `t.TempDir` 注册的 `RemoveAll` 正好撞上那次删除，读到「目录非空」就判失败。修法是让测试自己的 cleanup 先等目录稳定（连续读到空即止，最多 2 秒）再删——`RemoveAll` 幂等，`t.TempDir` 对已不存在的目录照样算干净。**没有改产品代码**：下载失败仍会在 phase 置位前删掉未校验的字节。`go test ./internal/service -count=2` 通过，master CI 复跑全绿。
+
 ## [2.32.0] - 2026-11-06
 
 ### 变更
