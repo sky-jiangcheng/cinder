@@ -63,7 +63,25 @@ func stubDownloadDir(t *testing.T) string {
 	dir := t.TempDir()
 	prev := downloadDirOverride()
 	setDownloadDirForTest(func() (string, error) { return dir, nil })
-	t.Cleanup(func() { setDownloadDirForTest(prev) })
+	// This cleanup runs before the one t.TempDir registered (LIFO), which is
+	// the point: the failure paths delete the ".part" file from the download
+	// goroutine, and on a slow CI disk that delete can land just after the
+	// phase flips to "failed" — t.TempDir's own RemoveAll then raced it and
+	// failed the test with "directory not empty" (macos-latest, 2026-11-05).
+	// Settle first; RemoveAll is idempotent and a missing directory counts as
+	// clean for TempDir's cleanup too.
+	t.Cleanup(func() {
+		setDownloadDirForTest(prev)
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			entries, err := os.ReadDir(dir)
+			if err == nil && len(entries) == 0 {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		_ = os.RemoveAll(dir)
+	})
 	return dir
 }
 
