@@ -972,6 +972,17 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     }
 
     /** Copy the card's title and body to the clipboard. */
+    private fun copyCard(turnId: String, cardType: String, cardId: Long) {
+        val found = card(turnId, cardType, cardId) ?: return
+        val hit = found.hit
+        val body = when (val cardBody = found.body) {
+            null -> hit.snippet
+            is CardBody.NoteBody -> cardBody.note.body
+            is CardBody.PageBody -> cardBody.page.content
+            is CardBody.TextBody -> cardBody.text
+        }
+        val text = buildString {
+            appendLine(hit.title.ifBlank { "(untitled)" })
             appendLine()
             append(body)
         }
