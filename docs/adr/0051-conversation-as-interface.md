@@ -1,6 +1,6 @@
 # ADR-0051: 对话即界面——以 Function Calling 工具面作为统一操作层做界面减法
 
-状态：**Accepted（2026-11-06，用户按「用户体验最强、UI 最清爽」批准）**
+状态：**Accepted（2026-11-06，用户按「用户体验最强、UI 最清爽」批准）**；2026-11-08 修订（桌面助手面板去 chrome，见文末修订记录）
 日期：2026-11-06
 关联：[ADR-0036](0036-ide-chat-console.md)（IDE 聊天台：共享会话的薄客户端纪律）、[ADR-0041](0041-draggable-agent-bot-and-shared-dashboard-scope.md)（可拖拽机器人与共享面板作用域）、[ADR-0045](0045-resident-desktop-bot.md)（机器人面板决策）、[ADR-0047](0047-resident-agent-separate-host.md)（两个产品各担一件事：桌面工作台 vs 助手）、[ADR-0048](0048-core-contract-version.md)（契约版本：本篇不涨契约、不改 MCP 工具名）、[ADR-0009](0009-ide-presence.md)（薄客户端纪律）
 起始 schema：不变（本 ADR 不改 schema、不改 MCP 工具名、不涨 `CoreVersion`）
@@ -77,6 +77,24 @@ MCP 工具面（`repotory_*`，`tools/list` 动态拉取，服务端给 schema�
 1. **P1 · Warden 最小 FC 循环**：`llm.rs` 请求带 `tools`、SSE `tool_calls` 片段重组、回灌；`conversations.rs` 只读白名单循环 + system 组装；前端工具事件渲染；主窗量化面板删除，伴侣窗指标行保留，记忆层工具清单卡收敛为单行计数；新增 e2e 测试（fake LLM 返回 `tool_calls` → fake MCP 执行 → 回灌 → 再生成；白名单守门：写类工具名不出现在模型请求里）。
 2. **P2 · 工具面扩展与插件第一轮减法**：Warden 白名单扩到只读面；VS Code 删 provider sheet/搜索钮/Copy/诊断面板钮/状态栏 handoff 计时器；JetBrains 删 ProviderDialog/DiagnosticsDialog/搜索动作/诊断动作/Rename 钮/卡片 Copy；修四处跨端不一致；两插件 `tsc`/测试全绿。
 3. **P3 · 服务端 `repotory_ask` 带工具循环 + 插件确认卡；插件内联编辑器退役；桌面注册表补记忆侧工具**（与桌面并行会话的那一方协调；本 ADR 不动桌面主路径）。
+
+
+## 修订记录
+
+### 2026-11-08：桌面助手面板只剩对话（推翻未决 3 的「本地即时卡保留」）
+
+用户看过落地后的面板，判断「小机器人的界面还是太过于冗余，现在完全可以使用 Function Calling 去获取相关界面的信息了，清理掉一些对话框之外的元素」。**改的是 D3 的边界，不是 D3 的方向**：D3 说「补通用工具卡片，把每页手写的快捷卡**逐步**退役」，落地时却在那条路上多长出一层界面——一排模块 chip（侧栏已经有一份）、一个作用域选择器（模型用 `list_projects` 就能自己收窄）、每页的快捷问答 chip 与手写卡片（`agentContext.ts`，576 行，全部从本地 API 取数）、页脚的「记一笔 / 打开对话台」。同一份数据在面板里有了第二个副本，而副本会漂。
+
+落地结果：
+
+- 面板只剩四件东西：标题栏、消息区（问题 / 工具调用行 / 回答 / 依据）、输入框、发送。
+- `agentContext.ts` 与其测试、`QuickCapturePanel.tsx` 退役（前端净删约 900 行）。「记一笔」能力仍在项目页的 `NoteSection` 与首页知识助手，不随面板一起消失。
+- **未决 3 翻案**：无 AI 时的本地即时卡一并退役。理由不是「不重要」，而是那张卡展示的每一种数据（提交量、交接记录、待审页面、安装信息）都是同一份数据的第二个副本；而在没有配模型时，面板本来就没有答案——用卡片当安慰剂，只会让人以为它能答。未配置现在只留一行引导（去 设置 → AI）。
+- 自由提问的作用域固定为全库（`project_id = 0`）：要收窄就由模型调工具，面板不再自带作用域控件（这一步同时简化了 ADR-0045 决策 4 的落地形态——那条决策的**语义**不变：桌面机器人仍是全局助手）。
+- 顺带修好工具名的文案映射：locale 的键是 camelCase（`ai.tool.queryDailyStats`），事件里拿到的是线名（`query_daily_stats`），此前**永远走回退分支显示裸函数名**；现在先归一化再查表。
+- 「存为笔记 / 存为页面」保留：它们作用在**这一次回答**上，属于对话的一部分，而不是面板的 chrome。
+
+回归：`AgentBot.test.tsx` 13 例（打开/关闭、拖拽、流式回答、工具行、依据、归档、未配置引导、窗口钳制），`npm test` 395 例全绿，`npm run build` 与 `npm run lint` 全绿，`check-i18n-keys` / `check-i18n-interpolation` / `check-docs-mirror` 全绿；`agent.*` 词条从 17 条剪到 4 条（中英同批）。
 
 ## 同批写
 
