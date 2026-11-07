@@ -5,6 +5,7 @@ Date: 2026-11-02
 Related: [ADR-0034](0034-desktop-three-column-shell.md) (three-column desktop shell, brand mark lives in the left rail), [ADR-0036](0036-ide-chat-console.md) (both IDE panels become a chat console), [ADR-0006](0006-scope-reduction.md) (scope freeze), [ADR-0007](0007-session-memory-protocol.md) (session memory protocol)
 Starting schema: v28 (**this ADR changes no schema**)
 
+> **Superseded by [ADR-0052](0052-the-knot-brand-mark.md)**: "no recognition through a concrete shape" becomes "no literal objects — recognition through a reproducible construction".
 ## Background
 
 The user said: **"legibility is low"**, and added a constraint — **"don't force awareness up; that would make later changes hard"**.

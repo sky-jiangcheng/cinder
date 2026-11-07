@@ -5,6 +5,7 @@
 关联：[ADR-0049](0049-brand-restructure-manus-style.md)（品牌重排——本篇**落地其明确留下的两个未决项**：「UI 减法与主次重构」与「母图是否再画」）、[ADR-0037](0037-brand-legibility-and-ui-language.md)（品牌辨识度与界面语法——本篇**修订其「暖纸 editorial」基调与「方边+发丝线就是风格」的母图构造**）、[ADR-0047](0047-resident-agent-separate-host.md)（两个产品各担一件事——Warden 是独立产品，故有独立字标与签名色）、[ADR-0006](0006-scope-freeze.md)（范围冻结与冻结标识）、[ADR-0048](0048-core-contract-version.md)（契约版本——本篇不涨契约）
 起始 schema：v28（**本 ADR 不改 schema、不改 MCP 工具面、不涨 `CoreVersion`**）
 
+> **Superseded (部分) by [ADR-0052](0052-the-knot-brand-mark.md)**：决策③（字母 C 反白印）与决策④（Warden 提灯）由 v6 The Knot 取代；色板、标识层冻结、守门架构等其余决策继续有效。
 ## 背景
 
 ### 起因

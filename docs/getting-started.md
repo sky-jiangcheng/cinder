@@ -5,7 +5,7 @@ order: 1
 
 # 快速开始
 
-Cinder 是面向 AI 编程 Agent 的本地优先记忆层，Cinder Desktop 是它的工作台。其核心价值在于建立**跨 Agent 的持久化项目记忆**：自动发现本机 Git 仓库，沉淀架构决策、避坑记录、依赖与技术栈，让任何 AI Agent 一次工具调用即可接入上下文。
+Cinder 是给 AI coding agent 的本地优先记忆层，Cinder Desktop 是它的工作台。其核心价值在于建立**跨 Agent 的持久化项目记忆**：自动发现本机 Git 仓库，沉淀架构决策、避坑记录、依赖与技术栈，让任何 AI Agent 一次工具调用即可接入上下文。
 
 本项目提供**多形态产物**，你可以根据实际需要选择最适合的上手方式：
 - **纯 MCP 模式**：无需桌面界面，一条命令为 Claude Code / Cursor / Windsurf 注册本地记忆；

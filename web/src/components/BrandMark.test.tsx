@@ -7,19 +7,19 @@
 // dependency, so swapping it back out breaks a test rather than shipping
 // silently.
 //
-// Second regression these guard: the brand moved to the inverse seal (a
-// solid warm-ink field with the letter knocked out in paper — ADR-0050, no
-// hairline frame). The UI is generated from the same SSOT as the shipped
-// icons, so a half-applied move — seal in the dock, framed card in the
-// navbar — would look like two products.
+// v6 / ADR-0052: the knot is a woven band whose under-strand is cut at
+// each crossing, so the master holds THREE filled paths. The geometry lives
+// in generated brandMarkPaths.ts and check-brand.mjs gate 5 byte-compares
+// every path against the master. This test guards the component's rendering
+// of that data — not the letter's shape (a previous version pinned "one M"
+// and a scale(0.941176) transform, both of which belonged to the retired
+// IBM Plex Sans "C").
 //
 // Third regression (2026-10-24 UI sweep): the navbar put a 6px border-radius
 // on the mark. The brand master is a square seal — "no rounded corners, the
 // square edge is the style" — so a radius crop ate the ink field's four
-// corners and the mark read as a torn sticker. The radius was left over from
-// the navy-tile era, when the tile had a gradient of its own. A CSS module
-// rule is invisible to a DOM assertion, so the stylesheet is read through
-// node:fs and the radius rule asserted to be gone.
+// corners and the mark read as a torn sticker. A CSS module rule is invisible
+// to a DOM assertion, so the stylesheet is read through node:fs.
 
 // 本文件的 DOM 访问是**显式登记**而非疏漏（ADR-0026 条件 4）：被测对象是装饰性
 // SVG——`aria-hidden` 正是设计意图，所以没有任何 role/name 可查。断言的是
@@ -30,6 +30,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import BrandMark from './BrandMark'
+import { BRAND_MARK_PATHS, BRAND_MARK_TRANSFORM } from './brandMarkPaths'
 
 const fsName = 'node:' + 'fs'
 const pathName = 'node:' + 'path'
@@ -70,45 +71,39 @@ describe('BrandMark', () => {
     const { container } = render(<BrandMark />)
     const html = container.innerHTML
     // Solid warm-ink field + off-white paper glyph, the brand SSOT's palette.
-    // A blue gradient and a white hairline were what made the old mark read
-    // as stock app-icon chrome.
     expect(html).toContain('#34322D')
     expect(html).toContain('#F7F4EE')
     expect(container.querySelector('linearGradient')).toBeNull()
     expect(container.querySelector('clipPath')).toBeNull()
-    // The inverse seal has NO frame: the recognition comes from the reversed
-    // figure, not from a stroke that has to be re-weighted to survive small
-    // sizes. Any stroke here means the framed-card era crept back in.
+    // The inverse seal has NO frame: recognition comes from the reversed
+    // figure, not from a stroke that has to be re-weighted at small sizes.
     expect(container.querySelectorAll('[stroke]')).toHaveLength(0)
-    // The field is a full-bleed rect, not an inset framed card.
     const field = container.querySelector('rect')!
     expect(field.getAttribute('width')).toBe('512')
     expect(field.getAttribute('fill')).toBe('#34322D')
     expect(container.querySelector('path')!.getAttribute('stroke')).toBeNull()
   })
 
-  it('draws the mark as one filled path', () => {
+  it('draws every generated path as a filled shape', () => {
     const { container } = render(<BrandMark />)
-    const mark = container.querySelector('path')!
-    // The letter is a fill, not a bundle of strokes: strokes at this size are what
-    // made the previous mark lose its white and pinch at 16px. Nonzero winding
-    // is the typeface's own.
-    expect(mark.getAttribute('fill-rule')).toBe('nonzero')
-    expect(mark.getAttribute('stroke')).toBeNull()
-    // One closed subpath. The R this replaced had two (silhouette + counter);
-    // the C's aperture opens to the outside, so the letter has no hole — and
-    // the count also pins WHICH letter the mark carries.
-    expect(mark.getAttribute('d')!.match(/M/g)).toHaveLength(1)
+    const marks = container.querySelectorAll('g path')
+    // The woven knot is cut at each crossing, so it is several filled paths,
+    // not one stroke bundle and not one letter with a counter.
+    expect(marks).toHaveLength(BRAND_MARK_PATHS.length)
+    expect(BRAND_MARK_PATHS.length).toBeGreaterThan(1)
+    marks.forEach((mark, i) => {
+      expect(mark.getAttribute('d')).toBe(BRAND_MARK_PATHS[i])
+      expect(mark.getAttribute('fill')).toBe('#F7F4EE')
+      expect(mark.getAttribute('fill-rule')).toBe('nonzero')
+      expect(mark.getAttribute('stroke')).toBeNull()
+    })
   })
 
-  it('keeps the glyph inside the tile', () => {
+  it('uses the master group transform verbatim', () => {
     const { container } = render(<BrandMark />)
-    const mark = container.querySelector('path')!
-    // The letter is scaled and centred by its own transform; without it the
-    // glyph renders at its original 340-unit cap and crowds the tile edge.
-    const g = mark.closest('g')!
-    const scale = Number(/scale\(([\d.]+)\)/.exec(g.getAttribute('transform')!)![1])
-    expect(scale).toBeCloseTo(320 / 340, 5)
+    const g = container.querySelector('g')!
+    // Generated alongside the paths; gate 5 compares it to build/icon.svg.
+    expect(g.getAttribute('transform')).toBe(BRAND_MARK_TRANSFORM)
   })
 
   it('is hidden from assistive tech unless given a title', () => {
@@ -124,23 +119,20 @@ describe('BrandMark', () => {
   })
 
   it('is not cropped in the rail — the card keeps its square edge', async () => {
-    // The load-bearing CSS rule. A border-radius on the mark is a crop, not a
-    // style: the brand master is a square card whose hairline frame sits
-    // ~1.3px from the edge at the rail's 26px, so any visible radius
-    // swallows the frame's four corners and the mark reads as torn.
+    // The load-bearing CSS rule. A border-radius on the mark is a crop, not
+    // a style: the brand master is a square seal, so any visible radius
+    // swallows the ink field's corners and the mark reads as torn.
     const css = await readRailCss()
     const rule = /\.brandMark\s*\{([^}]*)\}/.exec(css)
     expect(rule, '.brandMark rule not found in SideRail.module.css').not.toBeNull()
     expect(rule![1]).not.toMatch(/border-radius/)
-    // The navy-tile era also added a drop shadow; the paper card has none.
     expect(rule![1]).not.toMatch(/box-shadow/)
   })
 
   it('the mark is the app identity, not a per-section ornament', async () => {
     // The left rail is the ONE place the brand mark belongs. The assistant
     // header used to render it too, so a single home page carried the logo
-    // three times (rail, section header, AI message avatar). The assistant
-    // header and the message avatar now use text instead.
+    // three times (rail, section header, AI message avatar).
     const fs = (await import(/* @vite-ignore */ fsName)) as unknown as NodeFs
     const path = (await import(/* @vite-ignore */ pathName)) as unknown as NodePath
     const proc = (await import(/* @vite-ignore */ procName)) as unknown as NodeProcess
@@ -153,29 +145,28 @@ describe('BrandMark', () => {
 
   it('draws the solid seal at every size above the glyph-only floor', () => {
     // Above GLYPH_ONLY_MAX the mark is the full inverse seal: a flat ink
-    // field with the paper letter knocked out of it. There is no stroke to
-    // re-weight (the whole point of dropping the frame), so the field is the
-    // same full-bleed rect and the glyph the same paper fill at 17px and at
-    // 512px alike.
+    // field with the paper knot knocked out of it. There is no stroke to
+    // re-weight, so the same geometry holds at 17px and at 512px alike.
     for (const size of [17, 20, 22, 26, 32, 64, 512]) {
       const { container, unmount } = render(<BrandMark size={size} />)
       expect(container.querySelector('[stroke]'), `frame at ${size}px`).toBeNull()
       const field = container.querySelector('rect')!
       expect(field.getAttribute('width'), `field at ${size}px`).toBe('512')
       expect(field.getAttribute('fill')).toBe('#34322D')
+      expect(container.querySelectorAll('g path')).toHaveLength(BRAND_MARK_PATHS.length)
       expect(container.querySelector('path')!.getAttribute('fill')).toBe('#F7F4EE')
       unmount()
     }
   })
 
-  it('collapses to the bare letter at glyph-domain sizes', () => {
-    // At or below 16px a framed card reads as a bright square rather than a
-    // letter — the exact failure the icon generator's glyph domain exists
-    // to prevent. The letter takes currentColor so it belongs to whatever
-    // surface it lands on; a fixed near-black would vanish on a dark ground.
+  it('collapses to the bare knot at glyph-domain sizes', () => {
+    // At or below 16px a solid field reads as a dark square rather than a
+    // shape. Every path takes currentColor so it belongs to its surface.
     const { container } = render(<BrandMark size={16} />)
     expect(container.querySelector('[stroke]')).toBeNull()
     expect(container.querySelector('rect')).toBeNull()
-    expect(container.querySelector('path')!.getAttribute('fill')).toBe('currentColor')
+    const marks = container.querySelectorAll('g path')
+    expect(marks).toHaveLength(BRAND_MARK_PATHS.length)
+    marks.forEach((mark) => expect(mark.getAttribute('fill')).toBe('currentColor'))
   })
 })

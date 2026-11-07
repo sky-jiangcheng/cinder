@@ -335,7 +335,9 @@ describe('legacy palette', () => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name)
         if (entry.isDirectory()) walk(full)
-        else found.push(full)
+        // Generated mark geometry: pure path data with no colour tokens.
+        // check-brand.mjs gate 5 byte-compares it to the master instead.
+        else if (entry.name !== 'brandMarkPaths.ts') found.push(full)
       }
     }
     walk(path.resolve(proc.cwd(), 'src'))

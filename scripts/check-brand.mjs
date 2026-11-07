@@ -391,55 +391,51 @@ for (const file of scanned) {
 
 // --------------------------------------------- ⑤ BrandMark 与母图同源 ----
 
-// The app's own mark is a second copy of the master's letterform. It was
-// hand-copied, and a hand copy is exactly what this pipeline exists to
-// prevent — a rebrand would move the master and leave the navbar behind.
-if (!existsSync(join(root, 'build/icon.svg')) || !existsSync(join(root, 'web/src/components/BrandMark.tsx'))) {
-  issues.push('build/icon.svg 或 web/src/components/BrandMark.tsx 不存在——母图与 App 内标记必须同时存在')
+// The app's own mark is a second copy of the master's letterform. It used to
+// be a hand-copied <path d> in BrandMark.tsx, byte-compared against only the
+// FIRST master path. The v6 knot is three paths, so the geometry now lives
+// in generated data and this gate compares EVERY path plus the group
+// transform — a rebrand cannot leave the navbar behind.
+const MASTER_REL = 'build/icon.svg'
+const UI_DATA_REL = 'web/src/components/brandMarkPaths.ts'
+const UI_COMPONENT_REL = 'web/src/components/BrandMark.tsx'
+if (
+  !existsSync(join(root, MASTER_REL)) ||
+  !existsSync(join(root, UI_DATA_REL)) ||
+  !existsSync(join(root, UI_COMPONENT_REL))
+) {
+  issues.push(`${MASTER_REL} / ${UI_DATA_REL} / ${UI_COMPONENT_REL} 必须同时存在——母图与 App 内标记数据同源`)
 } else {
-  const master = read('build/icon.svg')
-  const app = read('web/src/components/BrandMark.tsx')
+  const master = read(MASTER_REL)
+  const uiData = read(UI_DATA_REL)
+  const component = read(UI_COMPONENT_REL)
 
-  const masterPath = master.match(/<path[^>]*\sd="([^"]+)"/)?.[1]
+  const masterPaths = [...master.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
+  const uiPaths = [...uiData.matchAll(/^\s*'([^']+)',?$/gm)].map((m) => m[1])
   const masterTransform = master.match(/<g transform="([^"]+)"/)?.[1]
+  const uiTransform = uiData.match(/BRAND_MARK_TRANSFORM = '([^']+)'/)?.[1]
   const masterField = master.match(/<rect width="512" height="512" fill="([^"]+)"/)?.[1]
-  const masterFrame = master.match(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"[^>]*stroke="([^"]+)" stroke-width="(\d+)"/)
 
-  const appPath = app.match(/<path[^>]*\sd="([^"]+)"/)?.[1]
-  const appTransform = app.match(/<g transform="([^"]+)"/)?.[1]
-
-  if (!masterPath || !appPath) {
-    issues.push('build/icon.svg 或 BrandMark.tsx 里读不到字形路径——母图与 App 内标记的结构变了，更新本检查')
-  } else if (masterPath !== appPath) {
-    issues.push(
-      'web/src/components/BrandMark.tsx: 字形路径与 build/icon.svg 不一致——' +
-        'App 里的标记是母图的手抄副本，改母图时它会漏改'
-    )
-  }
-
-  if (masterTransform && appTransform && masterTransform !== appTransform) {
-    issues.push(
-      `web/src/components/BrandMark.tsx: 字母组变换 "${appTransform}" 与母图的 "${masterTransform}" 不一致`
-    )
-  }
-
-  // The frame's geometry and the two colours are the master's too.
-  if (masterFrame) {
-    const [, x, y, w, h, ink, stroke] = masterFrame
-    const appStroke = app.match(/const MASTER_STROKE = (\d+)/)?.[1]
-    const appInset = app.match(/const MASTER_INSET = (\d+)/)?.[1]
-    if (appStroke !== stroke) {
-      report('web/src/components/BrandMark.tsx · MASTER_STROKE', `母图的 ${stroke}`, appStroke)
-    }
-    if (appInset !== x) {
-      report('web/src/components/BrandMark.tsx · MASTER_INSET', `母图的 ${x}`, appInset)
-    }
-    if (!app.includes(`stroke="${ink}"`)) {
-      issues.push(`web/src/components/BrandMark.tsx: 描边色不是母图的 ${ink}`)
+  if (!masterPaths.length || !uiPaths.length) {
+    issues.push(`${MASTER_REL} 或 ${UI_DATA_REL} 里读不到字形路径——母图结构变了，更新本检查`)
+  } else if (masterPaths.length !== uiPaths.length) {
+    issues.push(`${UI_DATA_REL}: 字形路径数 ${uiPaths.length} 与母图 ${masterPaths.length} 不一致`)
+  } else {
+    for (let i = 0; i < masterPaths.length; i++) {
+      if (masterPaths[i] !== uiPaths[i]) {
+        issues.push(`${UI_DATA_REL}: 第 ${i + 1} 段字形路径与 ${MASTER_REL} 不一致——App 里的标记是母图的手抄副本`)
+      }
     }
   }
-  if (masterField && !app.includes(`fill="${masterField}"`)) {
-    issues.push(`web/src/components/BrandMark.tsx: 纸面底色不是母图的 ${masterField}`)
+
+  if (masterTransform && uiTransform && masterTransform !== uiTransform) {
+    issues.push(`${UI_DATA_REL}: 字形组变换 "${uiTransform}" 与母图的 "${masterTransform}" 不一致`)
+  }
+  if (masterField && !component.includes(`fill="${masterField}"`)) {
+    issues.push(`${UI_COMPONENT_REL}: 墨场底色不是母图的 ${masterField}`)
+  }
+  if (!component.includes('BRAND_MARK_PATHS')) {
+    issues.push(`${UI_COMPONENT_REL}: 没有使用生成的字形数据——标记会与母图脱钩`)
   }
 }
 

@@ -1,0 +1,362 @@
+{
+  "_comment": "Cinder × Warden brand copy baseline (v6, landed). One zh/en column per surface. scripts/check-brand-copy.mjs reads this file; like the masters, copy must not drift.",
+  "version": "6",
+  "family": {
+    "recommended": "A1",
+    "candidates": [
+      {
+        "id": "A1",
+        "en": "Cinder remembers. Warden talks.",
+        "zh": "记的是 Cinder，答的是 Warden。"
+      },
+      {
+        "id": "A2",
+        "en": "One memory. Every agent.",
+        "zh": "一份记忆，所有 agent。"
+      },
+      {
+        "id": "A3",
+        "en": "Remember once. Keep it.",
+        "zh": "记一次，就一直记得。"
+      },
+      {
+        "id": "A4",
+        "en": "Nothing leaves. Nothing is forgotten.",
+        "zh": "什么都不走，什么都不忘。"
+      }
+    ]
+  },
+  "product": {
+    "cinder": {
+      "recommended": "C1",
+      "candidates": [
+        {
+          "id": "C1",
+          "en": "One memory. Every agent.",
+          "zh": "一份记忆，所有 agent。"
+        },
+        {
+          "id": "C2",
+          "en": "Remember once. Keep it.",
+          "zh": "记一次，就一直记得。"
+        },
+        {
+          "id": "C3",
+          "en": "Your agents forget. Cinder doesn't.",
+          "zh": "agent 会忘，Cinder 不会。"
+        },
+        {
+          "id": "C4",
+          "en": "Not a plugin. The layer.",
+          "zh": "不是插件，是底座。"
+        },
+        {
+          "id": "C5",
+          "en": "Local memory for every agent.",
+          "zh": "每个 agent 都有一份本地记忆。"
+        }
+      ]
+    },
+    "warden": {
+      "recommended": "W1",
+      "candidates": [
+        {
+          "id": "W1",
+          "en": "Your repo. Your machine. Your model.",
+          "zh": "你的仓库，你的机器，你的模型。"
+        },
+        {
+          "id": "W2",
+          "en": "Reads. Talks. Runs.",
+          "zh": "读、聊、执行。"
+        },
+        {
+          "id": "W3",
+          "en": "It asks before it writes.",
+          "zh": "它写之前先问。"
+        },
+        {
+          "id": "W4",
+          "en": "A copilot that stays on your machine.",
+          "zh": "一个不离开你机器的 copilot。"
+        }
+      ]
+    }
+  },
+  "positioning": {
+    "cinder": {
+      "zh": "给 AI coding agent 的本地优先记忆层。",
+      "en": "The local-first memory layer for AI coding agents."
+    },
+    "warden": {
+      "zh": "跑在你自己机器上的 copilot。",
+      "en": "A copilot that runs on your own machine."
+    },
+    "both": {
+      "zh": "一份本地记忆，一个本地助手。审批在人手里。",
+      "en": "One local memory, one local assistant. Approval stays with you."
+    }
+  },
+  "marks": {
+    "system": "The Knot / 结",
+    "rule": "每个标记是一条闭合的等宽带，它与自身相交，自己穿过自己；在下的一段真的缺席，切口平行于压过它那条的边缘，缝宽恒等于带宽。两枚标记归一化带宽完全相同（31.61u / 512），着墨率 23.3% / 24.3%。",
+    "cinder": {
+      "title": "三叶结 / Trefoil",
+      "curve": "z(t) = e^it + 2e^-2it",
+      "loops": 3,
+      "crossings": 3,
+      "symmetry": "3 重对称",
+      "bandPx": 31.61,
+      "bandSmallPx": 50.58,
+      "inkCoveragePct": 23.3,
+      "paths": 3,
+      "note": "三件事被捆在一起：浏览 / 编辑 / 审批。"
+    },
+    "warden": {
+      "title": "8 字 / Lemniscate",
+      "curve": "z(t) = cos t + i sin 2t",
+      "loops": 2,
+      "crossings": 1,
+      "symmetry": "2 重对称",
+      "bandPx": 31.61,
+      "bandSmallPx": 50.58,
+      "inkCoveragePct": 24.3,
+      "paths": 1,
+      "note": "一边读，一边跑；它自己不在中间。"
+    },
+    "colors": {
+      "field": "#34322D",
+      "glyph": "#F7F4EE",
+      "accentInMark": false
+    },
+    "domains": [
+      "brand 母图（平）",
+      "app 域（材质：高光 + 柔投影）",
+      "字形域（单色）",
+      "小尺寸域（≤20px 实心剪影）"
+    ]
+  },
+  "banned": {
+    "zh": [
+      "无缝",
+      "赋能",
+      "打通",
+      "闭环",
+      "革命性",
+      "强大的",
+      "智能化"
+    ],
+    "en": [
+      "seamless",
+      "frictionless",
+      "unlock",
+      "revolutionize",
+      "powerful",
+      "game-changer"
+    ]
+  },
+  "glossary": [
+    {
+      "zh": "记忆层",
+      "en": "memory layer",
+      "not": "知识库 / knowledge base"
+    },
+    {
+      "zh": "待批准的知识",
+      "en": "pending knowledge",
+      "not": "草稿 / draft"
+    },
+    {
+      "zh": "已批准的知识",
+      "en": "approved knowledge",
+      "not": "正式内容"
+    },
+    {
+      "zh": "交接",
+      "en": "handoff",
+      "not": "摘要 / summary"
+    },
+    {
+      "zh": "契约版本",
+      "en": "contract version",
+      "not": "工具面版本"
+    },
+    {
+      "zh": "工具面",
+      "en": "tool surface",
+      "not": "API 列表"
+    },
+    {
+      "zh": "工作台",
+      "en": "workbench",
+      "not": "控制台 / dashboard"
+    },
+    {
+      "zh": "助手",
+      "en": "assistant",
+      "not": "Agent 平台"
+    },
+    {
+      "zh": "闸门",
+      "en": "the gate",
+      "not": "权限系统 / sandbox"
+    },
+    {
+      "zh": "本地优先",
+      "en": "local-first",
+      "not": "私有化 / on-prem"
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "01",
+      "surface": "Cinder README 首句",
+      "zh": "给 AI coding agent 的本地优先记忆层。",
+      "en": "The local-first memory layer for AI coding agents."
+    },
+    {
+      "id": "02",
+      "surface": "Cinder README 副句",
+      "zh": "agent 的会话一关，决策、坑和下一步就没了。Cinder 把它们留在你机器上的一个 SQLite 文件里 —— 可检索、可版本化，一次工具调用交回给任何 agent。",
+      "en": "Agents forget the moment a session ends. Cinder keeps decisions, gotchas and next steps in one SQLite file on your machine — searchable, versioned, and handed back to any agent in one tool call."
+    },
+    {
+      "id": "03",
+      "surface": "Cinder README 第三句",
+      "zh": "不绑任何 harness。每个说 MCP 的 agent —— Claude Code、Cursor、Codex、Copilot —— 读写的都是同一份记忆。",
+      "en": "Not a plugin bolted onto one harness: every agent that speaks MCP reads and writes the same memory."
+    },
+    {
+      "id": "04",
+      "surface": "应用商店副标题 · Cinder",
+      "zh": "本地优先的 AI coding agent 记忆层",
+      "en": "The local-first memory layer for AI coding agents"
+    },
+    {
+      "id": "05",
+      "surface": "应用商店首句 · Cinder",
+      "zh": "一份记忆，所有 agent。",
+      "en": "One memory. Every agent."
+    },
+    {
+      "id": "06",
+      "surface": "应用商店首句 · Warden",
+      "zh": "你的仓库，你的机器，你的模型。",
+      "en": "Your repo. Your machine. Your model."
+    },
+    {
+      "id": "07",
+      "surface": "应用商店副标题 · Warden",
+      "zh": "跑在本机的 copilot，不是又一个 Agent 平台",
+      "en": "A local copilot — not another agent platform"
+    },
+    {
+      "id": "08",
+      "surface": "文档站 hero 主标题",
+      "zh": "记一次，就一直记得。",
+      "en": "Remember once. Keep it."
+    },
+    {
+      "id": "09",
+      "surface": "文档站 hero 副标题",
+      "zh": "一个 SQLite 文件。跨 agent、跨 IDE、跨会话。",
+      "en": "One SQLite file. Across agents, across IDEs, across sessions."
+    },
+    {
+      "id": "10",
+      "surface": "产品关系说明（两处通用）",
+      "zh": "Cinder 记，Warden 问。审批永远在 Cinder —— 因为那里有人在场。",
+      "en": "Cinder remembers, Warden asks. Approval stays in Cinder — because a human is there."
+    },
+    {
+      "id": "11",
+      "surface": "Warden 首屏空态 · 未连记忆层",
+      "zh": "这次没有记忆。",
+      "en": "No memory for this turn."
+    },
+    {
+      "id": "12",
+      "surface": "Warden 横幅 · 记忆层连不上",
+      "zh": "连不上记忆层，这次回答没有依据。",
+      "en": "The memory layer is unreachable — this answer has no memory behind it."
+    },
+    {
+      "id": "13",
+      "surface": "Cinder 待审批列表标题",
+      "zh": "等你放行的知识",
+      "en": "Knowledge waiting on you"
+    },
+    {
+      "id": "14",
+      "surface": "命令执行确认",
+      "zh": "这条命令会写入你的仓库。确认执行？",
+      "en": "This command writes to your repository. Run it?"
+    },
+    {
+      "id": "15",
+      "surface": "危险命令默认态",
+      "zh": "危险命令默认禁止。",
+      "en": "Dangerous commands are blocked by default."
+    },
+    {
+      "id": "16",
+      "surface": "托盘菜单 · Warden",
+      "zh": "唤起 Warden / 退出",
+      "en": "Show Warden / Quit"
+    },
+    {
+      "id": "17",
+      "surface": "错误 · 缺二进制",
+      "zh": "没装 repotory-mcp，就没有记忆。",
+      "en": "No repotory-mcp binary, no memory."
+    },
+    {
+      "id": "18",
+      "surface": "错误 · 版本过旧",
+      "zh": "这版记忆层太旧，升级后再用记忆。",
+      "en": "This memory layer is too old — upgrade it to use memory."
+    },
+    {
+      "id": "19",
+      "surface": "首屏自证 · 版本条",
+      "zh": "记忆层 v1.2.0 · 20 个工具",
+      "en": "Memory layer v1.2.0 · 20 tools"
+    },
+    {
+      "id": "20",
+      "surface": "发布说明标题",
+      "zh": "记忆层契约 v1.2.0",
+      "en": "Memory layer contract v1.2.0"
+    },
+    {
+      "id": "21",
+      "surface": "社交简介 · Cinder",
+      "zh": "本地优先的 AI coding agent 记忆层。一份记忆，所有 agent。",
+      "en": "The local-first memory layer for AI coding agents. One memory, every agent."
+    },
+    {
+      "id": "22",
+      "surface": "社交简介 · 联合",
+      "zh": "记忆在 Cinder，对话在 Warden。",
+      "en": "Cinder remembers. Warden talks."
+    },
+    {
+      "id": "23",
+      "surface": "CLI banner",
+      "zh": "cinder v2.32.1 — 本地记忆层已就绪",
+      "en": "cinder v2.32.1 — local memory layer ready"
+    },
+    {
+      "id": "24",
+      "surface": "共享会话状态条 · 已同步",
+      "zh": "已同步",
+      "en": "Synced"
+    },
+    {
+      "id": "25",
+      "surface": "共享会话状态条 · 临时对话",
+      "zh": "临时对话 / 未同步",
+      "en": "Temporary chat · not synced"
+    }
+  ]
+}

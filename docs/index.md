@@ -4,13 +4,13 @@ title: Cinder 文档
 
 # Cinder 文档
 
-<p class="subtitle"><strong>The local-first memory layer for AI coding agents</strong> — discover your Git repos, understand what changed, capture knowledge as searchable Markdown, and hand it to any agent in one tool call.<br><strong>面向 AI 编程 Agent 的本地优先记忆层</strong>：自动发现本地 Git 项目，理解每个项目「现在发生了什么、沉淀了哪些知识」，并在会话边界自动注入与收回，让任何 agent 复用同一份项目上下文。</p>
+<p class="subtitle"><strong>The local-first memory layer for AI coding agents</strong> — discover your Git repos, understand what changed, capture knowledge as searchable Markdown, and hand it to any agent in one tool call.<br><strong>给 AI coding agent 的本地优先记忆层</strong>：自动发现本地 Git 项目，理解每个项目「现在发生了什么、沉淀了哪些知识」，并在会话边界自动注入与收回，让任何 agent 复用同一份项目上下文。</p>
 
 <!--NAV_LINKS-->
 
 ## 产品定位
 
-Cinder 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记住的东西留在本机，让下一个 agent 接着用——核心价值是**让本地 Git 项目从'散落在终端和记忆里'变成'可检索、可复用的上下文'**。
+Cinder 是**给 AI coding agent 的本地优先记忆层**：把 agent 记住的东西留在本机，让下一个 agent 接着用——核心价值是**让本地 Git 项目从'散落在终端和记忆里'变成'可检索、可复用的上下文'**。
 
 这一层是**agent 中立 / 协议中立**的：任何会讲 MCP 的编程 Agent（Claude Code / Cursor / Codex / Copilot 等）都能读写**同一份**记忆——Cinder 不是绑在某个 harness 上的插件，而是这些 Agent 共享的中立一层。**不需要账号、不需要云端**：整份记忆就是本机的一个 SQLite 文件。
 
@@ -25,7 +25,7 @@ Cinder 是**面向 AI 编程 Agent 的本地优先记忆层**：把 agent 记住
 
 前端默认页为**知识库**，导航顺序为 **知识库 → 仪表盘 → 设置**（见 [ADR-0006](adr/0006-scope-freeze.md)）。
 
-核心闭环：
+核心链路：
 
 ```mermaid
 flowchart LR
@@ -56,7 +56,7 @@ sequenceDiagram
     Note over KB,Agent: 下一个会话（任何 agent）自动读到
 ```
 
-读图：三个参与者是**三个独立进程**——AI 侧不持有数据，Cinder 不调度 agent，知识库是双方唯一交汇的地方。上半段是冷启动（`repotory_scan`）与开会话（`repotory_context`），下半段是收会话（`repotory_handoff`）；最后一条 Note 是闭环成立的证据：交接笔记落库后，**下一个会话（可能是另一个 agent）经 `repotory_context` 自动读到**，不需要人工搬运。
+读图：三个参与者是**三个独立进程**——AI 侧不持有数据，Cinder 不调度 agent，知识库是双方唯一交汇的地方。上半段是冷启动（`repotory_scan`）与开会话（`repotory_context`），下半段是收会话（`repotory_handoff`）；最后一条 Note 是这条链路成立的证据：交接笔记落库后，**下一个会话（可能是另一个 agent）经 `repotory_context` 自动读到**，不需要人工搬运。
 
 其中「交给 AI 使用」落在**会话边界**：`repotory_scan` 建立知识库，`repotory_context` 开会话一次注入全上下文，`repotory_handoff` 收会话结构化交接，跨 agent 复用。
 

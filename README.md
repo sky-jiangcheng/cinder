@@ -104,7 +104,7 @@ First launch automatically seeds your scan roots (HOME on macOS/Linux; non-syste
 
 ## 🔄 The Cross-Agent Loop
 
-Three tool calls at session boundaries ensure that every agent that comes after you seamlessly reuses what the last one discovered:
+Three tool calls at session boundaries ensure that every agent that comes after you reuses what the last one discovered:
 
 ```mermaid
 flowchart TB
@@ -136,7 +136,7 @@ The dashed line is the key: handoffs live in your local SQLite database, not in 
 > Full feature matrix with tier definitions and ADR links: [docs/en/features-overview.md](docs/en/features-overview.md).
 
 - **Knowledge Base (Core)** — Markdown notes with a `/` block editor, FTS5 trigram search, per-save version history with line-level diff, and global ⌘/Ctrl+K search.
-- **AI-Ready Interfaces (Core)** — `repotory-mcp` (18 MCP tools), one-call `repotory_context` / `repotory_handoff`, llms.txt, 8 built-in memory importers (Claude, Codex, OpenCode, CodeBuddy, Cursor, OpenClaw, Hermes…), and data-integrity audit (`repotory_integrity`).
+- **AI-Ready Interfaces (Core)** — `repotory-mcp` (20 MCP tools), one-call `repotory_context` / `repotory_handoff`, llms.txt, 8 built-in memory importers (Claude, Codex, OpenCode, CodeBuddy, Cursor, OpenClaw, Hermes…), and data-integrity audit (`repotory_integrity`).
 - **Knowledge Graph & LLM Wiki (Support, Human-Gated)** — Notes compile into wiki pages as *pending* drafts; review queue (approve, reject, merge); page versions; community summaries; hybrid semantic search with pluggable vector store (sqlite-vec default, Qdrant / Weaviate remote) — every LLM path is opt-in.
 - **Built-in Backups (Core)** — Daily `VACUUM INTO` snapshots (on by default, 14 kept, 0600 permissions); restore is as simple as copying one file back.
 - **Repository Mining (Core)** — README summary, tech stack (20+ manifest formats), language shares, dependencies, contributors, and activity cached per repository.

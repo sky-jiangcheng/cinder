@@ -316,6 +316,9 @@ jobs:
       - name: Check brand drift
         run: node scripts/check-brand.mjs
 
+      - name: Check brand copy
+        run: node scripts/check-brand-copy.mjs
+
   # ------------------------------------------------------- Release notes ----
   # The GitHub Release body is the CHANGELOG section for that version,
   # reduced to its entry headlines (scripts/release-notes.mjs). The reduction

@@ -5,6 +5,7 @@
 - Related: [ADR-0049](0049-brand-restructure-manus-style.md) (the brand restructure — this ADR **lands the two items it explicitly left undecided**: "the UI subtraction and hierarchy rework" and "whether the master art is drawn again"), [ADR-0037](0037-brand-legibility-and-ui-language.md) (brand legibility and the interface grammar — this ADR **revises its "warm-paper editorial" tone and its "square edge + hairline is the style" master construction**), [ADR-0047](0047-resident-agent-separate-host.md) (two products, one job each — Warden is an independent product, so it gets its own glyph and signature colour), [ADR-0006](0006-scope-freeze.md) (scope freeze and the frozen identifiers), [ADR-0048](0048-core-contract-version.md) (the contract version — this ADR does not bump the contract)
 - Starting schema: v28 (**this ADR does not change the schema, the MCP tool surface, or `CoreVersion`**)
 
+> **Partially superseded by [ADR-0052](0052-the-knot-brand-mark.md)**: decisions 3 (the "C" inverse seal) and 4 (Warden's lantern) are replaced by v6 The Knot; the palette, the frozen identifier layer and the guard architecture still stand.
 ## Background
 
 ### The trigger

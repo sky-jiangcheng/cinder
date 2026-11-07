@@ -50,25 +50,26 @@ node scripts/check-i18n-keys.mjs    # locale 词条覆盖守卫（key 缺失 / �
 - **改绑定面必须同步文档**：`internal/app` 的方法签名是对外契约，变更需同步 [docs/api/reference.md](docs/api/reference.md)
 - **重大决策走 ADR**：在 [docs/adr/](docs/adr/index.md) 新增编号文件，说明背景、决策与代价；历史决策（分层、FTS5、块编辑器、范围冻结）见 ADR 索引
 
-## 品牌图标三域规则（macOS 适配 2026-10-23 立，2026-10-28 增补字形域）
+## 品牌图标四域规则（ADR-0052，2026-11-06 起）
 
-品牌母图 `build/icon.svg` 是**方边**奶油卡——方边是品牌识别（「印出来的卡」），但 macOS 从不给 icns 位图自动套圆角：方边母图直接当 app 图标，Dock 里就是一张方角卡片夹在一排圆角邻居里；而 VS Code 活动栏这类槽位**由宿主做遮罩渲染**。因此图标产物分三个域，**同一字母、三种容器**：
+标识是 **The Knot / 结**：一条闭合的等宽带穿过自己，在下的那一段**真的缺席**（断口编织，不用 mask）。母图因此是多段 path（Cinder 3 段 / Warden 1 段）。真相源是 `build/icon.svg` 与 `build/icon-warden.svg`；≤20px 的小尺寸域另有 `build/icon-small.svg` / `build/icon-warden-small.svg`（同一条中心线、笔画 1.6×、不断口）。
 
-| 域 | 产物 | 形状 | 理由 |
-|---|---|---|---|
-| 品牌域 | favicon（docs/web）、Marketplace 商店图标、JetBrains 工具窗内的品牌标记 PNG（96，渲染为 44） | 方边原卡 | 容器本身是方形或展示位，卡边即识别；squircle 在小尺寸下只会读作「破掉的矩形」 |
-| OS 应用域 | `build/appicon.png`（Wails 默认图标源）、`build/icons/` 阶梯、`build/icons/icon.ico` | squircle 容器 | macOS 规范：源图必须自带 squircle（≈22.37%，超椭圆 n≈5.2 近似），系统不裁 |
-| 字形域 | VS Code 活动栏（24，框+字母）、JetBrains 工具窗侧栏图标（16，仅字母） | 单色字形，**透明底** | 这两类槽位都不接受一张卡：VS Code 活动栏**遮罩渲染**（取 alpha 通道用主题前景色重绘，母图的奶油底不透明 → mask 出来是一整块实心方块，R 消失，把已发布的文件丢进 CSS mask 即可复现）；JetBrains 侧栏把插件 SVG 当**位图**光栅化（不遮罩，2026-10-29 按 IDEA 2025.2 的 `SVGLoader` → `StripeButton.setIcon` 链路核实），并在深色主题下自动取 `_dark` 同名兄弟文件（平台自己的 `icons/statisticsEventLog.svg` + `_dark.svg` 就是这个约定）。所以侧栏图标是 **16px 单色字母 + 透明底**，浅色主题用品牌墨色、深色主题用品牌纸色——13px 的奶油卡在 40px 深的侧栏里是一块发亮的方块，hairline 框在该尺寸不足一个像素，读作变形的光斑 |
+| 域 | 产物 | 形状 |
+|---|---|---|
+| 品牌域 | favicon、商店图标、JetBrains 工具窗品牌标记 PNG、Marketplace 40px 对 | 母图原样，方边、纯色、token 可绑 |
+| OS 应用域 | `build/appicon.png`、`build/icons/` 阶梯、ico/icns、Warden 的 Tauri 全套 | squircle 容器 + `lift` 纸色渐变 + `press` 柔投影 |
+| 字形域 | VS Code 活动栏 24px、JetBrains 侧栏 16px（含 `_dark`）、macOS 托盘 22px | 单色字形、透明底 |
+| 小尺寸域 | 所有 ≤20px 的位图帧与 16px 条纹图标 | 实心剪影，同一条中心线、笔画 1.6×、不断口 |
 
-规则条目：
+规则：
 
-- **单点改动**：只改 `build/icon.svg`，`scripts/generate-icons.mjs` 自动派生三域全部产物，CI 同步门（`--check`）拦截任何半落地
-- **遮罩槽位必须透明底**：凡是宿主按遮罩渲染的槽位，产物的 alpha 形状**就是**标记本身——不能有不透明的底。生成器对字形域断言「油墨覆盖率 < 75%」：一张实心卡的覆盖率是 100%，门会直接报 `opaque slab`
-- **同心原则**：OS 域的内部 hairline 框不是「随机半径圆角矩形」，而是按容器曲线内缩的同心 squircle（Apple concentricity：嵌套圆角必须与容器相关）
-- **新增图标面前先分类**：OS 应用图标 → 继承 squircle；品牌展示 → 母图原样；**遮罩槽位 → 字形域（透明底单色）**。**不要手养副本**——本品牌历史上四次半落地（活动栏/工具窗/favicon/README 各漏一次改版）根因全部是手养副本
-- **小尺寸要重新配重**：母图 hairline 在 512 网格上是 9 单位，到 24px 只剩 0.42px（不足一个像素，糊成一条灰线）。字形域的框按小尺寸重新配重（34 单位 = 24px 下 1.6px）
-- **macOS 26+ Liquid Glass `.icon` 分层格式**（系统自动掩码 + 玻璃效果）是未来方向，但 Wails 仍产 icns 位图阶梯，在迁移前本规则是唯一适配路径；迁移时删掉应用域的预裁 squircle，改供方形图层
-- **CI 顺序**：同步门先跑 `--check --tracked-only`（只查**已提交**的产物），再生成、再全量 `--check`。先生成后检查等于拿生成器跟它自己比，什么都抓不到
+- **单点改动**：只改母图（或用 `brand/marks/build-marks.mjs` 的参数重算），跑 `node scripts/generate-icons.mjs --agent-repo ../warden` 派生全部产物；CI 同步门（`--check --tracked-only`）拦任何半落地，先查后生成
+- **切域只有一处**：`renderPng()` 按渲染尺寸在 `SMALL_DOMAIN_MAX = 20` 处切小尺寸域，ICO / ICNS 的每一帧自动生效，不在调用点重复判断
+- **多 path 必须全局替色**：`extractBrandParts()` 出来的 `<g>` 内每段 path 都有自己的 fill；反白对与条纹图标用 `/g` 替换，漏掉就会花色
+- **遮罩槽位必须透明底**：alpha 形状就是标记本身；生成器对字形域断言「油墨覆盖率 < 75%」，否则报 `opaque slab`
+- **App 内不手抄几何**：`web/src/components/brandMarkPaths.ts` 由生成器写入，`check-brand.mjs` 第⑤门逐字节比对**全部** path 与 `<g transform>`
+- **文案同源**：`build/brand-copy.json` 是 25 条中英基线的真相源，`check-brand-copy.mjs` 校验禁用词、定位句与母图结构参数
+- **不要手养副本**：本品牌历史上四次半落地（活动栏 / 工具窗 / favicon / README 各漏一次改版）根因全部是手养副本
 
 ## 前端测试的异步落地（ADR-0026）
 

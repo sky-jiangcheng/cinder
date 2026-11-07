@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.32.3] - 2026-11-07
+
+### 变更
+
+- **品牌标识 v6 · The Knot（2026-11-06 / ADR-0052）**：母图改为「一条等宽带穿过自己」（Cinder 三叶结 / Warden 8 字），新增 ≤20px 小尺寸域与 app 域材质层；`check-brand.mjs` 第⑤门升级为全 path 逐字节比对，`BrandMark` 几何改由生成器写入；35 个派生图标全部重生成；文案基线落 `build/brand-copy.json` 并新增 `check-brand-copy.mjs` 门；ADR-0037 / 0050 的母图决策加 superseded 横幅。
+
 ## [2.32.2] - 2026-11-06
 
 ### 修复
@@ -861,7 +867,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.31.1...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...HEAD
+[2.32.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.2...v2.32.3
 [2.29.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.28.0...v2.29.0
 [2.30.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.29.0...v2.30.0
 [2.31.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.30.0...v2.31.0

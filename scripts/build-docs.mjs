@@ -519,7 +519,7 @@ ${extraHead}  <style>
     <div class="sidebar-brand">
       <div class="sidebar-brand-row">
         ${brandMarkSvg(28)}
-        <h1>Repo<span>tory</span></h1>
+        <h1>Cinder</h1>
       </div>
       <small>${loc.brandSmall}</small>
       ${switcherHtml(locale, base, pageOutDir)}

@@ -5,10 +5,10 @@
 <h1 align="center">Cinder</h1>
 
 <p align="center">
-  <b>面向 AI 编程 Agent 的本地优先记忆层。</b><br/>
+  <b>给 AI coding agent 的本地优先记忆层。</b><br/>
   告别 Agent「会话失忆症」。Agent 读代码很聪明，但会话一结束就忘光——为什么这样设计、踩过什么坑、下一步做什么。<br/>
   Cinder 把这些项目知识留在你的本地 SQLite 中：可搜索、有版本、有备份，<br/>
-  并让<i>任何</i>一个 Agent 一次工具调用就能无缝接回上下文。
+  并让<i>任何</i>一个 Agent 一次工具调用就能接回上下文。
 </p>
 
 <p align="center">
@@ -101,7 +101,7 @@ claude mcp add repotory -- "$(which repotory-mcp)"
 
 ---
 
-## 🔄 跨 Agent 记忆闭环
+## 🔄 跨 Agent 记忆接力
 
 在会话边界通过三次工具调用完成交接，让后续每一个接手的 Agent 都能复用前人留下的经验：
 
@@ -135,7 +135,7 @@ flowchart TB
 > 完整功能表（含层级分类与 ADR 链接）见 [docs/features-overview.md](docs/features-overview.md)。
 
 - **知识库（Core）** —— Markdown 笔记 + `/` 块编辑器、FTS5 全文搜索、逐次保存的版本历史与行级 diff、全局 ⌘/Ctrl+K 搜索。
-- **AI 就绪接口（Core）** —— `repotory-mcp`（18 个 MCP 工具）、单调用注入 `repotory_context` / `repotory_handoff`、llms.txt、8 个内置 Agent 记忆导入源（Claude / Codex / OpenCode / CodeBuddy / Cursor / OpenClaw / Hermes 等）、数据完整性审计（`repotory_integrity`）。
+- **AI 就绪接口（Core）** —— `repotory-mcp`（20 个 MCP 工具）、单调用注入 `repotory_context` / `repotory_handoff`、llms.txt、8 个内置 Agent 记忆导入源（Claude / Codex / OpenCode / CodeBuddy / Cursor / OpenClaw / Hermes 等）、数据完整性审计（`repotory_integrity`）。
 - **知识图谱 & LLM Wiki（Support，人把关）** —— 笔记自动编译为**待审** Wiki 页；审核队列（批准 / 拒绝 / 合并，墓碑语义）；页面版本与合并建议；混合语义检索 + 可插拔向量库（默认 sqlite-vec，支持远程 Qdrant / Weaviate）——LLM 编译流程全面受控。
 - **内置安全备份（Core）** —— 每日 `VACUUM INTO` 自动快照（默认开启，保留 14 份，0600 权限）；恢复仅需拷回单个文件。
 - **仓库自动挖掘（Core）** —— README 摘要、技术栈识别（20+ 清单格式）、语言分布、依赖关系、贡献者、活跃度趋势。

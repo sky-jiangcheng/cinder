@@ -22,53 +22,37 @@
 // palette as the Cinder SSOT, and it flows through the same three shape
 // domains below, so the sync gate covers it too.
 //
-// THREE SHAPE DOMAINS (see CONTRIBUTING "Brand icon domains"):
-//   brand domain — the SSOT verbatim: the square-edged "inverse seal" —
-//     a solid warm-ink field with the glyph knocked out in paper, no
-//     hairline frame (ADR-0050 decision ③).
-//     Favicons, marketplace icons, the JetBrains plugin's in-panel brand
-//     mark. These sit in square or promotional containers (browser tab,
-//     store list, a 96px mark in the tool-window header) where the card edge
-//     IS the brand; a squircle here would read as a broken rectangle, not a
-//     rounded one.
-//   app domain — the same mark inside a macOS squircle container:
-//     build/appicon.png (the Wails default icon source), the size ladder,
-//     the Windows .ico. macOS has never auto-masked app icons: since Big
-//     Sur the source artwork must ship its own squircle or the Dock shows
-//     a square card next to every rounded neighbour. (The macOS 26+
-//     Liquid Glass .icon format lets the system mask, but a Wails build
-//     still ships a plain icns/PNG ladder, so we must pre-shape it.)
-//   glyph domain — the same mark cut to ONE colour on a TRANSPARENT
-//     background, for slots the host renders as a MASK or as a monochrome
-//     stripe icon. Two slots live here:
-//     · the VS Code activity bar: VS Code takes the SVG's alpha channel
-//       and paints it in the theme's icon foreground, so the opaque cream
-//       field of the card turned the whole 24×24 into one flat slab — the
-//       activity bar showed a white square with the letter gone (verified by
-//       rendering the shipped file through a CSS mask). The alpha shape has
-//       to BE the mark: the glyph, nothing else.
-//     · the JetBrains tool-window stripe: IntelliJ rasterizes plugin SVG
-//       icons as plain images (no mask) and picks the `_dark` sibling when
-//       the IDE runs a dark theme — the same convention JetBrains' own
-//       stripe icons use (icons/statisticsEventLog.svg + _dark.svg in the
-//       bundled dev plugin). So the stripe gets a 16px monochrome glyph on
-//       a transparent background, in two theme colours. The card was wrong
-//       there: a cream slab in a 40px dark strip read as a deformed bright
-//       blob. The brand card still ships — in the tool-window header (96px)
-//       and in the store listing.
+// FOUR SHAPE DOMAINS (ADR-0052 "The Knot" / 结; see CONTRIBUTING):
+//   brand domain — the SSOT verbatim: a flat, square-edged ink field with
+//     the woven band knocked out in paper. Token-bindable, no gradients.
+//     Favicons, marketplace icons, the JetBrains in-panel mark.
+//   app domain — the same mark in a macOS squircle, with the v6 material
+//     layer (`lift` paper gradient + `press` soft impression shadow).
+//     appicon.png, the size ladder, ico/icns, the whole Tauri set.
+//   glyph domain — one colour on a transparent background, for slots the
+//     host renders as a mask or a monochrome stripe (VS Code activity bar,
+//     JetBrains tool window, macOS menu bar). The alpha shape must BE the
+//     mark; inkCoverage() fails an opaque slab.
+//   small domain — at <= SMALL_DOMAIN_MAX the woven cuts are sub-pixel, so
+//     a solid stroked silhouette on the same centre line takes over
+//     (1.6x stroke, no cuts). renderPng() switches by rendered size, so
+//     ICO/ICNS frames and the Tauri ladder all follow automatically.
 //
-// Two surfaces stay outside the generated set, both deliberately: the
-// JetBrains Marketplace pair (pluginIcon.svg / pluginIcon_dark.svg, 40×40)
-// is hand-scaled because the dark variant is a colour inversion, not a
-// resize; the docs sidebar mark and the README banners reference the SSOT
-// itself (build-docs.mjs inlines it, the READMEs point at the file), so
-// there is no second copy to drift.
+// The master can hold SEVERAL paths (Cinder 3, Warden 1): at each crossing
+// the under-strand is genuinely absent. Every fill replacement over the
+// letterform group is therefore global; a single replace would leave the
+// inverted Marketplace pair with mixed colours.
+//
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import sharp from 'sharp'
 
 const SIZES = [512, 256, 128, 64, 48, 32, 16]
+
+// v6 / ADR-0052: at this rendered size and below the woven knot's cuts
+// are sub-pixel, so the solid-stroke small-domain master takes over.
+const SMALL_DOMAIN_MAX = 20
 
 const root = process.cwd()
 const svgPath = path.join(root, 'build/icon.svg')
@@ -144,7 +128,7 @@ function extractBrandParts(svgText) {
 // the alpha shape has to BE the mark, and a solid field here would fill the
 // whole slot and render as one flat slab under a mask.
 function glyphSvg(parts, size) {
-  const letter = parts.letterform.replace(/fill="[^"]+"/, `fill="${parts.glyph}"`)
+  const letter = parts.letterform.replace(/fill="[^"]+"/g, `fill="${parts.glyph}"`)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="${size}" height="${size}" role="img" aria-label="Cinder">
   <!-- Glyph-domain cut of build/icon.svg (brand SSOT): one colour, transparent
        background — for slots the host renders as a mask. See CONTRIBUTING
@@ -210,7 +194,7 @@ async function alphaBBox(svgText, size = 512) {
 
 /** The letterform alone on a transparent field — the shape a stripe icon shows. */
 function letterOnlySvg(parts, fill) {
-  const letter = parts.letterform.replace(/fill="[^"]+"/, `fill="${fill}"`)
+  const letter = parts.letterform.replace(/fill="[^"]+"/g, `fill="${fill}"`)
   return `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">${letter}</svg>`
 }
 
@@ -230,7 +214,7 @@ function letterOnlySvg(parts, fill) {
 function sealSquareSvg(parts, size, inverted) {
   const field = inverted ? parts.glyph : parts.field
   const glyph = inverted ? parts.field : parts.glyph
-  const letter = parts.letterform.replace(/fill="[^"]+"/, `fill="${glyph}"`)
+  const letter = parts.letterform.replace(/fill="[^"]+"/g, `fill="${glyph}"`)
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 512 512">
   <!-- Marketplace icon (${size}x${size}) generated from build/icon.svg (the brand
        SSOT): the inverse seal — solid field, letterform knocked out, no frame.
@@ -242,22 +226,73 @@ function sealSquareSvg(parts, size, inverted) {
 `
 }
 
+// The web UI's own copy of the letterform, as DATA. A hand-copied <path d>
+// in BrandMark.tsx used to be byte-compared against only the FIRST master
+// path; the v6 master has three. Generating the whole list keeps gate 5
+// honest: it compares every path, not one of them.
+function brandMarkPathsModule(masterText) {
+  const paths = [...masterText.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
+  const transform = /<g transform="([^"]+)"/.exec(masterText)?.[1]
+  if (!paths.length || !transform) throw new Error('generate-icons: cannot derive web UI mark from master')
+  return `// Generated from build/icon.svg by scripts/generate-icons.mjs — do not edit.
+// check-brand.mjs gate 5 byte-compares every path and the group transform
+// against the master, so a rebrand cannot leave the navbar behind.
+export const BRAND_MARK_TRANSFORM = '${transform}'
+export const BRAND_MARK_PATHS: string[] = [
+${paths.map((d) => `  '${d}',`).join('\n')}
+]
+`
+}
+
 // The app-domain mark: SSOT letterform and colours inside the squircle
 // container. The inverse seal carries no hairline frame, so there is no
 // inner curve to re-draw concentrically — the container holds the solid
 // field and the knocked-out glyph, nothing else.
 function appMarkSvg(parts, label = 'Cinder') {
+  // v6 / ADR-0052: the app domain carries the material layer — a paper
+  // gradient along the glyph and a soft drop shadow (letterpress). The
+  // brand master stays flat so the token-bound monochrome domains survive.
+  const letter = parts.letterform.replace(/fill="[^"]+"/g, 'fill="url(#lift)"')
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="${label}">
-  <!-- App-domain variant of the brand SSOT: same letterform,
-       same colours, inside the macOS squircle container. Generated by
-       scripts/generate-icons.mjs; do not edit. -->
+  <!-- App-domain variant of the brand SSOT: same letterform, same colours,
+       inside the macOS squircle container, with the v6 material layer.
+       Generated by scripts/generate-icons.mjs; do not edit. -->
+  <defs>
+    <linearGradient id="lift" gradientUnits="userSpaceOnUse" x1="58" y1="38" x2="446" y2="474">
+      <stop offset="0" stop-color="#FFFDF6"/>
+      <stop offset="0.44" stop-color="${parts.glyph}"/>
+      <stop offset="1" stop-color="#D6CEBD"/>
+    </linearGradient>
+    <filter id="press" x="-22%" y="-22%" width="144%" height="150%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#100E0C" flood-opacity="0.45"/>
+    </filter>
+  </defs>
   <path d="${squirclePath(512)}" fill="${parts.field}"/>
-  ${parts.letterform}
+  <g filter="url(#press)">${letter}</g>
 </svg>
 `
 }
 
-async function renderPng(svg, size) {
+// The small-domain master is a square brand card whose glyph is a solid
+// stroked centre line. Re-container it into the same squircle; the
+// silhouette needs no lift gradient (it would be invisible at 16px anyway).
+function smallAppSvg(smallText) {
+  const m = /<rect width="512" height="512" fill="([^"]+)"\/>/.exec(smallText)
+  if (!m) throw new Error('generate-icons: small-domain master has no field rect')
+  const squircle = `<path d="${squirclePath(512)}" fill="${m[1]}"/>`
+  return smallText.replace(/<rect width="512" height="512" fill="[^"]+"\/>/, squircle)
+}
+
+// A mark is either one SVG (string/Buffer) or a { normal, small } pair.
+// Every raster target — size ladder, ICO frames, ICNS chunks, Tauri set —
+// goes through here, so the small-domain switch is one place, not N.
+function svgFor(mark, size) {
+  if (typeof mark === 'string' || Buffer.isBuffer(mark)) return mark
+  return size <= SMALL_DOMAIN_MAX && mark.small ? mark.small : mark.normal
+}
+
+async function renderPng(mark, size) {
+  const svg = svgFor(mark, size)
   // sharp treats a string argument as a file path; both domains hand us
   // strings and buffers, so normalise here.
   return sharp(Buffer.isBuffer(svg) ? svg : Buffer.from(svg)).resize(size, size).png().toBuffer()
@@ -381,8 +416,11 @@ async function main() {
   const trackedOnly = process.argv.includes('--tracked-only')
   const svg = fs.readFileSync(svgPath)
   const svgText = svg.toString()
+  const smallSvgText = fs.readFileSync(path.join(root, 'build/icon-small.svg')).toString()
+  const wardenSmallSvgText = fs.readFileSync(path.join(root, 'build/icon-warden-small.svg')).toString()
   const parts = extractBrandParts(svgText)
-  const appSvg = appMarkSvg(parts)
+  const brandSvg = { normal: svg, small: smallSvgText }
+  const appSvg = { normal: appMarkSvg(parts), small: smallAppSvg(smallSvgText) }
 
   // The agent product's own SSOT (build/icon-warden.svg): same palette and
   // same three domains, its own glyph. Loaded unconditionally so a broken
@@ -390,7 +428,7 @@ async function main() {
   // repo — the sync gate covers it either way.
   const wardenSvgText = fs.readFileSync(path.join(root, 'build/icon-warden.svg')).toString()
   const wardenParts = extractBrandParts(wardenSvgText)
-  const wardenAppSvg = appMarkSvg(wardenParts, 'Warden')
+  const wardenAppSvg = { normal: appMarkSvg(wardenParts, 'Warden'), small: smallAppSvg(wardenSmallSvgText) }
 
   if (!check) fs.mkdirSync(outDir, { recursive: true })
 
@@ -454,7 +492,7 @@ async function main() {
   // The favicon .ico is its own build from the brand mark — NOT a copy of
   // the app-domain icon.ico: the OS icon wears the squircle, the browser
   // tab wears the square card, same letterform, different containers.
-  const faviconIco = await buildIco(svg)
+  const faviconIco = await buildIco(brandSvg)
   const DERIVED = [
     { buf: faviconIco, rel: 'docs/favicon.ico' },
     { buf: faviconIco, rel: 'web/public/favicon.ico' },
@@ -492,10 +530,21 @@ async function main() {
     }
   }
 
+  // 2c. Web UI mark data — every master path, generated not hand-copied.
+  const pathsModule = brandMarkPathsModule(svgText)
+  const pathsTarget = path.join(root, 'web/src/components/brandMarkPaths.ts')
+  if (check) {
+    if (!fs.existsSync(pathsTarget)) stale.push(`${pathsTarget} (missing)`)
+    else if (sha(Buffer.from(pathsModule)) !== sha(fs.readFileSync(pathsTarget))) stale.push(`${pathsTarget} (stale)`)
+  } else {
+    fs.writeFileSync(pathsTarget, pathsModule)
+    console.log('  ✓ web/src/components/brandMarkPaths.ts (web UI mark data)')
+  }
+
   // 3. VS Code marketplace icon (media/icon.png, 128×128) — brand domain:
   //    store listings render in square or system-shaped thumbnails, the
   //    card edge is the recognition.
-  const marketplacePng = await renderPng(svg, MARKETPLACE_ICON_SIZE)
+  const marketplacePng = await renderPng(brandSvg, MARKETPLACE_ICON_SIZE)
   const vscodeIcon = path.join(root, 'ide/vscode/media/icon.png')
   if (trackedOnly) {
     // Only the committed marketplace icon is verified here; the PNG in
@@ -564,8 +613,11 @@ async function main() {
   const STRIPE_INK_LIGHT = parts.field // #34322D — brand ink, light theme
   const STRIPE_INK_DARK = parts.glyph // #F7F4EE — brand paper, dark theme
   const frame = await letterFrame(parts)
+  const smallLetterform = /<g transform="translate[\s\S]*?<\/g>/.exec(smallSvgText)
+  if (!smallLetterform) throw new Error('generate-icons: small-domain master has no glyph group')
   const stripeSvg = (ink) => {
-    const letter = parts.letterform.replace(/fill="[^"]+"/, `fill="${ink}"`)
+    // 16px: solid stroked centre line of the small domain, no woven cuts.
+    const letter = smallLetterform[0].replace(/stroke="[^"]+"/g, `stroke="${ink}"`)
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${TOOL_WINDOW_SIZE}" height="${TOOL_WINDOW_SIZE}" viewBox="${frame.x.toFixed(2)} ${frame.y.toFixed(2)} ${frame.side.toFixed(2)} ${frame.side.toFixed(2)}" fill="none">
   <!-- Tool-window stripe icon: the letterform of build/icon.svg (brand
        SSOT), cut to one colour on a transparent field — the glyph domain.
@@ -600,7 +652,7 @@ async function main() {
   //    pipeline exists to prevent: it drifted from the SSOT silently. It is
   //    generated now, so the CI sync gate covers it too.
   const MARK_PNG_SIZE = 96
-  const markPng = await renderPng(svg, MARK_PNG_SIZE)
+  const markPng = await renderPng(brandSvg, MARK_PNG_SIZE)
   const markFile = path.join(root, 'ide/jetbrains/src/main/resources/icons/repotory-mark.png')
   if (check) {
     if (!fs.existsSync(markFile)) stale.push(`${markFile} (missing)`)
@@ -659,6 +711,20 @@ async function main() {
     }
     if (!check) console.log(`  ✓ agent icons: ${TAURI_PNGS.length} PNGs (app domain, squircle)`)
 
+    // The in-app brand mark (index.html .brand__mark) and the companion
+    // surface used to be a hand-made lantern PNG with no sync gate. It is
+    // derived now, so ADR-0052's mark reaches the UI too.
+    const uiMarkPng = await renderPng(wardenAppSvg, 64)
+    const uiMarkPath = path.join(path.resolve(agentRepo), 'src/assets/warden.png')
+    if (check) {
+      if (!fs.existsSync(uiMarkPath)) stale.push(`${uiMarkPath} (missing)`)
+      else if ((await pixelDiff(uiMarkPng, fs.readFileSync(uiMarkPath))) > 0.005) stale.push(`${uiMarkPath} (pixel drift)`)
+    } else {
+      fs.mkdirSync(path.dirname(uiMarkPath), { recursive: true })
+      fs.writeFileSync(uiMarkPath, uiMarkPng)
+      console.log('  ✓ agent UI: src/assets/warden.png (64px app domain)')
+    }
+
     // The .ico Tauri's bundler embeds on Windows: Tauri's own size set.
     const agentIco = await buildIco(wardenAppSvg, [256, 64, 48, 32, 24, 16])
     const agentIcoPath = path.join(iconsDir, 'icon.ico')
@@ -709,7 +775,7 @@ async function main() {
   <!-- Menu-bar glyph: the glyph of build/icon-warden.svg (Warden SSOT), cut
        to one colour on a transparent field — the glyph domain.
        Generated by scripts/generate-icons.mjs; do not edit by hand. -->
-  ${wardenParts.letterform.replace(/fill="[^"]+"/, `fill="${wardenParts.field}"`)}
+  ${wardenParts.letterform.replace(/fill="[^"]+"/g, `fill="${wardenParts.field}"`)}
 </svg>
 `
     const trayPng = await renderPng(traySvg, TRAY_SIZE)
