@@ -60,9 +60,10 @@ order: 27
 
 | [0051](0051-conversation-as-interface.md) | Conversation as the interface — Function Calling tool surface as the unified operation layer, doing UI subtraction | **Accepted (2026-11-06, the user settled on "strongest user experience, cleanest UI")** |
 | [0052](0052-the-knot-brand-mark.md) | Redraw the marks — The Knot (one band threading itself) and four derived domains | **Accepted (2026-11-06, the user settled it with "land v6")**; amended 2026-11-07 (56u card margin, decision 9) |
+| [0053](0053-incremental-commit-review.md) | Incremental review after commits — rules sift candidates, the model only confirms them | **Proposed (2026-11-08, design draft, awaiting the user's call before any code)** |
 
 ## Conventions
 
 - One ADR per major irreversible decision: Background → Decision → Consequences
 - Superseded ADRs keep their original text and banner; they are never deleted
-- New ADRs increment from `0052`, file name `NNNN-kebab-title.md`
+- New ADRs increment from `0053`, file name `NNNN-kebab-title.md`

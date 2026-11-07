@@ -61,6 +61,7 @@ order: 27
 
 | [0051](0051-conversation-as-interface.md) | 对话即界面——以 Function Calling 工具面作为统一操作层做界面减法 | **Accepted（2026-11-06，用户按「用户体验最强、UI 最清爽」批准）** |
 | [0052](0052-the-knot-brand-mark.md) | 标识重做——The Knot（一条带子穿过自己）与四域派生 | **Accepted（2026-11-06，用户以「就以 v6 进行落地」拍定）**；2026-11-07 修订（卡片留白 56u，见决策⑨） |
+| [0053](0053-incremental-commit-review.md) | 提交后增量审查——规则筛候选，模型只复核候选 | **Proposed（2026-11-08，设计稿，等用户拍板后落码）** |
 
 
 
@@ -68,4 +69,4 @@ order: 27
 
 - 每个重大不可逆决策一篇：背景 → 决策 → 后果
 - 被 superseded 的 ADR 保留原文与横幅，不删除
-- 新 ADR 从 `0052` 递增编号，文件名 `NNNN-kebab-title.md`
+- 新 ADR 从 `0053` 递增编号，文件名 `NNNN-kebab-title.md`
