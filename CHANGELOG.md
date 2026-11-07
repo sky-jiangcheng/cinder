@@ -12,6 +12,10 @@
 
 - **品牌标识 v6 · The Knot（2026-11-06 / ADR-0052）**：母图改为「一条等宽带穿过自己」（Cinder 三叶结 / Warden 8 字），新增 ≤20px 小尺寸域与 app 域材质层；`check-brand.mjs` 第⑤门升级为全 path 逐字节比对，`BrandMark` 几何改由生成器写入；35 个派生图标全部重生成；文案基线落 `build/brand-copy.json` 并新增 `check-brand-copy.mjs` 门；ADR-0037 / 0050 的母图决策加 superseded 横幅。
 
+### 修复
+
+- **JetBrains 会话层补回 `rename`（2026-11-07）**：ADR-0051 撤掉工具窗的 Rename 按钮时把 `SharedChatSession.rename()` 一并删了，但两组共享会话并发回归仍引用它，`gradle test` 编译不过、release 的 ci-gate 因此挡住发版。`repotory_chat` 的 `rename` operation 仍在工具面，会话能力与 UI 按钮不是一回事——补回原实现（16 行），不改 MCP 契约、不动工具面。
+
 ## [2.32.2] - 2026-11-06
 
 ### 修复

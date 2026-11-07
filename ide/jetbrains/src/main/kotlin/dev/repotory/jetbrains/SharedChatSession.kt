@@ -142,6 +142,28 @@ internal class SharedChatSession(
         }
     }
 
+    /**
+     * Rename a shared thread. ADR-0051 removed the Rename BUTTON from the
+     * tool window, not the session capability: `repotory_chat` still serves
+     * the `rename` operation, and the concurrency regressions exercise stale
+     * reads and per-thread error attribution through this entry point.
+     */
+    fun rename(id: String, title: String) {
+        if (title.isBlank()) return
+        try {
+            val thread = chat("rename", mapOf("thread_id" to id, "title" to title.trim())).get("thread").thread()
+            check(thread.id == id) { "The service returned a different conversation." }
+            synchronized(lock) {
+                if (disposed) return
+                remember(thread)
+                revision++
+                errors.remove(id)
+                changed()
+            }
+        } catch (e: Exception) {
+            operationFailed(id, e)
+        }
+    }
 
     /** Capture the destination on the UI thread, BEFORE queuing network work. */
     fun prepareSend(question: String): SharedPending? = synchronized(lock) {
