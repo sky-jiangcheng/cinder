@@ -244,7 +244,7 @@ const HISTORICAL = [
 // Comment lines are not a surface: they explain why a frozen string still
 // says "repotory", and stripping them keeps that explanation from being
 // mistaken for a display-layer miss.
-const COMMENT_EXT = new Set(['.go', '.ts', '.tsx', '.js', '.mjs', '.css', '.yml', '.yaml', '.sh', '.ps1'])
+const COMMENT_EXT = new Set(['.go', '.ts', '.tsx', '.js', '.mjs', '.css', '.yml', '.yaml', '.sh', '.ps1', '.kt'])
 
 function stripComments(text, ext) {
   if (!COMMENT_EXT.has(ext)) return text
@@ -396,19 +396,28 @@ for (const file of scanned) {
 // FIRST master path. The v6 knot is three paths, so the geometry now lives
 // in generated data and this gate compares EVERY path plus the group
 // transform — a rebrand cannot leave the navbar behind.
+//
+// The VS Code webview is the same story with a different ending: it cannot
+// load the mark as a file, so it inlines the master's paths into its HTML.
+// That inlining was a hand copy nobody checked, and it silently kept the
+// previous letterform through a rebrand. It is generated now, and this gate
+// covers it as well.
 const MASTER_REL = 'build/icon.svg'
 const UI_DATA_REL = 'web/src/components/brandMarkPaths.ts'
 const UI_COMPONENT_REL = 'web/src/components/BrandMark.tsx'
+const WEBVIEW_REL = 'ide/vscode/src/chatConsoleHtml.ts'
 if (
   !existsSync(join(root, MASTER_REL)) ||
   !existsSync(join(root, UI_DATA_REL)) ||
-  !existsSync(join(root, UI_COMPONENT_REL))
+  !existsSync(join(root, UI_COMPONENT_REL)) ||
+  !existsSync(join(root, WEBVIEW_REL))
 ) {
-  issues.push(`${MASTER_REL} / ${UI_DATA_REL} / ${UI_COMPONENT_REL} 必须同时存在——母图与 App 内标记数据同源`)
+  issues.push(`${MASTER_REL} / ${UI_DATA_REL} / ${UI_COMPONENT_REL} / ${WEBVIEW_REL} 必须同时存在——母图与 App 内标记数据同源`)
 } else {
   const master = read(MASTER_REL)
   const uiData = read(UI_DATA_REL)
   const component = read(UI_COMPONENT_REL)
+  const webview = read(WEBVIEW_REL)
 
   const masterPaths = [...master.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
   const uiPaths = [...uiData.matchAll(/^\s*'([^']+)',?$/gm)].map((m) => m[1])
@@ -428,6 +437,26 @@ if (
     }
   }
 
+  // The VS Code webview cannot load the mark as a file (the panel has no
+  // localResourceRoots), so it INLINES the master's paths into its HTML.
+  // That inlining was a hand copy with no gate on it: the v6 rebrand left
+  // the panel wearing the previous letterform while every other surface
+  // had moved. It is generated now — and this gate catches a hand edit.
+  const webviewPaths = [
+    ...(webview.match(/const MARK_SVG = `[\s\S]*?<\/svg>`;/)?.[0] ?? '').matchAll(/<path[^>]*\sd="([^"]+)"/g),
+  ].map((m) => m[1])
+  if (!webviewPaths.length) {
+    issues.push(`${WEBVIEW_REL}: 找不到内联的 MARK_SVG——webview 面板里的标记与母图脱钩`)
+  } else if (webviewPaths.length !== masterPaths.length) {
+    issues.push(`${WEBVIEW_REL}: 内联标记 ${webviewPaths.length} 段路径，母图 ${masterPaths.length} 段——webview 里是一份旧母图`)
+  } else {
+    for (let i = 0; i < masterPaths.length; i++) {
+      if (masterPaths[i] !== webviewPaths[i]) {
+        issues.push(`${WEBVIEW_REL}: 内联标记第 ${i + 1} 段路径与 ${MASTER_REL} 不一致——webview 里的标记是母图的手抄副本`)
+      }
+    }
+  }
+
   if (masterTransform && uiTransform && masterTransform !== uiTransform) {
     issues.push(`${UI_DATA_REL}: 字形组变换 "${uiTransform}" 与母图的 "${masterTransform}" 不一致`)
   }
@@ -437,6 +466,41 @@ if (
   if (!component.includes('BRAND_MARK_PATHS')) {
     issues.push(`${UI_COMPONENT_REL}: 没有使用生成的字形数据——标记会与母图脱钩`)
   }
+}
+
+// ------------------------------------- ⑥ 用户可见文案里不许出现工具名 ----
+//
+// ADR-0049 决策③把 `repotory_*` 冻成标识层——那是接口，不是品牌。但「冻结」
+// 说的是**不改名字**，不是**可以把它写给用户看**：界面上冒出一句
+// “repotory_chat is required”，读的人看到的是一个工具前缀，不是一个产品。
+// 标识层留在代码里（工具名就以工具名的样子出现），显示层说的是人话。
+//
+// 所以规则很窄：IDE 插件的源码里，含 `repotory_` 的字符串必须**整个**就是
+// 一个工具名。`"repotory_chat"` 是接口；`"repotory_chat is required"` 是泄漏。
+//
+// 测试目录不算显示面——测试名里出现工具名是正常的（它就在测那个工具）。
+const IDE_SURFACES = ['ide/jetbrains/src/main/', 'ide/vscode/src/']
+const IDE_NOT_DISPLAY = ['ide/vscode/src/__tests__/']
+const TOOL_NAME_ONLY = /^repotory_[a-z0-9_]+$/
+const stringLiteralRe = /"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g
+let toolNamesInCopy = 0
+for (const file of scanned) {
+  if (!IDE_SURFACES.some((p) => file.startsWith(p))) continue
+  if (IDE_NOT_DISPLAY.some((p) => file.startsWith(p))) continue
+  const ext = file.slice(file.lastIndexOf('.'))
+  const text = stripComments(read(file), ext)
+  text.split('\n').forEach((line, i) => {
+    for (const m of line.matchAll(stringLiteralRe)) {
+      const literal = (m[1] ?? m[2] ?? m[3] ?? '').trim()
+      if (!literal.includes('repotory_')) continue
+      if (TOOL_NAME_ONLY.test(literal)) continue
+      toolNamesInCopy += 1
+      issues.push(
+        `${file}:${i + 1}: 用户可见文案里出现了工具名「${literal.slice(0, 60)}」——` +
+          '标识层冻结是不改它，不是把它写给用户看',
+      )
+    }
+  })
 }
 
 // ------------------------------------------------------------------ 结论 ----
@@ -457,6 +521,6 @@ if (issues.length > 0) {
 console.log(
   `brand OK: 母品牌 ${brand.mother} / 桌面 ${brand.desktop} / 助手 ${brand.agent}；` +
     `${BRAND_SITES.length} 处产品名一致，${FROZEN.length} 条冻结标识层仍在原处，` +
-    `${scanned.length} 个当前面文件无旧品牌词，仓地址都在白名单里（` +
-    `${[...allowedSlugs].sort().join(' / ')}），BrandMark 与母图同源。`
+    `${scanned.length} 个当前面文件无旧品牌词，IDE 插件文案里没有工具名（${toolNamesInCopy} 处），` +
+    `仓地址都在白名单里（${[...allowedSlugs].sort().join(' / ')}），BrandMark、webview 与母图同源。`
 )

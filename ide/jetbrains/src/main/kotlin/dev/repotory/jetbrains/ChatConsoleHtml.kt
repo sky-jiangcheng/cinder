@@ -67,7 +67,7 @@ internal object ChatConsoleHtml {
     fun renderShared(state: SharedChatState): String = buildString {
         append("<html><body style=\"margin:8px;\">")
         append("<h3>Warden shared conversations</h3>")
-        append("<p>Knowledge-base Q&amp;A via repotory_ask — not Warden's local provider. " +
+        append("<p>Knowledge-base Q&amp;A through the shared memory layer — not Warden's local provider. " +
             "History is shared; local Ask/Notes/Pages history stays in this panel.</p>")
         if (state.syncError.isNotBlank()) append(sharedText("Not synced", state.syncError))
         if (state.operationError.isNotBlank()) append(sharedText("Operation failed", state.operationError))
@@ -240,7 +240,16 @@ internal object ChatConsoleHtml {
         return sb.toString()
     }
 
-    /** One card: the hit, its body once it is open, and its actions. */
+    /**
+     * One card: the hit, its body once it is open, and its actions.
+     *
+     * EVERY value that came from the server goes through [esc] before it
+     * reaches the HTML. The badge is the one that was easy to forget: for a
+     * page hit it is the page's `kind` (concept | entity | synthesis | …),
+     * and `kind` is a field a user fills in when the page is written — so a
+     * badge is as author-controlled as a title, and it must be escaped the
+     * same way.
+     */
     private fun cardHtml(turn: ChatTurn, card: ChatCard, expandedCards: Set<String>): String {
         val hit = card.hit
         val key = "${turn.id}/${hit.type}/${hit.id}"
@@ -253,7 +262,7 @@ internal object ChatConsoleHtml {
             <table width="100%" cellpadding="4" cellspacing="0" style="border:1px solid $border; margin-bottom:6px;">
             <tr><td>
               <table width="100%" cellpadding="0" cellspacing="0"><tr>
-                <td valign="top" style="padding-right:6px;"><span style="font-size:8pt; color:$badgeColor;">$badge</span></td>
+                <td valign="top" style="padding-right:6px;"><span style="font-size:8pt; color:$badgeColor;">${esc(badge)}</span></td>
                 <td valign="top" style="font-weight:bold;"><a href="${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/toggle">${esc(hit.title.ifBlank { "(untitled)" })}</a></td>
                 <td valign="top" align="right" style="font-size:8pt; color:$meta;">#${hit.id}</td>
               </tr></table>

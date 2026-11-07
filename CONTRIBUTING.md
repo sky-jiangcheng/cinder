@@ -52,14 +52,14 @@ node scripts/check-i18n-keys.mjs    # locale 词条覆盖守卫（key 缺失 / �
 
 ## 品牌图标四域规则（ADR-0052，2026-11-06 起）
 
-标识是 **The Knot / 结**：一条闭合的等宽带穿过自己，在下的那一段**真的缺席**（断口编织，不用 mask）。母图因此是多段 path（Cinder 3 段 / Warden 1 段）。真相源是 `build/icon.svg` 与 `build/icon-warden.svg`；≤20px 的小尺寸域另有 `build/icon-small.svg` / `build/icon-warden-small.svg`（同一条中心线、笔画 1.6×、不断口）。
+标识是 **The Knot / 结**：一条闭合的等宽带穿过自己，在下的那一段**真的缺席**（断口编织，不用 mask）。母图因此是多段 path（Cinder 3 段 / Warden 1 段）。真相源是 `build/icon.svg` 与 `build/icon-warden.svg`；≤20px 的小尺寸域另有 `build/icon-small.svg` / `build/icon-warden-small.svg`（同一条中心线、笔画 1.86× = 50.68u、不断口）。
 
 | 域 | 产物 | 形状 |
 |---|---|---|
 | 品牌域 | favicon、商店图标、JetBrains 工具窗品牌标记 PNG、Marketplace 40px 对 | 母图原样，方边、纯色、token 可绑 |
 | OS 应用域 | `build/appicon.png`、`build/icons/` 阶梯、ico/icns、Warden 的 Tauri 全套 | squircle 容器 + `lift` 纸色渐变 + `press` 柔投影 |
 | 字形域 | VS Code 活动栏 24px、JetBrains 侧栏 16px（含 `_dark`）、macOS 托盘 22px | 单色字形、透明底 |
-| 小尺寸域 | 所有 ≤20px 的位图帧与 16px 条纹图标 | 实心剪影，同一条中心线、笔画 1.6×、不断口 |
+| 小尺寸域 | 所有 ≤20px 的位图帧与 16px 条纹图标 | 实心剪影，同一条中心线、笔画 1.86× = 50.68u、不断口 |
 
 规则：
 

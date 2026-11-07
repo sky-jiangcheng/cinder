@@ -103,7 +103,7 @@ internal class SharedChatSession(
                     synchronized(lock) {
                         if (current(request.first)) {
                             syncError = "Not synced — ${reason(e)}. Check or upgrade the Cinder service; " +
-                                "repotory_chat is required. Cached history is kept."
+                                "the shared-conversation tool is required. Cached history is kept."
                             synced = false
                             changed()
                         }
@@ -205,7 +205,7 @@ internal class SharedChatSession(
                 val retained = pending[job.userId] ?: job
                 pending[job.userId] = retained.copy(busy = false, error =
                     "Not synced / request failed: ${reason(e)}. Retry keeps the same message ids; " +
-                        "upgrade Cinder if repotory_chat is unavailable.")
+                        "upgrade Cinder if the shared-conversation tool is unavailable.")
                 changed()
             }
         }
@@ -253,7 +253,7 @@ internal class SharedChatSession(
     private fun operationFailed(id: String?, e: Exception) = synchronized(lock) {
         if (!disposed) {
             val operation = if (id == null) "Create conversation" else "Rename conversation"
-            errors[id] = "$operation not synced — ${reason(e)}. Check/upgrade the Cinder service (repotory_chat)."
+            errors[id] = "$operation not synced — ${reason(e)}. Check or upgrade the Cinder service."
             changed()
         }
     }

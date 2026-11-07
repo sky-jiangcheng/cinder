@@ -35,7 +35,7 @@
 //     mark; inkCoverage() fails an opaque slab.
 //   small domain — at <= SMALL_DOMAIN_MAX the woven cuts are sub-pixel, so
 //     a solid stroked silhouette on the same centre line takes over
-//     (1.6x stroke, no cuts). renderPng() switches by rendered size, so
+//     (1.86x stroke, no cuts). renderPng() switches by rendered size, so
 //     ICO/ICNS frames and the Tauri ladder all follow automatically.
 //
 // The master can hold SEVERAL paths (Cinder 3, Warden 1): at each crossing
@@ -281,6 +281,44 @@ function smallAppSvg(smallText) {
   if (!m) throw new Error('generate-icons: small-domain master has no field rect')
   const squircle = `<path d="${squirclePath(512)}" fill="${m[1]}"/>`
   return smallText.replace(/<rect width="512" height="512" fill="[^"]+"\/>/, squircle)
+}
+
+// The webview's inline brand mark (ide/vscode/src/chatConsoleHtml.ts).
+//
+// The panel has no `localResourceRoots`, so the mark cannot be loaded as a
+// file — it is inlined into the HTML. That made it a HAND-COPIED copy of the
+// master's paths, and no gate covered it: the v6 rebrand left the webview
+// wearing the previous letterform while every other surface had moved.
+//
+// It is generated now. The block between the template-literal fences is
+// rewritten in place, so the file keeps its shape and the mark can never
+// drift from the master again.
+function webviewMarkBlock(masterText) {
+  const field = /<rect width="512" height="512" fill="([^"]+)"/.exec(masterText)?.[1]
+  const glyph = /<path[^>]*\sfill="([^"]+)"/.exec(masterText)?.[1]
+  const paths = [...masterText.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
+  if (!field || !glyph || !paths.length) {
+    throw new Error('generate-icons: cannot derive the webview mark from the master')
+  }
+  return [
+    'const MARK_SVG = `<svg viewBox="0 0 512 512" width="28" height="28" aria-hidden="true" focusable="false">',
+    `  <rect width="512" height="512" fill="${field}"/>`,
+    '  <g transform="translate(0 0)">',
+    ...paths.map((d) => `    <path fill="${glyph}" fill-rule="nonzero" d="${d}"/>`),
+    '  </g>',
+    '</svg>`;',
+  ].join('\n')
+}
+
+const WEBVIEW_MARK_REL = 'ide/vscode/src/chatConsoleHtml.ts'
+
+/** Rewrite the inlined mark inside the webview module; return the new file text. */
+function applyWebviewMark(fileText, block) {
+  const re = /const MARK_SVG = `[\s\S]*?<\/svg>`;/g
+  if (!re.test(fileText)) {
+    throw new Error(`generate-icons: ${WEBVIEW_MARK_REL} no longer holds a MARK_SVG template literal — update the generator`)
+  }
+  return fileText.replace(re, block)
 }
 
 // A mark is either one SVG (string/Buffer) or a { normal, small } pair.
@@ -539,6 +577,25 @@ async function main() {
   } else {
     fs.writeFileSync(pathsTarget, pathsModule)
     console.log('  ✓ web/src/components/brandMarkPaths.ts (web UI mark data)')
+  }
+
+  // 2d. The VS Code webview's INLINED mark. The panel cannot load the file
+  //     (no localResourceRoots), so the mark is inlined into the HTML — and
+  //     that inlining used to be a hand-copied path, with no gate on it. It
+  //     is generated now, so a rebrand cannot leave the panel behind.
+  const webviewBlock = webviewMarkBlock(svgText)
+  const webviewTarget = path.join(root, WEBVIEW_MARK_REL)
+  if (!fs.existsSync(webviewTarget)) {
+    stale.push(`${webviewTarget} (missing)`)
+  } else {
+    const webviewText = fs.readFileSync(webviewTarget, 'utf8')
+    const current = /const MARK_SVG = `[\s\S]*?<\/svg>`;/.exec(webviewText)?.[0]
+    if (check) {
+      if (current !== webviewBlock) stale.push(`${WEBVIEW_MARK_REL} (stale: the inlined mark is not the master's)`)
+    } else {
+      fs.writeFileSync(webviewTarget, applyWebviewMark(webviewText, webviewBlock))
+      console.log(`  ✓ ${WEBVIEW_MARK_REL} (webview inline mark, ${svgText.match(/<path[^>]*\sd="/g)?.length ?? 0} paths)`)
+    }
   }
 
   // 3. VS Code marketplace icon (media/icon.png, 128×128) — brand domain:

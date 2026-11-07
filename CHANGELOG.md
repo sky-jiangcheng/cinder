@@ -4,7 +4,17 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
-## [Unreleased]
+## [2.32.4] - 2026-11-07
+
+### 变更
+
+- **品牌母图给了卡片留白：字形从铺满 91% 收到 78%（2026-11-07）**：用户一句「图标里图案离边太近了」——母图原来把字形铺到卡片的 91%（ink bbox 432×464，边距只剩 24–40u），派生到 squircle / 市场方卡 / JetBrains 印章 / favicon / 导航栏后一律显挤：标记读起来像被卡片裁了一下，而不是坐在卡片里。**留白定在母图里**，因为母图本身就是「暗方卡 + 挖空结」的构图，36 个受版本控制的派生件全由它派生，一个数改对所有面 —— 留白 **56u**，字形落在 512 格的 **78%**（Manus ≈74%、ChatGPT ≈70%、Apple HIG 内容圆 80%）。**带宽与着墨率随归一化比例重算**：27.25u / 17.4%（Cinder）与 27.25u / 18.1%（Warden）——两枚仍逐位相等，「等带宽即一支笔」不变；小尺寸域笔画 1.6× → **1.86×** 补偿母图缩小后的绝对宽度（27.25u × 1.86 = 50.68u，16px 时 1.58px）。**数字不再手写**：`build-marks.mjs` 现在把带宽 / 小尺寸带宽 / 着墨率 / 卡片留白一并算进 `marks/geometry.json`，手册模板与 `build/brand-copy.json` 都从它取数——上一版的 31.61u / 23.3% 就是手写散落的，正是这次几何一改就全变陈旧的根因。ADR-0052（中英）加决策⑨并注明修订日期，`CONTRIBUTING.md` 与品牌手册同步。**实测**：11 道 node 门 + go build/vet/test + vitest 418 + tsc&build&lint + VS Code 37 + Gradle + cargo 110 + govulncheck 0 全绿；两仓 36 个受版本控制的派生产物 + cinder 10 个 gitignored 中间件同批重生成；无头 Chrome 整页重渲 1440×16000 目检通过。
+
+### 修复
+
+- **VS Code webview 面板里的品牌标记是一份没人守的手抄副本（2026-11-07）**：webview 面板没有 `localResourceRoots`，标记只能内联进 HTML —— 而那份内联是**手抄**的母图 path，且**没有任何门看它**：v6 换版时它独自留着上一版字形，逃过了 `check-brand.mjs` 第⑤门、`generate-icons.mjs --check` 与 CI（别的面都跟着母图走了，只有它没走）。现在它由 `generate-icons.mjs` 生成（就地重写模板字面量，文件形状不变），`check-brand.mjs` 第⑤门新增一条比对，逐字节钉住每一段 path。**负例已验**：把旧母图坐标塞回 webview，门立刻红并指出文件；`generate-icons.mjs --check` 同样报 stale。
+- **JetBrains 聊天面板的来源徽标不再把页面 kind 当标记渲染（2026-11-07）**：卡片上的徽标对 wiki 命中取的是页面的 `kind`（concept | entity | synthesis | …），而 `kind` 是写页面的人填的字段——所以它和标题一样是作者可控的，原样拼进 HTML 是一次存储型注入。徽标改走 `esc()`；新增 `ChatConsoleHtmlTest`，两条断言分别钉住「恶意 kind 不会以标记形式到达面板」与「卡片里每一个服务端字符串都不以标记形式到达 HTML」，**负例已验**（回退修复后两条都红）。本机补上 Gradle 8.10.2 + JDK 21 后 `gradle test` 全绿、`gradle buildPlugin` 产出 `repotory-jetbrains-2.32.3.zip`——这组遗留原本卡在「本机没有能跑的 Gradle，改 Kotlin 行为等于盲改」。
+- **JetBrains 界面文案不再把 `repotory_*` 工具名写给用户看（2026-11-07）**：四处用户可见文案（共享会话面板的 "via repotory_ask"、`SharedChatSession` 的三处 "repotory_chat"）改成人话。按「先给门加覆盖，再改文案」的次序：`check-brand.mjs` 新增第⑥道门——IDE 插件源码里含 `repotory_` 的字符串必须**整个**就是一个工具名（`"repotory_chat"` 是接口，`"repotory_chat is required"` 是泄漏），测试目录不算显示面；门同时把 `.kt` 纳入注释剥离。**负例已验**（把工具名塞回文案，门立刻红并指出行号）。标识层一字未动：`repotory_*` 仍是冻结的接口名。
 
 ## [2.32.3] - 2026-11-07
 
@@ -873,6 +883,7 @@
 
 [Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...HEAD
 [2.32.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.2...v2.32.3
+[2.32.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...v2.32.4
 [2.29.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.28.0...v2.29.0
 [2.30.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.29.0...v2.30.0
 [2.31.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.30.0...v2.31.0

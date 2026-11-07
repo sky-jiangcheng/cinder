@@ -99,16 +99,16 @@
   },
   "marks": {
     "system": "The Knot / 结",
-    "rule": "每个标记是一条闭合的等宽带，它与自身相交，自己穿过自己；在下的一段真的缺席，切口平行于压过它那条的边缘，缝宽恒等于带宽。两枚标记归一化带宽完全相同（31.61u / 512），着墨率 23.3% / 24.3%。",
+    "rule": "每个标记是一条闭合的等宽带，它与自身相交，自己穿过自己；在下的一段真的缺席，切口平行于压过它那条的边缘，缝宽恒等于带宽。两枚标记归一化带宽完全相同（27.25u / 512），着墨率 17.4% / 18.1%。卡片留白 56u，字形落在 512 格的 78%。",
     "cinder": {
       "title": "三叶结 / Trefoil",
       "curve": "z(t) = e^it + 2e^-2it",
       "loops": 3,
       "crossings": 3,
       "symmetry": "3 重对称",
-      "bandPx": 31.61,
-      "bandSmallPx": 50.58,
-      "inkCoveragePct": 23.3,
+      "bandPx": 27.25,
+      "bandSmallPx": 50.68,
+      "inkCoveragePct": 17.4,
       "paths": 3,
       "note": "三件事被捆在一起：浏览 / 编辑 / 审批。"
     },
@@ -118,9 +118,9 @@
       "loops": 2,
       "crossings": 1,
       "symmetry": "2 重对称",
-      "bandPx": 31.61,
-      "bandSmallPx": 50.58,
-      "inkCoveragePct": 24.3,
+      "bandPx": 27.25,
+      "bandSmallPx": 50.68,
+      "inkCoveragePct": 18.1,
       "paths": 1,
       "note": "一边读，一边跑；它自己不在中间。"
     },
