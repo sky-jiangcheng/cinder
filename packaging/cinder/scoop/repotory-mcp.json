@@ -4,7 +4,7 @@
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
   "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.32.3/repotory-mcp-windows-amd64.zip",
-  "hash": "sha256:5f91854d02f909ec8c2a49a6135c28f8593566d4b74f2cc7b2c13b1b8f4186a9",
+  "hash": "sha256:a2f40a462d29a5b105859bb66b330224b61b69c922bec44bcb8acb5bbfb598a9",
   "bin": "repotory-mcp.exe",
   "checkver": {
     "url": "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest",
