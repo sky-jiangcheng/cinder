@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.32.5] - 2026-11-08
+
 ### 变更
 
 - **桌面助手面板只剩对话：模块 chip、作用域选择、快捷问答卡、记一笔与页脚一起退役（2026-11-08，ADR-0051 修订）**：用户一句「小机器人的界面还是太过于冗余，现在完全可以使用 Function Calling 去获取相关界面的信息了，清理掉一些对话框之外的元素」。面板此前在 420px 里又画了一遍 App：五个模块 chip（侧栏已经有一份）、作用域选择器（模型用 `list_projects` 就能收窄）、每页手写的快捷问答与数据卡（`agentContext.ts` 576 行，从本地 API 取数）、页脚两个入口。**同一份数据在面板里有了第二个副本，副本会漂**——所以删的是副本，不是能力：面板现在只有标题栏、消息区（问题 / 工具调用行 / 回答 / 依据）、输入框与发送；「记一笔」仍在项目页 `NoteSection` 与首页知识助手；自由提问固定全库作用域。**无 AI 时的本地即时卡一并退役**（ADR-0051 未决 3 翻案，修订记录写明理由：没配模型时面板本来没有答案，卡片只会让人以为它能答），未配置只留一行去设置的引导。顺带修好工具名文案映射：locale 键是 camelCase 而事件给的是线名，此前永远显示裸函数名。回归：`AgentBot.test.tsx` 重写为 13 例，`npm test` 395 例、`npm run build`、`npm run lint`、`check-i18n-keys`、`check-i18n-interpolation`、`check-docs-mirror` 全绿；`agent.*` 词条 17 → 4 条（中英同批）。
@@ -889,6 +891,7 @@
 
 [Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...HEAD
 [2.32.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.2...v2.32.3
+[2.32.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.4...v2.32.5
 [2.32.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...v2.32.4
 [2.29.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.28.0...v2.29.0
 [2.30.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.29.0...v2.30.0
