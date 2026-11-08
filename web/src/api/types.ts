@@ -969,7 +969,10 @@ export interface ReviewConfig {
 /** What a review run reports back. `findings` are the stored rows. */
 export interface ReviewResult {
   run: ReviewRun
+  /** Candidates in rule order, before storage. */
   findings?: ReviewFinding[]
+  /** The persisted rows (absent on a dry run). */
+  stored?: ReviewFinding[]
   dry_run: boolean
   already_done?: boolean
 }

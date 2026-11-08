@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -267,5 +268,33 @@ func TestReviewRuleSetHonoursOptIn(t *testing.T) {
 	}
 	if !has("sensitive_log") {
 		t.Error("sensitive_log should turn on when review.rule.sensitive_log=1")
+	}
+}
+
+// TestReviewResultJSONUsesSnakeCase pins the wire shape the frontend reads.
+//
+// ReviewResult crosses the Wails binding and the RPC bridge directly, so its
+// json tags are the contract: without them Go emits "AlreadyDone" and the page's
+// `result.already_done` is undefined — every idempotent re-run would then be
+// reported as a fresh one. Cheap test, silent bug otherwise.
+func TestReviewResultJSONUsesSnakeCase(t *testing.T) {
+	blob, err := json.Marshal(ReviewResult{
+		Run:         &db.ReviewRun{ID: 7, RunDate: "2026-11-07"},
+		AlreadyDone: true,
+		DryRun:      true,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(blob)
+	for _, want := range []string{`"run"`, `"already_done":true`, `"dry_run":true`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %s in %s", want, got)
+		}
+	}
+	for _, unwanted := range []string{`"AlreadyDone"`, `"DryRun"`, `"Run"`} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("Go field name %s leaked into the wire shape: %s", unwanted, got)
+		}
 	}
 }

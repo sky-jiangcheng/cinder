@@ -60,16 +60,23 @@ type ReviewOptions struct {
 
 // ReviewResult is what a caller gets back: the run row (nil on a dry run), the
 // candidates as computed, and counters.
+// ReviewResult is what every trigger returns (CLI, MCP tool, desktop button).
+//
+// The json tags are load-bearing: this struct crosses the Wails binding to the
+// frontend and the RPC bridge to a browser, and Go's default field names are
+// capitalised — `AlreadyDone` would arrive as `AlreadyDone`, so a frontend
+// reading `already_done` would see undefined and report every idempotent call
+// as a fresh run. Snake_case everywhere, matching db.ReviewRun.
 type ReviewResult struct {
-	Run *db.ReviewRun
+	Run *db.ReviewRun `json:"run"`
 	// Findings are the candidates, in rule order, before storage.
-	Findings []review.Finding
+	Findings []review.Finding `json:"findings"`
 	// Stored is the persisted view (nil on a dry run). Same content, with the
 	// run id attached.
-	Stored []db.ReviewFinding
+	Stored []db.ReviewFinding `json:"stored"`
 	// AlreadyDone is set when the day was reviewed before and Force was off.
-	AlreadyDone bool
-	DryRun      bool
+	AlreadyDone bool `json:"already_done"`
+	DryRun      bool `json:"dry_run"`
 }
 
 // reviewRuleSet returns the rules to run, honouring per-rule opt-in config.
