@@ -135,7 +135,7 @@ public class PayController {
 	f.Removed = []string{`    @PostMapping("/pay/queryV1")`}
 
 	repo := fakeRepo{
-		"src/main/java/b/Consumer.java": `@FeignClient("pay") interface C { @PostMapping("/pay/queryV1") void call(); }`,
+		"src/main/java/b/Consumer.java":      `@FeignClient("pay") interface C { @PostMapping("/pay/queryV1") void call(); }`,
 		"src/main/java/a/PayController.java": src,
 	}
 	got := run(t, routeRenamed{}, f, repo)

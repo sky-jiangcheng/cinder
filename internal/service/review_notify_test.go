@@ -42,7 +42,7 @@ func TestReviewNotifyCountDefaultsToConfirmedHigh(t *testing.T) {
 	seedReview(t, svc, []db.ReviewFinding{
 		finding("high", "confirmed"),
 		finding("high", "confirmed"),
-		finding("high", "unverified"), // a candidate nobody checked: silent
+		finding("high", "unverified"),  // a candidate nobody checked: silent
 		finding("medium", "confirmed"), // below the threshold
 		finding("low", "confirmed"),
 	})
