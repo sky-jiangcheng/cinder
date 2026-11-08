@@ -163,15 +163,23 @@ for a in assets:
   # the asset: Cask and Formula emit `url` then `sha256`, Scoop emits "url"
   # then "hash". So: find the asset's line, overwrite the digest on the next
   # non-blank line.
+  # `fill` takes TWO names for the same asset, and the difference is the whole
+  # point: `$2` is how the manifest SPELLS it (possibly with a version template
+  # such as `Cinder-#{version}-darwin-arm64.dmg`), `$3` is the name the release
+  # actually serves (`Cinder-2.33.0-darwin-arm64.dmg`). The first locates the
+  # line to edit, the second looks up the digest. Passing the templated form to
+  # both — which is what this did — silently matched nothing, left every
+  # `__FILL_SHA256_*__` in place, and the v2.33.0 release went out with a tap
+  # that could not install.
   fill() {
-    local file="$1" asset="$2"
+    local file="$1" asset="$2" served="${3:-$2}"
     local digest
-    digest="$(sha_for "$asset")"
+    digest="$(sha_for "$served")"
     if [ -z "$digest" ]; then
-      echo "  skip $file: $asset not in SHA256SUMS (left untouched)"
+      echo "  skip $file: $served not in SHA256SUMS (left untouched)"
       return 0
     fi
-    if ! grep -q "$asset" "$file"; then
+    if ! grep -qF "$asset" "$file"; then
       echo "  skip $file: no reference to $asset"
       return 0
     fi
@@ -208,7 +216,7 @@ for a in assets:
     chmod 0644 "$tmp"
     mv "$tmp" "$file"
     trap - RETURN
-    echo "  set $file <- $asset (${digest:0:12}…)"
+    echo "  set $file <- $served (${digest:0:12}…)"
   }
 
   echo "Filling sha256 from $SUMS"
@@ -216,12 +224,24 @@ for a in assets:
   # asset in the release URL, so a new project — or a new artifact in an
   # existing one — needs no change here. The URL is the only place an asset
   # name appears, and the digest always sits on the line below it.
+  # The two versions of the asset name, one per line, tab separated. The
+  # templates are the three the manifests actually use: Ruby's `#{version}`
+  # (Cask, Formula), PowerShell's `$version` (Scoop's autoupdate block) and
+  # `${version}` for whichever format reaches for braces.
   while IFS= read -r file; do
-    while IFS= read -r asset; do
+    while IFS=$'\t' read -r asset served; do
       [ -n "$asset" ] || continue
-      fill "$file" "$asset"
+      fill "$file" "$asset" "$served"
     done < <(grep -hoE 'releases/download/[^/]+/[^"[:space:]]+' "$file" \
-             | sed -E 's#^releases/download/[^/]+/##' | sort -u)
+             | sed -E 's#^releases/download/[^/]+/##' \
+             | awk -v ver="$VERSION" '
+                { asset = $0
+                  served = $0
+                  gsub(/#\{version\}/, ver, served)
+                  gsub(/\$\{version\}/, ver, served)
+                  gsub(/\$version/, ver, served)
+                  printf "%s\t%s\n", asset, served }
+              ' | sort -u)
   done < <(find packaging -type f \( -name '*.rb' -o -name '*.json' \) | sort)
 
   echo
