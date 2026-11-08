@@ -302,6 +302,63 @@ func TestAskWithToolsResolvesTheBaseURL(t *testing.T) {
 	}
 }
 
+// TestStreamAskWithToolsResolvesTheBaseURL is the streaming twin of
+// TestAskWithToolsResolvesTheBaseURL, and it is the one that matters.
+//
+// The assistant panel STREAMS, so the streaming tool loop is the path the
+// user actually hits. The batch loop learned to walk the candidate URLs; this
+// one still posted to the bare base, which is why the panel kept saying
+// "AI endpoint returned 404" while Settings → AI reported a healthy endpoint.
+//
+// The configured value is the ROOT of the endpoint — exactly what a user
+// pastes from a provider's docs page — while the completions route lives one
+// segment deeper.
+func TestStreamAskWithToolsResolvesTheBaseURL(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"message":"Not Found","code":404}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: " + stubChunk(t, map[string]any{
+			"choices": []map[string]any{{"delta": map[string]any{"content": "resolved"}}},
+		}) + "\n\n"))
+		_, _ = w.Write([]byte("data: " + stubChunk(t, map[string]any{
+			"choices": []map[string]any{{"delta": map[string]any{}, "finish_reason": "stop"}},
+		}) + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}
+	// nil handler: the helper then leaves the base URL unset, so this test owns
+	// it — the base is the ROOT, not the completions endpoint.
+	svc := newAuditTestService(t, nil)
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	t.Cleanup(srv.Close)
+	if err := svc.UpdateConfig("ai_chat_base_url", srv.URL); err != nil {
+		t.Fatalf("set base url: %v", err)
+	}
+
+	var deltas strings.Builder
+	reply, _, err := svc.streamAskWithTools(
+		mustCfg(t, svc),
+		[]chatMessage{{Role: "user", Content: "hi"}},
+		nil,
+		func(d string) { deltas.WriteString(d) },
+		nil,
+		nil,
+		5*time.Second,
+	)
+	if err != nil {
+		t.Fatalf("streamAskWithTools must walk to the working URL, got: %v", err)
+	}
+	if reply != "resolved" {
+		t.Fatalf("reply = %q", reply)
+	}
+	if deltas.String() != "resolved" {
+		t.Fatalf("streamed deltas = %q, want the answer", deltas.String())
+	}
+}
+
 // TestAskWithToolsDoesNotWalkCandidatesOnAuthFailure keeps the 404 rule narrow:
 // a 401 is the endpoint answering, not a wrong URL, and retrying it against a
 // guessed sibling path would turn one clear error into three confusing ones.

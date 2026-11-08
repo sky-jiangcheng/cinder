@@ -17,9 +17,21 @@ describe('code review endpoint routing contract', () => {
     await latestReviewReport()
     expect(callMock).toHaveBeenCalledWith({
       method: 'LatestReviewReport',
-      args: [],
+      args: [[]],
       path: '/review/latest',
     })
+  })
+
+  // The Wails bridge checks the argument count against the Go signature and
+  // refuses a short call: "received 0 arguments to method
+  // 'app.App.LatestReviewReport', expected 1". The severity filter must
+  // therefore always travel as ONE argument, empty list included.
+  it('latestReviewReport always sends exactly one argument', async () => {
+    callMock.mockResolvedValue({ run: null, findings: [] })
+    await latestReviewReport()
+    await latestReviewReport(['high'])
+    expect(callMock.mock.calls[0][0].args).toHaveLength(1)
+    expect(callMock.mock.calls[1][0].args).toEqual([['high']])
   })
 
   it('latestReviewReport unwraps a null payload to an empty snapshot', async () => {

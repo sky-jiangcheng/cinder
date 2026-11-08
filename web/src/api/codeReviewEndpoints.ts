@@ -20,11 +20,16 @@ import type { ReviewConfig, ReviewResult, ReviewSeverity, ReviewSnapshot } from 
  * A missing `run` means "never reviewed" — an empty finding list with a run
  * means "reviewed, nothing found". The page must tell those two apart, so the
  * distinction survives in the payload instead of being collapsed here.
+ *
+ * The severity filter is ALWAYS sent as one argument, even when it is empty.
+ * The Wails bridge checks the argument count against the Go signature
+ * ("received 0 arguments to method 'app.App.LatestReviewReport', expected 1"),
+ * so an empty filter has to travel as an empty list, not as no argument.
  */
 export function latestReviewReport(severities: ReviewSeverity[] = []): Promise<ReviewSnapshot> {
   return call<ReviewSnapshot>({
     method: 'LatestReviewReport',
-    args: severities.length > 0 ? [severities] : [],
+    args: [severities],
     path: '/review/latest',
   }).then(s => s ?? { findings: [] })
 }

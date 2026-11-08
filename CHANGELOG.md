@@ -6,8 +6,13 @@
 
 ## [Unreleased]
 
+## [2.33.1] - 2026-11-08
+
 ### 修复
 
+- **助手面板仍然 404：上一次只修了批量工具循环，面板走的是流式那条（2026-11-08）**：用户报「provider 已测试通过并保存了，但联调还是 `AI endpoint returned 404: {"error":{"message":"Not Found","code":404}}`」。上一版把批量工具循环（`askWithTools`）改成了走 `aiCandidateURLs` 候选探测，**但助手面板是流式的**——`streamAskWithTools` 里的 `aiPostJSONToolStream` 仍然直接 POST 到裸 base，于是「设置页测试连接是通的、面板一发消息就 404」。这次把流式路径也接到候选探测上：状态码从错误里拆出来单独返回（`aiPostJSONToolStream` 现在返回 `(status, error)`），404 才换下一个候选，401/5xx 依然是 endpoint 在回答、不重试。回归：新增流式一例（只有 `/v1/chat/completions` 应答、base 只填根地址时必须成功；**负例已验**：把修复回退后，一字不差地复现用户截图里那行 404）。
+- **代码审查页点开就报错：前端少传了一个参数（2026-11-08）**：用户报「error parsing arguments: received 0 arguments to method 'app.App.LatestReviewReport', expected 1」。绑定是 `LatestReviewReport(severities []string)`，前端在「不过滤」时把参数列表整个省掉了（`args: []`），而 Wails 运行时按 Go 签名核对参数个数，少一个就拒——**HTTP 桥会拿零值补齐，所以浏览器模式一路绿灯，只有桌面端炸**。改成永远传一个参数：没有过滤就传空数组。
+- **加一道门：前端调用绑定的参数个数必须与 Go 签名一致（2026-11-08）**：上面这两类错误没有任何工具链能发现——TS 侧的参数是无类型的数组，Go 侧是 `reflect.Call`，类型检查、lint、测试全都看不见，只有「点这个按钮」这个动作才会暴露它。加 `internal/app/frontend_arity_contract_test.go`：用反射取 `*App` 每个方法的参数个数，扫描 `web/src/api/` 下每个调用点、数出它实际传了几个，对不上就红并指出文件与行号。**负例已验**：把审查页改回旧写法，门立刻红。顺带把「绑定存在吗」那道门从只读 `endpoints.ts` 扩到读 `web/src/api/` 下所有调用文件——代码审查、记忆、知识导入这几个功能切片各写各的，**没被读到的文件等于没被守**，而这正是审查页那一族接口漏掉的原因。
 - **安装脚本装完顺手清掉隔离标记**：`scripts/install.sh` 在 macOS 上从 dmg 拷出 `Cinder.app` 之后补一句 `xattr -dr com.apple.quarantine`。`curl` 本身不写隔离标记，所以这条路本来就能开；但一个从 dmg 继承来的标记是不可见的，等用户看见「Apple 无法验证 "Cinder"」时已经太晚，而这条命令正是那个对话框在要求的事。失败不致命（`|| true`），它只让首次启动安静。
 
 ### 文档

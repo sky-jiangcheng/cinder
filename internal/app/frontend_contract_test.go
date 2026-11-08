@@ -45,19 +45,28 @@ var frontendInitBlock = regexp.MustCompile(`init:\s*\{[^}]*\}`)
 
 // frontendTransportMethods returns the distinct binding names the browser
 // frontend calls over the transport.
+//
+// Every file in web/src/api that CALLS bindings is read, not just
+// endpoints.ts: the feature slices (memory, code review, knowledge import)
+// keep their calls in their own module, and a file that is not read is a set
+// of bindings nothing checks. The review endpoints were unguarded for
+// exactly that reason — a method that did not exist on *App would have been
+// caught only by clicking it.
 func frontendTransportMethods(t *testing.T) []string {
 	t.Helper()
-	raw, err := os.ReadFile(frontendEndpointsPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", frontendEndpointsPath, err)
-	}
-	src := frontendInitBlock.ReplaceAllString(string(raw), "")
 	seen := map[string]bool{}
 	var out []string
-	for _, m := range frontendMethodCall.FindAllStringSubmatch(src, -1) {
-		if !seen[m[1]] {
-			seen[m[1]] = true
-			out = append(out, m[1])
+	for _, path := range frontendBindingFiles(t) {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := frontendInitBlock.ReplaceAllString(string(raw), "")
+		for _, m := range frontendMethodCall.FindAllStringSubmatch(src, -1) {
+			if !seen[m[1]] {
+				seen[m[1]] = true
+				out = append(out, m[1])
+			}
 		}
 	}
 	sort.Strings(out)
@@ -82,7 +91,6 @@ func TestFrontendTransportCallsResolveToRealBindings(t *testing.T) {
 		t.Fatalf("extracted only %d frontend method calls from %s — the extractor is stale, update it",
 			len(called), frontendEndpointsPath)
 	}
-
 	var phantom []string
 	for _, name := range called {
 		if !real[name] {

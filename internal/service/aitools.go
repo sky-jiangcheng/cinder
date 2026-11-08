@@ -647,13 +647,18 @@ type toolCallAcc struct {
 	Args  strings.Builder
 }
 
-// aiPostJSONToolStream posts a tool-enabled streaming request and delivers each
-// decoded SSE chunk to onDelta. Falls back to localhost like the batch path.
-func aiPostJSONToolStream(ctx context.Context, rawURL, apiKey string, body []byte, onDelta func(streamToolDelta)) error {
-	try := func(u string) error {
+// aiPostJSONToolStream posts a tool-enabled streaming request to ONE url and
+// delivers each decoded SSE chunk to onDelta.
+//
+// The status comes back BESIDE the error, not inside it, so the caller can
+// tell "this URL shape is wrong" (404 — try the next candidate) from "the
+// endpoint answered" (401, 5xx — do not retry). Falls back to localhost like
+// the batch path.
+func aiPostJSONToolStream(ctx context.Context, rawURL, apiKey string, body []byte, onDelta func(streamToolDelta)) (int, error) {
+	try := func(u string) (int, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 		if err != nil {
-			return err
+			return 0, err
 		}
 		req.Header.Set("Content-Type", "application/json")
 		if apiKey != "" {
@@ -661,22 +666,22 @@ func aiPostJSONToolStream(ctx context.Context, rawURL, apiKey string, body []byt
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-			return fmt.Errorf("AI endpoint returned %d: %s", resp.StatusCode, truncateBytes(string(raw), 300))
+			return resp.StatusCode, fmt.Errorf("AI endpoint returned %d: %s", resp.StatusCode, truncateBytes(string(raw), 300))
 		}
-		return parseSSEToolStream(resp.Body, onDelta)
+		return resp.StatusCode, parseSSEToolStream(resp.Body, onDelta)
 	}
-	if err := try(rawURL); err != nil {
+	status, err := try(rawURL)
+	if err != nil {
 		if fallback := aiLocalhostFallback(rawURL); fallback != "" {
-			return try(fallback)
+			status, err = try(fallback)
 		}
-		return err
 	}
-	return nil
+	return status, err
 }
 
 // parseSSEToolStream consumes an OpenAI-compatible SSE stream that may carry
@@ -722,6 +727,12 @@ func (s *Service) streamAskWithTools(
 	onToolResult func(id string, result any),
 	timeout time.Duration,
 ) (string, finishReasons, error) {
+	// Same URL resolution as the batch tool loop: cfg.baseURL is a BASE
+	// ("https://api.deepseek.com", ".../v1"), never a completions endpoint.
+	// The assistant panel streams, so this path is the one the user actually
+	// hits — posting it to the bare base is what produced the 404.
+	candidates := aiCandidateURLs(cfg.baseURL, "/chat/completions")
+	url := candidates[0]
 	round := 0
 	for {
 		round++
@@ -739,7 +750,7 @@ func (s *Service) streamAskWithTools(
 		var finishReason finishReasons
 		var calls []toolCallAcc
 
-		err = aiPostJSONToolStream(ctx, cfg.baseURL, cfg.apiKey, body, func(delta streamToolDelta) {
+		status, err := aiPostJSONToolStream(ctx, url, cfg.apiKey, body, func(delta streamToolDelta) {
 			for _, c := range delta.Choices {
 				if c.Delta.Content != "" {
 					acc.WriteString(c.Delta.Content)
@@ -769,6 +780,13 @@ func (s *Service) streamAskWithTools(
 		})
 		cancel()
 		if err != nil {
+			if next, ok := nextAICandidate(candidates, url, status); ok {
+				url = next
+				// A URL probe is not a tool round: the model has not seen this
+				// attempt, so it must not eat into the tool budget.
+				round--
+				continue
+			}
 			return "", "", err
 		}
 
