@@ -56,6 +56,31 @@ iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts
 - **Scoop (Windows)**：`scoop install repo/repotory`
 - **二进制下载**：访问 [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) 下载 `.dmg` / `.tar.gz` / `.zip`
 
+#### macOS 首次打开被 Gatekeeper 拦下
+
+如果弹的是
+
+> 未打开 "Cinder"。Apple 无法验证 "Cinder" 是否包含可能危害 Mac 安全或泄露隐私的恶意软件。
+
+或者「"Cinder" 已损坏，无法打开」，那是预期之内：release 构建**没有 Apple Developer ID 签名、也没有公证**，
+而浏览器下载的 dmg 会被打上 `com.apple.quarantine` 隔离标记，Gatekeeper 于是拒绝首次启动。
+
+任选一种放行：
+
+```bash
+# 装到 /Applications 之后，清掉隔离标记（只动这一个 bundle）
+xattr -dr com.apple.quarantine "/Applications/Cinder.app"
+```
+
+- 右键 →「打开」，在随后对话框里再点一次「打开」
+- 或者改用上面的一键脚本安装：`curl` 不写隔离标记，装完直接能开
+
+> **不要 `sudo spctl --master-disable`**：那是把整台机器的下载检查关掉，用所有 App 的风险换一个 App 的方便。
+
+真正的解法是签名 + 公证（Apple Developer Program → Developer ID Application 证书 → `codesign --options runtime`
+→ `notarytool submit` → `stapler staple`）。这一步需要付费证书，所以目前没有做——与其假装已经公证，
+不如把上面这条命令写清楚。
+
 ---
 
 ## 首次启动与五分钟上手

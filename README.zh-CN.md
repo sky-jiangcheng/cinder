@@ -92,10 +92,16 @@ claude mcp add repotory -- "$(which cinder-mcp)"
 
 | 方式 | 命令 / 资产 |
 | :--- | :--- |
+| **一行脚本 (macOS / Linux)** | `curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh \| bash` |
+| **一行脚本 (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
 | **直接下载** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `Cinder-<version>-darwin-arm64.dmg` / `Cinder-<version>-linux-amd64.tar.gz` / `Cinder-<version>-windows-amd64.zip` |
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
-| **一行脚本 (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
+
+> **macOS 首次打开提示「Apple 无法验证 "Cinder"」？** 这是正常的：release 构建**没有 Apple Developer ID 签名、也没公证**，
+> 浏览器下载的 dmg 带隔离标记，Gatekeeper 于是拒绝首次启动。任选一种放行：
+> 用上面的一行脚本装（`curl` 不写隔离标记，装完直接能开）· 右键 →「打开」· `xattr -dr com.apple.quarantine "/Applications/Cinder.app"`。
+> **别用 `sudo spctl --master-disable`**——那是拿一个 App 换掉整台机器的下载检查。
 
 首次启动自动播种扫描根目录（macOS/Linux 为 HOME；Windows 为非系统盘）。在仪表盘点击 **重新扫描** 即可立即可用。详见[快速上手指南](docs/getting-started.md)。
 

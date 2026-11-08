@@ -58,6 +58,33 @@ iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts
 - **Scoop (Windows)**: `scoop install repo/repotory`
 - **Direct Downloads**: Grab `.dmg` / `.tar.gz` / `.zip` from [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases).
 
+#### macOS: Gatekeeper refuses the first launch
+
+If the dialog says
+
+> "Cinder" Not Opened. Apple cannot check it for malicious software.
+
+or "Cinder is damaged and can't be opened", that is expected: release builds carry **no Apple Developer ID
+signature and no notarisation**, and a dmg downloaded by a browser is marked `com.apple.quarantine`, so
+Gatekeeper refuses to start it.
+
+Any one of these gets past it:
+
+```bash
+# after the app is in /Applications, drop the quarantine flag (one bundle only)
+xattr -dr com.apple.quarantine "/Applications/Cinder.app"
+```
+
+- Right-click → **Open**, then **Open** again in the dialog that follows
+- Or install with the one-line script above: `curl` writes no quarantine flag, so the app opens directly
+
+> **Do not run `sudo spctl --master-disable`.** That switches off download checking for the whole machine —
+> every app's protection traded for one app's convenience.
+
+The real fix is signing plus notarisation (Apple Developer Program → Developer ID Application certificate →
+`codesign --options runtime` → `notarytool submit` → `stapler staple`). It needs a paid certificate, so it is
+not in place yet — and saying so plainly beats pretending the build is notarised.
+
 ---
 
 ## First Launch & 5-Minute Walkthrough

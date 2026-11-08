@@ -192,6 +192,16 @@ if [ "$OS" = "darwin" ]; then
   hdiutil detach "$MOUNT_DIR" -quiet
   MOUNT_DIR=""
 
+  # The bundle is ad-hoc signed (no Apple Developer ID), so a quarantine flag
+  # makes Gatekeeper refuse the first launch with "Apple cannot check Cinder
+  # for malicious software" and offer only 完成 / 移到废纸篓. curl does not set
+  # that flag, so this install usually produces a clean bundle already — but a
+  # flag inherited from the dmg (or set by anything that touched the file) is
+  # invisible until the user is staring at the dialog, and the command below is
+  # exactly what that dialog is asking them to do. Failure is not fatal: the
+  # app is installed, this only makes the first launch quiet.
+  as_root xattr -dr com.apple.quarantine "$APP_INSTALL_DIR/$APP_NAME" 2>/dev/null || true
+
   echo ""
   echo "Cinder Desktop installed to $APP_INSTALL_DIR/$APP_NAME"
   echo "Run 'open -a \"$APP_INSTALL_DIR/$APP_NAME\"' to start!"

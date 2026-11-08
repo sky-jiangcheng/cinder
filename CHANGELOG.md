@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **安装脚本装完顺手清掉隔离标记**：`scripts/install.sh` 在 macOS 上从 dmg 拷出 `Cinder.app` 之后补一句 `xattr -dr com.apple.quarantine`。`curl` 本身不写隔离标记，所以这条路本来就能开；但一个从 dmg 继承来的标记是不可见的，等用户看见「Apple 无法验证 "Cinder"」时已经太晚，而这条命令正是那个对话框在要求的事。失败不致命（`|| true`），它只让首次启动安静。
+
+### 文档
+
+- **macOS 首次打开为什么被拦、怎么放行**（README 中英 + [快速开始](docs/getting-started.md) 中英）：release 构建**没有 Apple Developer ID 签名、也没有公证**，浏览器下载的 dmg 又被打了 `com.apple.quarantine`，Gatekeeper 于是拒绝首次启动。给了三条路（一键脚本 / 右键打开 / `xattr -dr`），写明**别用 `sudo spctl --master-disable`**（拿整台机器的下载检查换一个 App），也写明真正的解法是付费证书 + `notarytool` + `stapler`——与其假装已公证，不如把命令写清楚。
+
 ## [2.33.0] - 2026-11-08
 
 ### 变更
@@ -17,6 +25,7 @@
 
 - **助手面板一发消息就 404：工具调用路径把「配置的 base」当成了完整 endpoint（2026-11-08）**：用户报「Cinder 助手发消息提示 404」，截图里是 `AI endpoint returned 404: {"error":{"message":"Not Found","code":404}}`，而同一个 endpoint 在设置页「测试连接」是通的。根因不在 provider：`ai_chat_base_url` 存的是**base**（`https://api.deepseek.com` 或 `.../v1`），纯聊天与流式两条路径都用 `aiCandidateURLs` 拼 `/chat/completions` 再逐个探测，**只有带 function calling 的工具循环直接 POST 到 base**——于是凡是补全路由多一段的服务商（DeepSeek、OpenAI、绝大多数 OpenAI 兼容网关）都 404。单元测试没抓到，是因为假服务器的 handler 不校验路径，把 `base = srv.URL+"/v1"` 直接当 endpoint 用，等于把 bug 编码进了 fixture。修法是让工具循环也走 `aiCandidateURLs`，并把「只有 404 才换下一个候选」这条规则抽成 `nextAICandidate`（401/5xx 是 endpoint 在回答，不能拿猜出来的兄弟 URL 重试）。回归：新增两例——只有 `/v1/chat/completions` 应答、base 只填根地址时必须成功（**负例已验**：回退修复后一字不差地复现用户截图里的 404）；401 时请求数必须是 1。
 - **助手面板把草稿当消息渲染：输入框与对话线程共用一个 state（2026-11-08）**：用户报「点击发送之前编辑的待发送消息就已经进入聊天框」。`question` 既是 textarea 的值、又是线程里那条用户气泡的来源，所以**一开始打字气泡就出现了**，发送后还会同时留在气泡和输入框里，看起来像「没发就已经发了一条」。拆成 `question`（Composer，正在输入）与 `askedQuestion`（线程主题，只在发送时落定），发送后清空输入框；「存为笔记 / 存为知识页」用的是 `askedQuestion`（原来会存成用户此刻正在输入的下一句话开头）。回归：新增两例——打字不产生气泡且空态提示仍在、发送后气泡有一条且输入框为空。
+- **清单回填把版本模板当成资产名去匹配，v2.33.0 的 tap 因此装不上（2026-11-08）**：资产改名后 Cask/Formula 的 URL 写成 `Cinder-#{version}-darwin-arm64.dmg`（cask 的 `version` 段是唯一真相，URL 不再逐版重写），而 `update-manifests.sh --fill-sha256` 是拿「URL 里那串字符」直接去资产清单里查摘要的——模板永远查不到，于是每个 `__FILL_SHA256_*__` 都被默默跳过，`fill-sha256` 的门（占位符不许存活）红在发布之后，tap/bucket 同步被跳过挨着。修法是让 `fill` 收两个名字：**manifest 怎么拼**（用于定位那一行）与**发布端实际叫什么**（用于查摘要），模板 `#{version}` / `$version` / `${version}` 在提取时一次性解析。重跑回填与同步后，master 上的清单已是真摘要（`chore(packaging): fill sha256 for v2.33.0`），`brew` / `scoop` 安装恢复。
 
 ### 文档
 

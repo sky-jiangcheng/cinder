@@ -93,10 +93,14 @@ Prefer a visual dashboard, markdown note editor, and human review queue?
 
 | Method | Command / Download |
 | :--- | :--- |
+| **One-Line Script (macOS / Linux)** | `curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh \| bash` |
+| **One-Line Script (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
 | **Direct Download** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `Cinder-<version>-darwin-arm64.dmg` / `Cinder-<version>-linux-amd64.tar.gz` / `Cinder-<version>-windows-amd64.zip` |
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
-| **One-Line Script (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
+
+> **macOS says it cannot verify "Cinder" on first launch.** That is expected: release builds carry **no Apple Developer ID signature and no notarisation**, and a dmg downloaded by a browser is quarantined, so Gatekeeper refuses to start it. Any one of these gets past it: install with the one-line script above (`curl` writes no quarantine flag, so the app opens immediately) · right-click → **Open** · `xattr -dr com.apple.quarantine "/Applications/Cinder.app"`.
+> **Do not use `sudo spctl --master-disable`** — that trades one app's problem for every app's protection.
 
 First launch automatically seeds your scan roots (HOME on macOS/Linux; non-system drives on Windows). Hit **Rescan** on the dashboard and your knowledge base is immediately ready. Full walkthrough: [Getting Started](docs/en/getting-started.md).
 
