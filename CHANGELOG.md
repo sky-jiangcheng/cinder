@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.33.2] - 2026-11-08
+
 ### 修复
 
 - **发布流水线的签名代码是死代码：从没往 `build` job 灌过 `APPLE_CERTIFICATE`**。旧版 `release.yml` 里有一段看起来在做签名的代码（`if [ -n "$APPLE_CERTIFICATE" ]` → `codesign` → `notarytool`），但 `build` job **根本没有 `env:`**，`APPLE_CERTIFICATE` 永远是空串——**每一版都在未签名的状态下发布，而流水线上看不出任何异常**。这正是「Apple 无法验证"xxx"」一直存在的根因：不是没写签名，是写了但没接线。
@@ -21,6 +23,9 @@
 ### 文档
 
 - **「Apple 无法验证」的说法改了**：以前写的是「release 构建没有 Developer ID 签名、也没公证」，现在写的是「**你拿到的这一版没有签名**」——因为签名是**条件性**的：证书配进 CI 的发布是已签名的，没配的那次就是未签名的。同时把「真正的解法是买证书（这一步需要付费，属于本人的决定）」改成了指向指南的链接：**证书已经有了，剩下的只是把它接上**。
+- **v2.33.2 是第一版带签名的产物**：Developer ID Application 证书已配进仓库 Secrets，发布流水线在构建**之前**就预检公证凭据——证书在但公证凭据缺，当场失败，不会悄悄发一个没公证的包（没公证的包照样能装上，只是每个人打开都弹一次框，而这种失败在流水线上看不见，只有用户会替你发现）。
+- **指南里补上了「团队密钥 vs 个人 API 密钥」的区分**：Apple 官方原话——个人密钥「无法使用 Provisioning 接口、访问 Sales and Finance，或 **notaryTool**」。原来那份指南只写「去 App Store Connect 的集成页点 + 生成一个 API Key」，而那一页上**两类密钥是两个分区**，照着做很可能生成的是个人密钥：配进去公证会直接失败，而报错不会告诉你是这个原因。
+- **「没配证书会怎样」拆成三种状态**：证书和公证凭据都没配（打一条 warning，产物未签名）／证书配了但公证凭据没配（发版**直接失败**）／都已配（签名 + 公证）。原文只写了第一种，读者会以为「证书配了就能发」。
 
 ## [2.33.1] - 2026-11-08
 
@@ -936,7 +941,10 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.2...HEAD
+[2.33.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.1...v2.33.2
+[2.33.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.0...v2.33.1
+[2.33.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.5...v2.33.0
 [2.32.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.2...v2.32.3
 [2.32.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.4...v2.32.5
 [2.32.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...v2.32.4

@@ -1,9 +1,9 @@
 {
-  "version": "2.33.1",
+  "version": "2.33.2",
   "description": "Local-first code project context base",
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
-  "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.33.1/Cinder-2.33.1-windows-amd64.zip",
+  "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.33.2/Cinder-2.33.2-windows-amd64.zip",
   "hash": "sha256:1b410906a9dc1ccdf19daec445441b2c3537ea3fae12b785d2f38d9d67f07a34",
   "bin": ["cinder.exe", ["cinder.exe", "repotory"]],
   "checkver": {
