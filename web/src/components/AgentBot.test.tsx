@@ -155,6 +155,35 @@ describe('AgentBot', () => {
     expect(within(screen.getByRole('log')).getByText('失败重试策略是什么？')).toBeTruthy()
   })
 
+  // Regression: the composer and the thread were one state, so the draft
+  // showed up as a message bubble the moment the user typed — before anything
+  // was sent, and (after sending) in both places at once.
+  it('keeps the draft out of the thread until it is sent', () => {
+    answerWith('好。')
+    renderBot()
+    clickBot()
+    const log = screen.getByRole('log')
+    const box = screen.getByLabelText('问题')
+
+    fireEvent.change(box, { target: { value: '还没发出去的问题' } })
+    expect(within(log).queryByText('还没发出去的问题')).toBeNull()
+    // The thread is still empty, so the empty hint is still the right thing to
+    // show: typing has not started a conversation.
+    expect(within(log).getByText('问点什么，答案来自你的记忆库。')).toBeTruthy()
+  })
+
+  it('moves the question into the thread and empties the composer on send', async () => {
+    answerWith('好。')
+    renderBot()
+    clickBot()
+    await ask('失败重试策略是什么？')
+
+    expect(within(screen.getByRole('log')).getByText('失败重试策略是什么？')).toBeTruthy()
+    // One copy, in one place: the composer is empty, so it cannot look like
+    // the same question is queued and sent at the same time.
+    expect((screen.getByLabelText('问题') as HTMLTextAreaElement).value).toBe('')
+  })
+
   it('shows the tool the model ran, then marks it done', async () => {
     answerWith('今天 12 次提交。', { tool: 'query_daily_stats' })
     renderBot()

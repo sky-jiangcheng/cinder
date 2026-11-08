@@ -270,6 +270,24 @@ func aiCandidateURLs(base, path string) []string {
 	return out
 }
 
+// nextAICandidate answers "is this 404 a URL-shape problem worth another try".
+//
+// It is shared by every path that walks aiCandidateURLs so the rule lives in
+// one place: only a 404 moves to the next candidate (a wrong path), while an
+// auth failure or a 5xx is a real answer about the endpoint and must not be
+// retried against a made-up sibling URL.
+func nextAICandidate(candidates []string, current string, status int) (string, bool) {
+	if status != http.StatusNotFound {
+		return "", false
+	}
+	for i, c := range candidates {
+		if c == current && i+1 < len(candidates) {
+			return candidates[i+1], true
+		}
+	}
+	return "", false
+}
+
 // aiLocalhostFallback rewrites a "localhost" URL to its 127.0.0.1 equivalent.
 // The resolver prefers ::1 and a server listening on IPv4 only reported
 // "dial tcp [::1]:... connection refused" even though the service was up.

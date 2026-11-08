@@ -310,6 +310,16 @@ type toolChatResponse struct {
 // tool calls the model requests, feeds results back, and repeats up to
 // maxToolRounds times. Returns the final assistant reply and finish reason.
 func (s *Service) askWithTools(cfg aiChatConfig, messages []chatMessage, tools []toolDefinition, timeout time.Duration) (string, string, error) {
+	// cfg.baseURL is the CONFIGURED base ("https://api.deepseek.com" or
+	// ".../v1"), never a completions endpoint. The plain and streaming chat
+	// paths resolve it through aiCandidateURLs; this loop used to post to the
+	// bare base, which is a 404 on every provider whose completions route sits
+	// one segment deeper — the "AI endpoint returned 404: Not Found" the
+	// assistant panel showed while Settings → AI reported a healthy endpoint.
+	// Candidates are tried in the same order, with the same rule as those
+	// paths: a 404 means "wrong shape of URL, try the next one".
+	candidates := aiCandidateURLs(cfg.baseURL, "/chat/completions")
+	url := candidates[0]
 	round := 0
 	for {
 		round++
@@ -322,10 +332,17 @@ func (s *Service) askWithTools(cfg aiChatConfig, messages []chatMessage, tools [
 			return "", "", err
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		status, rawBody, err := aiPostJSON(ctx, cfg.baseURL, cfg.apiKey, body)
+		status, rawBody, err := aiPostJSON(ctx, url, cfg.apiKey, body)
 		cancel()
 		if err != nil {
 			return "", "", err
+		}
+		if next, ok := nextAICandidate(candidates, url, status); ok {
+			url = next
+			// A URL probe is not a tool round: the model has not seen this
+			// attempt, so it must not eat into the tool budget.
+			round--
+			continue
 		}
 		if status != http.StatusOK {
 			return "", "", fmt.Errorf("AI endpoint returned %d: %s", status, truncateBytes(string(rawBody), 300))

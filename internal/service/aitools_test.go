@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -261,4 +262,66 @@ func stubChunk(t *testing.T, body any) string {
 		t.Fatalf("marshal stub chunk: %v", err)
 	}
 	return string(raw)
+}
+
+// TestAskWithToolsResolvesTheBaseURL is the regression for the "AI endpoint
+// returned 404: Not Found" the assistant panel showed.
+//
+// The configured value is a BASE ("https://api.deepseek.com", ".../v1"), not a
+// completions endpoint. Every other AI path resolved it through
+// aiCandidateURLs; the tool loop posted to the bare base, so a provider whose
+// completions route sits one segment deeper answered 404 while Settings → AI
+// still called the endpoint healthy.
+func TestAskWithToolsResolvesTheBaseURL(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		// Only the real completions route answers; anything else is the 404 a
+		// real provider returns for a bare base URL.
+		if r.URL.Path != "/v1/chat/completions" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"message":"Not Found","code":404}}`))
+			return
+		}
+		respondJSON(t, w, textTurn("resolved"))
+	}
+	// nil handler: the helper then leaves the base URL unset, so this test owns
+	// it. The base is the ROOT — exactly what a user pastes from a provider's
+	// docs page — while the completions route lives one segment deeper.
+	svc := newAuditTestService(t, nil)
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	t.Cleanup(srv.Close)
+	if err := svc.UpdateConfig("ai_chat_base_url", srv.URL); err != nil {
+		t.Fatalf("set base url: %v", err)
+	}
+
+	reply, _, err := svc.askWithTools(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "hi"}}, nil, 5*time.Second)
+	if err != nil {
+		t.Fatalf("askWithTools must walk to the working URL, got: %v", err)
+	}
+	if reply != "resolved" {
+		t.Fatalf("reply = %q", reply)
+	}
+}
+
+// TestAskWithToolsDoesNotWalkCandidatesOnAuthFailure keeps the 404 rule narrow:
+// a 401 is the endpoint answering, not a wrong URL, and retrying it against a
+// guessed sibling path would turn one clear error into three confusing ones.
+func TestAskWithToolsDoesNotWalkCandidatesOnAuthFailure(t *testing.T) {
+	requests := 0
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid api key"}}`))
+	}
+	svc := newAuditTestService(t, handler)
+
+	_, _, err := svc.askWithTools(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "hi"}}, nil, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected an auth error")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Fatalf("error should name the status, got %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("provider saw %d requests, want exactly 1 (no candidate walking on 401)", requests)
+	}
 }

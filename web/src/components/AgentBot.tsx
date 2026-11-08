@@ -112,7 +112,12 @@ export default function AgentBot({ onToast }: Props) {
   const [pos, setPos] = useState<Point>(() => loadPos() ?? defaultPos())
   const posRef = useRef(pos)
   const [open, setOpen] = useState(false)
+  // `question` is the COMPOSER (what is being typed); `askedQuestion` is what
+  // the thread is about — set on send, never on keystroke. They were one state
+  // once, which made the draft appear as a message bubble the instant the user
+  // started typing, before anything had been sent.
   const [question, setQuestion] = useState('')
+  const [askedQuestion, setAskedQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [asking, setAsking] = useState(false)
   const [evidence, setEvidence] = useState<Evidence | null>(null)
@@ -161,6 +166,10 @@ export default function AgentBot({ onToast }: Props) {
     const q = question.trim()
     if (!q || asking) return
     setAsking(true)
+    setAskedQuestion(q)
+    // The thread now carries the question, so the composer empties: leaving
+    // both filled is the "why is my draft in the chat twice" report.
+    setQuestion('')
     setAnswer('')
     setEvidence(null)
     setToolCalls([])
@@ -204,7 +213,7 @@ export default function AgentBot({ onToast }: Props) {
   }, [answer, evidence])
 
   const saveAnswerAsNote = async () => {
-    const q = question.trim()
+    const q = askedQuestion.trim()
     if (!q || !answer.trim() || !filingProjectId) return
     try {
       await createNoteWithMeta(
@@ -219,7 +228,7 @@ export default function AgentBot({ onToast }: Props) {
   }
 
   const saveAnswerAsPage = async () => {
-    const q = question.trim()
+    const q = askedQuestion.trim()
     if (!q || !answer.trim() || !evidence || !filingProjectId) return
     try {
       const pageId = await fileAnswerAsPage(filingProjectId, q, answer.trim(), evidence, citedRefs)
@@ -314,7 +323,10 @@ export default function AgentBot({ onToast }: Props) {
   }, [pos])
 
   const hasAnswer = answer.trim().length > 0
-  const asked = question.trim().length > 0
+  const asked = askedQuestion.trim().length > 0
+  // The send button follows the COMPOSER: it is enabled exactly when there is
+  // something typed to send.
+  const canSend = question.trim().length > 0
 
   return (
     <>
@@ -334,7 +346,7 @@ export default function AgentBot({ onToast }: Props) {
           </div>
 
           <div className={s.thread} role="log">
-            {asked && <p className={s.userTurn}>{question.trim()}</p>}
+            {asked && <p className={s.userTurn}>{askedQuestion.trim()}</p>}
 
             {!asked && <p className={s.empty}>{t('agent.empty')}</p>}
 
@@ -424,7 +436,7 @@ export default function AgentBot({ onToast }: Props) {
             <button
               className="btn btn-primary btn-sm"
               onClick={ask}
-              disabled={!asked || asking || configured === false}
+              disabled={!canSend || asking || configured === false}
             >
               {asking ? t('ai.asking') : t('ai.send')}
             </button>
