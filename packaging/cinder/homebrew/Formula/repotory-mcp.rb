@@ -14,13 +14,13 @@ class RepotoryMcp < Formula
 
   if OS.mac? && Hardware::CPU.arm?
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-mcp-#{version}-darwin-arm64.tar.gz"
-    sha256 "16a1f7446f4d0e575dbaa251f144db5609cfad189258e69a7448734ab3a45a57"
+    sha256 "eb19ffd53a66297cd7690b1872975b38d7f29def29c97820696155ef5d04610d"
   elsif OS.mac? && Hardware::CPU.is_64_bit?
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-mcp-#{version}-darwin-amd64.tar.gz"
-    sha256 "8dc7f0a4dcd4ec2a703fd1a1c949f0fc3ae3402751aee46c732caa06b10d67ec"
+    sha256 "d1c5e4f261d6a7de8cb4c72792e0963bc017176f9672075eb124bf0588e86a95"
   else
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-mcp-#{version}-linux-amd64.tar.gz"
-    sha256 "af677446f1b550e7c01da2a547e53ef8b3f408d9c534e219c0a080fec8836815"
+    sha256 "7a8f871e0d38fa9b1d5bc55daea4414fac385903324f69181f5ed78926d76948"
   end
 
   def install
