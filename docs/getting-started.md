@@ -62,9 +62,13 @@ iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts
 
 > 未打开 "Cinder"。Apple 无法验证 "Cinder" 是否包含可能危害 Mac 安全或泄露隐私的恶意软件。
 
-或者「"Cinder" 已损坏，无法打开」，那是预期之内：release 构建**没有 Apple Developer ID 签名、也没有公证**，
-而浏览器下载的 dmg 会被打上 `com.apple.quarantine` 隔离标记，Gatekeeper 于是拒绝首次启动。
+或者「"Cinder" 已损坏，无法打开」，说明**你拿到的这一版没有签名**。
 
+签名与公证是在发布流水线里用 Apple Developer ID 证书做的：签名（`codesign --options runtime
+--timestamp`）证明是谁做的，公证（`notarytool submit` + `stapler staple`）是 Apple 扫过一遍证明
+不是恶意软件。两个都要有——**证书没配进 CI 的那次发布就是未签名的**。
+
+没签名的 dmg 会被浏览器打上 `com.apple.quarantine` 隔离标记，Gatekeeper 于是拒绝首次启动。
 任选一种放行：
 
 ```bash
@@ -77,9 +81,7 @@ xattr -dr com.apple.quarantine "/Applications/Cinder.app"
 
 > **不要 `sudo spctl --master-disable`**：那是把整台机器的下载检查关掉，用所有 App 的风险换一个 App 的方便。
 
-真正的解法是签名 + 公证（Apple Developer Program → Developer ID Application 证书 → `codesign --options runtime`
-→ `notarytool submit` → `stapler staple`）。这一步需要付费证书，所以目前没有做——与其假装已经公证，
-不如把上面这条命令写清楚。
+想让每一版都不再弹这个框，见[签名与公证](signing.md)——从拿证书到配进 CI 的完整步骤。
 
 ---
 

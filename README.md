@@ -99,7 +99,7 @@ Prefer a visual dashboard, markdown note editor, and human review queue?
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
 
-> **macOS says it cannot verify "Cinder" on first launch.** That is expected: release builds carry **no Apple Developer ID signature and no notarisation**, and a dmg downloaded by a browser is quarantined, so Gatekeeper refuses to start it. Any one of these gets past it: install with the one-line script above (`curl` writes no quarantine flag, so the app opens immediately) · right-click → **Open** · `xattr -dr com.apple.quarantine "/Applications/Cinder.app"`.
+> **macOS says it cannot verify "Cinder" on first launch?** Then that particular build was **not signed** — signing and notarisation happen in the release pipeline with an Apple Developer ID certificate, and a release produced without one is unsigned. An unsigned dmg downloaded by a browser is quarantined, so Gatekeeper refuses to start it. Any one of these gets past it: install with the one-line script above (`curl` writes no quarantine flag, so the app opens immediately) · right-click → **Open** · `xattr -dr com.apple.quarantine "/Applications/Cinder.app"`. To stop every build from showing this dialog, see [Signing and notarisation](docs/en/signing.md).
 > **Do not use `sudo spctl --master-disable`** — that trades one app's problem for every app's protection.
 
 First launch automatically seeds your scan roots (HOME on macOS/Linux; non-system drives on Windows). Hit **Rescan** on the dashboard and your knowledge base is immediately ready. Full walkthrough: [Getting Started](docs/en/getting-started.md).

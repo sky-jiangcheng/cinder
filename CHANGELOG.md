@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **发布流水线的签名代码是死代码：从没往 `build` job 灌过 `APPLE_CERTIFICATE`**。旧版 `release.yml` 里有一段看起来在做签名的代码（`if [ -n "$APPLE_CERTIFICATE" ]` → `codesign` → `notarytool`），但 `build` job **根本没有 `env:`**，`APPLE_CERTIFICATE` 永远是空串——**每一版都在未签名的状态下发布，而流水线上看不出任何异常**。这正是「Apple 无法验证"xxx"」一直存在的根因：不是没写签名，是写了但没接线。
+- **就算接上线，那段代码也跑不通**（三处硬错）：`codesign --sign "$APPLE_TEAM_ID"` 传的是 Team ID 而不是证书 identity；签名缺 `--timestamp`（Apple 公证会直接拒收「没有安全时间戳」的签名）；`notarytool --keychain-profile "github-actions"` 但从头到尾没有 `notarytool store-credentials`，而且 `|| true` 把失败吞了——**公证静默失败，产物照样发出去**。新写的 `scripts/sign-macos.sh` 把整条链拆成每步必失败：导入证书 → `set-key-partition-list`（没有这行 codesign 会等一个没人能点的授权框）→ 从内到外签名 → 公证 app → staple → **用已公证的 app 打 dmg** → 公证 dmg → staple → `spctl --assess`（就是 Gatekeeper 自己在问的那句话）。
+- **公证凭据半配置时，错误出现在构建末尾二十分钟后**。现在在构建**之前**就检查：证书配了但公证凭据缺一半，当场报「缺 APPLE_API_KEY / APPLE_ISSUER / APPLE_KEY_P8」这样的一句人话，而不是让 Tauri 或 notarytool 在流水线末尾甩一个读不懂的错。
+- **`.p12` 导入失败时，报错信息误导人**：macOS `security import` 读不了 OpenSSL 3 默认导出的 PBES2/AES 加密 p12，报的是「MAC verification failed during PKCS12 import (**wrong password?**)」——把一个加密算法问题说成密码错了。脚本改用 `-f pkcs12` 显式指定格式，并在失败时直接给出重新导出的命令（`openssl pkcs12 -export ... -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1`）。
+
+### 新增
+
+- **`scripts/sign-macos.sh`**：macOS 签名与公证的完整链路，独立成脚本而不是塞在 YAML 里——它要能在本机跑通（改一行就能重签一个 dmg），也要能被 CI 调用。
+- **[签名与公证指南](docs/signing.md)（中英）**：从「你有开发者账号」到「每一版都不再弹那个框」的完整路径：Developer Program 怎么开、Developer ID 证书怎么拿（Xcode / 后台两种）、`.p12` 怎么导、App Store Connect API Key 与 app 专用密码两种公证凭据怎么选、`gh secret set` 怎么配、以及八条最常撞的错误的成因。
+
+### 文档
+
+- **「Apple 无法验证」的说法改了**：以前写的是「release 构建没有 Developer ID 签名、也没公证」，现在写的是「**你拿到的这一版没有签名**」——因为签名是**条件性**的：证书配进 CI 的发布是已签名的，没配的那次就是未签名的。同时把「真正的解法是买证书（这一步需要付费，属于本人的决定）」改成了指向指南的链接：**证书已经有了，剩下的只是把它接上**。
+
 ## [2.33.1] - 2026-11-08
 
 ### 修复

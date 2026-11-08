@@ -64,11 +64,15 @@ If the dialog says
 
 > "Cinder" Not Opened. Apple cannot check it for malicious software.
 
-or "Cinder is damaged and can't be opened", that is expected: release builds carry **no Apple Developer ID
-signature and no notarisation**, and a dmg downloaded by a browser is marked `com.apple.quarantine`, so
-Gatekeeper refuses to start it.
+or "Cinder is damaged and can't be opened", then **that particular build was not signed**.
 
-Any one of these gets past it:
+Signing and notarisation happen in the release pipeline with an Apple Developer ID certificate:
+signing (`codesign --options runtime --timestamp`) proves who built it, notarisation
+(`notarytool submit` + `stapler staple`) is Apple's malware scan. You need both — and **a release
+produced without a certificate configured is unsigned**.
+
+An unsigned dmg downloaded by a browser is marked `com.apple.quarantine`, so Gatekeeper refuses to
+start it. Any one of these gets past it:
 
 ```bash
 # after the app is in /Applications, drop the quarantine flag (one bundle only)
@@ -81,9 +85,8 @@ xattr -dr com.apple.quarantine "/Applications/Cinder.app"
 > **Do not run `sudo spctl --master-disable`.** That switches off download checking for the whole machine —
 > every app's protection traded for one app's convenience.
 
-The real fix is signing plus notarisation (Apple Developer Program → Developer ID Application certificate →
-`codesign --options runtime` → `notarytool submit` → `stapler staple`). It needs a paid certificate, so it is
-not in place yet — and saying so plainly beats pretending the build is notarised.
+To stop every build from showing this dialog, see [Signing and notarisation](signing.md) — the whole
+path from getting a certificate to wiring it into CI.
 
 ---
 

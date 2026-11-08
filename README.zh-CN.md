@@ -98,9 +98,11 @@ claude mcp add repotory -- "$(which cinder-mcp)"
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
 
-> **macOS 首次打开提示「Apple 无法验证 "Cinder"」？** 这是正常的：release 构建**没有 Apple Developer ID 签名、也没公证**，
-> 浏览器下载的 dmg 带隔离标记，Gatekeeper 于是拒绝首次启动。任选一种放行：
+> **macOS 首次打开提示「Apple 无法验证 "Cinder"」？** 那说明你拿到的这一版**没有签名**——签名与公证是
+> 在发布流水线里用 Apple Developer ID 证书做的，**证书没配进 CI 的那次发布就是未签名的**。
+> 未签名的 dmg 浏览器下载时带隔离标记，Gatekeeper 于是拒绝首次启动。任选一种放行：
 > 用上面的一行脚本装（`curl` 不写隔离标记，装完直接能开）· 右键 →「打开」· `xattr -dr com.apple.quarantine "/Applications/Cinder.app"`。
+> 想让每一版都不再弹这个框，见[签名与公证](docs/signing.md)。
 > **别用 `sudo spctl --master-disable`**——那是拿一个 App 换掉整台机器的下载检查。
 
 首次启动自动播种扫描根目录（macOS/Linux 为 HOME；Windows 为非系统盘）。在仪表盘点击 **重新扫描** 即可立即可用。详见[快速上手指南](docs/getting-started.md)。

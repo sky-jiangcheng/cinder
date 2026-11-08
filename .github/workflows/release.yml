@@ -147,11 +147,123 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libgtk-3-dev \
+            lib            libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
+
+      # Apple signing and notarisation credentials.
+      #
+      # This step exists because the secrets have to REACH the build. The
+      # previous version of this workflow had a signing block that read
+      # $APPLE_CERTIFICATE — and nothing ever set it, because the build job
+      # had no env: at all. The block looked like signing worked and was
+      # dead code: every release shipped unsigned, and nobody found out until
+      # a user reported the Gatekeeper dialog.
+      #
+      # The App Store Connect API key is preferred over an Apple ID password:
+      # no password ends up in the workflow log, and there is no two-factor
+      # prompt to answer in the middle of a release. The .p8 key file has to
+      # exist on disk for notarytool to read it, so it is written out here.
+      - name: Configure Apple signing when a certificate is available
+        if: runner.os == 'macOS'
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CERT}" ]; then
+            echo "::notice::No Apple certificate configured — the .dmg will be UNSIGNED."
+            echo "::notice::Users will get the 'Apple cannot verify' dialog. See docs/signing.md."
+            exit 0
+          fi
+          {
+            echo "APPLE_CERTIFICATE=${CERT}"
+            echo "APPLE_CERTIFICATE_PASSWORD=${CERT_PASSWORD}"
+            echo "APPLE_SIGNING_IDENTITY=${SIGNING_IDENTITY}"
+            echo "APPLE_TEAM_ID=${TEAM_ID}"
+          } >> "$GITHUB_ENV"
+          if [ -n "${APPLE_ID_SECRET}" ]; then
+            echo "APPLE_ID=${APPLE_ID_SECRET}" >> "$GITHUB_ENV"
+            echo "APPLE_PASSWORD=${APPLE_PASSWORD_SECRET}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${API_KEY}" ] && [ -n "${API_ISSUER}" ] && [ -n "${API_KEY_P8}" ]; then
+            # The .p8 is a file, not a value: notarytool reads it from disk.
+            printf '%s' "${API_KEY_P8}" | base64 --decode > "$RUNNER_TEMP/AuthKey_${API_KEY}.p8"
+            chmod 600 "$RUNNER_TEMP/AuthKey_${API_KEY}.p8"
+            echo "APPLE_API_KEY=${API_KEY}" >> "$GITHUB_ENV"
+            echo "APPLE_API_ISSUER=${API_ISSUER}" >> "$GITHUB_ENV"
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey_${API_KEY}.p8" >> "$GITHUB_ENV"
+          fi
+          echo "Apple signing is ON for this run."
+
+      # The credentials are checked BEFORE the build rather than after it.
+      #
+      # A half-configured set of notarisation credentials fails twenty
+      # minutes into a macOS build, inside notarytool, and reads like a
+      # broken toolchain. Checking first turns that into a one-line answer,
+      # and it is the only way to tell "signed and notarised" apart from
+      # "signed but the notarisation silently did not happen".
+      - name: Verify the notarisation credentials are complete
+        if: runner.os == 'macOS'
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CERT}" ]; then
+            echo "No certificate configured — the .dmg will be unsigned. Nothing to check."
+            exit 0
+          fi
+          missing=""
+          [ -n "${CERT_PASSWORD}" ] || missing="${missing} APPLE_CERTIFICATE_PASSWORD"
+          [ -n "${SIGNING_IDENTITY}" ] || missing="${missing} APPLE_SIGNING_IDENTITY"
+          if [ -n "${missing}" ]; then
+            echo "::error::the signing credentials are incomplete — missing:${missing}"
+            exit 1
+          fi
+          if [ -n "${API_KEY}" ] || [ -n "${API_ISSUER}" ] || [ -n "${API_KEY_P8}" ]; then
+            missing=""
+            [ -n "${API_KEY}" ] || missing="${missing} APPLE_API_KEY"
+            [ -n "${API_ISSUER}" ] || missing="${missing} APPLE_API_ISSUER"
+            [ -n "${API_KEY_P8}" ] || missing="${missing} APPLE_API_KEY_P8"
+            if [ -n "${missing}" ]; then
+              echo "::error::the App Store Connect key is half configured — missing:${missing}"
+              exit 1
+            fi
+            echo "Notarisation credentials: App Store Connect API key."
+          elif [ -n "${APPLE_ID_SECRET}" ] || [ -n "${APPLE_PASSWORD_SECRET}" ] || [ -n "${TEAM_ID}" ]; then
+            missing=""
+            [ -n "${APPLE_ID_SECRET}" ] || missing="${missing} APPLE_ID"
+            [ -n "${APPLE_PASSWORD_SECRET}" ] || missing="${missing} APPLE_PASSWORD"
+            [ -n "${TEAM_ID}" ] || missing="${missing} APPLE_TEAM_ID"
+            if [ -n "${missing}" ]; then
+              echo "::error::the Apple ID credentials are half configured — missing:${missing}"
+              exit 1
+            fi
+            echo "Notarisation credentials: Apple ID."
+          else
+            echo "::error::a certificate is configured but there are no notarisation credentials."
+            echo "::error::Set either APPLE_API_KEY + APPLE_API_ISSUER + APPLE_API_KEY_P8,"
+            echo "::error::or APPLE_ID + APPLE_PASSWORD + APPLE_TEAM_ID."
+            echo "::error::See docs/signing.md."
+            exit 1
+          fi
 
       - name: Generate app icons from SVG
         shell: bash
@@ -312,50 +424,58 @@ jobs:
           APP_NAME=$(basename "$APP")
           APP_PATH="$APP"
 
-          if [ -n "$APPLE_CERTIFICATE" ]; then
-            echo "Signing $APP_NAME..."
-            echo "$APPLE_CERTIFICATE" | base64 -d -o /tmp/cert.p12
-            security create-keychain -p "github-actions" /tmp/signing.keychain
-            security import /tmp/cert.p12 -k /tmp/signing.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-            security list-keychains -s /tmp/signing.keychain
-            security default-keychain -s /tmp/signing.keychain
-            security unlock-keychain -p "github-actions" /tmp/signing.keychain
-            codesign --deep --force --sign "$APPLE_TEAM_ID" --options runtime "$APP_PATH"
-            echo "Signed successfully"
-          fi
+          # create-dmg is a dependency of the signing script: the .dmg is
+          # built AROUND the notarised app, so signing and packaging are one
+          # operation, not two.
+          pip install create-dmg 2>/dev/null || brew install create-dmg 2>/dev/null || curl -sL https://github.com/create-dmg/create-dmg/archive/refs/tags/v1.0.0.tar.gz | tar -xz && cd create-dmg-1.0.0 && sudo make install && cd ..
 
           VER=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
-          STAGING=$(mktemp -d)
-          cp -R "$APP" "$STAGING/"
-          ln -s /Applications "$STAGING/Applications"
-          mkdir -p "$STAGING/.background"
-          sips -s format png "build/dmg-background.svg" --out "$STAGING/.background/background.png"
-          pip install create-dmg 2>/dev/null || brew install create-dmg 2>/dev/null || curl -sL https://github.com/create-dmg/create-dmg/archive/refs/tags/v1.0.0.tar.gz | tar -xz && cd create-dmg-1.0.0 && sudo make install && cd ..
-          create-dmg \
-            --volname "Cinder Desktop" \
-            --window-size 600 400 \
-            --icon-size 80 \
-            --icon "$APP_NAME" 100 280 \
-            --hide-extension "$APP_NAME" \
-            --app-drop-link 400 280 \
-            --background "$STAGING/.background/background.png" \
-            --format UDZO \
-            "release/Cinder-$VER-${{ matrix.target }}.dmg" \
-            "$STAGING/"
-          rm -rf "$STAGING"
+          DMG="release/Cinder-$VER-${{ matrix.target }}.dmg"
+
+          # One script for the whole chain: import the certificate, sign the
+          # app, notarise it, staple the ticket, build the .dmg around it,
+          # notarise the .dmg, staple that, and ask Gatekeeper whether the
+          # result passes.
+          #
+          # The order matters and the script is where it is enforced: an app
+          # has to carry its own notarisation ticket before it is wrapped in a
+          # .dmg, and the .dmg has to carry one too, because the .dmg is what
+          # the browser downloads and what Gatekeeper looks at first.
+          #
+          # Every step in the script fails the step. A release that quietly
+          # skips notarisation still installs, so the failure would only show
+          # up as "Apple cannot verify" in front of a user.
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "Signing and notarising with the Developer ID certificate."
+            ./scripts/sign-macos.sh "$APP_PATH" "$DMG"
+          else
+            echo "::warning::No APPLE_CERTIFICATE configured — building an UNSIGNED .dmg."
+            echo "::warning::Users will get the 'Apple cannot verify' dialog. See docs/signing.md."
+            STAGING=$(mktemp -d)
+            cp -R "$APP" "$STAGING/"
+            ln -s /Applications "$STAGING/Applications"
+            mkdir -p "$STAGING/.background"
+            sips -s format png "build/dmg-background.svg" --out "$STAGING/.background/background.png"
+            create-dmg \
+              --volname "Cinder Desktop" \
+              --window-size 600 400 \
+              --icon-size 80 \
+              --icon "$APP_NAME" 100 280 \
+              --hide-extension "$APP_NAME" \
+              --app-drop-link 400 280 \
+              --background "$STAGING/.background/background.png" \
+              --format UDZO \
+              "$DMG" \
+              "$STAGING/"
+            rm -rf "$STAGING"
+          fi
 
           # Belt and braces: the .dmg is the artifact every installer points
           # at, so its absence must fail the job even if create-dmg exited 0.
-          if [ ! -f "release/Cinder-$VER-${{ matrix.target }}.dmg" ]; then
-            echo "::error::release/Cinder-$VER-${{ matrix.target }}.dmg was not produced"
+          if [ ! -f "$DMG" ]; then
+            echo "::error::$DMG was not produced"
             ls -la release/ || true
             exit 1
-          fi
-
-          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_ID" ]; then
-            echo "Notarizing DMG..."
-            xcrun notarytool submit "release/Cinder-$VER-${{ matrix.target }}.dmg" --keychain-profile "github-actions" --wait 2>&1 || true
-            xcrun stapler staple "release/Cinder-$VER-${{ matrix.target }}.dmg" 2>&1 || true
           fi
 
           # MCP server: separate archive, same release, no codesign/notary impact
