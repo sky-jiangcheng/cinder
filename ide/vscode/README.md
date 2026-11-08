@@ -16,8 +16,8 @@ One VSIX covers the whole fork family — **VS Code, Cursor and Windsurf**.
 | Sidebar view "Cinder Chat" (Cinder activity bar) | The chat console — see below. The panel is a conversation: one turn per question, the old turns folded away, every detail opened in place. Its scope chip is **locked to the current project** by default; click it to search across all projects. The panel draws its **own** header row — brand plus four inline icon buttons: **Search notes**, **AI provider**, **Diagnostics** and **Desktop app**. They live inside the panel, not in the view's title bar, so the host cannot clip them (ADR-0044) |
 | Status bar `$(repo) Cinder` | Click = load context; the tooltip names the resolved workspace (project / repository and its path) once resolved |
 | Command `Cinder: Register MCP Server` | Runs the bundled `repotory-init --with-hook` silently in the background (no terminal): registers the MCP server for Claude Code / Cursor / VS Code / Windsurf and installs the SessionEnd hook. The installer ships inside the extension, so this works in any project — it is not limited to the Cinder repository |
-| Command `Cinder: Setup & Diagnostics` | One panel showing four checks — `repotory-mcp` binary, local service, workspace resolution, MCP client config — each with the fix action next to it. Use this instead of guessing why something is not working |
-| Command `Cinder: Set repotory-mcp Path` | File picker for the `repotory-mcp` executable; writes `repotory.mcpPath` so no PATH editing is needed |
+| Command `Cinder: Setup & Diagnostics` | One panel showing four checks — `cinder-mcp` binary, local service, workspace resolution, MCP client config — each with the fix action next to it. Use this instead of guessing why something is not working |
+| Command `Cinder: Set cinder-mcp Path` | File picker for the `cinder-mcp` executable; writes `repotory.mcpPath` so no PATH editing is needed |
 
 ## The chat console
 
@@ -93,8 +93,8 @@ All commands remain in the Command Palette; rebind them in *Preferences → Keyb
 
 ## Requirements
 
-- The `repotory-mcp` binary — install it via Homebrew, Scoop or the GitHub Releases page. It does **not** have to be on your PATH: the extension resolves it in this order and stops at the first hit — `repotory.mcpPath`, `REPOTORY_MCP_BIN`, the extension's own storage, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. If none matches, **"Cinder: Set repotory-mcp Path"** opens a file picker. The desktop app is optional; the MCP server alone is enough.
-- Optional: a running `repotory server`. The chat console works without it over `repotory-mcp` alone — but the **project lock needs it**: the panel asks the read-only `ResolveWorkspacePath` binding which project your folder belongs to, and without the service there is no project to lock to, so the panel says so and searches across all projects instead (set `repotory.serverUrl` if you changed the port).
+- The `cinder-mcp` binary — install it via Homebrew, Scoop or the GitHub Releases page. It does **not** have to be on your PATH: the extension resolves it in this order and stops at the first hit — `repotory.mcpPath`, `REPOTORY_MCP_BIN`, the extension's own storage, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. If none matches, **"Cinder: Set cinder-mcp Path"** opens a file picker. The desktop app is optional; the MCP server alone is enough.
+- Optional: a running `repotory server`. The chat console works without it over `cinder-mcp` alone — but the **project lock needs it**: the panel asks the read-only `ResolveWorkspacePath` binding which project your folder belongs to, and without the service there is no project to lock to, so the panel says so and searches across all projects instead (set `repotory.serverUrl` if you changed the port).
 
 ## First launch
 
@@ -107,7 +107,7 @@ To wire the MCP server into your AI clients, run **"Cinder: Register MCP Server"
 | Setting | Default | Description |
 |---|---|---|
 | `repotory.serverUrl` | `http://127.0.0.1:18765` | Cinder headless service URL |
-| `repotory.mcpPath` | `""` (auto-detect) | Explicit path to the `repotory-mcp` executable; empty means auto-detect. Pointing at a missing/unexecutable file is reported by the diagnostics panel instead of silently falling back |
+| `repotory.mcpPath` | `""` (auto-detect) | Explicit path to the `cinder-mcp` executable; empty means auto-detect. Pointing at a missing/unexecutable file is reported by the diagnostics panel instead of silently falling back |
 
 That is the whole surface. No project id to configure: the extension sends the workspace path and the service resolves it into a project and a repository, so there is no setting to keep in sync with your knowledge base. **The AI provider is not here either** — it lives in the service's configuration and is edited from the panel (see *The external AI provider*), so there is nothing to keep in sync between the editor and the desktop app.
 
@@ -115,7 +115,7 @@ That is the whole surface. No project id to configure: the extension sends the w
 
 The extension no longer needs a hand-typed project id. Every command sends the current workspace folder's absolute path (`repotory_context`, `repotory_handoff`, `repotory_notes_search`), and the backend's four-tier path resolver (`project → repository`, most specific first) works out which project — and which repository inside it — the folder belongs to. The matching rules live server-side on purpose: the MCP tools resolve the same path, and a second implementation in the extension would let the sidebar and an agent's `repotory_context` disagree about which knowledge a session gets. On load and whenever the workspace folders change, the extension asks the read-only `ResolveWorkspacePath` binding what the folder is and shows the answer: the console's scope chip locks to `<project>` and the status-bar tooltip names the resolved workspace (or reports that the folder is `not in the knowledge base yet` when nothing matches).
 
-When the headless service is not reachable, the console's announcement bar says so (it does not guess) and the scope chip reads `No project` — the panel searches across all projects rather than pretending to be scoped. The commands themselves still work over `repotory-mcp`, and any path-based resolution there is done by the same server-side code.
+When the headless service is not reachable, the console's announcement bar says so (it does not guess) and the scope chip reads `No project` — the panel searches across all projects rather than pretending to be scoped. The commands themselves still work over `cinder-mcp`, and any path-based resolution there is done by the same server-side code.
 
 When the service **is** reachable but the folder matches nothing, the chip offers the candidate projects instead of a dead end, and filing the folder under one is a real write to the knowledge base — see *When the folder is not in the knowledge base yet*.
 
@@ -142,4 +142,4 @@ npm test        # unit tests for the parsers (ask answer, project lock)
 npx @vscode/vsce package --no-dependencies   # → repotory-vscode-<version>.vsix
 ```
 
-Architecture and scope: [ADR-0009](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0009-ide-presence.md) for the client discipline, [ADR-0036](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0036-ide-chat-console.md) for the chat console's shape. The extension calls `repotory-mcp` over stdio and the loopback-only headless service; zero business logic lives here.
+Architecture and scope: [ADR-0009](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0009-ide-presence.md) for the client discipline, [ADR-0036](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0036-ide-chat-console.md) for the chat console's shape. The extension calls `cinder-mcp` over stdio and the loopback-only headless service; zero business logic lives here.

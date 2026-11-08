@@ -23,7 +23,7 @@ wails dev
 
 # 纯后端构建（桌面应用 + MCP server）
 go build -ldflags="-s -w" -o repotory .
-go build -o repotory-mcp ./cmd/mcp/
+go build -o cinder-mcp ./cmd/mcp/
 ```
 
 提交前请跑齐三件套：
@@ -94,7 +94,8 @@ node scripts/check-i18n-keys.mjs    # locale 词条覆盖守卫（key 缺失 / �
 品牌展示层与机器标识**有意不一致**，完整规约见 [README 命名分层](README.md#命名分层)。速记：
 
 - 品牌文案写 `Cinder`，完整展示名 `Cinder: Local Git Knowledge Base`，仓库/包标识写 `repotory`
-- **不要「顺手统一」冻结标识**：二进制/命令名 `repotory`、数据目录 `repotory`（`internal/platform` 的 `dirName`）、MCP server 名 `repotory-mcp` 与工具前缀 `repotory_*`。它们绑定用户数据迁移史与 AI 客户端对外契约，改名是破坏性变更
+- 可执行文件名是 `cinder` / `cinder-mcp` / `cinder-server`；旧的 `repotory*` 名以软链（Windows 用副本与 Scoop shim）随每次安装一起发出，**不要删这段兼容层**——已装用户的 MCP 客户端配置仍指向旧路径
+- **不要「顺手统一」冻结标识**：数据目录 `repotory`（`internal/platform` 的 `dirName`）、`repotory.db`、MCP server 名 `repotory-mcp`（客户端配置里看到的就是它，与被改名的可执行文件 `cinder-mcp` 是两件事）与工具前缀 `repotory_*`、插件 id、cask/bucket token。它们绑定用户数据迁移史与 AI 客户端对外契约，改名是破坏性变更
 
 ## 默认值变更须先过评测门
 

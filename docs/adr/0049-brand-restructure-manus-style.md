@@ -278,6 +278,28 @@ v2.31.0 的发布流水线里，**只有 VS Code Marketplace 那一格红了**�
 
 **未做**：仓 slug 改名**不动任何数据**（用户的数据目录、库文件名、工具前缀全在标识层里，一字未动）；**不新开一条旧名的跳转服务**——GitHub 的 301 已经覆盖了 clone 与 fetch 这两种最常见的用法，而 Pages 那条**本来就不继承**，补它要自己再养一个服务，代价与收益不成比例，改为**把新路径写进发布说明与文档站导航**。
 
+### 补注三：产物名带版本、可执行文件也改名（2026-11-08）
+
+决策③把「二进制名」冻在标识层里，理由写得很清楚：**接口名一旦发出去就是别人的依赖**。这条理由今天仍然成立，但**它管错了对象**——被冻的是**可执行文件名**，而这个文件名其实可以和「别人机器上写死的路径」解耦：只要**新名字和旧名字同时存在**，旧路径就仍然是活的。真正不能动的是**用户配置里那些字符串本身**（数据目录、`repotory_*` 工具前缀、MCP server 名、插件 id、cask/bucket token）——它们没有「发个副本」这种过渡手段。
+
+触发点是两件具体的事，同一个根因：**发出去的 16 个资产全叫 `repotory-darwin-arm64.dmg` 这种形状**——① **不带版本**，用户手里三个版本的文件名一模一样，报 bug 时说不清装的是哪个；② **仍挂着上一代品牌** `repotory`，而下载页、应用内、文档站已经全叫 Cinder。品牌改名那次（本篇决策①）只改了**显示层**，产物文件名既不是显示层（它出现在 URL 与磁盘上）也不是标识层（没有程序读它），于是**掉在两个层中间没人管**。
+
+**改到哪一层（用户拍定的范围：文件名 + 可执行文件）**：
+
+| 层 | 改成 | 例子 |
+| :--- | :--- | :--- |
+| 下载产物 | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | `Cinder-2.32.6-macos-arm64.dmg` |
+| 可执行文件 | `cinder` / `cinder-mcp` / `cinder-server`，**旧名同批发出** | 归档里同时有 `cinder-mcp` 与 `repotory-mcp`（软链；Windows 用副本与 Scoop shim） |
+| 标识层 | **一字未动** | 数据目录 `~/Library/Application Support/repotory`、`repotory.db`、`repotory_*`、MCP server 名 `repotory-mcp`、插件 id、cask/bucket token |
+
+**「同时发出」不是可选项，是这次改名成立的前提**。已装用户的 `.mcp.json`、VS Code / JetBrains 设置里的路径、hook 脚本里写的都是 `repotory-mcp`；如果归档里只有新名字，**升级一次就断全部已配置的客户端**。所以每个安装渠道都带兼容层：`install.sh` 装完建软链、`install.ps1` 复制副本（Windows 软链要开发者模式）、Homebrew 的 `binary "cinder-mcp", target: "repotory-mcp"`、Scoop 的双 shim、Docker 镜像里的 `ln -s`、归档里预先打好的软链。IDE 插件与 `repotory-init` 的二进制查找改成**按名单遍历**（新名优先，旧名兜底），常见目录同时收新旧两种包目录。
+
+**连带炸出来的一处真缺陷**：资产名带版本之后，`releases/latest/download/<固定文件名>` **不再可用**——两个安装脚本此前都靠这个 URL 拿包。修法是先解析最新 tag 再拼版本化 URL（`install.sh` 跟 `curl -I` 的重定向取结尾，`install.ps1` 走 API），并保留 `VERSION` / `RELEASES` / `CINDER_RELEASE_BASE` 覆盖点，供安装冒烟测试用 fixture 顶替真实发布。**应用内更新器同批改**：`appAssetPattern` 认新形状、`legacyAppAssetPattern` 认旧形状，`platformAsset` 从「前缀匹配」改成「含 `-<os>-<arch>.`」——**版本号插在品牌与平台之间，前缀匹配从此必失**，这是最容易漏的一处（漏了就是「点了更新没反应」）。
+
+**没动的**：MCP server 名仍是 `repotory-mcp`（`NewMCPServer` 的参数是**客户端看到的服务器身份**，不是文件名，改它等于改契约）；`REPOTORY_MCP_BIN` 环境变量名、`repotory_*` 工具前缀、数据目录、cask/bucket token、skill 目录 `skill/repotory/` 全部照旧。**包管理器的 cask/formula/scoop 文件名也没改**——`brew install sky-jiangcheng/homebrew-repo/repotory-mcp` 是用户保存下来的命令，token 一改那条命令就废。
+
+**守门同批调整**：`check-brand.mjs` 照旧检查 12 条冻结项（MCP server 名那条**故意没放宽**）；`check-version-drift.mjs` 里三处「读清单里的 `repotory-mcp` 字面量」的正则放宽为 `(?:cinder|repotory)-mcp`，工具数量那两处也一并放宽——**门要认新名，但不能因为改名而不再看工具数**。
+
 ### 验证
 
 - 主仓：`node scripts/check-brand.mjs` 绿；`node scripts/generate-icons.mjs --check --tracked-only` 绿（母图与全部已提交派生件同源）。

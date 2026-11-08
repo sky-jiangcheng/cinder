@@ -1,6 +1,6 @@
 # Cinder MCP 工具完整参考（通道 A）
 
-20 个工具的精确参数签名（取自 `repotory-mcp` 的 `tools/list` 实际响应，非手写推测）。
+22 个工具的精确参数签名（取自 `cinder-mcp` 的 `tools/list` 实际响应，非手写推测）。
 
 ```
 repotory_agent_score()
@@ -202,6 +202,50 @@ FTS5 trigram + bm25 全文检索。
 
 ---
 
+## 增量代码审查工具
+
+收藏项目的**当日增量**审查（ADR-0053）：只报当天提交**引入**的问题，历史债刻意不报。
+报告是数据不是笔记（D6）——落在 `review_runs` / `review_findings` 两张表，**永远不进知识库**。
+
+### `repotory_review_latest(days?, severity?)`
+
+读**已完成**的最近一次审查：跑了哪些仓库、多少提交 / 文件 / 候选，以及 findings 本身
+（repo、file、line、rule、severity、verdict、evidence、message、suggestion）。
+
+| 参数 | 说明 |
+|------|------|
+| `days` | 往前包含几天（默认 1 = 只取最近一次，上限 30），用来看「这几天都报了什么」 |
+| `severity` | 逗号分隔的过滤：`high` / `medium` / `low` |
+
+两个必须分辨的字段：
+
+- **`verdict`**：`confirmed` = 模型确认问题成立；`unverified` = 确定性规则命中了，但这段代码有合法读法、且没有模型复核过。**别把 `unverified` 说成「确认有问题」**。
+- **`ai_calls`**：这次审查花了多少次模型调用。0 表示纯规则跑（没配模型，或传了 `no_ai`）。
+
+> 没有报告时它返回的是**一句话说明**，不是空对象——「从未审查」与「审查了但没问题」是两件事，
+> 后者会给出一次 findings 为 0 的 run。
+
+### `repotory_review_run(date?, scope?, dry_run?, no_ai?, force?)`
+
+对**某一天**（默认昨天）跑一次审查并返回 findings。
+
+| 参数 | 说明 |
+|------|------|
+| `date` | `YYYY-MM-DD`，默认昨天 |
+| `scope` | `collected`（默认，跟随设置）或 `project:<id>,<id>` |
+| `dry_run` | 只算不落库 |
+| `no_ai` | 纯规则，零模型调用 |
+| `force` | 重跑一个已完成的日子 |
+
+**幂等**：同一天 + 同一 scope 只审一次；已完成时返回 `already_done: true` 与既有报告，不重算
+（要重算才传 `force`）。这不是性能优化——重跑会把同一批候选反复送给模型。
+
+十条规则全是 Java 的：Feign 契约（缺 body / `@GET` 带体 / 路由改名 / 参数数量对不上）、吞异常、
+`@Transactional` 自调用、SQL 字符串拼接、`sensitiveLog`（默认 **opt-in**：日志里可能本来就有敏感
+字段，开不开由人定）、共享 `SimpleDateFormat`、循环里发远程调用。
+
+---
+
 ## 自检工具
 
 ### `repotory_integrity()`
@@ -236,6 +280,7 @@ AI 就绪度评分（0-100）：数据库、笔记、搜索、MCP、llms.txt、S
 | `PreviewProjectMergeUp` | 破坏性合并的预览；分组是人做的事 |
 | `UpdateProjectLevel` / `ToggleStar` / `SearchProjects` | UI 状态 |
 | `CompileWiki` / 审批 / 合并 / 社区综述 | 机器写的知识必须过人工审核 |
+| `GetReviewConfig` / `UpdateReviewConfig` | 开一个会读源码、可能调用模型的作业是隐私闸门，agent 不能自己拉闸（ADR-0053 D5） |
 
 > 这份清单是**代码里的注册表**，不是文档约定。`internal/app/api_contract_test.go`
 > 会强制每个导出方法都登记，且要求 desktop-only 条目必须写明原因。
@@ -262,6 +307,8 @@ MCP 工具在 HTTP 桥上的对应关系不是同名 —— RPC 走的是桌面 
 | `repotory_integrity` | `Health()` |
 | `repotory_agent_score` | `GetSummary(date, starredOnly)` |
 | `repotory_handoff` | `CreateNoteWithMeta(projectID, title, content, tags, kind="handoff", source)` |
+| `repotory_review_latest` | `LatestReviewReport(severities)` |
+| `repotory_review_run` | `RunReviewNow(date, scope, force, noAI, dryRun)` |
 
 > **`repotory_chat` 与 `repotory_metrics` 没有 HTTP RPC 孪生。** 它们只落在 `internal/service`
 > （`ListChatThreads` / `AppendChatMessage` / `GetMetrics`…），**没有登记进 `internal/app` 的桌面绑定**，

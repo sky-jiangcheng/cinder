@@ -54,6 +54,10 @@ function installWailsBindings() {
     // the smoke test off the network — and keeps its verdict from flipping
     // the nav badge mid-assertion, which is a state update outside act().
     GetConfig: () => Promise.resolve({ config: { update_check_enabled: '0' }, scan_roots: [] }),
+    // The left rail asks for the unread review count on mount (ADR-0053 D7).
+    // Zero is the answer that draws no dot, so it cannot change the nav the
+    // assertions below look at.
+    ReviewNotifyCount: () => Promise.resolve(0),
   }
   const app = new Proxy(bindings, {
     get(target, prop: string) {

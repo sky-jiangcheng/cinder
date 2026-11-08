@@ -13,7 +13,7 @@ Cinder 的 MCP server 是一个 **stdio 进程**：它不关心对面是哪个�
 
 | 角色 | 干什么 | 不干什么 |
 |------|--------|----------|
-| Cinder（`repotory-mcp`） | 存上下文、检索、写交接笔记 | 不提供模型、不代持密钥、不联网 |
+| Cinder（`cinder-mcp`） | 存上下文、检索、写交接笔记 | 不提供模型、不代持密钥、不联网 |
 | 本地模型（ollama / LM Studio …） | 推理、决定调用哪个工具 | 不存持久状态（模型本身没有记忆） |
 | MCP 客户端（Claude Code / Cursor / opencode …） | 把两者连起来：注入工具、转发调用 | 不解释语义 |
 
@@ -23,10 +23,10 @@ Cinder 的 MCP server 是一个 **stdio 进程**：它不关心对面是哪个�
 
 ### 1. 拿到 MCP 二进制
 
-发布资产里有 `repotory-mcp-<平台>`；从源码构建则是：
+发布资产里有 `cinder-mcp-<平台>`；从源码构建则是：
 
 ```bash
-go build -o /usr/local/bin/repotory-mcp ./cmd/mcp
+go build -o /usr/local/bin/cinder-mcp ./cmd/mcp
 ```
 
 ### 2. 起一个本地 OpenAI 兼容端点
@@ -47,7 +47,7 @@ LM Studio：在应用里加载模型，然后开本地服务器（默认 `http:/
 Claude Code：
 
 ```bash
-claude mcp add repotory -- /usr/local/bin/repotory-mcp
+claude mcp add repotory -- /usr/local/bin/cinder-mcp
 ```
 
 Cursor / VS Code / Claude Code 的项目级配置文件都是同一个形状：
@@ -55,7 +55,7 @@ Cursor / VS Code / Claude Code 的项目级配置文件都是同一个形状：
 ```json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
@@ -63,7 +63,7 @@ Cursor / VS Code / Claude Code 的项目级配置文件都是同一个形状：
 opencode：
 
 ```bash
-opencode mcp add repotory -- /usr/local/bin/repotory-mcp
+opencode mcp add repotory -- /usr/local/bin/cinder-mcp
 ```
 
 opencode 的服务器名会成为工具前缀，所以你看到的工具名是 `repotory_repotory_context`、`repotory_repotory_handoff` 这种形式。想短一点就把服务器注册成别的名字（例如 `memory`，工具名变成 `memory_repotory_context`）。
@@ -93,7 +93,7 @@ opencode 的服务器名会成为工具前缀，所以你看到的工具名是 `
 
 ## 真机验证记录（2026-10-29）
 
-环境：macOS arm64；ollama `qwen2.5:3b`（1.9 GB，本地）；`repotory-mcp` v2.19.0；**隔离 HOME**（`HOME=/tmp/repotory-verify/home`），一个演示 Git 仓库。活库全程未打开，前后 sha256 一致。
+环境：macOS arm64；ollama `qwen2.5:3b`（1.9 GB，本地）；`cinder-mcp` v2.19.0；**隔离 HOME**（`HOME=/tmp/repotory-verify/home`），一个演示 Git 仓库。活库全程未打开，前后 sha256 一致。
 
 | 步骤 | 结果 |
 |------|------|
@@ -119,13 +119,13 @@ returns a `200` status code even when the account balance is negative.
 - 但发给模型的请求里只有 opencode 自带的 12 个工具，**18 个 repotory 工具一个都没有**；
 - 换模型（ollama qwen2.5:3b / qwen2.5-coder:7b、LM Studio 27B）、换配置形状（`mcp.servers` / `mcp` / 项目级 / 全局级）、换 MCP server（另写一个只有 1 个工具的对照 server）——**全都不行**，对照 server 的工具同样进不去。
 
-所以这是客户端侧的行为，与模型、与 `repotory-mcp` 都无关。opencode 自己的文档对「工具调用不工作」只给了一条线索（把 ollama 的 `num_ctx` 调到 16k–32k），本文的复现里调了上下文也不生效。
+所以这是客户端侧的行为，与模型、与 `cinder-mcp` 都无关。opencode 自己的文档对「工具调用不工作」只给了一条线索（把 ollama 的 `num_ctx` 调到 16k–32k），本文的复现里调了上下文也不生效。
 
 在 opencode 修好之前，用 Claude Code / Cursor / 任何别的 MCP 客户端接入 Cinder；或者按下面「记录用的最小驱动」自己验证一遍链路。
 
 ## 记录用的最小驱动
 
-上表里的两个会话是用一个约 170 行的记录脚本跑的（`outputs/process-logs/2026-10-29-本地Agent-MCP真机验证.md` 附全文）：它做三件事——通过 stdio 连 `repotory-mcp`、把 18 个工具原样转成 OpenAI 的 `tools` 数组、把模型的 `tool_calls` 转成 MCP 调用。
+上表里的两个会话是用一个约 170 行的记录脚本跑的（`outputs/process-logs/2026-10-29-本地Agent-MCP真机验证.md` 附全文）：它做三件事——通过 stdio 连 `cinder-mcp`、把 18 个工具原样转成 OpenAI 的 `tools` 数组、把模型的 `tool_calls` 转成 MCP 调用。
 
 **它不是要发布的产品，只是把「客户端本该做的事」显式写出来的记录工具**。真实使用请用现成的客户端；这个脚本的用途是：当你不确定是「客户端没接上」还是「服务端有问题」时，它能用三十行代码把链路跑通，从而把问题定位到客户端那一侧。
 

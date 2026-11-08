@@ -9,8 +9,10 @@
 #
 # The desktop asset is faked (the goal is the script's URL/extract/install
 # logic, not Wails output), but the MCP archive is a real Go build of
-# ./cmd/mcp, so `repotory-mcp` actually runs afterwards. RELEASES /
-# REPOTORY_RELEASE_BASE point the scripts at the fixture.
+# ./cmd/mcp, so `cinder-mcp` actually runs afterwards. Release assets carry the
+# version in their names, so the fixtures do too: VERSION pins the fixture tag
+# the scripts build their URLs from, and RELEASES / CINDER_RELEASE_BASE point
+# them at the fixture server instead of GitHub.
 name: Install smoke test
 
 on:
@@ -32,6 +34,9 @@ jobs:
     name: install.sh (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # The fixture release the install scripts are pointed at.
+      VERSION: 9.9.9
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -45,7 +50,7 @@ jobs:
       # The MCP binary is the real deliverable under test: a genuine build of
       # ./cmd/mcp packed the same way release.yml packs it.
       - name: Build MCP server
-        run: go build -o dist/repotory-mcp ./cmd/mcp/
+        run: go build -o dist/cinder-mcp ./cmd/mcp/
 
       # The desktop tarball only has to satisfy the script's download and
       # extract steps; building Wails here would need GTK/WebKit and would
@@ -53,14 +58,18 @@ jobs:
       - name: Pack fixture assets
         run: |
           mkdir -p dist
-          printf '#!/bin/sh\necho repotory fixture\n' > dist/repotory
-          chmod +x dist/repotory
-          tar -czf dist/repotory-linux-amd64.tar.gz -C dist repotory
-          tar -czf dist/repotory-mcp-linux-amd64.tar.gz -C dist repotory-mcp
-          rm -f dist/repotory
+          printf '#!/bin/sh\necho cinder fixture\n' > dist/cinder
+          chmod +x dist/cinder
+          # The release archive ships the old binary name as a symlink; the
+          # fixture does the same so the extract step is exercised as shipped.
+          ln -sf cinder dist/repotory
+          ln -sf cinder-mcp dist/repotory-mcp
+          tar -czf "dist/Cinder-$VERSION-linux-amd64.tar.gz" -C dist cinder repotory
+          tar -czf "dist/cinder-mcp-$VERSION-linux-amd64.tar.gz" -C dist cinder-mcp repotory-mcp
+          rm -f dist/cinder dist/repotory dist/cinder-mcp dist/repotory-mcp
           # Same manifest shape release.yml uploads, so install.sh's verify
           # path runs for real (not just its "no manifest" skip path).
-          (cd dist && sha256sum repotory-linux-amd64.tar.gz repotory-mcp-linux-amd64.tar.gz > SHA256SUMS)
+          (cd dist && sha256sum "Cinder-$VERSION-linux-amd64.tar.gz" "cinder-mcp-$VERSION-linux-amd64.tar.gz" > SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: Serve fixtures over HTTP
@@ -82,13 +91,17 @@ jobs:
       - name: Verify installed binaries execute
         run: |
           export PATH="$RUNNER_TEMP/bin:$PATH"
-          command -v repotory
-          command -v repotory-mcp
-          # repotory-mcp serves MCP over stdio; it must answer an initialize
+          command -v cinder
+          command -v cinder-mcp
+          # The pre-rename names must keep resolving — that is the whole point
+          # of the compat symlinks (existing client configs use those paths).
+          test -L "$RUNNER_TEMP/bin/repotory" || { echo "compat symlink repotory missing" >&2; exit 1; }
+          test -L "$RUNNER_TEMP/bin/repotory-mcp" || { echo "compat symlink repotory-mcp missing" >&2; exit 1; }
+          # cinder-mcp serves MCP over stdio; it must answer an initialize
           # handshake, not just exist as a file.
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
-            | "$RUNNER_TEMP/bin/repotory-mcp" 2>/dev/null | grep -q 'repotory-mcp' || {
-            echo "repotory-mcp did not answer initialize" >&2; exit 1; }
+            | "$RUNNER_TEMP/bin/cinder-mcp" 2>/dev/null | grep -q 'cinder-mcp' || {
+            echo "cinder-mcp did not answer initialize" >&2; exit 1; }
 
       # The positive run above proves verification *runs*; this proves it can
       # *fail*. Without it, a bug that always skipped verification would pass
@@ -120,6 +133,8 @@ jobs:
     name: install.sh (macOS)
     runs-on: macos-latest
     timeout-minutes: 20
+    env:
+      VERSION: 9.9.9
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -131,7 +146,7 @@ jobs:
           cache: true
 
       - name: Build MCP server
-        run: go build -o dist/repotory-mcp ./cmd/mcp/
+        run: go build -o dist/cinder-mcp ./cmd/mcp/
 
       # macOS install.sh attaches a .dmg with hdiutil; a fixture dmg built
       # with hdiutil is a real one, so the attach/detach path is exercised.
@@ -144,14 +159,16 @@ jobs:
           TARGET="darwin-$TARGET"
           echo "TARGET=$TARGET" >> "$GITHUB_ENV"
           mkdir -p stage/Cinder.app/Contents/MacOS dist
-          printf '#!/bin/sh\necho repotory fixture\n' > stage/Cinder.app/Contents/MacOS/repotory
-          chmod +x stage/Cinder.app/Contents/MacOS/repotory
+          printf '#!/bin/sh\necho cinder fixture\n' > stage/Cinder.app/Contents/MacOS/cinder
+          chmod +x stage/Cinder.app/Contents/MacOS/cinder
           hdiutil create -volname Cinder -srcfolder stage -ov -format UDZO \
-            "dist/repotory-$TARGET.dmg"
-          tar -czf "dist/repotory-mcp-$TARGET.tar.gz" -C dist repotory-mcp
+            "dist/Cinder-$VERSION-$TARGET.dmg"
+          ln -sf cinder-mcp dist/repotory-mcp
+          tar -czf "dist/cinder-mcp-$VERSION-$TARGET.tar.gz" -C dist cinder-mcp repotory-mcp
+          rm -f dist/cinder-mcp dist/repotory-mcp
           # Same manifest shape release.yml uploads, so install.sh's verify
           # path runs for real (not just its "no manifest" skip path).
-          (cd dist && shasum -a 256 "repotory-$TARGET.dmg" "repotory-mcp-$TARGET.tar.gz" > SHA256SUMS)
+          (cd dist && shasum -a 256 "Cinder-$VERSION-$TARGET.dmg" "cinder-mcp-$VERSION-$TARGET.tar.gz" > SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: Serve fixtures over HTTP
@@ -177,17 +194,21 @@ jobs:
         run: |
           test -d "$RUNNER_TEMP/Applications/Cinder.app" || {
             echo "Cinder.app missing" >&2; exit 1; }
-          test -x "$RUNNER_TEMP/bin/repotory-mcp" || {
-            echo "repotory-mcp missing or not executable" >&2; exit 1; }
+          test -x "$RUNNER_TEMP/bin/cinder-mcp" || {
+            echo "cinder-mcp missing or not executable" >&2; exit 1; }
+          test -L "$RUNNER_TEMP/bin/repotory-mcp" || {
+            echo "compat symlink repotory-mcp missing" >&2; exit 1; }
           # The MCP binary must actually run, not just exist.
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
-            | "$RUNNER_TEMP/bin/repotory-mcp" 2>/dev/null | grep -q 'repotory-mcp' || {
-            echo "repotory-mcp did not answer initialize" >&2; exit 1; }
+            | "$RUNNER_TEMP/bin/cinder-mcp" 2>/dev/null | grep -q 'cinder-mcp' || {
+            echo "cinder-mcp did not answer initialize" >&2; exit 1; }
 
   windows:
     name: install.ps1 (Windows)
     runs-on: windows-latest
     timeout-minutes: 15
+    env:
+      VERSION: 9.9.9
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -199,21 +220,21 @@ jobs:
           cache: true
 
       - name: Build MCP server
-        run: go build -o dist/repotory-mcp.exe ./cmd/mcp/
+        run: go build -o dist/cinder-mcp.exe ./cmd/mcp/
 
       - name: Pack fixture assets
         shell: pwsh
         run: |
           # Desktop zip: the script only checks the archive extracts and
-          # contains repotory.exe.
-          Set-Content -Path dist/repotory.exe -Value "fixture" -NoNewline
-          Compress-Archive -Path dist/repotory.exe `
-            -DestinationPath dist/repotory-windows-amd64.zip -Force
-          Compress-Archive -Path dist/repotory-mcp.exe `
-            -DestinationPath dist/repotory-mcp-windows-amd64.zip -Force
+          # contains cinder.exe.
+          Set-Content -Path dist/cinder.exe -Value "fixture" -NoNewline
+          Compress-Archive -Path dist/cinder.exe `
+            -DestinationPath "dist/Cinder-$env:VERSION-windows-amd64.zip" -Force
+          Compress-Archive -Path dist/cinder-mcp.exe `
+            -DestinationPath "dist/cinder-mcp-$env:VERSION-windows-amd64.zip" -Force
           # Same manifest shape release.yml uploads, so install.ps1's verify
           # path runs for real (not just its "no manifest" skip path).
-          $lines = foreach ($f in @("dist/repotory-windows-amd64.zip", "dist/repotory-mcp-windows-amd64.zip")) {
+          $lines = foreach ($f in @("dist/Cinder-$env:VERSION-windows-amd64.zip", "dist/cinder-mcp-$env:VERSION-windows-amd64.zip")) {
             "$((Get-FileHash -Path $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
           }
           Set-Content -Path dist/SHA256SUMS -Value ($lines -join "`r`n") -Encoding ascii -NoNewline
@@ -238,15 +259,18 @@ jobs:
       - name: Run install script
         shell: pwsh
         run: |
-          $env:REPOTORY_RELEASE_BASE = "http://127.0.0.1:8080"
+          $env:CINDER_RELEASE_BASE = "http://127.0.0.1:8080"
           . .\scripts\install.ps1
 
       - name: Verify installed artifacts
         shell: pwsh
         run: |
           $dir = "$env:LOCALAPPDATA\Repotory"
-          if (-not (Test-Path "$dir\repotory.exe")) { throw "repotory.exe missing" }
-          if (-not (Test-Path "$dir\repotory-mcp.exe")) { throw "repotory-mcp.exe missing" }
+          if (-not (Test-Path "$dir\cinder.exe")) { throw "cinder.exe missing" }
+          if (-not (Test-Path "$dir\cinder-mcp.exe")) { throw "cinder-mcp.exe missing" }
+          # Pre-rename copies keep existing client configs working.
+          if (-not (Test-Path "$dir\repotory.exe")) { throw "compat copy repotory.exe missing" }
+          if (-not (Test-Path "$dir\repotory-mcp.exe")) { throw "compat copy repotory-mcp.exe missing" }
 
       - name: Stop fixture server
         if: always()

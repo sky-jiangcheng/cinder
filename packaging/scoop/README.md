@@ -10,8 +10,12 @@ published into it, and the set grows without the bucket being renamed.
 
 | Manifest | Package | Artifact |
 |----------|---------|----------|
-| [`bucket/repotory.json`](bucket/repotory.json) | `repotory` | `repotory-windows-amd64.zip` — the Wails desktop app |
-| [`bucket/repotory-mcp.json`](bucket/repotory-mcp.json) | `repotory-mcp` | `repotory-mcp-windows-amd64.zip` — the MCP stdio server |
+| [`bucket/repotory.json`](bucket/repotory.json) | `repotory` | `Cinder-<version>-windows-amd64.zip` — the Wails desktop app |
+| [`bucket/repotory-mcp.json`](bucket/repotory-mcp.json) | `repotory-mcp` | `cinder-mcp-<version>-windows-amd64.zip` — the MCP stdio server |
+
+The manifest names are still `repotory` / `repotory-mcp` (a frozen identity —
+renaming them would break every saved `scoop install` command); the archives carry
+`cinder.exe` / `cinder-mcp.exe` with `repotory*.exe` shims alongside.
 
 ### Deprecated aliases
 
@@ -39,7 +43,7 @@ scoop install repo/repotory-mcp
 After installing the MCP server, register it with an AI client:
 
 ```powershell
-claude mcp add repotory -- (Get-Command repotory-mcp).Source
+claude mcp add repotory -- (Get-Command cinder-mcp).Source
 ```
 
 The desktop app is **not** required to use the MCP server. Both read the same

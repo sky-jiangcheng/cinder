@@ -37,8 +37,8 @@ By default the server is API-only, exactly as in production. With `--web-dist <d
 
 ```bash
 cd web && npm run build:server              # base /, outputs web/dist-server
-cd .. && go build -o repotory-server ./cmd/server
-./repotory-server --port 18766 --web-dist web/dist-server
+cd .. && go build -o cinder-server ./cmd/server
+./cinder-server --port 18766 --web-dist web/dist-server
 ```
 
 - `/api/*` and `/health` always route to the API mux (`cmd/server`'s `isAPIPath` is pinned against `httpapi`'s registered routes by a test); every other path prefers a real static file and falls back to `index.html` (client-side routing)

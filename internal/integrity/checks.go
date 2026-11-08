@@ -60,7 +60,11 @@ const schemaVersionKey = "schema_version"
 // keys into the same SQLite file the notes live in. Purely additive: no
 // existing table is touched.
 // v29 added isolated chat_threads / chat_messages with immutable message IDs.
-const ExpectedSchemaVersion = 29
+// v30 added review_runs / review_findings (internal/db's EnsureReviewSchema,
+// ADR-0053): two new tables, no foreign keys, and a UNIQUE(run_date, scope) that
+// makes "one report per day per scope" a schema fact rather than a convention.
+// Purely additive — no existing table is touched.
+const ExpectedSchemaVersion = 30
 
 // StaleAfterDays is the age at which the repo_meta knowledge cache is reported
 // as stale. The cache feeds generated knowledge (tech stack, readme excerpt,

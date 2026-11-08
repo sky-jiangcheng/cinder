@@ -126,7 +126,7 @@ A few deliberate choices:
 
 ### Docker deployment (headless, NAS/homelab)
 
-The repository root ships a `Dockerfile` and `docker-compose.yml`: a single container running `repotory-server` (serving the frontend from the same origin), with the data volume mounted at `/data`. The data directory is located inside the volume via `XDG_CONFIG_HOME=/data` (`/data/repotory/repotory.db`), so snapshots land in `/data/repotory/backups/` — include that directory in your host's backup plan as well. The remote push is enabled inside the container through the same `backup_remote_*` config keys.
+The repository root ships a `Dockerfile` and `docker-compose.yml`: a single container running `cinder-server` (serving the frontend from the same origin), with the data volume mounted at `/data`. The data directory is located inside the volume via `XDG_CONFIG_HOME=/data` (`/data/repotory/repotory.db`), so snapshots land in `/data/repotory/backups/` — include that directory in your host's backup plan as well. The remote push is enabled inside the container through the same `backup_remote_*` config keys.
 
 ```bash
 docker compose up -d --build     # default port 18765, open http://localhost:18765

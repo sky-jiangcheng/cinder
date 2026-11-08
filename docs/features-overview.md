@@ -30,7 +30,7 @@ order: 2
 
 | 通道 | 说明 |
 |------|------|
-| MCP 服务器 | `repotory-mcp` stdio 服务器，20 个工具（仓库扫描 + 上下文注入 + 会话交接 + 笔记 CRUD/整理 + 项目查询 + 搜索 + 四项自检 + 知识页检索 + 跨端共享会话 + 量化指标）；可接入 Claude Code / Cursor 等（AI 执行动作的唯一通道） |
+| MCP 服务器 | `cinder-mcp` stdio 服务器，22 个工具（仓库扫描 + 上下文注入 + 会话交接 + 笔记 CRUD/整理 + 项目查询 + 搜索 + 四项自检 + 知识页检索 + 跨端共享会话 + 量化指标 + 增量审查）；可接入 Claude Code / Cursor 等（AI 执行动作的唯一通道） |
 | `repotory_scan` | 一次冷启动：播种默认扫描根并同步扫描，发现本地 Git 仓库。纯 MCP 安装（无桌面应用）也能把知识库从零建起来 |
 | `repotory_context` | 会话开始一次调用拉齐项目全貌：技术栈 / README 摘要 / 依赖 / 最近提交 / 未完成待办 / 高相关笔记（交接笔记优先）——替代 3-4 次链式查询 |
 | `repotory_handoff` | 会话结束时结构化交接：summary / changes / decisions / gotchas / next_steps 渲染统一模板并落库；下一个会话（任何 Agent）自动读到 |
@@ -40,6 +40,20 @@ order: 2
 | 会话自动捕获（M1） | 按需抓取项目最近一次 Claude Code 会话转录成交接笔记；`repotory-capture` CLI 承载 B 端 SessionEnd hook 自动化。**默认关**（`claude_session_capture`），隐私门控 |
 | 便携记忆导出 | `ExportMemoryJSON` 以 [Open Memory Protocol](https://github.com/SMJAI/open-memory-protocol) 风格导出知识库（临时口径；OMP 尚未 1.0） |
 | 数据完整性自检 | `repotory_integrity` 六项只读检查：FTS 索引漂移、孤儿行、schema 形状与版本戳、扫描覆盖、知识缓存新鲜度、版本快照孤儿。索引漂移会让搜索**静默漏结果**且无其它机制能发现——这是唯一的检测手段 |
+
+### 增量代码审查（Support）
+
+收藏项目的**昨日提交**里，那些编译不报错、联调也过、上线才炸的问题——典型是跨项目 Feign 契约错配。
+**规则先筛候选，模型只复核候选**，只报当天新引入的问题，历史债刻意不报。默认关（它会读源码）。
+
+| 功能 | 说明 |
+|------|------|
+| 十条 Java 规则 | Feign 契约（缺 body / GET 带体 / 路由改名 / 参数数量）、吞异常、`@Transactional` 自调用、SQL 拼接、共享 `SimpleDateFormat`、循环内远程调用；`sensitive_log` 需手动开 |
+| 报告 | 按文件分组的 findings（severity / verdict / 证据行 / 跳过计数 / 模型调用次数）；落在 `review_runs` / `review_findings`，**不进知识库** |
+| 三个入口 | 桌面「代码审查」页 + MCP `repotory_review_latest` / `repotory_review_run` + `cinder-review` CLI（给 launchd / 计划任务） |
+| 提醒 | 左侧导航红点，只数 `high AND confirmed`；为 0 时不打扰 |
+
+详见[增量代码审查](features/code-review.md)。
 
 ### 知识图谱 & LLM Wiki（Support——人把关）
 

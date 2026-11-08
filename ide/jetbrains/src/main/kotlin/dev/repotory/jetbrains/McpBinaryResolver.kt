@@ -1,9 +1,9 @@
-// Cinder for JetBrains — where the `repotory-mcp` binary is.
+// Cinder for JetBrains — where the `cinder-mcp` binary is.
 //
 // ADR-0035 decision 7: the plugin resolves the binary the same way the VS
 // extension does — setting -> `REPOTORY_MCP_BIN` -> PATH -> the common
 // package-manager directories — and the plugin NEVER downloads it. Three
-// distribution channels already exist for `repotory-mcp` (install.sh, Homebrew,
+// distribution channels already exist for `cinder-mcp` (install.sh, Homebrew,
 // Scoop); the plugin's job is to find the one the user already installed.
 //
 // A configured-but-missing path is reported as a problem instead of falling
@@ -39,8 +39,14 @@ data class McpBinaryResolution(
 object McpBinaryResolver {
     const val ENV_VAR = "REPOTORY_MCP_BIN"
 
-    /** The binary's name on each platform; Windows carries the extension. */
-    val BINARY_NAMES = listOf("repotory-mcp", "repotory-mcp.exe")
+    /**
+     * The binary's name on each platform; Windows carries the extension.
+     *
+     * `cinder-mcp` first, `repotory-mcp` second: the rename kept the old name
+     * as a symlink on every install (ADR-0049 补注), so a machine that has not
+     * been updated yet still resolves.
+     */
+    val BINARY_NAMES = listOf("cinder-mcp", "cinder-mcp.exe", "repotory-mcp", "repotory-mcp.exe")
 
     /**
      * Resolve the binary.
@@ -61,7 +67,8 @@ object McpBinaryResolver {
         windows: Boolean,
     ): McpBinaryResolution {
         val attempts = mutableListOf<String>()
-        val names = if (windows) listOf("repotory-mcp.exe") else listOf("repotory-mcp")
+        val names = if (windows) listOf("cinder-mcp.exe", "repotory-mcp.exe")
+        else listOf("cinder-mcp", "repotory-mcp")
 
         // 1. The setting. Explicit wins, and a broken explicit path is an
         //    error to report — not something to route around.
@@ -73,7 +80,7 @@ object McpBinaryResolver {
                 return McpBinaryResolution(file.path, "setting", attempts = attempts)
             }
             return McpBinaryResolution(
-                problem = "The configured repotory-mcp path is not an executable file: $file",
+                problem = "The configured cinder-mcp path is not an executable file: $file",
                 attempts = attempts,
             )
         }
@@ -106,7 +113,7 @@ object McpBinaryResolver {
             }
         }
         return McpBinaryResolution(
-            problem = "repotory-mcp was not found in PATH, the common install directories, " +
+            problem = "cinder-mcp was not found in PATH, the common install directories, " +
                 "or the settings — install it (install.sh, Homebrew or Scoop) or point the setting at it",
             attempts = attempts,
         )
@@ -124,8 +131,11 @@ object McpBinaryResolver {
             val local = System.getenv("LOCALAPPDATA") ?: File(home, "AppData/Local").path
             return listOf(
                 File(local, "scoop/shims").path,
+                File(local, "scoop/apps/cinder-mcp/current").path,
                 File(local, "scoop/apps/repotory-mcp/current").path,
+                File(local, "Programs/cinder-mcp").path,
                 File(local, "Programs/repotory-mcp").path,
+                File(local, "cinder-mcp").path,
                 File(local, "repotory-mcp").path,
             )
         }
@@ -134,6 +144,7 @@ object McpBinaryResolver {
             listOf(
                 "/opt/homebrew/bin",
                 "/usr/local/bin",
+                "/usr/local/opt/cinder-mcp/bin",
                 "/usr/local/opt/repotory-mcp/bin",
                 File(home, ".local/bin").path,
             )

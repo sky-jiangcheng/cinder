@@ -1,6 +1,6 @@
 # ADR-0053: 提交后增量审查——规则筛候选，模型只复核候选
 
-状态：**Proposed（2026-11-08，设计稿，等用户拍板后落码）**
+状态：**Accepted（2026-11-08，同日落地；实现偏差见文末「落地记录」）**
 日期：2026-11-08
 关联：[ADR-0016](0016-async-batch-jobs.md)（复用「提交即返回、进度可查」的任务形态）、[ADR-0030](0030-ai-call-audit.md)（模型调用必须过审计）、[ADR-0051](0051-conversation-as-interface.md)（对话是界面：审查结论要能被追问，不另开一套 UI 语言）、[ADR-0048](0048-core-contract-version.md)（新增 MCP 工具要涨契约版本）
 起始 schema：v29 → **v30**（两张新表）；`CoreVersion` 1.1.0 → **1.2.0**（加两个只读/触发工具）
@@ -111,10 +111,10 @@ CREATE TABLE review_findings (
 
 | 面 | 内容 |
 |---|---|
-| CLI | `repotory review --since yesterday [--dry-run] [--no-ai] [--full] [--json]` |
+| CLI | `cinder-review [--since yesterday] [--dry-run] [--no-ai] [--force] [--json] [--severity]` |
 | MCP | `review_latest {days?, severity?}`、`review_run {date?, dry_run?}`（新增 2 个 → `CoreVersion` 1.2.0） |
 | 桌面 | 设置页「每日审查」分区（开关/时间/范围/是否用 AI/通知级别）；「审查」页按文件分组列出 findings，点开看证据行 |
-| 通知 | 只推 `severity=high AND verdict=confirmed`；没有就不打扰 |
+| 通知 | 只推 `severity=high AND verdict=confirmed`；没有就不打扰。通道是**左侧导航的红点**，不是系统通知 |
 
 首页与仪表盘**不加任何东西**——刚做完的面板精简（ADR-0051 修订）就是这个教训。
 
@@ -170,3 +170,34 @@ CREATE TABLE review_findings (
 3. 同一天跑两次：第二次拒绝或覆盖，`review_findings` 不翻倍。
 4. `review.ai=0` 与候选为 0 两种情况，`ai_calls` 均为 0。
 5. `cargo`/`go test ./...`、`npm test`、`check-i18n-keys`、`check-docs-mirror`、`check-version-drift` 全绿。
+
+## 落地记录（2026-11-08）
+
+按 P1 → P3 一次做完：`CoreVersion` 1.2.0、schema v30、MCP 20 → 22 个工具。
+三处与上面的设计稿不一致，记在这里。
+
+**① CLI 是独立二进制 `cinder-review`，不是主二进制的子命令。** 设计稿写的是
+`repotory review --since yesterday`，但主二进制从 ADR-0049 起就不派发任何 CLI 子命令
+（`cinder` 只启动桌面应用），加子命令会把「双击启动」与「命令行工具」两种语义挤进同一个入口。
+独立二进制也让 launchd / 计划任务直接调它，不必 `open -a` 绕一圈。
+
+**②「通知」的通道是红点，不是系统通知。** 本仓没有系统通知基础设施，而每个平台的授权弹窗
+都要求用户先做一次决定才能看到价值。红点复用更新检查那套（`SideRail` 的 `updateDot`）：
+`high` 数 `high AND confirmed`、`all` 数全部、`off` 不画；**计数为 0 或取数失败都不画**——
+导航不能依赖它。阈值判定放在 `service.ReviewNotifyCount` 而不是 UI：谁都可能忘了规则，后端不会。
+
+**③ `--full` 没做。** D7 的 CLI 行列了它，同一份 ADR 的「明确不做的事」第 2 条又写了「不做
+定时全量审计」——两处自相矛盾，以「不做」为准：全量审计不是增量审查的一个开关，它是另一个
+问题（存量清理），等有人真要用时另开 ADR。
+
+两条硬约束，写进代码注释也写在这里：
+
+- **候选为 0 时模型调用必须是 0 次。** `refineWithCandidates` 只在有候选时才发请求，测试用
+  计数 `httptest` handler 钉住了这一点。省钱的实现很容易做成「先问模型这个文件有没有问题」，
+  那等于把 §背景①的量级问题又请回来。
+- **`unverified` 不等于有问题。** 规则命中但没被模型复核的候选允许出现在报告里，但不许进红点、
+  不许在措辞上说成「确认」。
+
+**仍然开着的口子（不在这次范围内）**：验收第 2 条「人工标注 20 条候选、precision ≥ 0.7」没做。
+所以首版只按最保守阈值出红点，`review.notify` 的 `all` 在标注完成前不要用。这条是给未来的
+自己留的话：规则不是越多越好，误报率不达标时改规则，别加规则。

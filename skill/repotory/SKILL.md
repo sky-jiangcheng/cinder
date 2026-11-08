@@ -12,7 +12,7 @@ description: |
   - starts work on a tracked repo and wants prior context ("继续昨天的活");
   - asks about a project's history, tech stack, open TODOs, or contributors;
   - wants the knowledge base audited ("知识库是不是坏了", "搜索为什么搜不到");
-  - mentions Cinder itself (the app, repotory-mcp, llms.txt, the knowledge base).
+  - mentions Cinder itself (the app, cinder-mcp, llms.txt, the knowledge base).
 
   Also use when a search comes back suspiciously thin — an FTS index that drifted out of sync
   makes every query under-report while the readiness check still says everything is fine.
@@ -32,7 +32,7 @@ metadata:
     - starts work on a repository that Cinder already tracks and wants prior context;
     - asks about the shape of a project's history, tech stack, open TODOs, or contributors;
     - wants the knowledge base audited or checked for drift;
-    - mentions Cinder itself (the app, the MCP server, repotory-mcp, llms.txt, the knowledge base).
+    - mentions Cinder itself (the app, the MCP server, cinder-mcp, llms.txt, the knowledge base).
 ---
 
 # Cinder — 跨 agent 的本地记忆层
@@ -51,7 +51,7 @@ Claude Code 写的交接，Cursor 明天就能读；这不是某个工具的私�
 | 通道 | 何时用 | 怎么调 | 能力 |
 |------|--------|--------|------|
 | **A. MCP 工具** | 默认。工具列表里有 `repotory_*` | 直接调用 | 读写全功能，含语义检索、handoff |
-| **B. HTTP RPC** | MCP 没装/没起，但有 `repotory-server` 在跑 | `curl -X POST http://127.0.0.1:18765/api/rpc -d '{"method":"...","args":[...]}'` | 同 A 的绑定全集 |
+| **B. HTTP RPC** | MCP 没装/没起，但有 `cinder-server` 在跑 | `curl -X POST http://127.0.0.1:18765/api/rpc -d '{"method":"...","args":[...]}'` | 同 A 的绑定全集 |
 | **C. SQLite 只读** | 上面都没有 | `scripts/repotory-query.py` | **只读**，检索 + 列表 |
 
 ### 通道 A 的启用条件
@@ -61,7 +61,7 @@ MCP server 需要在 WorkBuddy 里被**信任**才生效。配置在 `~/.workbud
 ```json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
@@ -135,7 +135,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 
 ## 三、工具路由（通道 A）
 
-20 个工具，按意图选：
+22 个工具，按意图选：
 
 ### 读
 
@@ -168,6 +168,15 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 
 > **`agent_score` 不是数据完整性检查。** 它答的是「装好了吗」，不是「数据是真的吗」。
 > 索引漂移时 `agent_score` 依然满分，而搜索会静默漏结果 —— 所以**偏薄时先跑 `integrity`**。
+
+### 增量代码审查
+
+| 工具 | 什么时候用 | 注意 |
+|------|-----------|------|
+| `repotory_review_latest` | 「昨天那些提交有什么问题？」—— 读已存的审查报告 | `verdict: unverified` 是**规则命中但没复核**，别说成「确认有问题」 |
+| `repotory_review_run` | 需要一份新报告时跑当天（默认昨天） | 同一天 + 同一 scope **幂等**，已完成不重算；`dry_run` 只算不落库，`no_ai` 零模型调用 |
+
+> 只报**当天提交引入**的问题，历史债刻意不报；报告是数据不是笔记，永远不进知识库。
 
 ### 只读探查
 
@@ -224,7 +233,7 @@ curl -s -X POST http://127.0.0.1:18765/api/rpc \
 启动 server（headless，不需要桌面应用）：
 
 ```bash
-repotory-server --port 18765        # 或 go build -o repotory-server ./cmd/server
+cinder-server --port 18765        # 或 go build -o cinder-server ./cmd/server
 ```
 
 > **注意版本**：常驻的 server 可能是旧版本（`/health` 会返回 `version`）。
@@ -317,7 +326,7 @@ curl -s -X POST http://127.0.0.1:18765/api/rpc \
 | 搜索结果明显偏少 | `repotory_integrity`（FTS 漂移）→ 别急着下「知识库很薄」的结论 |
 | 搜到但内容对不上 | `repotory_notes_read` 读全文；`notes_search` 返回的是片段 |
 | 语义检索没效果 | 语义检索**默认关闭**，需在桌面端 设置 → AI 里自配端点；未开时 `ask` 退化为词法 |
-| MCP 连不上 | `repotory-mcp` 是否在 PATH；直接握手验证：`echo '{"jsonrpc":"2.0","id":1,"method":"initialize",...}' \| repotory-mcp` |
+| MCP 连不上 | `cinder-mcp` 是否在 PATH；直接握手验证：`echo '{"jsonrpc":"2.0","id":1,"method":"initialize",...}' \| cinder-mcp` |
 | 库被锁 / 打不开 | 库是 WAL 模式，桌面应用开着时**可以并发读**；写冲突才是问题 |
 | 项目没被识别 | `repotory_scan`（首次运行）或 `repotory_projects_list` 看是否已扫描 |
 
@@ -333,7 +342,7 @@ curl -s -X POST http://127.0.0.1:18765/api/rpc \
 
 ## 九、资源
 
-- `scripts/repotory-query.py` —— 通道 C 的只读查询工具（检索 / 列主题 / 列项目 / 读单条 / 库概况）- `references/mcp-tools.md` —— 14 个 MCP 工具的完整参数与返回值、HTTP RPC 方法映射
+- `scripts/repotory-query.py` —— 通道 C 的只读查询工具（检索 / 列主题 / 列项目 / 读单条 / 库概况）- `references/mcp-tools.md` —— 22 个 MCP 工具的完整参数与返回值、HTTP RPC 方法映射
 - `references/data-model.md` —— schema 与不变量（主题归属、迁移、handoff 保护、搜索边界）
 
 上游项目：<https://github.com/sky-jiangcheng/cinder> · 文档：<https://sky-jiangcheng.github.io/cinder/>

@@ -231,6 +231,11 @@ func (s *Service) Startup() {
 		// Its first pass is one interval away, so opening the app files no todos.
 		s.startWikiLintTicker()
 
+		// Daily incremental review (ADR-0053 D5): a ten-minute poll that runs
+		// yesterday's review once `review.at` has passed. No cron parser, and
+		// the first poll is one interval away for the same reason as lint.
+		s.startReviewTicker()
+
 		// Async compile jobs (ADR-0016). Recovery runs before the worker, so a job
 		// left 'running' by a dead process is marked failed and never picked up as
 		// if it knew where it stopped.

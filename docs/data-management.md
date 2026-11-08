@@ -126,7 +126,7 @@ PASS  this snapshot can bring the knowledge back
 
 ### Docker 部署（headless，NAS/homelab）
 
-仓库根提供 `Dockerfile` 与 `docker-compose.yml`：单容器跑 `repotory-server`（同源托管前端），数据卷挂在 `/data`。数据目录由 `XDG_CONFIG_HOME=/data` 定位到卷内（`/data/repotory/repotory.db`），备份快照自然落在 `/data/repotory/backups/`——把该目录再纳入宿主机的备份计划即可。远端推送在容器内同样通过 `backup_remote_*` 配置键启用。
+仓库根提供 `Dockerfile` 与 `docker-compose.yml`：单容器跑 `cinder-server`（同源托管前端），数据卷挂在 `/data`。数据目录由 `XDG_CONFIG_HOME=/data` 定位到卷内（`/data/repotory/repotory.db`），备份快照自然落在 `/data/repotory/backups/`——把该目录再纳入宿主机的备份计划即可。远端推送在容器内同样通过 `backup_remote_*` 配置键启用。
 
 ```bash
 docker compose up -d --build     # 默认端口 18765，浏览器打开 http://localhost:18765

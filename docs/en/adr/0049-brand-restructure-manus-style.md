@@ -278,6 +278,28 @@ So the gate goes from "**only the old ones**" to "**only addresses that exist**"
 
 **Not done**: renaming the repository slug **moves no data** (the user's data directory, database file name and tool prefix all live in the identifier layer and did not move); **no redirect service was stood up for the old name** — GitHub's 301 already covers clone and fetch, the two most common uses, while the Pages path **never inherited the redirect in the first place**; covering that would mean running another service, whose cost does not match its benefit, so the new path went into the release notes and the documentation-site navigation instead.
 
+### Addendum three: artifacts carry a version, and the binaries were renamed too (2026-11-08)
+
+Decision ③ froze "the binary name" in the identifier layer, for a reason that is still true today: **an interface name, once shipped, is somebody else's dependency**. But that reason **was pointed at the wrong object** — what was frozen is the **executable's file name**, and that name can be decoupled from "the path written into other people's machines": as long as **the new name and the old name both exist**, the old path stays alive. What genuinely cannot move are the **strings inside user configs** (the data directory, the `repotory_*` tool prefix, the MCP server name, plugin ids, cask/bucket tokens) — there is no "ship a second copy" escape hatch for those.
+
+Two concrete things triggered this, one shared root cause: **all 16 shipped assets were named like `repotory-darwin-arm64.dmg`** — ① **no version**, so three different releases landed on a user's disk under identical file names and a bug report could not say which build it was; ② **still carrying the previous brand** `repotory` while the download page, the app and the documentation site had already switched to Cinder. The brand rename (decision ① of this ADR) only touched the **display layer**; artifact file names are neither display layer (they live in URLs and on disk) nor identifier layer (no program reads them), so **they fell between the two layers and nobody owned them**.
+
+**How far the rename went (the scope the user chose: file names + executables)**:
+
+| Layer | Changed to | Example |
+| :--- | :--- | :--- |
+| Downloadable artifacts | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | `Cinder-2.32.6-macos-arm64.dmg` |
+| Executables | `cinder` / `cinder-mcp` / `cinder-server`, **with the old names shipped alongside** | the archive carries both `cinder-mcp` and `repotory-mcp` (symlink; Windows uses copies and Scoop shims) |
+| Identifier layer | **untouched** | data directory `~/Library/Application Support/repotory`, `repotory.db`, `repotory_*`, the MCP server name `repotory-mcp`, plugin ids, cask/bucket tokens |
+
+**Shipping both names is not optional — it is what makes this rename valid at all**. Existing users have `repotory-mcp` written into `.mcp.json`, into VS Code / JetBrains settings and into hook scripts; an archive with only the new name would **break every configured client on the first upgrade**. So every install channel carries a compatibility layer: `install.sh` creates symlinks, `install.ps1` writes copies (Windows symlinks need developer mode), Homebrew gets `binary "cinder-mcp", target: "repotory-mcp"`, Scoop gets a dual shim, the Docker image gets an `ln -s`, and the archives are packed with the symlink already in place. Binary lookup in the IDE plugins and in `repotory-init` became **iteration over a name list** (new name first, old name as fallback), and the common directories now include both the old and the new package directories.
+
+**One real defect this flushed out**: once asset names carry a version, `releases/latest/download/<fixed-file-name>` **stops working** — and both install scripts relied on exactly that URL. The fix resolves the latest tag first and then assembles a versioned URL (`install.sh` follows the `curl -I` redirect and takes its tail, `install.ps1` uses the API), keeping `VERSION` / `RELEASES` / `CINDER_RELEASE_BASE` as override points so the install smoke test can point at a fixture instead of a real release. **The in-app updater changed in the same batch**: `appAssetPattern` accepts the new shape and `legacyAppAssetPattern` the old one, while `platformAsset` went from a prefix match to "contains `-<os>-<arch>.`" — **the version now sits between the brand and the platform, so a prefix match can only ever miss**, and this is the easiest spot to overlook (missing it means "the update button does nothing").
+
+**Not changed**: the MCP server name is still `repotory-mcp` (the argument to `NewMCPServer` is the **server identity clients see**, not a file name — changing it is a contract change); the `REPOTORY_MCP_BIN` environment variable, the `repotory_*` tool prefix, the data directory, the cask/bucket tokens and the skill directory `skill/repotory/` all stay as they were. **The package-manager manifest file names did not change either** — `brew install sky-jiangcheng/homebrew-repo/repotory-mcp` is a command users have saved, and renaming the token kills it.
+
+**Guards adjusted in the same batch**: `check-brand.mjs` still checks all 12 frozen entries (the MCP server name one was **deliberately not loosened**); three regexes in `check-version-drift.mjs` that read the literal `repotory-mcp` out of manifests were widened to `(?:cinder|repotory)-mcp`, and the two tool-count ones along with them — **the gate has to accept the new name, but it must not stop counting tools because of a rename**.
+
 ### Verification
 
 - Main repository: `node scripts/check-brand.mjs` green; `node scripts/generate-icons.mjs --check --tracked-only` green (the master mark and every committed derivative agree).

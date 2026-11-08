@@ -23,7 +23,9 @@ const CONFIG_SECTION = "repotory";
 const SERVER_URL_KEY = "serverUrl";
 const MCP_PATH_KEY = "mcpPath";
 const MCP_ENV = "REPOTORY_MCP_BIN";
-const BINARY_NAMES = ["repotory-mcp", "repotory-mcp.exe"];
+// `cinder-mcp` first, `repotory-mcp` second: the rename kept the old name as
+// a symlink on every install (ADR-0049 补注), so an older machine still works.
+const BINARY_NAMES = ["cinder-mcp", "cinder-mcp.exe", "repotory-mcp", "repotory-mcp.exe"];
 const RELEASES_URL = "https://github.com/sky-jiangcheng/cinder/releases";
 const AI_INTEGRATION_DOC =
   "https://github.com/sky-jiangcheng/cinder/blob/master/docs/features/ai-integration.md";
@@ -90,6 +92,7 @@ function commonBinaryDirs(): string[] {
     return [
       "/opt/homebrew/bin",
       "/usr/local/bin",
+      "/usr/local/opt/cinder-mcp/bin",
       "/usr/local/opt/repotory-mcp/bin",
       path.join(home, ".local", "bin"),
     ];
@@ -98,8 +101,11 @@ function commonBinaryDirs(): string[] {
     const local = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local");
     return [
       path.join(home, "scoop", "shims"),
+      path.join(home, "scoop", "apps", "cinder-mcp", "current"),
       path.join(home, "scoop", "apps", "repotory-mcp", "current"),
+      path.join(local, "Programs", "cinder-mcp"),
       path.join(local, "Programs", "repotory-mcp"),
+      path.join(local, "cinder-mcp"),
       path.join(local, "repotory-mcp"),
     ];
   }
@@ -163,7 +169,7 @@ export function resolveMcpBinary(): BinaryResolution {
     }
   }
   return {
-    problem: "在 PATH、Homebrew / Scoop 常见目录和扩展存储中都没有找到 repotory-mcp",
+    problem: "在 PATH、Homebrew / Scoop 常见目录和扩展存储中都没有找到 cinder-mcp",
   };
 }
 
@@ -177,7 +183,7 @@ async function pickMcpBinary(): Promise<string | undefined> {
     canSelectFolders: false,
     canSelectMany: false,
     openLabel: "使用此文件",
-    title: "选择 repotory-mcp 可执行文件",
+    title: "选择 cinder-mcp 可执行文件",
   });
   const file = picked?.[0];
   if (!file) return undefined;
@@ -202,7 +208,7 @@ async function getMcp(): Promise<McpStdioClient> {
   const resolved = resolveMcpBinary();
   if (!resolved.path) {
     const choice = await vscode.window.showErrorMessage(
-      `Cinder: 未找到 repotory-mcp。${resolved.problem ?? ""}`,
+      `Cinder: 未找到 cinder-mcp。${resolved.problem ?? ""}`,
       "定位可执行文件…",
       "打开下载页",
       "环境诊断",
@@ -215,7 +221,7 @@ async function getMcp(): Promise<McpStdioClient> {
     } else if (choice === "环境诊断" && extensionContext) {
       await diagnose(extensionContext);
     }
-    throw new Error(resolved.problem ?? "repotory-mcp not found");
+    throw new Error(resolved.problem ?? "cinder-mcp not found");
   }
   const client = new McpStdioClient({ command: resolved.path }, (line: string) =>
     output?.appendLine(line),
@@ -515,14 +521,14 @@ async function diagnose(context: vscode.ExtensionContext): Promise<void> {
 
   const items: DiagnosticAction[] = [
     {
-      label: binary.path ? "$(check) repotory-mcp" : "$(error) repotory-mcp",
+      label: binary.path ? "$(check) cinder-mcp" : "$(error) cinder-mcp",
       description: binary.path ?? binary.problem ?? "未找到",
       detail: binary.path
         ? `来源：${binarySourceLabel(binary.source)}`
         : "点击选择可执行文件；取消后可改从 Releases 下载",
       run: async () => {
         if (binary.path) {
-          output.appendLine(`repotory-mcp: ${binary.path}`);
+          output.appendLine(`cinder-mcp: ${binary.path}`);
           output.show(true);
           return;
         }
@@ -538,7 +544,7 @@ async function diagnose(context: vscode.ExtensionContext): Promise<void> {
       label: serverOk ? "$(check) 本地服务" : "$(warning) 本地服务",
       description: serverOk
         ? serverUrl()
-        : `未连接到 ${serverUrl()}（搜索仍可经 repotory-mcp 完成）`,
+        : `未连接到 ${serverUrl()}（搜索仍可经 cinder-mcp 完成）`,
       detail: serverOk ? "健康检查通过" : "桌面版可在设置中修改 repotory.serverUrl；点击重新检测",
       run: async () => {
         await diagnose(context);
@@ -652,7 +658,7 @@ async function onboard(context: vscode.ExtensionContext): Promise<void> {
 
   const choice = await vscode.window.showInformationMessage(
     "👋 欢迎使用 Cinder。\n\n" +
-      "配置向导会自动检测 repotory-mcp、检查本地服务、并把 MCP 写入当前项目——" +
+      "配置向导会自动检测 cinder-mcp、检查本地服务、并把 MCP 写入当前项目——" +
       "不需要手动敲命令。",
     "开始配置",
     "稍后再说",

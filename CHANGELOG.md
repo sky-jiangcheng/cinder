@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+## [2.33.0] - 2026-11-08
+
+### 变更
+
+- **收藏项目的昨日提交每天自检一遍：规则筛候选，模型只复核候选（2026-11-08，ADR-0053 Accepted）**：用户要的是「每天自动看一眼昨日提交，列出线上会炸但编译不报错的问题」，举的例子是跨项目 Feign 契约——A 侧方法少了 `@RequestBody`，编译过、联调过、上线丢参数。先量了三件事再动手：单日增量 41–94 commit / 1.4 万–4.7 万行 diff（全量喂模型逾 10 万 token，且**不可复现**才是真问题）；错配在 A 侧 diff 里人畜无害、要到 B 侧才成立（模型自由发挥只能猜）；113 个 Feign 方法里 38 个缺 `@RequestBody`（能捞到东西，但误报三次功能就被关掉）。所以做成两层：**十条确定性 Java 规则先筛候选**（Feign 缺 body / GET 带体 / 路由改名 / 参数数量、吞异常、`@Transactional` 自调用、SQL 拼接、共享 `SimpleDateFormat`、循环内远程调用；`sensitive_log` 需手动开），**模型只对候选做「这段代码有没有合法读法」**，且**候选为 0 时模型调用必须是 0 次**（计数 handler 钉死）。只报当天 `added` 行引入的问题，历史债刻意不报。报告是数据不是笔记——落在 `review_runs` / `review_findings`（`UNIQUE(run_date, scope)` 让「一天一范围一份」成为 schema 事实），**永不进知识库**。四个交付面：桌面「代码审查」页（按文件分组、severity 过滤、证据行折叠）、设置「审查」分区（默认关：它会读源码，开了 AI 还会把片段发出去）、MCP `repotory_review_latest` / `repotory_review_run`、`cinder-review` CLI（给 launchd / 计划任务）。提醒走左侧导航红点，只数 `high AND confirmed`，为 0 或取数失败都不画——导航不能依赖它，阈值判定放在 `service.ReviewNotifyCount` 而不是 UI。`CoreVersion` 1.1.0 → **1.2.0**、schema v29 → **v30**、MCP 工具 20 → **22**。回归：Go 全绿（新增规则 fixture、端到端真 git 仓、幂等/dry-run/skipped、`ai_calls=0` 三例）、vitest 401 例、tsc/build/lint、9 道 node 门全绿。三处与设计稿不一致（CLI 独立二进制、通知走红点、`--full` 不做）连同验收第 2 条未做一起记进 ADR 的「落地记录」。
+- **安装包终于说清自己是哪个版本、哪个牌子；可执行文件同步改名（2026-11-08，ADR-0049 补注三）**：用户一句「生成的资产里安装包都不带版本还用的是 Repotory 这个老名字」——v2.32.5 的 16 个资产全叫 `repotory-darwin-arm64.dmg` 这类，下载到 `~/Downloads` 里既分不清版本也看不出品牌。资产名改为 `Cinder-<version>-macos-arm64.dmg` / `cinder-mcp-<version>-<target>.tar.gz`，可执行文件同时改名 `cinder` / `cinder-mcp` / `cinder-server`，**旧的 `repotory*` 名以软链（Windows 用副本与 Scoop shim）随每次安装一起发出**——已装的 MCP 客户端配置、PATH 入口、脚本一个都不许断，所以「同时发出」不是可选项。连带修好两处真缺陷：安装脚本里的 `releases/latest/download` 固定文件名在改名后必然 404（改为先解析 tag 再拼版本化 URL），应用内更新器的 `platformAsset` 前缀匹配必然失配。**标识层一字未动**：数据目录 `repotory` 与 `repotory.db`、`repotory_*` 工具前缀、插件 id、cask/bucket token、MCP server 名都是接口不是品牌（补注三把它们与可执行文件名分开列，并写明后者不在冻结清单里）。
+
+### 文档
+
+- **ADR-0053 从设计稿转为 Accepted，并补「落地记录」**（中英）：三处实现偏差各自的理由（CLI 是独立二进制而非主二进制的子命令；通知通道是导航红点而非系统通知；`--full` 因与本 ADR「不做定时全量审计」自相矛盾而未做），加「验收第 2 条 precision 未量、`review.notify=all` 在标注完成前不要用」的提醒。
+- **新增功能页[增量代码审查](docs/features/code-review.md)**（中英）：为什么不是「让模型读 diff」的三个数、十条规则表、报告五个字段怎么读（`verdict` 的 `unverified` **不等于**有问题）、三个入口、设置项、明确不做的四件事；功能总览与首页场景表同步。
+
 ## [2.32.5] - 2026-11-08
 
 ### 变更

@@ -61,10 +61,10 @@ Cinder 不仅是一个应用，而是一套模块化的本地项目知识套件�
 
 | 产物 | 形态 | 核心作用 & 适用场景 | 快速接入 |
 | :--- | :--- | :--- | :--- |
-| **`repotory-mcp`** | 🤖 独立 MCP 服务器 | **Agent 记忆引擎核心**。通过 stdio 运行。为 Claude Code、Cursor、Windsurf 等提供标准工具接口，**无需打开桌面应用即可独立使用**。 | `node scripts/repotory-init/index.mjs` |
+| **`cinder-mcp`** | 🤖 独立 MCP 服务器 | **Agent 记忆引擎核心**。通过 stdio 运行。为 Claude Code、Cursor、Windsurf 等提供标准工具接口，**无需打开桌面应用即可独立使用**。 | `node scripts/repotory-init/index.mjs` |
 | **Cinder Desktop** | 🖥️ 桌面应用 | **可视化工作台与审核中心**。单文件原生跨平台桌面应用（Wails v2 + React 19），提供笔记浏览、待办看板、LLM Wiki 审核队列与仓库指标。 | [Releases](https://github.com/sky-jiangcheng/cinder/releases) · `brew` · `scoop` |
 | **IDE 扩展插件** | 🧩 VS Code & JetBrains | **编辑器内就地检索**。在 VS Code、Cursor、Windsurf 侧边栏及 IntelliJ 系列 IDE 工具窗中直接搜索笔记、待办与交接记录。 | [VS Code 商店](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) · JetBrains 插件 |
-| **CLI 自动化与守护** | ⚡ 终端工具与服务 | **自动交接钩子与无头服务**。包含 `repotory-capture`（会话结束自动交接 Hook）、`repotory-server`（无头 HTTP API）、向量配置与数据审计工具。 | 随安装脚本自动下发 |
+| **CLI 自动化与守护** | ⚡ 终端工具与服务 | **自动交接钩子与无头服务**。包含 `repotory-capture`（会话结束自动交接 Hook）、`cinder-server`（无头 HTTP API）、向量配置与数据审计工具。 | 随安装脚本自动下发 |
 
 ---
 
@@ -72,10 +72,10 @@ Cinder 不仅是一个应用，而是一套模块化的本地项目知识套件�
 
 ### 方式 A — 接入你的 AI Agent（最推荐，极速免 GUI）
 
-`repotory-mcp` 是独立分发的 stdio 服务器，直接读写本地数据库。一条命令自动注册到所有支持的客户端：
+`cinder-mcp` 是独立分发的 stdio 服务器，直接读写本地数据库。一条命令自动注册到所有支持的客户端：
 
 ```bash
-# 1. 下载 / 安装 repotory-mcp（macOS / Linux）
+# 1. 下载 / 安装 cinder-mcp（macOS / Linux）
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. 一键注册到已安装的 Agent (Claude Code / Cursor / Windsurf / VS Code)，
@@ -83,7 +83,7 @@ curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/script
 node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # 或仅为 Claude Code 单独添加：
-claude mcp add repotory -- "$(which repotory-mcp)"
+claude mcp add repotory -- "$(which cinder-mcp)"
 ```
 
 ### 方式 B — 安装桌面端（可视化工作台）
@@ -92,7 +92,7 @@ claude mcp add repotory -- "$(which repotory-mcp)"
 
 | 方式 | 命令 / 资产 |
 | :--- | :--- |
-| **直接下载** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
+| **直接下载** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `Cinder-<version>-darwin-arm64.dmg` / `Cinder-<version>-linux-amd64.tar.gz` / `Cinder-<version>-windows-amd64.zip` |
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
 | **一行脚本 (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
@@ -135,7 +135,7 @@ flowchart TB
 > 完整功能表（含层级分类与 ADR 链接）见 [docs/features-overview.md](docs/features-overview.md)。
 
 - **知识库（Core）** —— Markdown 笔记 + `/` 块编辑器、FTS5 全文搜索、逐次保存的版本历史与行级 diff、全局 ⌘/Ctrl+K 搜索。
-- **AI 就绪接口（Core）** —— `repotory-mcp`（20 个 MCP 工具）、单调用注入 `repotory_context` / `repotory_handoff`、llms.txt、8 个内置 Agent 记忆导入源（Claude / Codex / OpenCode / CodeBuddy / Cursor / OpenClaw / Hermes 等）、数据完整性审计（`repotory_integrity`）。
+- **AI 就绪接口（Core）** —— `cinder-mcp`（20 个 MCP 工具）、单调用注入 `repotory_context` / `repotory_handoff`、llms.txt、8 个内置 Agent 记忆导入源（Claude / Codex / OpenCode / CodeBuddy / Cursor / OpenClaw / Hermes 等）、数据完整性审计（`repotory_integrity`）。
 - **知识图谱 & LLM Wiki（Support，人把关）** —— 笔记自动编译为**待审** Wiki 页；审核队列（批准 / 拒绝 / 合并，墓碑语义）；页面版本与合并建议；混合语义检索 + 可插拔向量库（默认 sqlite-vec，支持远程 Qdrant / Weaviate）——LLM 编译流程全面受控。
 - **内置安全备份（Core）** —— 每日 `VACUUM INTO` 自动快照（默认开启，保留 14 份，0600 权限）；恢复仅需拷回单个文件。
 - **仓库自动挖掘（Core）** —— README 摘要、技术栈识别（20+ 清单格式）、语言分布、依赖关系、贡献者、活跃度趋势。
@@ -147,7 +147,7 @@ flowchart TB
 
 ### VS Code / Cursor / Windsurf 扩展
 
-一个通用的 VSIX 瘦客户端：通过 stdio 与 `repotory-mcp` 通信，在侧边栏直接查看项目知识与交接。
+一个通用的 VSIX 瘦客户端：通过 stdio 与 `cinder-mcp` 通信，在侧边栏直接查看项目知识与交接。
 
 - 从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) 安装，或从 [Releases](https://github.com/sky-jiangcheng/cinder/releases) 下载 `.vsix` 文件。
 - 源码打包：
@@ -180,7 +180,7 @@ cd web && npm install && npm run build && cd ..
 
 # 构建桌面应用与 MCP 服务
 go build -ldflags "-s -w" -o repotory .
-go build -o repotory-mcp ./cmd/mcp/
+go build -o cinder-mcp ./cmd/mcp/
 ```
 
 本地开发模式：`wails dev`（桌面热重载）或 `bash scripts/dev.sh`（无头 API :18765 + Vite :5173）。
@@ -216,10 +216,12 @@ web/src/           # React 19 + TypeScript：api · hooks · pages · components
 | 分层 | 取值 | 用途 |
 | :--- | :--- | :--- |
 | **品牌（展示）** | `Cinder` | `productName`、应用内 Logo、文档与 UI 文案 |
+| **下载产物** | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | 发布资产名——每个文件自己说清是哪个构建 |
+| **可执行文件** | `cinder` / `cinder-mcp` / `cinder-server` | `which` 找到的东西。改名前的 `repotory*` 仍以符号链接安装（Windows 是副本 / Scoop shim），已有客户端配置照旧可用 |
 | **仓库与包标识** | `repotory` | GitHub 仓库名、Go module 名、npm 包名、文档站 URL |
-| **冻结标识** | `repotory` | 二进制名、用户数据目录、MCP 服务器 `repotory-mcp`、工具前缀 `repotory_*` |
+| **冻结标识** | `repotory` | 用户数据目录、`repotory.db`、MCP 工具前缀 `repotory_*`、插件 id、cask/bucket token、DB sentinel |
 
-数据目录与 MCP 工具名是与 AI 客户端绑定的外部契约——贡献代码时请勿「顺手统一」这些命名。
+数据目录与 MCP 工具名是与 AI 客户端绑定的外部契约——贡献代码时请勿「顺手统一」这些命名。二进制名已经不在这个清单里：它被改过一次，且每次安装都会带上兼容别名（ADR-0049 补注）。
 
 ---
 

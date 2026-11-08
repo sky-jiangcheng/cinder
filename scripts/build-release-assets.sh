@@ -2,9 +2,9 @@
 # Build release artifacts into assets/releases/v<version>/.
 #
 # Two products ship from one release:
-#   - repotory-mcp  : pure Go, zero CGO. Cross-compiles for every target from
-#                     any host, so this script can always produce all four.
-#   - repotory      : the Wails desktop shell. It links GTK/WebKit on Linux and
+#   - cinder-mcp  : pure Go, zero CGO. Cross-compiles for every target from
+#                   any host, so this script can always produce all four.
+#   - cinder      : the Wails desktop shell. It links GTK/WebKit on Linux and
 #                     needs the native toolchain on macOS and Windows, so it can
 #                     only be produced on each target's own CI runner - exactly
 #                     what .github/workflows/release.yml does on a tag push.
@@ -50,21 +50,24 @@ build_mcp() {
   # CGO_ENABLED=0: the MCP server is a pure stdio JSON-RPC loop with no UI
   # dependency, so it cross-compiles cleanly and runs anywhere.
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -ldflags "$LDFLAGS" -o "$stage/repotory-mcp" ./cmd/mcp/ 2>&1 | sed 's/^/    /'
+    go build -ldflags "$LDFLAGS" -o "$stage/cinder-mcp" ./cmd/mcp/ 2>&1 | sed 's/^/    /'
 
   # `go build -o name` uses the name verbatim, so the Windows .exe suffix has to
-  # be added here - release assets, the Scoop manifest and install.ps1 all
-  # expect repotory-mcp.exe.
+  # be added here - the release asset and the Scoop manifest expect
+  # cinder-mcp.exe.
   local asset
   case "$target" in
     windows-amd64)
-      mv "$stage/repotory-mcp" "$stage/repotory-mcp.exe"
-      asset="repotory-mcp-$target.zip"
-      (cd "$stage" && zip -q -j "$OUT/$asset" repotory-mcp.exe)
+      mv "$stage/cinder-mcp" "$stage/cinder-mcp.exe"
+      asset="cinder-mcp-$VERSION-$target.zip"
+      (cd "$stage" && zip -q -j "$OUT/$asset" cinder-mcp.exe)
       ;;
     *)
-      asset="repotory-mcp-$target.tar.gz"
-      tar -czf "$OUT/$asset" -C "$stage" repotory-mcp
+      # The archive carries the pre-rename name as a symlink: existing client
+      # configs point at that path (ADR-0049 补注).
+      ln -sf cinder-mcp "$stage/repotory-mcp"
+      asset="cinder-mcp-$VERSION-$target.tar.gz"
+      tar -czf "$OUT/$asset" -C "$stage" cinder-mcp repotory-mcp
       ;;
   esac
   echo "  ✓ $asset"

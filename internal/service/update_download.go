@@ -415,12 +415,18 @@ func versionedFileName(base, version string) string {
 	if version == "" {
 		return base
 	}
-	// Only the shapes CI actually publishes are decorated; anything else
-	// (including a name that already carries a version) is left alone.
-	if !appAssetPattern.MatchString(base) {
+	// Asset names carry the version now, so a name CI publishes today needs
+	// nothing added — decorating it again would produce
+	// "Cinder-2.33.0-2.33.0-darwin-arm64.dmg".
+	if appAssetPattern.MatchString(base) {
 		return base
 	}
-	return "repotory-" + version + "-" + strings.TrimPrefix(base, "repotory-")
+	// A pre-rename name ("repotory-darwin-arm64.dmg") still gets the version,
+	// and gets it under the current brand.
+	if legacyAppAssetPattern.MatchString(base) {
+		return "Cinder-" + version + "-" + strings.TrimPrefix(base, "repotory-")
+	}
+	return base
 }
 
 // updateOverridesMu guards the test-only path overrides below.

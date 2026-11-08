@@ -30,7 +30,7 @@ order: 2
 
 | Channel | Description |
 |---------|-------------|
-| MCP Server | `repotory-mcp` stdio server, 20 tools (repo scan + context injection + session handoff + note CRUD/organize + project queries + search + four self-checks + knowledge-page retrieval + cross-client shared conversations + workspace metrics); plugs into Claude Code / Cursor and more (the only interface AI executes through) |
+| MCP Server | `cinder-mcp` stdio server, 22 tools (repo scan + context injection + session handoff + note CRUD/organize + project queries + search + four self-checks + knowledge-page retrieval + cross-client shared conversations + workspace metrics + incremental review); plugs into Claude Code / Cursor and more (the only interface AI executes through) |
 | `repotory_scan` | One-shot cold start: seeds default scan roots and scans synchronously to discover local Git repos. A pure-MCP install (no desktop app) can bootstrap the knowledge base |
 | `repotory_context` | One call at session start loads the project's full context: tech stack / README summary / dependencies / recent commits / open todos / highly relevant notes (handoff notes first) — replaces 3-4 chained queries |
 | `repotory_handoff` | Structured handoff at session end: summary / changes / decisions / gotchas / next_steps rendered into a unified template and stored; the next session (any agent) reads it automatically |
@@ -40,6 +40,22 @@ order: 2
 | Session auto-capture (M1) | On-demand capture of a project's latest Claude Code session transcript into a handoff note; a `repotory-capture` CLI covers the B-end SessionEnd-hook automation. **Off by default** (`claude_session_capture`), privacy-gated |
 | Portable memory export | `ExportMemoryJSON` emits the knowledge base as [Open Memory Protocol](https://github.com/SMJAI/open-memory-protocol)-style memory objects (provisional; OMP is pre-1.0) |
 | Data integrity audit | `repotory_integrity`, 6 read-only checks: FTS index drift, orphan rows, schema shape vs version stamp, scan coverage, knowledge-cache freshness, version-snapshot orphans. Index drift makes search **silently miss results** with no other mechanism to catch it — this is the only way to detect it |
+
+### Incremental Code Review (Support)
+
+The problems in a collected project's **yesterday's commits** that compile, pass integration, and
+then break in production — typically a cross-project Feign contract mismatch. **Rules sift
+candidates, the model only confirms them**, and only what that day introduced is reported;
+pre-existing debt is deliberately out of scope. Off by default (it reads your source).
+
+| Feature | Detail |
+|---------|--------|
+| Ten Java rules | Feign contracts (missing body / body on GET / renamed route / arity), swallowed exceptions, self-invoked `@Transactional`, SQL concatenation, shared `SimpleDateFormat`, remote calls in loops; `sensitive_log` is opt-in |
+| Report | Findings grouped by file (severity / verdict / evidence lines / skip count / model calls); stored in `review_runs` / `review_findings`, **never in the knowledge base** |
+| Three surfaces | The desktop "Code Review" page + MCP `repotory_review_latest` / `repotory_review_run` + the `cinder-review` CLI (for launchd / a scheduler) |
+| Reminder | A dot on the left rail counting `high AND confirmed` only; silence at zero |
+
+See [Incremental Code Review](features/code-review.md).
 
 ### Knowledge Graph & LLM Wiki (Support — human-gated)
 

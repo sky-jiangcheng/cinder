@@ -1,6 +1,6 @@
 # ADR-0053: Incremental review after commits — rules sift candidates, the model only confirms them
 
-Status: **Proposed (2026-11-08, design draft, awaiting the user's call before any code)**
+Status: **Accepted (2026-11-08, implemented the same day; deviations in the Implementation record at the end)**
 Date: 2026-11-08
 Related: [ADR-0016](0016-async-batch-jobs.md) (reuses "submit returns, progress is queryable"), [ADR-0030](0030-ai-call-audit.md) (every model call goes through the audit log), [ADR-0051](0051-conversation-as-interface.md) (the conversation is the interface: findings must be askable, not another UI language), [ADR-0048](0048-core-contract-version.md) (new MCP tools bump the contract version)
 Starting schema: v29 → **v30** (two tables); `CoreVersion` 1.1.0 → **1.2.0** (two tools)
@@ -101,7 +101,7 @@ CREATE TABLE review_findings (
 | `review.notify` | `high` | `high` / `all` / `off` |
 | `review.max_diff_lines` | `2000` | per-file diff above this is skipped and counted in `skipped` |
 
-Desktop: a ten-minute ticker asks "is it past `review.at` today and is there no `done` row for today", and runs once if so. CLI: `repotory review --since yesterday`, called by launchd or the OS scheduler — **no cron-expression parser** (over-engineering, and behaviour differs across platforms).
+Desktop: a ten-minute ticker asks "is it past `review.at` today and is there no `done` row for today", and runs once if so. CLI: `cinder-review --since yesterday`, called by launchd or the OS scheduler — **no cron-expression parser** (over-engineering, and behaviour differs across platforms).
 
 ### 6. The report is data, not a note
 
@@ -111,10 +111,10 @@ Findings do not go into notes or the wiki. Notes are the human's; mixing machine
 
 | Surface | Content |
 |---|---|
-| CLI | `repotory review --since yesterday [--dry-run] [--no-ai] [--full] [--json]` |
+| CLI | `cinder-review [--since yesterday] [--dry-run] [--no-ai] [--force] [--json] [--severity]` |
 | MCP | `review_latest {days?, severity?}`, `review_run {date?, dry_run?}` (two new tools → `CoreVersion` 1.2.0) |
 | Desktop | a "daily review" section in settings (on/off, time, scope, AI, notification level); a review page grouping findings by file, with the evidence line one click away |
-| Notification | only `severity=high AND verdict=confirmed`; silence otherwise |
+| Notification | only `severity=high AND verdict=confirmed`; silence otherwise. The channel is a **dot on the left rail**, not an OS notification |
 
 Nothing is added to the home screen or the dashboard — the panel trim in the ADR-0051 amendment is exactly that lesson.
 
@@ -170,3 +170,45 @@ Nothing is added to the home screen or the dashboard — the panel trim in the A
 3. Run the same day twice: the second run refuses or overwrites, and `review_findings` does not double.
 4. With `review.ai=0` and with zero candidates, `ai_calls` is 0 in both.
 5. `go test ./...`, `npm test`, `check-i18n-keys`, `check-docs-mirror`, `check-version-drift` all green.
+
+## Implementation record (2026-11-08)
+
+Shipped P1 → P3 in one pass: `CoreVersion` 1.2.0, schema v30, MCP 20 → 22 tools.
+Three places diverge from the design above.
+
+**① The CLI is its own binary, `cinder-review`, not a subcommand of the main one.** The
+design says `repotory review --since yesterday`, but since ADR-0049 the main binary
+dispatches no CLI subcommands at all (`cinder` only starts the desktop app); adding one
+would squeeze "double-click to launch" and "command-line tool" into a single entry point.
+A separate binary also lets launchd or an OS scheduler call it directly instead of going
+through `open -a`.
+
+**② "Notification" is a rail dot, not an OS notification.** This repo has no system
+notification infrastructure, and every platform's permission prompt asks the user to
+decide before they have seen any value. The dot reuses what the update check already does
+(`updateDot` in `SideRail`): `high` counts `high AND confirmed`, `all` counts everything,
+`off` draws nothing — and **zero or a failed fetch also draws nothing**, because
+navigation must not depend on it. The threshold lives in `service.ReviewNotifyCount`
+rather than the UI: anyone can forget a rule, the backend cannot.
+
+**③ `--full` was not built.** D7's CLI row lists it while the same ADR's "what this
+explicitly does not do" item 2 says "no scheduled full audit" — the two contradict each
+other, and the second wins: a full audit is not a switch on incremental review, it is a
+different problem (clearing existing debt), to be decided in its own ADR when someone
+actually needs it.
+
+Two hard constraints, written into the code comments and repeated here:
+
+- **Zero candidates must mean zero model calls.** `refineWithCandidates` only sends a
+  request when there are candidates, and a counting `httptest` handler pins that down.
+  The cheaper-looking implementation — "ask the model whether this file has problems" —
+  would invite the volume problem from §Background① straight back in.
+- **`unverified` does not mean broken.** A candidate a rule fired on but no model
+  confirmed may appear in the report; it must not raise the dot and must not be worded as
+  "confirmed".
+
+**Still open (out of scope here)**: acceptance item 2 — hand-label twenty candidates,
+reach precision 0.7 — was not done. That is why the first version only raises the dot at
+the most conservative threshold; do not use `review.notify=all` before the labelling
+happens. A note to a future self: rules are not a quantity game. When precision misses,
+change the rules, do not add more.

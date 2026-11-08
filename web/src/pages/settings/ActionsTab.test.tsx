@@ -193,7 +193,7 @@ describe('ActionsTab AI client wiring', () => {
     vi.mocked(setupAgentClients).mockResolvedValue({
       code: '',
       blocking: false,
-      binary: '/usr/local/bin/repotory-mcp',
+      binary: '/usr/local/bin/cinder-mcp',
       files: [{ client: 'claude', path: '/code/demo/.mcp.json', status: 'created' }],
     })
   })
@@ -261,7 +261,7 @@ describe('ActionsTab AI client wiring', () => {
     vi.mocked(setupAgentClients).mockResolvedValue({
       code: '',
       blocking: false,
-      binary: '/usr/local/bin/repotory-mcp',
+      binary: '/usr/local/bin/cinder-mcp',
       files: [{ client: 'claude', path: '/code/demo/.mcp.json', status: 'created' }],
       instructions: [
         { client: '', path: '/code/demo/AGENTS.md', status: 'updated', note: 'backup: /code/demo/AGENTS.md.repotory-init.bak' },

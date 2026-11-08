@@ -11,6 +11,7 @@ import AppearanceTab from './settings/AppearanceTab'
 import PluginsTab from './settings/PluginsTab'
 import ActionsTab from './settings/ActionsTab'
 import UpdatesTab from './settings/UpdatesTab'
+import ReviewTab from './settings/ReviewTab'
 import ErrorBanner from '../components/ErrorBanner'
 import PageShell from '../components/PageShell'
 import s from './Settings.module.css'
@@ -18,8 +19,8 @@ import s from './Settings.module.css'
 // 预留钩子类：`settings` —— 目前全站没有对应样式定义（P35 复核确认），
 // 保留在 markup 里作为将来挂样式的锚点，删留都不影响行为。
 
-type TabKey = 'scan' | 'standards' | 'authors' | 'appearance' | 'plugins' | 'ai' | 'actions' | 'updates'
-const TAB_KEYS: TabKey[] = ['scan', 'standards', 'authors', 'appearance', 'plugins', 'ai', 'actions', 'updates']
+type TabKey = 'scan' | 'standards' | 'authors' | 'appearance' | 'plugins' | 'ai' | 'review' | 'actions' | 'updates'
+const TAB_KEYS: TabKey[] = ['scan', 'standards', 'authors', 'appearance', 'plugins', 'ai', 'review', 'actions', 'updates']
 
 const isTabKey = (v: string | null): v is TabKey => !!v && (TAB_KEYS as string[]).includes(v)
 
@@ -168,6 +169,8 @@ function Settings() {
             <AiTab config={data.config} showMessage={showMessage} onSaved={loadConfig} />
           </div>
         )}
+
+        {tab === 'review' && <ReviewTab showMessage={showMessage} />}
 
         {tab === 'actions' && data && <ActionsTab initialConfig={data.config} showMessage={showMessage} />}
         {tab === 'updates' && data && (

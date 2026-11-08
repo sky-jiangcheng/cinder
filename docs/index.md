@@ -84,7 +84,7 @@ flowchart TB
 
     subgraph AGENT["🤖 AI Agent —— 工具面调用"]
         direction LR
-        MCP["repotory-mcp<br/>20 个工具"]
+        MCP["cinder-mcp<br/>22 个工具"]
         DSH["dsh 插件<br/>3 个工具"]
         LLMSTXT["llms.txt 导出"]
         MCP ~~~ DSH ~~~ LLMSTXT
@@ -135,6 +135,7 @@ flowchart TB
 | 写笔记、搜笔记、找回旧版本 | [知识库与笔记](features/knowledge.md) |
 | 看某个项目的技术栈与依赖 | [项目详情](features/project-detail.md) |
 | 让 Claude / Cursor 读写我的知识库 | [AI 集成](features/ai-integration.md) |
+| 每天自动看一眼昨日提交里的风险 | [增量代码审查](features/code-review.md) |
 | 写一个插件或知识源导入器 | [插件手册](plugins/overview.md) |
 | 理解代码分层与关键决策 | [架构说明](architecture.md)、[ADR](adr/index.md) |
 | 看懂存储结构与「为何不让 AI 直接读 git」 | [存储结构优化与 AI 价值](storage-optimization.md) |

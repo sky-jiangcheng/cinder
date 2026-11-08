@@ -19,7 +19,7 @@ The panel is a **conversation console**, not a result list (ADR-0036). One quest
 | Card actions | **Open in Cinder** (deep link into the web UI), **Copy** (title + body), and for notes **Edit** / **New note here** / **AI Tidy** — see *Maintaining notes without leaving the IDE* below |
 | Scope chip | The panel is **locked to the current project** by default. The chip shows `🔒 <project>`; clicking it unlocks the panel back to cross-project. A workspace that resolves to no project offers the candidate projects to pick from instead of a dead end — see *When the folder is not in the knowledge base yet* |
 | **Tools → Cinder** | Opens the tool window (also on its title bar) |
-| **Settings → Tools → Cinder** | The **`repotory-mcp`** binary (the plugin's data channel) with a **Check MCP channel** diagnostic that lists every place it looked, plus the optional server address, server binary path, a **Test connection** button that tells "API and web UI both reachable" from "API-only, the link would 404", and **Start local service** for a one-click launch |
+| **Settings → Tools → Cinder** | The **`cinder-mcp`** binary (the plugin's data channel) with a **Check MCP channel** diagnostic that lists every place it looked, plus the optional server address, server binary path, a **Test connection** button that tells "API and web UI both reachable" from "API-only, the link would 404", and **Start local service** for a one-click launch |
 
 The layout is the same console the VS Code extension ships, so the two IDE surfaces feel like one product (ADR-0036 decision 8): same regions, same wording, same fold rules.
 
@@ -56,8 +56,8 @@ If there are no candidates either (the service is unreachable, or nothing matche
 ## Requirements
 
 - **IntelliJ IDEA 2024.2 or newer** (any IntelliJ-family IDE). The plugin runs on the JRE the IDE ships with (JBR 21 on 2024.2+), **independently of your project's JDK**. A project that compiles with **JDK 8** is fully supported — the plugin never loads your project's JDK, never compiles your code, and never needs Java 8 APIs. Building the plugin from source is the only Java-21 task (see Development).
-- A **`repotory-mcp`** binary — this is the plugin's **data channel**: searching, reading, editing, creating and organizing all go through it over MCP stdio, exactly like the VS Code extension. The plugin looks for the binary in this order — **Settings | Tools | Cinder → MCP binary**, `REPOTORY_MCP_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. It ships with the release (`install.sh`, Homebrew and Scoop all carry it) and the plugin **never downloads it**: if no binary is found, the tool window offers the file picker and the release page instead.
-- A **`repotory-server`** binary — **optional**. The server is no longer a prerequisite: the plugin talks to your knowledge base through `repotory-mcp`, which opens the same local SQLite database the desktop app uses. The server is only needed for the two things that still speak HTTP: **deep links** into the web UI, and **moving a note between projects**. The plugin can start a local one with one click; it looks for the binary in this order — **Settings | Tools | Cinder → Server binary**, `REPOTORY_SERVER_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories.
+- A **`cinder-mcp`** binary — this is the plugin's **data channel**: searching, reading, editing, creating and organizing all go through it over MCP stdio, exactly like the VS Code extension. The plugin looks for the binary in this order — **Settings | Tools | Cinder → MCP binary**, `REPOTORY_MCP_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. It ships with the release (`install.sh`, Homebrew and Scoop all carry it) and the plugin **never downloads it**: if no binary is found, the tool window offers the file picker and the release page instead.
+- A **`cinder-server`** binary — **optional**. The server is no longer a prerequisite: the plugin talks to your knowledge base through `cinder-mcp`, which opens the same local SQLite database the desktop app uses. The server is only needed for the two things that still speak HTTP: **deep links** into the web UI, and **moving a note between projects**. The plugin can start a local one with one click; it looks for the binary in this order — **Settings | Tools | Cinder → Server binary**, `REPOTORY_SERVER_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories.
 
 Everything is loopback-only by design, so there is nothing to authenticate and nothing that leaves your machine.
 
@@ -66,7 +66,7 @@ Everything is loopback-only by design, so there is nothing to authenticate and n
 The one-click start is just a shortcut for:
 
 ```bash
-./repotory-server --port 18765 --web-dist <bundle>/web
+./cinder-server --port 18765 --web-dist <bundle>/web
 ```
 
 `--web-dist` matters for result links. Without it the server is API-only: the API answers, but every result link 404s — and the plugin says exactly that instead of dropping you on a dead page. The release bundle's `web/` directory is the **server** build of the web assets (base `/`); the desktop `web/dist` (base `./`) is not interchangeable. The plugin does not embed the SPA itself (one rendering of the knowledge UI, the desktop app's).
@@ -74,12 +74,12 @@ The one-click start is just a shortcut for:
 ## First launch
 
 1. Open the **Cinder** tool window from the right-hand tool window bar, or **Tools | Cinder**.
-2. Pick a mode — **Ask** (default), **Notes** or **Pages** — type a question and press **Enter** (Shift+Enter breaks the line). The turn appears in the feed; asking does **not** need a server — the plugin talks to `repotory-mcp`, which reads your local knowledge base directly.
+2. Pick a mode — **Ask** (default), **Notes** or **Pages** — type a question and press **Enter** (Shift+Enter breaks the line). The turn appears in the feed; asking does **not** need a server — the plugin talks to `cinder-mcp`, which reads your local knowledge base directly.
 3. The panel locks itself to the project your IDE project belongs to. The chip next to the modes says `🔒 <project>`; click it to search across all projects, click it again to lock back.
-4. If the plugin cannot find `repotory-mcp`, the announcement bar says so and offers **Locate…** (file picker) or **Open settings**. Point it at the binary and the next question works.
-5. **Open in Cinder** (on an opened card) jumps into the Cinder web UI, and that one DOES need a local server that serves the UI. The plugin starts one for you with **Start local service**: it looks for `repotory-server` (see Requirements), starts it on the configured port with its bundled `web/` directory and waits for `/health`.
+4. If the plugin cannot find `cinder-mcp`, the announcement bar says so and offers **Locate…** (file picker) or **Open settings**. Point it at the binary and the next question works.
+5. **Open in Cinder** (on an opened card) jumps into the Cinder web UI, and that one DOES need a local server that serves the UI. The plugin starts one for you with **Start local service**: it looks for `cinder-server` (see Requirements), starts it on the configured port with its bundled `web/` directory and waits for `/health`.
 6. Prefer to check things by hand? **Settings | Tools | Cinder** has the MCP binary, the address, the server binary path, **Check MCP channel**, **Test connection** and **Start local service**:
-   - *repotory-mcp found at … (via …).* → the data channel is ready.
+   - *cinder-mcp found at … (via …).* → the data channel is ready.
    - *Connected: … — API and web UI both reachable.* → deep links work.
    - *Connected: …, but API-only: "Open in Cinder" would 404.* → the running server has no web UI; restart it with `--web-dist` or use the release bundle.
    - *No response from …* → nothing is listening; press **Start local service**.
@@ -105,9 +105,9 @@ The tidy proposal is generated server-side by the shared service layer (`Organiz
 
 | Setting | Default | Description |
 |---|---|---|
-| MCP binary | empty (auto-detect) | Path to `repotory-mcp` — the plugin's data channel; empty means `REPOTORY_MCP_BIN`, then `PATH`, then common install directories |
+| MCP binary | empty (auto-detect) | Path to `cinder-mcp` — the plugin's data channel; empty means `REPOTORY_MCP_BIN`, then `PATH`, then common install directories |
 | Server address | `http://127.0.0.1:18765` | Cinder headless service URL (deep links and moving notes) |
-| Server binary | empty (auto-detect) | Path to `repotory-server`; empty means `REPOTORY_SERVER_BIN`, then `PATH`, then common install directories |
+| Server binary | empty (auto-detect) | Path to `cinder-server`; empty means `REPOTORY_SERVER_BIN`, then `PATH`, then common install directories |
 
 All three values are stored in the IDE's own properties store (`repotory.xml`), not in Cinder's database — a client must not write into the service's storage. **The AI provider is not here either**: it lives in the service's configuration and is edited from the panel (see *The external AI provider*), so there is nothing to keep in sync between the IDE and the desktop app.
 
@@ -184,4 +184,4 @@ JETBRAINS_MARKETPLACE_TOKEN=… gradle publishPlugin
 
 The first upload of a brand-new plugin has to be done once from the vendor account (the Marketplace creates the plugin page and assigns its numeric public URL); every later version can come from CI. The version is never passed as an argument — `build.gradle.kts` already carries the release version stamped by `scripts/bump-version.sh`, so the Marketplace listing, the GitHub zip and the desktop app share one number.
 
-Architecture and scope: [ADR-0027](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0027-jetbrains-plugin.md), the panel's conversation form: [ADR-0036](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0036-ide-chat-console.md), and the channel split: [ADR-0035](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0035-jetbrains-mcp-primary-channel.md). The plugin is a thin client — its data goes over MCP stdio to `repotory-mcp`, and the two things that still speak HTTP (`MoveNote` and the web-UI probe) speak to the loopback-only headless service over `GET /health` and `POST /api/rpc`. Zero business logic lives here.
+Architecture and scope: [ADR-0027](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0027-jetbrains-plugin.md), the panel's conversation form: [ADR-0036](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0036-ide-chat-console.md), and the channel split: [ADR-0035](https://github.com/sky-jiangcheng/cinder/blob/master/docs/en/adr/0035-jetbrains-mcp-primary-channel.md). The plugin is a thin client — its data goes over MCP stdio to `cinder-mcp`, and the two things that still speak HTTP (`MoveNote` and the web-UI probe) speak to the loopback-only headless service over `GET /health` and `POST /api/rpc`. Zero business logic lives here.

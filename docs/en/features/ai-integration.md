@@ -9,7 +9,7 @@ Cinder provides read channels and self-check tools for AI agents, all reusing th
 
 ## Value proposition: Cinder is a data source for AI, not an AI platform
 
-**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 20 MCP tools, fetching on demand and searching precisely.
+**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 22 MCP tools, fetching on demand and searching precisely.
 
 For the argument for why this layer is better than letting AI read git directly, see [Storage Optimization and AI Value](../storage-optimization.md).
 
@@ -106,22 +106,22 @@ A model writing into the knowledge base at all (compilation) requires two furthe
 Beyond MCP there is a second channel onto the same implementation: expose `internal/service` over loopback HTTP for browser mode, scripts and other agents.
 
 ```
-go build -o repotory-server ./cmd/server
-./repotory-server --port 18765        # or env REPOTORY_HTTP_PORT; listens on 127.0.0.1 only
+go build -o cinder-server ./cmd/server
+./cinder-server --port 18765        # or env REPOTORY_HTTP_PORT; listens on 127.0.0.1 only
 ```
 
 - `POST /api/rpc` reflects every desktop binding (JSON body naming method + args) and runs the **same implementation** as Wails; `Startup` / `Shutdown` / `Service` itself are excluded. Write operations obey the same protocol protections as MCP (for example handoff notes refuse to be overwritten by update).
 - For browser development use `bash scripts/dev.sh`: it starts the headless API (default 18765) *and* Vite. Running `npx vite` alone yields a page that loads but 502s every request — that is a missing backend, not a broken app.
-- **Release assets contain only**: the desktop installers (4 platforms), `repotory-mcp-<platform>`, and the VS Code VSIX. `repotory-server`, `cmd/vector-init`, `cmd/abeval`, `cmd/repotory-capture` and `cmd/wiki-export` (the read-only wiki export) must be built yourself (`go build` / `go run`); they are not distributed with releases.
+- **Release assets contain only**: the desktop installers (4 platforms), `cinder-mcp-<platform>`, and the VS Code VSIX. `cinder-server`, `cmd/vector-init`, `cmd/abeval`, `cmd/repotory-capture` and `cmd/wiki-export` (the read-only wiki export) must be built yourself (`go build` / `go run`); they are not distributed with releases.
 
-MCP is the only AI execution interface (the `repotory` CLI is not shipped with releases). stdio protocol, the database is opened once per process, 20 tools (including 5 write operations: scan + note create/update + session handoff + shared conversation writes):
+MCP is the only AI execution interface (the `cinder` binary dispatches no CLI subcommands). stdio protocol, the database is opened once per process, 22 tools (including 5 write operations: scan + note create/update + session handoff + shared conversation writes):
 
 The two ends of the session memory protocol, in sequence:
 
 ```mermaid
 sequenceDiagram
     participant A as AI Agent
-    participant R as repotory-mcp
+    participant R as cinder-mcp
     participant K as Knowledge base (SQLite)
     A->>R: repotory_context (session start)
     R->>K: resolve project + assemble context<br/>(handoffs first)
@@ -206,7 +206,7 @@ If you installed the desktop app, you never need to open a terminal: under **Set
 
 (Windsurf is the exception: its MCP config is **user-level**, at `~/.codeium/windsurf/mcp_config.json`, and has nothing to do with the project. The other three clients get their config inside the **project directory**, so it travels with the repository.)
 
-The `repotory-mcp` binary that gets registered is looked up in this order: an explicit path → the `REPOTORY_MCP_BIN` environment variable → `PATH` → **the directory the running executable lives in** (in a normal desktop install it sits right next to `repotory`, so one install is enough) → the usual package-manager locations. When it cannot be found, the button says so plainly and points at the install guide instead of writing a config that points at a path that does not exist.
+The `cinder-mcp` binary that gets registered is looked up in this order: an explicit path → the `REPOTORY_MCP_BIN` environment variable → `PATH` → **the directory the running executable lives in** (in a normal desktop install it sits right next to `cinder`, so one install is enough) → the usual package-manager locations. When it cannot be found, the button says so plainly and points at the install guide instead of writing a config that points at a path that does not exist.
 
 It and the terminal path below are **two implementations of one protocol**:
 
@@ -236,15 +236,15 @@ node scripts/repotory-init/index.mjs --with-hook
 
 **It runs in any project**: the extension's `Cinder: Register MCP Server` command uses the copy of `repotory-init` bundled inside the VSIX (the source of truth stays at `scripts/repotory-init/index.mjs`, copied in by `compile` and pinned to it by a CI `git diff --exit-code`), so cloning this repository first is not required; nor does it open a terminal — the extension runs the installer silently inside its host process (falling back to `node` only on `ENOENT`/`EACCES`). The bare command above does require you to be inside this repository.
 
-- Detects `repotory-mcp` (override with `--bin`) and registers it with Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), VS Code (`.vscode/mcp.json`) and Windsurf (configs land only where the client's directory exists); JetBrains gets printed manual guidance
+- Detects `cinder-mcp` (override with `--bin`) and registers it with Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), VS Code (`.vscode/mcp.json`) and Windsurf (configs land only where the client's directory exists); JetBrains gets printed manual guidance
 - `--with-hook` also installs the SessionEnd hook below (script + merged `settings.json`, backed up before changes)
 - `--with-instructions` also writes the handoff instructions into the project's `AGENTS.md` and `CLAUDE.md` (ADR-0043; an existing block is replaced in place, **nothing outside the markers is touched**, and the file is backed up before changes)
-- `--dry-run` previews every write; when the binary is missing it prints install guidance, and `--yes` writes the bare command name `repotory-mcp` (works once installed)
+- `--dry-run` previews every write; when the binary is missing it prints install guidance, and `--yes` writes the bare command name `cinder-mcp` (works once installed)
 
 ### Connect Claude Code manually (alternative)
 
 ```bash
-claude mcp add repotory -- /path/to/repotory-mcp
+claude mcp add repotory -- /path/to/cinder-mcp
 ```
 
 Or write it into `.mcp.json` (project level) / `~/.claude.json` (user level):
@@ -252,7 +252,7 @@ Or write it into `.mcp.json` (project level) / `~/.claude.json` (user level):
 ```json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
@@ -328,7 +328,7 @@ Uninstalling means deleting what sits between the two marker lines — the block
 
 ### Connect Cursor / other MCP clients
 
-Add the same `command` pointing at the `repotory-mcp` binary in the client's MCP configuration (Cursor: `Settings → MCP → Add Server`).
+Add the same `command` pointing at the `cinder-mcp` binary in the client's MCP configuration (Cursor: `Settings → MCP → Add Server`).
 
 ## llms.txt and Markdown export (in-app)
 
@@ -371,7 +371,7 @@ After that, WorkBuddy still needs one **Trust** click in the connector managemen
 // ~/.workbuddy/mcp.json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
@@ -380,11 +380,11 @@ Package contents:
 
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 20 tools, and the list of capabilities agents must not use |
+| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 22 tools, and the list of capabilities agents must not use |
 | `references/mcp-tools.md` | Exact parameter signatures per tool, plus the HTTP RPC method mapping |
 | `references/data-model.md` | Schema and invariants (topic ownership, migration rules, handoff protection, trigram boundaries) |
 | `scripts/repotory-query.py` | Read-only fallback queries when MCP is unavailable (search / list topics / list projects / library stats) |
 
-**Why a fallback channel at all**: when MCP is not trusted, or the environment has no `repotory-mcp`, the agent still needs to reach the knowledge base. The read-only fallback goes straight at `project_notes_fts` through `sqlite3` and only issues `SELECT` — but it cannot compensate for FTS index drift, which is why MCP comes first.
+**Why a fallback channel at all**: when MCP is not trusted, or the environment has no `cinder-mcp`, the agent still needs to reach the knowledge base. The read-only fallback goes straight at `project_notes_fts` through `sqlite3` and only issues `SELECT` — but it cannot compensate for FTS index drift, which is why MCP comes first.
 
 **The agent-side boundary is unchanged**: the package spells out which bindings are desktop-only (create / rename / delete a topic, file a note under a topic, merge projects, compile and approve wiki pages) — those are **organizing and review acts, and they belong to a human**. The skill package does not let agents cross that line.

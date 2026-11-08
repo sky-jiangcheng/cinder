@@ -23,6 +23,7 @@ import Icon, { type IconName } from './Icon'
 import BrandMark from './BrandMark'
 import { NAV_ENTRIES } from './navEntries'
 import { getUpdateState, subscribeUpdateState } from '../api/updateStatus'
+import { reviewNotifyCount } from '../api/client'
 import { getCurrentLanguage, setLanguage } from '../i18n'
 import type { ThemeMode } from '../utils/theme'
 import s from './SideRail.module.css'
@@ -52,6 +53,20 @@ export default function SideRail({ themeMode, onThemeChange }: Props) {
   const [updateState, setUpdateState] = useState(getUpdateState())
 
   useEffect(() => subscribeUpdateState(setUpdateState), [])
+
+  // Unread review findings -> the same dot on the Code Review icon. The
+  // threshold is the user's own setting and is applied by the backend; this
+  // side only decides whether to draw it. Zero means "do not disturb", and a
+  // failed call means the same — navigation must not depend on it.
+  const [reviewDot, setReviewDot] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    reviewNotifyCount()
+      .then(n => { if (!cancelled) setReviewDot(n) })
+      .catch(() => { /* no dot; the page still works */ })
+    return () => { cancelled = true }
+  }, [pathname])
 
   useEffect(() => {
     if (!langOpen) return
@@ -101,6 +116,9 @@ export default function SideRail({ themeMode, onThemeChange }: Props) {
                   className={s.updateDot}
                   title={t('nav.updateAvailable', { version: updateState.info?.latest ?? '' })}
                 />
+              )}
+              {entry.to === '/code-review' && reviewDot > 0 && (
+                <span className={s.updateDot} title={t('nav.reviewNeedsAttention', { count: reviewDot })} />
               )}
             </Link>
           )

@@ -61,11 +61,18 @@ func TestVersionedFileName(t *testing.T) {
 		version string
 		want    string
 	}{
-		{"repotory-darwin-arm64.dmg", "2.25.0", "repotory-2.25.0-darwin-arm64.dmg"},
-		{"repotory-windows-amd64.zip", "2.24.0", "repotory-2.24.0-windows-amd64.zip"},
+		// A pre-rename name still gets the version — and gets it under the
+		// current brand.
+		{"repotory-darwin-arm64.dmg", "2.25.0", "Cinder-2.25.0-darwin-arm64.dmg"},
+		{"repotory-windows-amd64.zip", "2.24.0", "Cinder-2.24.0-windows-amd64.zip"},
 		// No version: the name is left exactly as the release published it.
 		{"repotory-darwin-arm64.dmg", "", "repotory-darwin-arm64.dmg"},
+		// Current names already carry the version: decorating them again
+		// would give "Cinder-2.33.0-2.33.0-darwin-arm64.dmg".
+		{"Cinder-2.33.0-darwin-arm64.dmg", "2.33.0", "Cinder-2.33.0-darwin-arm64.dmg"},
+		{"Cinder-2.33.0-windows-amd64.zip", "2.33.0", "Cinder-2.33.0-windows-amd64.zip"},
 		// A name that is not one of ours is never decorated.
+		{"cinder-mcp-2.33.0-darwin-arm64.tar.gz", "2.33.0", "cinder-mcp-2.33.0-darwin-arm64.tar.gz"},
 		{"repotory-mcp-darwin-arm64.tar.gz", "2.25.0", "repotory-mcp-darwin-arm64.tar.gz"},
 		{"notes.txt", "2.25.0", "notes.txt"},
 	}
@@ -91,7 +98,7 @@ func TestDownloadWritesVersionedFileAndReportsVersion(t *testing.T) {
 	newUpdateHTTPClient = func(proxy string) (*http.Client, error) { return srv.Client(), nil }
 	t.Cleanup(func() { newUpdateHTTPClient = prevClient })
 
-	const name = "repotory-darwin-arm64.dmg"
+	const name = "Cinder-2.25.0-darwin-arm64.dmg"
 	if err := svc.StartUpdateDownload(srv.URL+"/"+name, name, "", "2.25.0"); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -100,7 +107,7 @@ func TestDownloadWritesVersionedFileAndReportsVersion(t *testing.T) {
 	if st.Version != "2.25.0" {
 		t.Errorf("state.Version = %q, want 2.25.0 — the progress dialog must name the version", st.Version)
 	}
-	want := filepath.Join(dir, "repotory-2.25.0-darwin-arm64.dmg")
+	want := filepath.Join(dir, "Cinder-2.25.0-darwin-arm64.dmg")
 	if st.Path != want {
 		t.Errorf("state.Path = %q, want %q", st.Path, want)
 	}
@@ -132,7 +139,7 @@ func TestFinishedDownloadIsPersistedToDisk(t *testing.T) {
 	newUpdateHTTPClient = func(proxy string) (*http.Client, error) { return srv.Client(), nil }
 	t.Cleanup(func() { newUpdateHTTPClient = prevClient })
 
-	const name = "repotory-darwin-arm64.dmg"
+	const name = "Cinder-2.25.0-darwin-arm64.dmg"
 	if err := svc.StartUpdateDownload(srv.URL+"/"+name, name, "", "2.25.0"); err != nil {
 		t.Fatalf("start: %v", err)
 	}

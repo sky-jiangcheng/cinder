@@ -159,7 +159,7 @@ jobs:
           if [ -f "build/icon.svg" ]; then
             # Initialize a temp package.json in root so npm install works
             if [ ! -f "package.json" ]; then
-              node -e "require('fs').writeFileSync('package.json', JSON.stringify({name:'repotory-build',version:'0.0.0',private:true},null,2))"
+              node -e "require('fs').writeFileSync('package.json', JSON.stringify({name:'cinder-build',version:'0.0.0',private:true},null,2))"
             fi
             npm install --no-save sharp 2>&1 || true
             if node scripts/generate-icons.mjs 2>&1; then
@@ -214,8 +214,8 @@ jobs:
             wails build -platform ${{ matrix.goos }}/${{ matrix.goarch }} -clean -ldflags "$LDFLAGS"
           fi
 
-      # repotory-mcp is the AI execution interface (MCP stdio server) and ships as
-      # its own release asset so `claude mcp add repotory -- ...` works without
+      # cinder-mcp is the AI execution interface (MCP stdio server) and ships
+      # as its own release asset so `claude mcp add repotory -- ...` works without
       # building from source. Pure Go / zero CGO, so the matrix target builds
       # natively. Version is injected from wails.json (SSOT), same as the app.
       - name: Build MCP server
@@ -223,15 +223,22 @@ jobs:
         run: |
           set -e
           APP_VERSION=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
-          echo "Building repotory-mcp version: $APP_VERSION"
+          echo "Building cinder-mcp version: $APP_VERSION"
           LDFLAGS="-X repotory/internal/version.Version=$APP_VERSION"
           mkdir -p build/mcp
           CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -ldflags "$LDFLAGS" -o build/mcp/repotory-mcp ./cmd/mcp/
+            go build -ldflags "$LDFLAGS" -o build/mcp/cinder-mcp ./cmd/mcp/
           # `go build -o name` uses the name verbatim, so add the Windows suffix
-          # ourselves — release assets / manifests / scoop all expect repotory-mcp.exe.
-          if [ "${{ runner.os }}" = "Windows" ] && [ -f build/mcp/repotory-mcp ]; then
-            mv build/mcp/repotory-mcp build/mcp/repotory-mcp.exe
+          # ourselves — the release archive and both manifests expect cinder-mcp.exe.
+          if [ "${{ runner.os }}" = "Windows" ] && [ -f build/mcp/cinder-mcp ]; then
+            mv build/mcp/cinder-mcp build/mcp/cinder-mcp.exe
+          fi
+          # Compatibility alias (ADR-0049 补注): every existing MCP client
+          # config points at the old path, so the archive carries both names.
+          # A symlink is free on Unix; Windows gets the alias from
+          # install.ps1 and the Scoop shim rather than a duplicate 11 MB exe.
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            ln -sf cinder-mcp build/mcp/repotory-mcp
           fi
           ls -lh build/mcp/
 
@@ -247,16 +254,20 @@ jobs:
         run: |
           set -e
           APP_VERSION=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
-          echo "Building repotory-server version: $APP_VERSION"
+          echo "Building cinder-server version: $APP_VERSION"
           LDFLAGS="-X repotory/internal/version.Version=$APP_VERSION"
           (cd web && npm run build:server)
           mkdir -p build/server
           rm -rf build/server/web
           cp -R web/dist-server build/server/web
           CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -ldflags "$LDFLAGS" -o build/server/repotory-server ./cmd/server
-          if [ "${{ runner.os }}" = "Windows" ] && [ -f build/server/repotory-server ]; then
-            mv build/server/repotory-server build/server/repotory-server.exe
+            go build -ldflags "$LDFLAGS" -o build/server/cinder-server ./cmd/server
+          if [ "${{ runner.os }}" = "Windows" ] && [ -f build/server/cinder-server ]; then
+            mv build/server/cinder-server build/server/cinder-server.exe
+          fi
+          # Same compatibility alias as the MCP archive above.
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            ln -sf cinder-server build/server/repotory-server
           fi
           ls -lh build/server/
 
@@ -264,10 +275,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
+          VER=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
           mkdir -p build/bin/release
-          tar -czf "build/bin/release/repotory-linux-amd64.tar.gz" -C build/bin repotory
-          tar -czf "build/bin/release/repotory-mcp-linux-amd64.tar.gz" -C build/mcp repotory-mcp
-          tar -czf "build/bin/release/repotory-server-linux-amd64.tar.gz" -C build/server repotory-server web
+          # Asset names carry the brand AND the version: a download sitting in
+          # ~/Downloads has to say which build it is. The tarball keeps the old
+          # binary name as a symlink so an existing PATH entry keeps working.
+          ln -sf cinder build/bin/repotory
+          tar -czf "build/bin/release/Cinder-$VER-linux-amd64.tar.gz" -C build/bin cinder repotory
+          tar -czf "build/bin/release/cinder-mcp-$VER-linux-amd64.tar.gz" -C build/mcp cinder-mcp repotory-mcp
+          tar -czf "build/bin/release/cinder-server-$VER-linux-amd64.tar.gz" -C build/server cinder-server repotory-server web
           echo "RELEASE_DIR=build/bin/release" >> $GITHUB_ENV
 
       - name: Package macOS
@@ -308,6 +324,7 @@ jobs:
             echo "Signed successfully"
           fi
 
+          VER=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
           STAGING=$(mktemp -d)
           cp -R "$APP" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
@@ -323,28 +340,28 @@ jobs:
             --app-drop-link 400 280 \
             --background "$STAGING/.background/background.png" \
             --format UDZO \
-            "release/repotory-${{ matrix.target }}.dmg" \
+            "release/Cinder-$VER-${{ matrix.target }}.dmg" \
             "$STAGING/"
           rm -rf "$STAGING"
 
           # Belt and braces: the .dmg is the artifact every installer points
           # at, so its absence must fail the job even if create-dmg exited 0.
-          if [ ! -f "release/repotory-${{ matrix.target }}.dmg" ]; then
-            echo "::error::release/repotory-${{ matrix.target }}.dmg was not produced"
+          if [ ! -f "release/Cinder-$VER-${{ matrix.target }}.dmg" ]; then
+            echo "::error::release/Cinder-$VER-${{ matrix.target }}.dmg was not produced"
             ls -la release/ || true
             exit 1
           fi
 
           if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_ID" ]; then
             echo "Notarizing DMG..."
-            xcrun notarytool submit "release/repotory-${{ matrix.target }}.dmg" --keychain-profile "github-actions" --wait 2>&1 || true
-            xcrun stapler staple "release/repotory-${{ matrix.target }}.dmg" 2>&1 || true
+            xcrun notarytool submit "release/Cinder-$VER-${{ matrix.target }}.dmg" --keychain-profile "github-actions" --wait 2>&1 || true
+            xcrun stapler staple "release/Cinder-$VER-${{ matrix.target }}.dmg" 2>&1 || true
           fi
 
           # MCP server: separate archive, same release, no codesign/notary impact
           # on the .dmg above.
-          tar -czf "release/repotory-mcp-${{ matrix.target }}.tar.gz" -C build/mcp repotory-mcp
-          tar -czf "release/repotory-server-${{ matrix.target }}.tar.gz" -C build/server repotory-server web
+          tar -czf "release/cinder-mcp-$VER-${{ matrix.target }}.tar.gz" -C build/mcp cinder-mcp repotory-mcp
+          tar -czf "release/cinder-server-$VER-${{ matrix.target }}.tar.gz" -C build/server cinder-server repotory-server web
 
           echo "RELEASE_DIR=release" >> $GITHUB_ENV
 
@@ -358,16 +375,17 @@ jobs:
           # Skipping it publishes a release whose Windows download 404s, and
           # the artifact upload's if-no-files-found:error does not catch it
           # because the directory is not empty.
-          for f in build/bin/repotory.exe build/mcp/repotory-mcp.exe build/server/repotory-server.exe; do
+                    VER=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
+          for f in build/bin/cinder.exe build/mcp/cinder-mcp.exe build/server/cinder-server.exe; do
             if [ ! -f "$f" ]; then
               echo "::error::$f was not produced — refusing to publish a release with a missing Windows artifact"
               ls -la build/bin build/mcp build/server 2>/dev/null || true
               exit 1
             fi
           done
-          powershell Compress-Archive -Path "build/bin/repotory.exe" -DestinationPath "release/repotory-windows-amd64.zip"
-          powershell Compress-Archive -Path "build/mcp/repotory-mcp.exe" -DestinationPath "release/repotory-mcp-windows-amd64.zip"
-          powershell Compress-Archive -Path "build/server/repotory-server.exe","build/server/web" -DestinationPath "release/repotory-server-windows-amd64.zip"
+          powershell Compress-Archive -Path "build/bin/cinder.exe" -DestinationPath "release/Cinder-$VER-windows-amd64.zip"
+          powershell Compress-Archive -Path "build/mcp/cinder-mcp.exe" -DestinationPath "release/cinder-mcp-$VER-windows-amd64.zip"
+          powershell Compress-Archive -Path "build/server/cinder-server.exe","build/server/web" -DestinationPath "release/cinder-server-$VER-windows-amd64.zip"
           echo "RELEASE_DIR=release" >> "$GITHUB_ENV"
 
       - name: Upload release artifacts
@@ -401,13 +419,13 @@ jobs:
           cd ide/vscode
           npm ci
           npm run compile
-          npx @vscode/vsce package --no-dependencies -o "../../repotory-vscode-${VER}.vsix"
+          npx @vscode/vsce package --no-dependencies -o "../../cinder-vscode-${VER}.vsix"
 
       - name: Upload vsix artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vsix-extension
-          path: repotory-vscode-*.vsix
+          path: cinder-vscode-*.vsix
           if-no-files-found: error
 
   # The JetBrains plugin was never built by any release job before this: the
@@ -440,11 +458,25 @@ jobs:
         working-directory: ide/jetbrains
         run: gradle buildPlugin
 
+      # Gradle names the distribution after the plugin's display name and
+      # version ("Cinder Memory-2.33.0.zip"). Release assets follow one shape
+      # for every artifact, so the zip is renamed rather than the build being
+      # taught a second naming rule.
+      - name: Rename the plugin zip to the release convention
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF#refs/tags/v}"
+          shopt -s nullglob
+          for f in ide/jetbrains/build/distributions/*.zip; do
+            mv "$f" "cinder-jetbrains-${VER}.zip"
+          done
+          ls -lh cinder-jetbrains-*.zip
+
       - name: Upload plugin artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: jetbrains-plugin
-          path: ide/jetbrains/build/distributions/*.zip
+          path: cinder-jetbrains-*.zip
           if-no-files-found: error
 
   # The WorkBuddy skill package. It is platform-independent (markdown plus one
@@ -466,19 +498,20 @@ jobs:
       - name: Package skill
         run: |
           set -euo pipefail
+          VER="${GITHUB_REF#refs/tags/v}"
           # The query script is invoked by absolute path from SKILL.md, so it
           # must stay executable inside the archive.
           chmod +x skill/repotory/scripts/repotory-query.py
           cd skill
-          zip -r ../repotory.skill repotory
+          zip -r "../cinder-${VER}.skill" repotory
           cd ..
-          unzip -l repotory.skill
+          unzip -l "../cinder-${VER}.skill"
 
       - name: Upload skill artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: skill-package
-          path: repotory.skill
+          path: cinder-*.skill
           if-no-files-found: error
 
   # The human-written half of the release notes.
@@ -582,21 +615,23 @@ jobs:
           # earlier. A release that cannot be installed must not be tagged as
           # published.
           missing=()
+          # Every asset name carries the brand and the version, so this list
+          # is also the contract the manifests and the install scripts address.
           for t in linux-amd64 darwin-amd64 darwin-arm64 windows-amd64; do
             # The app bundle and the companion archives do NOT share an
             # extension: the macOS app is a .dmg while its mcp/server archives
             # are tarballs; only Windows uses .zip for all three.
             case "$t" in
-              linux-*)   app="repotory-${t}.tar.gz"; arch="tar.gz" ;;
-              darwin-*)  app="repotory-${t}.dmg";     arch="tar.gz" ;;
-              windows-*) app="repotory-${t}.zip";     arch="zip" ;;
+              linux-*)   app="Cinder-${VER}-${t}.tar.gz"; arch="tar.gz" ;;
+              darwin-*)  app="Cinder-${VER}-${t}.dmg";    arch="tar.gz" ;;
+              windows-*) app="Cinder-${VER}-${t}.zip";    arch="zip" ;;
             esac
             [ -f "$app" ] || missing+=("$app")
-            for f in "repotory-mcp-${t}.${arch}" "repotory-server-${t}.${arch}"; do
+            for f in "cinder-mcp-${VER}-${t}.${arch}" "cinder-server-${VER}-${t}.${arch}"; do
               [ -f "$f" ] || missing+=("$f")
             done
           done
-          for f in "repotory-vscode-${VER}.vsix" "repotory-jetbrains-${VER}.zip" "repotory.skill"; do
+          for f in "cinder-vscode-${VER}.vsix" "cinder-jetbrains-${VER}.zip" "cinder-${VER}.skill"; do
             [ -f "$f" ] || missing+=("$f")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -757,7 +792,7 @@ jobs:
           # VSIX, the Marketplace listing and the manifest to a single number — the
           # file is stamped by scripts/bump-version.sh at release time.
           npx @vscode/vsce publish --no-dependencies
-          echo "Published repotory-vscode@$(node -p "require('./package.json').version") to the VS Code Marketplace."
+          echo "Published cinder-vscode@$(node -p "require('./package.json').version") to the VS Code Marketplace."
 
   # Publish the JetBrains plugin to the Marketplace with the same version as
   # the product release (build.gradle.kts follows wails.json via

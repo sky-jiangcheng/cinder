@@ -1,21 +1,23 @@
 #!/bin/bash
 # Cinder Desktop install script for macOS and Linux.
-# Installs the desktop app and the MCP server (repotory-mcp), which AI clients
+# Installs the desktop app and the MCP server (cinder-mcp), which AI clients
 # use to read the same local database.
 #
-# Release assets (see .github/workflows/release.yml):
-#   Linux   repotory-linux-amd64.tar.gz   -> bare `repotory` binary
-#   macOS   repotory-darwin-<arch>.dmg    -> Cinder.app
-#   MCP     repotory-mcp-<target>.tar.gz  -> bare `repotory-mcp` binary
+# Release assets (see .github/workflows/release.yml) carry the brand and the
+# version in their names, so a file in ~/Downloads says which build it is:
+#   Linux   Cinder-<ver>-linux-amd64.tar.gz   -> bare `cinder` binary
+#   macOS   Cinder-<ver>-darwin-<arch>.dmg    -> Cinder.app
+#   MCP     cinder-mcp-<ver>-<target>.tar.gz  -> bare `cinder-mcp` binary
 set -e
 
-BINARY_NAME="repotory"
-MCP_BINARY_NAME="repotory-mcp"
+BINARY_NAME="cinder"
+# The pre-rename names are still installed as symlinks: every AI client config
+# and shell alias already on this machine points at them, and a rename is not a
+# reason to break a working setup (ADR-0049 补注).
+COMPAT_BINARY_NAME="repotory"
+MCP_BINARY_NAME="cinder-mcp"
+COMPAT_MCP_BINARY_NAME="repotory-mcp"
 REPO="sky-jiangcheng/cinder"
-# RELEASES is the base URL for release assets. Overridable so CI can point it
-# at a local fixture server and exercise the real download/extract/install
-# path without a published release (see .github/workflows/install-smoke.yml).
-RELEASES="${RELEASES:-https://github.com/$REPO/releases/latest/download}"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -43,6 +45,34 @@ esac
 # without sudo and verify the script end-to-end (see
 # .github/workflows/install-smoke.yml). Defaults to the system path above.
 INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+
+# --- Which release? -----------------------------------------------------------
+#
+# Asset names embed the version, so `releases/latest/download/<file>` cannot be
+# used any more: the tag has to be known before the URL can be built. It is
+# read from the redirect of /releases/latest (one request, no API rate limit —
+# the anonymous GitHub API shares 60 req/h per IP and CI runners exhaust it).
+#
+# RELEASES (a flat directory of assets) and VERSION are both overridable so the
+# install smoke test can exercise this script against a local fixture server
+# without a published release (see .github/workflows/install-smoke.yml).
+if [ -z "${RELEASES:-}" ]; then
+  if [ -z "${VERSION:-}" ]; then
+    VERSION="$(curl -fsSIL -o /dev/null -w '%{url_effective}' \
+      "https://github.com/$REPO/releases/latest" 2>/dev/null \
+      | sed -E 's|.*/tag/v?||')"
+    if [ -z "$VERSION" ] || [ "$VERSION" = "$REPO" ]; then
+      echo "ERROR: could not resolve the latest release of $REPO." >&2
+      echo "       Set VERSION or RELEASES to install a specific build." >&2
+      exit 1
+    fi
+  fi
+  RELEASES="https://github.com/$REPO/releases/download/v$VERSION"
+fi
+if [ -z "${VERSION:-}" ]; then
+  VERSION="$(printf '%s' "$RELEASES" | sed -E 's|.*/v?([0-9]+\.[0-9]+\.[0-9]+.*)$|\1|')"
+fi
+echo "Installing Cinder $VERSION ($TARGET)"
 
 # Run a command with sudo only when the install dir is not writable.
 # Usage: as_root <cmd...>
@@ -143,11 +173,12 @@ verify_sha256() {
 APP_INSTALL_DIR="${APP_INSTALL_DIR:-/Applications}"
 
 if [ "$OS" = "darwin" ]; then
-  DMG="$TMP_DIR/repotory.dmg"
+  DMG="$TMP_DIR/Cinder.dmg"
   APP_NAME="Cinder.app"
+  DESKTOP_ASSET="Cinder-$VERSION-$TARGET.dmg"
   echo "Downloading Cinder Desktop for $TARGET (dmg)..."
-  fetch "$RELEASES/repotory-$TARGET.dmg" "$DMG"
-  verify_sha256 "$DMG" "repotory-$TARGET.dmg"
+  fetch "$RELEASES/$DESKTOP_ASSET" "$DMG"
+  verify_sha256 "$DMG" "$DESKTOP_ASSET"
 
   MOUNT_DIR=$(hdiutil attach "$DMG" -nobrowse -readonly | tail -1 | sed -E 's|.*(/Volumes/.*)|\1|')
   trap 'rm -rf "$TMP_DIR"; [ -n "${MOUNT_DIR:-}" ] && hdiutil detach "$MOUNT_DIR" -quiet' EXIT
@@ -165,12 +196,16 @@ if [ "$OS" = "darwin" ]; then
   echo "Cinder Desktop installed to $APP_INSTALL_DIR/$APP_NAME"
   echo "Run 'open -a \"$APP_INSTALL_DIR/$APP_NAME\"' to start!"
 else
-  TARBALL="$TMP_DIR/repotory.tar.gz"
+  TARBALL="$TMP_DIR/Cinder.tar.gz"
+  DESKTOP_ASSET="Cinder-$VERSION-$TARGET.tar.gz"
   echo "Downloading Cinder Desktop for $TARGET (tar.gz)..."
-  fetch "$RELEASES/repotory-$TARGET.tar.gz" "$TARBALL"
-  verify_sha256 "$TARBALL" "repotory-$TARGET.tar.gz"
+  fetch "$RELEASES/$DESKTOP_ASSET" "$TARBALL"
+  verify_sha256 "$TARBALL" "$DESKTOP_ASSET"
   tar -xzf "$TARBALL" -C "$TMP_DIR" "$BINARY_NAME"
   install_binary "$TMP_DIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
+  # Old name → new name, so `repotory` in someone's shell history still starts
+  # the app. A symlink also means there is exactly one binary to update.
+  as_root ln -sf "$BINARY_NAME" "$INSTALL_DIR/$COMPAT_BINARY_NAME"
 
   echo ""
   echo "Cinder Desktop installed to $INSTALL_DIR/$BINARY_NAME"
@@ -183,12 +218,12 @@ fi
 echo ""
 echo "Downloading Cinder MCP server for $TARGET..."
 
-MCP_ASSET="repotory-mcp-$TARGET.tar.gz"
+MCP_ASSET="cinder-mcp-$VERSION-$TARGET.tar.gz"
 MCP_URL="$RELEASES/$MCP_ASSET"
 
 # Recovery hint shared by both failure paths (no asset / extract failure).
 mcp_install_hint() {
-  echo "WARNING: could not install repotory-mcp ($1)." >&2
+  echo "WARNING: could not install $MCP_BINARY_NAME ($1)." >&2
   echo "         The desktop app is installed and working; install the MCP server manually:" >&2
   echo "         $MCP_URL" >&2
   echo "         then: tar -xzf $MCP_ASSET && sudo install -m 0755 $MCP_BINARY_NAME $INSTALL_DIR/" >&2
@@ -203,6 +238,7 @@ else
   verify_sha256 "$TMP_DIR/$MCP_ASSET" "$MCP_ASSET"
   if tar -xzf "$TMP_DIR/$MCP_ASSET" -C "$TMP_DIR" "$MCP_BINARY_NAME" \
     && install_binary "$TMP_DIR/$MCP_BINARY_NAME" "$INSTALL_DIR/$MCP_BINARY_NAME"; then
+    as_root ln -sf "$MCP_BINARY_NAME" "$INSTALL_DIR/$COMPAT_MCP_BINARY_NAME"
     echo "Cinder MCP server installed to $INSTALL_DIR/$MCP_BINARY_NAME"
     echo "Register it with an AI client: claude mcp add repotory -- $INSTALL_DIR/$MCP_BINARY_NAME"
   else

@@ -85,7 +85,7 @@ flowchart TB
 
     subgraph AGENT["🤖 AI agent — tool surface"]
         direction LR
-        MCP["repotory-mcp<br/>20 tools"]
+        MCP["cinder-mcp<br/>22 tools"]
         DSH["dsh plugin<br/>3 tools"]
         LLMSTXT["llms.txt export"]
         MCP ~~~ DSH ~~~ LLMSTXT
@@ -132,6 +132,7 @@ This manual covers Cinder's core features and use cases. The docs are written in
 | Write notes, search notes, recover old versions | [Knowledge Base and Notes](features/knowledge.md) |
 | See a project's tech stack and dependencies | [Project Detail](features/project-detail.md) |
 | Let Claude / Cursor read and write my knowledge base | [AI Integration](features/ai-integration.md) |
+| Have yesterday's commits checked for risk automatically | [Incremental Code Review](features/code-review.md) |
 | Write a plugin or a knowledge source importer | [Plugin Guide](plugins/overview.md) |
 | Understand the code layering and key decisions | [Architecture](architecture.md), [ADRs](adr/index.md) |
 | Understand the storage layout and "why not let the AI read git directly" | [Storage Optimization and AI Value](storage-optimization.md) |

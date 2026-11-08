@@ -14,7 +14,9 @@
       "light": "Bright side of the moon",
       "dark": "Dark side of the moon",
       "system": "Follow system"
-    }
+    },
+    "codeReview": "Code review",
+    "reviewNeedsAttention": "{{count}} new review finding(s) to look at"
   },
   "shell": {
     "contextTitle": "Context",
@@ -216,7 +218,8 @@
       "plugins": "Plugins",
       "actions": "Actions",
       "ai": "AI",
-      "updates": "Updates"
+      "updates": "Updates",
+      "review": "Daily review"
     },
     "scanRoots": "Scan Root Directories",
     "addRoot": "Add directory:",
@@ -329,7 +332,7 @@
     "agentSetupVirtualProject": "\"Uncategorized\" is not a real directory and cannot receive client configuration — pick a real project.",
     "agentSetupAutoGroupedProject": "That project is an auto-grouped container (your home directory, typically) and cannot receive client configuration — pick a concrete project.",
     "agentSetupMissingDirectory": "The project directory is gone or was moved — nothing was connected.",
-    "agentSetupBinaryMissing": "repotory-mcp was not found on this machine, so there is nothing to register — install it first (or keep it next to Cinder).",
+    "agentSetupBinaryMissing": "cinder-mcp was not found on this machine, so there is nothing to register — install it first (or keep it next to Cinder).",
     "agentStatusCreated": "created",
     "agentStatusUpdated": "updated",
     "agentStatusUnchanged": "unchanged",
@@ -408,7 +411,8 @@
       "plugins": "Manage knowledge sources, global-memory targets and session capture",
       "ai": "Configure the chat endpoint, semantic search (embedding & vector store), session capture, and the wiki compile and model-check gates",
       "actions": "Trigger a full rescan or import past memories on demand",
-      "updates": "Check for a new version, read the release notes and download the installer"
+      "updates": "Check for a new version, read the release notes and download the installer",
+      "review": "Look at yesterday's commits once a day, and report only the runtime risks this change introduced that no compiler catches."
     },
     "ai": {
       "title": "AI Chat Endpoint",
@@ -547,6 +551,28 @@
       "verdictBlocked": "Blocked",
       "verdictFlagged": "Flagged",
       "verdictAllow": "Passed"
+    },
+    "review": {
+      "title": "Daily review",
+      "desc": "The review reads the source of your collected projects. Rules run locally; only candidates may be sent to a model. It is off by default — turning it on agrees to both.",
+      "enabled": "Enable the daily review",
+      "enabledHint": "While off, no source is read and no scheduled job runs.",
+      "at": "Run at",
+      "atHint": "Runs once within ten minutes of this time; an existing report for the day is not recomputed.",
+      "scope": "Scope",
+      "scopeHint": "collected = every collected project; project:3,7 = those project ids.",
+      "ai": "Ask a model to review candidates",
+      "aiHint": "Off means rules only: zero egress, zero cost. Zero candidates also means zero calls.",
+      "notify": "Notify",
+      "notifyHigh": "Only high + confirmed",
+      "notifyAll": "Every candidate",
+      "notifyOff": "Nothing",
+      "notifyHint": "The default pushes only high + confirmed: three false alarms and the feature gets turned off.",
+      "maxDiff": "Max diff lines per file",
+      "maxDiffHint": "Files over the budget are skipped and counted in `skipped`, never dropped silently.",
+      "rules": "Rules",
+      "rulesHint": "Rules that are off by default need an explicit choice (sensitive-field logging, for one: masking conventions differ per team).",
+      "saved": "Review settings saved"
     }
   },
   "project": {
@@ -1180,5 +1206,32 @@
     "open": "Open the agent",
     "empty": "Ask anything — answers are built from your library.",
     "questionPlaceholder": "Ask anything… (Enter to send, Shift+Enter for a new line)"
+  },
+  "codeReview": {
+    "runNow": "Review yesterday now",
+    "running": "Reviewing…",
+    "filterLabel": "Filter by severity",
+    "severityAll": "All {{count}}",
+    "severity": {
+      "high": "High {{count}}",
+      "medium": "Medium {{count}}",
+      "low": "Low {{count}}"
+    },
+    "verdict": {
+      "confirmed": "Confirmed",
+      "unverified": "Unverified",
+      "dismissed": "Dismissed"
+    },
+    "meta": "Reviewing {{date}} · {{repos}} repos · {{commits}} commits · {{files}} files · {{ai}} model calls · {{skipped}} skipped",
+    "neverRan": "No review yet.",
+    "neverRanHint": "Press “Review yesterday now”, or turn on the schedule in Settings → Daily review.",
+    "nothingFound": "No problems found in the commits from {{date}}.",
+    "nothingFoundHint": "Only problems this change introduced are reported; existing debt is out of scope.",
+    "findingCount": "{{count}} findings",
+    "showEvidence": "Show evidence",
+    "alreadyDone": "That day was already reviewed",
+    "runFinished": "Review finished",
+    "runFinishedDetail": "{{count}} candidates",
+    "runFailed": "Review failed"
   }
 }

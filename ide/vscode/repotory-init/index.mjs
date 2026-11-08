@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // repotory-init — one-command MCP registration for Cinder.
-// ADR-0009 step one / TODO M4: detect the repotory-mcp binary, register it with
+// ADR-0009 step one / TODO M4: detect the cinder-mcp binary, register it with
 // the MCP clients found in this project (Claude Code / Cursor / VS Code /
 // Windsurf), and optionally install the Claude Code SessionEnd handoff hook.
 // Zero dependencies. Node >= 18.
@@ -10,7 +10,12 @@ import path from "node:path";
 import os from "node:os";
 
 const SERVER_NAME = "repotory";
-const BINARY_NAME = process.platform === "win32" ? "repotory-mcp.exe" : "repotory-mcp";
+// The MCP server binary, newest name first. `repotory-mcp` is the pre-rename
+// name; every install still carries it as a symlink (ADR-0049 补注), so a
+// machine that has not been updated yet resolves through the second entry.
+const BINARY_NAMES =
+  process.platform === "win32" ? ["cinder-mcp.exe", "repotory-mcp.exe"] : ["cinder-mcp", "repotory-mcp"];
+const BINARY_NAME = BINARY_NAMES[0];
 const HOOK_SCRIPT_REL = ".claude/hooks/repotory-handoff.sh";
 // Forward slashes on every platform, deliberately: this path is written into a
 // shell command string, and path.join would produce backslashes on Windows —
@@ -97,20 +102,20 @@ function findBinary() {
   if (process.env.REPOTORY_MCP_BIN && fs.existsSync(process.env.REPOTORY_MCP_BIN)) {
     return path.resolve(process.env.REPOTORY_MCP_BIN);
   }
-  const fromPath = searchPathFor(BINARY_NAME);
-  if (fromPath) return fromPath;
+  for (const name of BINARY_NAMES) {
+    const fromPath = searchPathFor(name);
+    if (fromPath) return fromPath;
+  }
   const home = os.homedir();
-  const common =
+  const dirs =
     process.platform === "win32"
       ? [
-          path.join(home, "scoop", "shims", BINARY_NAME),
-          path.join(home, "scoop", "apps", "repotory-mcp", "current", BINARY_NAME),
+          path.join(home, "scoop", "shims"),
+          path.join(home, "scoop", "apps", "cinder-mcp", "current"),
+          path.join(home, "scoop", "apps", "repotory-mcp", "current"),
         ]
-      : [
-          "/opt/homebrew/bin/repotory-mcp",
-          "/usr/local/bin/repotory-mcp",
-          "/usr/local/opt/repotory-mcp/bin/repotory-mcp",
-        ];
+      : ["/opt/homebrew/bin", "/usr/local/bin", "/usr/local/opt/cinder-mcp/bin", "/usr/local/opt/repotory-mcp/bin"];
+  const common = dirs.flatMap((dir) => BINARY_NAMES.map((name) => path.join(dir, name)));
   return common.find((p) => fs.existsSync(p)) ?? null;
 }
 
@@ -124,7 +129,7 @@ Could not find the ${BINARY_NAME} binary. Install it with one of:
   Anywhere: download repotory-mcp-<target> from ${RELEASES_URL}
 
 Then re-run with --bin /path/to/${BINARY_NAME}, or re-run with --yes to write
-the config with the bare command name "repotory-mcp" (works once installed).`);
+the config with the bare command name "cinder-mcp" (works once installed).`);
 }
 
 // ------------------------------------------------------------ registrations

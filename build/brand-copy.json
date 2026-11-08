@@ -307,8 +307,8 @@
     {
       "id": "17",
       "surface": "错误 · 缺二进制",
-      "zh": "没装 repotory-mcp，就没有记忆。",
-      "en": "No repotory-mcp binary, no memory."
+      "zh": "没装 cinder-mcp，就没有记忆。",
+      "en": "No cinder-mcp binary, no memory."
     },
     {
       "id": "18",

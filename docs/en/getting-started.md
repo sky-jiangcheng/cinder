@@ -17,10 +17,10 @@ The project ships as a **multi-artifact suite**. You can choose the entry point 
 
 ### Option A: Connect Your AI Agents (Fastest, No GUI Required)
 
-If your daily development revolves around Claude Code, Cursor, or Windsurf in the terminal/IDE, simply install `repotory-mcp` and register it:
+If your daily development revolves around Claude Code, Cursor, or Windsurf in the terminal/IDE, simply install `cinder-mcp` and register it:
 
 ```bash
-# 1. Download and install repotory-mcp (macOS / Linux)
+# 1. Download and install cinder-mcp (macOS / Linux)
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. Register MCP with the installed agents and write the
@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/script
 node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # Or add manually to Claude Code:
-claude mcp add repotory -- "$(which repotory-mcp)"
+claude mcp add repotory -- "$(which cinder-mcp)"
 ```
 
 Once registered, have your agent run `repotory_scan()` once in your project directory to bootstrap the knowledge base.
@@ -46,7 +46,7 @@ If you prefer a visual knowledge base, block-based Markdown editor, and human re
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 ```
-> Installs to `/Applications/Cinder.app` on macOS and `/usr/local/bin/repotory` on Linux; also places `repotory-mcp` in your PATH.
+> Installs to `/Applications/Cinder.app` on macOS and `/usr/local/bin/repotory` on Linux; also places `cinder-mcp` in your PATH.
 
 #### Windows One-Line Script
 ```powershell
@@ -141,7 +141,7 @@ The `Cinder Desktop` item in the macOS menu bar is the system application menu (
 | **Knowledge Base** | Core | Cross-project note hub: Markdown `/` block editor, tags, pinning, FTS5 full-text search, version history |
 | **Repo Mining** | Core | Automatically extracts README, tech stack (20+ formats), language breakdown, dependencies, contributors |
 | **Project Retrieval** | Core | Global command palette `⌘/Ctrl+K`, global full-text search, fast project context jump |
-| **AI Memory Interfaces** | Core | llms.txt, note export, `repotory-mcp` with 20 tools (including `repotory_context` / `repotory_handoff`) |
+| **AI Memory Interfaces** | Core | llms.txt, note export, `cinder-mcp` with 22 tools (including `repotory_context` / `repotory_handoff`) |
 | **Dashboard & Metrics** | Supporting | Daily goal progress ring, project cards, activity trend lines, Git commit heatmap |
 | **Memory Importers** | Built-in | 8 idempotent agent memory importers (see [Knowledge Source Import](plugins/overview.md)) |
 
@@ -171,7 +171,7 @@ cd web && npm install && npm run build && cd ..
 
 # 2. Build Desktop App & MCP Server
 go build -ldflags="-s -w" -o repotory .
-go build -o repotory-mcp ./cmd/mcp/
+go build -o cinder-mcp ./cmd/mcp/
 ```
 
 Dev mode: `wails dev` (desktop hot reload); test suite: `go test ./...`, frontend `npm test && npm run build`.

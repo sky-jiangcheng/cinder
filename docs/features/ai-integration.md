@@ -9,7 +9,7 @@ Cinder 面向 AI 代理提供读取通道与自检工具，全部复用同一 `i
 
 ## 价值定位：Cinder 是 AI 的数据源，而非 AI 平台
 
-**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 20 个工具来**消费**这层数据，按需取数、精确检索。
+**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 22 个工具来**消费**这层数据，按需取数、精确检索。
 
 这一层「为什么比让 AI 直接读 git 更优」的论证，见[存储结构优化与 AI 价值](../storage-optimization.md)。
 
@@ -106,24 +106,24 @@ go run ./cmd/abeval -mode handoff -k 10
 MCP 之外还有一条同源的通道：把 `internal/service` 暴露成 loopback HTTP，供浏览器模式、脚本和其它 agent 调用。
 
 ```
-go build -o repotory-server ./cmd/server
-./repotory-server --port 18765        # 或 env REPOTORY_HTTP_PORT；只监听 127.0.0.1
+go build -o cinder-server ./cmd/server
+./cinder-server --port 18765        # 或 env REPOTORY_HTTP_PORT；只监听 127.0.0.1
 ```
 
 - `POST /api/rpc` 用反射覆盖桌面端绑定的全部方法（JSON body 指定 method + args），与 Wails 走的是**同一份实现**；`Startup` / `Shutdown` / `Service` 本身被屏蔽。写操作与 MCP 遵守同一套协议保护（例如交接笔记拒绝被 update 覆盖）。
 - 浏览器开发模式用 `bash scripts/dev.sh`：它同时起无头 API（默认 18765）与 Vite。只跑 `npx vite` 会得到一个「页面能开、每个请求都 502」的假象——那是缺后端，不是应用坏了。
-- **发布资产里只有**：桌面安装包（4 平台）、`repotory-mcp-<平台>`、VS Code 扩展 VSIX。`repotory-server`、`cmd/vector-init`、`cmd/abeval`、`cmd/repotory-capture`、`cmd/wiki-export`（wiki 只读导出）都需自行 `go build`（或 `go run`），未随版本分发。
+- **发布资产里只有**：桌面安装包（4 平台）、`cinder-mcp-<平台>`、VS Code 扩展 VSIX。`cinder-server`、`cmd/vector-init`、`cmd/abeval`、`cmd/repotory-capture`、`cmd/wiki-export`（wiki 只读导出）都需自行 `go build`（或 `go run`），未随版本分发。
 
-## MCP Server（`repotory-mcp`）
+## MCP Server（`cinder-mcp`）
 
-MCP 是唯一的 AI 执行接口（`repotory` CLI 未随版本发布）。stdio 协议，进程内单次开库，20 个工具（含 5 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 共享会话写入）：
+MCP 是唯一的 AI 执行接口（`cinder` 无 CLI 子命令）。stdio 协议，进程内单次开库，22 个工具（含 5 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 共享会话写入）：
 
 会话记忆协议的两端在时序上是这样落位的：
 
 ```mermaid
 sequenceDiagram
     participant A as AI Agent
-    participant R as repotory-mcp
+    participant R as cinder-mcp
     participant K as 知识库 SQLite
     A->>R: repotory_context（会话开始）
     R->>K: 项目解析 + 上下文组装<br>（交接置顶）
@@ -208,7 +208,7 @@ repository 层（1、2）压过 project 层（3、4），因为命中 repository
 
 （Windsurf 是个例外：它的 MCP 配置是**用户级**的，落在 `~/.codeium/windsurf/mcp_config.json`，与项目无关。其余三个客户端的配置写在**项目目录**里，跟着仓库走。）
 
-注册进去的 `repotory-mcp` 二进制按这个顺序找：显式路径 → `REPOTORY_MCP_BIN` 环境变量 → `PATH` → **与当前可执行文件同目录**（桌面安装包里它就躺在 `repotory` 旁边，所以正常安装一次就能找到）→ 包管理器常见目录。找不到时按钮会明确说「二进制不在」并给出安装指引，而不是写进一个指向空路径的配置。
+注册进去的 `cinder-mcp` 二进制按这个顺序找：显式路径 → `REPOTORY_MCP_BIN` 环境变量 → `PATH` → **与当前可执行文件同目录**（桌面安装包里它就躺在 `repotory` 旁边，所以正常安装一次就能找到）→ 包管理器常见目录。找不到时按钮会明确说「二进制不在」并给出安装指引，而不是写进一个指向空路径的配置。
 
 它与下面那条终端路径是**同一套协议的两份实现**：
 
@@ -238,15 +238,15 @@ node scripts/repotory-init/index.mjs --with-hook
 
 **在任意项目里都能跑**：VS Code 扩展的 `Cinder: Register MCP Server` 命令用的是随扩展打包的那份 `repotory-init`（事实源仍是 `scripts/repotory-init/index.mjs`，由 `compile` 拷入 VSIX，CI 用 `git diff --exit-code` 钉住两者一致），所以不必先克隆本仓库；执行时也不弹终端——扩展在宿主进程内静默跑完安装器（仅 `ENOENT`/`EACCES` 时才回退到 `node`）。上面的裸命令则需要你在本仓库目录内执行。
 
-- 自动探测 `repotory-mcp`（`--bin` 可显式指定），向 Claude Code（`.mcp.json`）、Cursor（`.cursor/mcp.json`）、VS Code（`.vscode/mcp.json`）、Windsurf 写入注册（配置只落在对应客户端目录已存在的地方），JetBrains 打印手动指引
+- 自动探测 `cinder-mcp`（`--bin` 可显式指定），向 Claude Code（`.mcp.json`）、Cursor（`.cursor/mcp.json`）、VS Code（`.vscode/mcp.json`）、Windsurf 写入注册（配置只落在对应客户端目录已存在的地方），JetBrains 打印手动指引
 - `--with-hook` 同时安装下方的 SessionEnd hook（脚本 + `settings.json` 合并，改前备份）
 - `--with-instructions` 同时把交接指令写进项目的 `AGENTS.md` 与 `CLAUDE.md`（ADR-0043；已有同名区块则原地替换，**区块之外的内容一律不动**，改前备份）
-- `--dry-run` 预览全部写入动作；找不到二进制时给出安装引导，`--yes` 以裸命令名 `repotory-mcp` 写入配置（装好即生效）
+- `--dry-run` 预览全部写入动作；找不到二进制时给出安装引导，`--yes` 以裸命令名 `cinder-mcp` 写入配置（装好即生效）
 
 ### 手动接入 Claude Code（备选）
 
 ```bash
-claude mcp add repotory -- /path/to/repotory-mcp
+claude mcp add repotory -- /path/to/cinder-mcp
 ```
 
 或写入 `.mcp.json`（项目级）/ `~/.claude.json`（用户级）：
@@ -254,7 +254,7 @@ claude mcp add repotory -- /path/to/repotory-mcp
 ```json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
@@ -330,7 +330,7 @@ SessionEnd hook 只存在于 Claude Code。**换任何一个别的 agent，那�
 
 ### 接入 Cursor / 其他 MCP 客户端
 
-在对应客户端的 MCP 配置中添加同样的 `command` 指向 `repotory-mcp` 二进制（Cursor：`Settings → MCP → Add Server`）。
+在对应客户端的 MCP 配置中添加同样的 `command` 指向 `cinder-mcp` 二进制（Cursor：`Settings → MCP → Add Server`）。
 
 ## llms.txt 与 Markdown 导出（应用内）
 
@@ -373,7 +373,7 @@ unzip repotory.skill -d ~/.workbuddy/skills/
 // ~/.workbuddy/mcp.json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
@@ -382,11 +382,11 @@ unzip repotory.skill -d ~/.workbuddy/skills/
 
 | 文件 | 作用 |
 |------|------|
-| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、20 个工具的路由决策、agent 不可用的能力清单 |
+| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、22 个工具的路由决策、agent 不可用的能力清单 |
 | `references/mcp-tools.md` | 每个工具的精确参数签名、HTTP RPC 方法映射 |
 | `references/data-model.md` | schema 与不变量（主题归属、迁移规则、handoff 保护、trigram 边界） |
 | `scripts/repotory-query.py` | MCP 不可用时的只读兜底查询（检索 / 列主题 / 列项目 / 库概况） |
 
-**为什么要有兜底通道**：MCP 未被信任、或环境里没有 `repotory-mcp` 时，代理仍要能查知识库。只读兜底走 `sqlite3` 直接打 `project_notes_fts`，只发 `SELECT` —— 但它绕不过 FTS 索引漂移的补偿逻辑，所以优先走 MCP。
+**为什么要有兜底通道**：MCP 未被信任、或环境里没有 `cinder-mcp` 时，代理仍要能查知识库。只读兜底走 `sqlite3` 直接打 `project_notes_fts`，只发 `SELECT` —— 但它绕不过 FTS 索引漂移的补偿逻辑，所以优先走 MCP。
 
 **agent 侧的硬边界不变**：技能包里明确写了哪些绑定是 desktop-only（建/改/删主题、给笔记归类、项目合并、wiki 编译与审批）—— 这些是**归档与评审行为，归人**。技能包不会让代理越过这条线。

@@ -13,7 +13,7 @@ The one-line version: **the model runs on your machine, the knowledge base runs 
 
 | Role | Does | Does not |
 |------|------|----------|
-| Cinder (`repotory-mcp`) | Stores context, retrieves, writes handoff notes | Provide a model, hold API keys, go online |
+| Cinder (`cinder-mcp`) | Stores context, retrieves, writes handoff notes | Provide a model, hold API keys, go online |
 | Local model (ollama / LM Studio …) | Reasons, decides which tool to call | Persist state (the model itself has no memory) |
 | MCP client (Claude Code / Cursor / opencode …) | Connects the two: injects tools, forwards calls | Interpret semantics |
 
@@ -23,10 +23,10 @@ Conversation history is gone the moment the model process exits; **anything reme
 
 ### 1. Get the MCP binary
 
-Release assets include `repotory-mcp-<platform>`; to build from source:
+Release assets include `cinder-mcp-<platform>`; to build from source:
 
 ```bash
-go build -o /usr/local/bin/repotory-mcp ./cmd/mcp
+go build -o /usr/local/bin/cinder-mcp ./cmd/mcp
 ```
 
 ### 2. Start a local OpenAI-compatible endpoint
@@ -47,7 +47,7 @@ Tool-calling ability is a hard requirement. A 3B-class model can complete a sing
 Claude Code:
 
 ```bash
-claude mcp add repotory -- /usr/local/bin/repotory-mcp
+claude mcp add repotory -- /usr/local/bin/cinder-mcp
 ```
 
 Cursor / VS Code / Claude Code all use the same shape for project-level config:
@@ -55,7 +55,7 @@ Cursor / VS Code / Claude Code all use the same shape for project-level config:
 ```json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
@@ -63,7 +63,7 @@ Cursor / VS Code / Claude Code all use the same shape for project-level config:
 opencode:
 
 ```bash
-opencode mcp add repotory -- /usr/local/bin/repotory-mcp
+opencode mcp add repotory -- /usr/local/bin/cinder-mcp
 ```
 
 opencode prefixes tool names with the server name, so you will see tools like `repotory_repotory_context` and `repotory_repotory_handoff`. To get something shorter, register the server under a different name (e.g. `memory`, giving `memory_repotory_context`).
@@ -93,7 +93,7 @@ The two coexist: the hook catches "forgot to wrap up", the instruction file catc
 
 ## Verified on a real machine (2026-10-29)
 
-Environment: macOS arm64; ollama `qwen2.5:3b` (1.9 GB, local); `repotory-mcp` v2.19.0; an **isolated HOME** (`HOME=/tmp/repotory-verify/home`) with one demo Git repository. The live library was never opened, and its sha256 was identical before and after.
+Environment: macOS arm64; ollama `qwen2.5:3b` (1.9 GB, local); `cinder-mcp` v2.19.0; an **isolated HOME** (`HOME=/tmp/repotory-verify/home`) with one demo Git repository. The live library was never opened, and its sha256 was identical before and after.
 
 | Step | Result |
 |------|--------|
@@ -119,13 +119,13 @@ The first client tried in this verification was opencode v2.0.29, and it **conne
 - yet the requests sent to the model carry only opencode's own 12 tools — **none of the 18 repotory tools**;
 - switching models (ollama qwen2.5:3b / qwen2.5-coder:7b, LM Studio 27B), switching config shapes (`mcp.servers` / `mcp` / project-level / global), switching MCP servers (a separate control server with just 1 tool) — **none of it helped**; the control server's tool did not get through either.
 
-So this is client-side behavior, unrelated to the model or to `repotory-mcp`. opencode's own docs offer only one hint for "tool calling doesn't work" (raise ollama's `num_ctx` to 16k–32k); raising the context made no difference in this reproduction.
+So this is client-side behavior, unrelated to the model or to `cinder-mcp`. opencode's own docs offer only one hint for "tool calling doesn't work" (raise ollama's `num_ctx` to 16k–32k); raising the context made no difference in this reproduction.
 
 Until opencode fixes it, connect Cinder through Claude Code / Cursor / any other MCP client — or verify the chain yourself with the minimal driver below.
 
 ## The minimal driver used for recording
 
-The two sessions in the table were run by a ~170-line recording script (full listing in `outputs/process-logs/2026-10-29-本地Agent-MCP真机验证.md`): it does three things — connect to `repotory-mcp` over stdio, convert the 18 tools verbatim into OpenAI's `tools` array, and translate the model's `tool_calls` into MCP calls.
+The two sessions in the table were run by a ~170-line recording script (full listing in `outputs/process-logs/2026-10-29-本地Agent-MCP真机验证.md`): it does three things — connect to `cinder-mcp` over stdio, convert the 18 tools verbatim into OpenAI's `tools` array, and translate the model's `tool_calls` into MCP calls.
 
 **It is not a product to ship; it is a recording tool that spells out what a client is supposed to do.** For real use, use an off-the-shelf client. The script's purpose is diagnosis: when you cannot tell whether "the client isn't wired up" or "the server is broken", thirty lines of code can push the chain through and localize the problem to the client side.
 

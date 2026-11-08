@@ -97,7 +97,7 @@ styles/     设计系统：tokens / reset / components / layouts / features
 ```mermaid
 flowchart TB
     SRC["Go 源码"] --> B1["go build → repotory<br/>内联 web/dist"]
-    SRC --> B2["go build → repotory-mcp<br/>cmd/mcp"]
+    SRC --> B2["go build → cinder-mcp<br/>cmd/mcp"]
     B1 --> REL[("GitHub Releases<br/>macOS 签名公证")]
     B2 --> REL
     MD["docs/**/*.md<br/>zh + en 镜像"] --> B3["build-docs.mjs<br/>mermaid → SVG"]
@@ -111,8 +111,8 @@ flowchart TB
 
 | 产物 | 来源 | 说明 |
 |------|------|------|
-| `repotory` | 根包 | Wails 桌面应用（`scripts/build.sh`） |
-| `repotory-mcp` | `cmd/mcp` | MCP stdio 服务器（知识库查询 + agent-score 自检） |
+| `cinder` | 根包 | Wails 桌面应用（`scripts/build.sh`） |
+| `cinder-mcp` | `cmd/mcp` | MCP stdio 服务器（知识库查询 + agent-score 自检） |
 
 CI（`.github/workflows/release.yml`）多平台构建 + macOS 签名公证；文档站（`pages.yml`）由 `scripts/build-docs.mjs` 从 `docs/**/*.md` 生成后部署 GitHub Pages。
 
@@ -131,7 +131,7 @@ flowchart TB
     end
     subgraph AGENT[🤖 AI Agent 用户 — 工具面]
         direction LR
-        MCP[repotory-mcp · 20 个 MCP 工具]
+        MCP[cinder-mcp · 22 个 MCP 工具]
         DSH[dsh Harness 插件 · llms.txt]
     end
     subgraph CORE[🧠 本地知识库 — 唯一事实源]
@@ -157,7 +157,9 @@ flowchart TB
 |------|------|------|
 | 品牌名 | `Cinder` / `Cinder Desktop` | 母品牌；桌面应用的 `productName` 与文档文案是 `Cinder Desktop` |
 | 完整展示名 | `Cinder Desktop: Local Git Knowledge Base` | 窗口标题（`main.go` 的 Wails `options.Title`）与 HTML `<title>` |
+| 下载产物 | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | Release 资产名——每个文件都自带版本 |
+| 可执行文件 | `cinder` / `cinder-mcp` / `cinder-server` | `which` 找到的名字；旧名 `repotory*` 随每次安装发一份软链（Windows 用副本与 Scoop shim），已装用户的客户端配置不受影响 |
 | 仓库与包标识 | `sky-jiangcheng/cinder` / `repotory` | GitHub 仓库名已随品牌改为 `cinder`；Go module 与 npm 包名仍冻结为 `repotory` |
-| 冻结标识 | `repotory` | 二进制/命令名、用户数据目录（`internal/platform` 的 `dirName`）、MCP server 名与工具前缀 |
+| 冻结标识 | `repotory` | 用户数据目录（`internal/platform` 的 `dirName`）、`repotory.db`、`repotory_*` 工具前缀、插件 id、cask/bucket token |
 
-冻结标识不参与「品牌统一」：数据目录已经历 gitboard → gitbuddy → repotory 两轮迁移（`internal/platform/platform.go` 的 legacy 迁移逻辑），MCP 工具名是对 AI 客户端的对外契约。
+冻结标识不参与「品牌统一」：数据目录已经历 gitboard → gitbuddy → repotory 两轮迁移（`internal/platform/platform.go` 的 legacy 迁移逻辑），MCP 工具名是对 AI 客户端的对外契约。**可执行文件名不在这张冻结清单里**——它改过一次，随每次安装带兼容别名（ADR-0049 补注）。

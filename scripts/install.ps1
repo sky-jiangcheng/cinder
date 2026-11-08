@@ -1,24 +1,50 @@
 # Cinder Desktop install script for Windows
-# Installs both the desktop app (repotory.exe) and the MCP server (repotory-mcp.exe).
+# Installs both the desktop app (cinder.exe) and the MCP server (cinder-mcp.exe).
 # Run in PowerShell: iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
 
-# The install FOLDER keeps the old word on purpose: it holds the frozen
-# binaries (repotory.exe / repotory-mcp.exe — ADR-0049 decision 3), and
-# renaming it would orphan every existing Windows install for no gain.
+# The install FOLDER keeps the old word on purpose: it is the Windows twin of
+# the frozen data directory (`~/Library/Application Support/repotory` on macOS),
+# and moving it would leave every existing install with two copies of the app
+# and its database (ADR-0049 补注).
 $InstallDir = "$env:LOCALAPPDATA\Repotory"
-$BinaryName = "repotory.exe"
-$McpBinaryName = "repotory-mcp.exe"
+$BinaryName = "cinder.exe"
+$McpBinaryName = "cinder-mcp.exe"
+# Pre-rename names stay available as copies: an MCP client already configured
+# on this machine points at repotory-mcp.exe by absolute path.
+$CompatBinaryName = "repotory.exe"
+$CompatMcpName = "repotory-mcp.exe"
 $Repo = "sky-jiangcheng/cinder"
 $Target = "windows-amd64"
 
-# ReleaseBase is the base URL for release assets. Overridable so CI can point
-# it at a local fixture server and exercise the real download/extract/install
-# path without a published release (see .github/workflows/install-smoke.yml).
-$ReleaseBase = if ($env:REPOTORY_RELEASE_BASE) { $env:REPOTORY_RELEASE_BASE } else { "https://github.com/$Repo/releases/latest/download" }
-$DesktopUrl = "$ReleaseBase/repotory-$Target.zip"
-$McpUrl = "$ReleaseBase/repotory-mcp-$Target.zip"
+# --- Which release? -----------------------------------------------------------
+#
+# Asset names embed the version, so `releases/latest/download/<file>` cannot be
+# used any more — the tag has to be known before the URL can be built.
+# CINDER_RELEASE_BASE (a flat directory of assets) and VERSION are overridable
+# so CI can exercise this script against a local fixture server without a
+# published release (see .github/workflows/install-smoke.yml).
+$Version = $env:VERSION
+$ReleaseBase = $env:CINDER_RELEASE_BASE
+if (-not $ReleaseBase) {
+    if (-not $Version) {
+        $Latest = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
+            -Headers @{ "User-Agent" = "cinder-install" }
+        $Version = $Latest.tag_name.TrimStart("v")
+        if (-not $Version) { throw "could not resolve the latest release of $Repo" }
+    }
+    $ReleaseBase = "https://github.com/$Repo/releases/download/v$Version"
+}
+if (-not $Version -and $ReleaseBase -match '/v?([0-9]+\.[0-9]+\.[0-9][^/]*)$') {
+    $Version = $Matches[1]
+}
+$DesktopAsset = "Cinder-$Version-$Target.zip"
+$McpAsset = "cinder-mcp-$Version-$Target.zip"
+$DesktopUrl = "$ReleaseBase/$DesktopAsset"
+$McpUrl = "$ReleaseBase/$McpAsset"
+
+Write-Host "Installing Cinder $Version ($Target)"
 
 # --- Checksum verification -----------------------------------------------------
 #
@@ -30,7 +56,7 @@ $McpUrl = "$ReleaseBase/repotory-mcp-$Target.zip"
 # The manifest is optional on purpose: releases published before it existed
 # do not have the asset, and a missing manifest must not fail an otherwise
 # healthy install. A digest MISMATCH is always fatal.
-$SumsFile = "$env:TEMP\repotory-SHA256SUMS"
+$SumsFile = "$env:TEMP\cinder-SHA256SUMS"
 $SumsLoaded = $false
 try {
     Invoke-WebRequest -Uri "$ReleaseBase/SHA256SUMS" -OutFile $SumsFile -ErrorAction Stop
@@ -63,16 +89,19 @@ Write-Host "Downloading Cinder Desktop for Windows..."
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 # The release workflow publishes Windows as a .zip (Compress-Archive of
-# build/bin/repotory.exe), not a bare .exe. Download the archive and expand it
-# rather than pointing at a .exe URL that 404s.
-$DesktopZip = "$env:TEMP\repotory-$Target.zip"
+# build/bin/cinder.exe), not a bare .exe. Download the archive and expand it
+# rather than pointing at an .exe URL that 404s.
+$DesktopZip = "$env:TEMP\$DesktopAsset"
 try {
     Invoke-WebRequest -Uri $DesktopUrl -OutFile $DesktopZip
-    Test-AssetSha256 -Path $DesktopZip -AssetName "repotory-$Target.zip"
+    Test-AssetSha256 -Path $DesktopZip -AssetName $DesktopAsset
     Expand-Archive -Path $DesktopZip -DestinationPath $InstallDir -Force
     if (-not (Test-Path "$InstallDir\$BinaryName")) {
         throw "archive did not contain $BinaryName"
     }
+    # Old name → new name. A copy rather than a symlink: Windows symlinks need
+    # developer mode or elevation, and this has to work for everyone.
+    Copy-Item "$InstallDir\$BinaryName" "$InstallDir\$CompatBinaryName" -Force
 } finally {
     if (Test-Path $DesktopZip) { Remove-Item $DesktopZip -Force }
 }
@@ -80,29 +109,30 @@ try {
 # MCP server: separate release asset, so AI clients can run it without the desktop
 # app. Non-fatal: older releases may not have the asset yet.
 Write-Host "Downloading Cinder MCP server for Windows..."
-$McpZip = "$env:TEMP\repotory-mcp-$Target.zip"
+$McpZip = "$env:TEMP\$McpAsset"
 $McpDownloaded = $false
 try {
     Invoke-WebRequest -Uri $McpUrl -OutFile $McpZip
     $McpDownloaded = $true
 } catch {
-    Write-Warning "Could not download repotory-mcp (no asset for $Target, or download failed)."
+    Write-Warning "Could not download $McpBinaryName (no asset for $Target, or download failed)."
     Write-Warning "The desktop app is installed and working; install the MCP server manually from $McpUrl"
 }
 
 if ($McpDownloaded) {
     # Outside the try on purpose: a checksum mismatch throws and must abort the
     # install, not fall through to the non-fatal warning path above.
-    Test-AssetSha256 -Path $McpZip -AssetName "repotory-mcp-$Target.zip"
+    Test-AssetSha256 -Path $McpZip -AssetName $McpAsset
     try {
         Expand-Archive -Path $McpZip -DestinationPath $InstallDir -Force
         if (Test-Path "$InstallDir\$McpBinaryName") {
+            Copy-Item "$InstallDir\$McpBinaryName" "$InstallDir\$CompatMcpName" -Force
             Write-Host "Cinder MCP server installed to $InstallDir\$McpBinaryName"
         } else {
             Write-Warning "archive did not contain $McpBinaryName"
         }
     } catch {
-        Write-Warning "Could not install repotory-mcp. The desktop app is installed and working."
+        Write-Warning "Could not install $McpBinaryName. The desktop app is installed and working."
     } finally {
         if (Test-Path $McpZip) { Remove-Item $McpZip -Force }
     }
@@ -117,6 +147,6 @@ if ($UserPath -notlike "*$InstallDir*") {
 
 Write-Host ""
 Write-Host "Cinder Desktop installed to $InstallDir"
-Write-Host "Run 'repotory' in a new terminal to start!"
+Write-Host "Run 'cinder' in a new terminal to start!"
 Write-Host ""
 Write-Host "You can also create a desktop shortcut to: $InstallDir\$BinaryName"

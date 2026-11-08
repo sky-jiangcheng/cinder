@@ -9,6 +9,10 @@
 # Built binaries (see scripts/build.sh) / 构建产物
 # Anchored with "/" so they only match repo-root binaries; unanchored patterns
 # also swallowed cmd/mcp/ and hid cmd/mcp/results.go from version control.
+/cinder
+/cinder-mcp
+/cinder-review
+/cinder-server
 /repotory
 /repotory-mcp
 /repotory-server

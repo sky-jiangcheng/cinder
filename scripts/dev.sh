@@ -39,7 +39,7 @@ fi
 
 if lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "port $API_PORT already in use — reusing whatever is listening there."
-  echo "  (if it is an old build, restart it: pkill -f 'repotory-server --port $API_PORT')"
+  echo "  (if it is an old build, restart it: pkill -f 'cinder-server --port $API_PORT')"
   WITH_API=0
 fi
 
@@ -52,9 +52,9 @@ trap cleanup EXIT INT TERM
 if [ "$WITH_API" = 1 ]; then
   echo "building headless API..."
   cd "$PROJECT_ROOT"
-  go build -o repotory-server ./cmd/server
+  go build -o cinder-server ./cmd/server
   echo "starting API on 127.0.0.1:$API_PORT ..."
-  ./repotory-server --port "$API_PORT" &
+  ./cinder-server --port "$API_PORT" &
   API_PID=$!
   # Wait for /health instead of a fixed sleep — a slow first build would
   # otherwise race the check and report a false failure.

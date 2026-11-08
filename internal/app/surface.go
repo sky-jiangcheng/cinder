@@ -202,6 +202,11 @@ var bindingSurfaces = map[string]BindingSurface{
 	"ListAIModels":          {SurfaceDesktopOnly, "", "model picker in the settings tab; it enumerates a configured endpoint and is not a knowledge capability"},
 	"TestAIChat":            {SurfaceDesktopOnly, "", "settings 'test connection' button"},
 	"RebuildPageEmbeddings": {SurfaceDesktopOnly, "", "admin re-embed of approved pages (ADR-0018 lane 2); same endpoint-spend rationale as RebuildEmbeddings"},
+	"GetReviewConfig":       {SurfaceDesktopOnly, "", "the daily review switches: whether a job that reads the user's source (and may send excerpts to a model) is armed is a human-facing fact, not an agent capability"},
+	"UpdateReviewConfig":    {SurfaceDesktopOnly, "", "arming a job that reads source code and can call a model on the user's behalf is a privacy gate, and an agent must not flip its own gate (ADR-0053 D5)"},
+	"LatestReviewReport":    {SurfaceMCPBacked, "repotory_review_latest", ""},
+	"RunReviewNow":          {SurfaceMCPBacked, "repotory_review_run", ""},
+	"ReviewNotifyCount":     {SurfaceDesktopOnly, "", "the rail dot is an attention budget, not a knowledge capability: it answers 'what has the user not looked at yet'"},
 	"GetAIAuditStatus":      {SurfaceMCPBacked, "repotory_ai_audit", ""},
 	"ListAICallAudit":       {SurfaceMCPBacked, "repotory_ai_audit", ""},
 

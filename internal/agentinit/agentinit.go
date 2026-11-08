@@ -139,7 +139,7 @@ type Options struct {
 
 // ErrBinaryNotFound means the repotory-mcp binary is not on this machine. The
 // caller shows the install guidance; the registration itself is not possible.
-var ErrBinaryNotFound = errors.New("repotory-mcp binary not found")
+var ErrBinaryNotFound = errors.New("cinder-mcp binary not found")
 
 // Register writes the client configuration for one project directory and
 // returns what it did.
@@ -584,13 +584,19 @@ func jsonValueEqual(a, b any) bool {
 	}
 }
 
-// binaryName is the MCP server executable name on this platform.
-func binaryName() string {
+// binaryNames are the MCP server executable names on this platform, newest
+// first. `cinder-mcp` is what this release builds; `repotory-mcp` is the
+// pre-rename name that every install still carries as a symlink (ADR-0049
+// 补注), so a machine that only has the old one keeps working.
+func binaryNames() []string {
 	if runtime.GOOS == "windows" {
-		return "repotory-mcp.exe"
+		return []string{"cinder-mcp.exe", "repotory-mcp.exe"}
 	}
-	return "repotory-mcp"
+	return []string{"cinder-mcp", "repotory-mcp"}
 }
+
+// binaryName is the preferred name, used where only one can be reported.
+func binaryName() string { return binaryNames()[0] }
 
 // FindBinary resolves the repotory-mcp executable to register.
 //
@@ -610,19 +616,25 @@ func FindBinary(explicit string) (string, error) {
 			return filepath.Abs(env)
 		}
 	}
-	if p, err := exec.LookPath(binaryName()); err == nil {
-		return p, nil
+	for _, name := range binaryNames() {
+		if p, err := exec.LookPath(name); err == nil {
+			return p, nil
+		}
 	}
 	if exe, err := os.Executable(); err == nil {
-		sibling := filepath.Join(filepath.Dir(exe), binaryName())
-		if isExecutable(sibling) {
-			return sibling, nil
+		for _, name := range binaryNames() {
+			sibling := filepath.Join(filepath.Dir(exe), name)
+			if isExecutable(sibling) {
+				return sibling, nil
+			}
 		}
 	}
 	for _, dir := range commonBinaryDirs() {
-		candidate := filepath.Join(dir, binaryName())
-		if isExecutable(candidate) {
-			return candidate, nil
+		for _, name := range binaryNames() {
+			candidate := filepath.Join(dir, name)
+			if isExecutable(candidate) {
+				return candidate, nil
+			}
 		}
 	}
 	return "", ErrBinaryNotFound
@@ -649,12 +661,15 @@ func commonBinaryDirs() []string {
 	if runtime.GOOS == "windows" {
 		return []string{
 			filepath.Join(home, "scoop", "shims"),
+			// The manifest name, old and new: `scoop install` picks one.
+			filepath.Join(home, "scoop", "apps", "cinder-mcp", "current"),
 			filepath.Join(home, "scoop", "apps", "repotory-mcp", "current"),
 		}
 	}
 	return []string{
 		"/opt/homebrew/bin",
 		"/usr/local/bin",
+		"/usr/local/opt/cinder-mcp/bin",
 		"/usr/local/opt/repotory-mcp/bin",
 	}
 }

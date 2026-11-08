@@ -1,6 +1,6 @@
 # Cinder headless server — single-container build (ADR-0025 Docker tier).
 # The desktop app stays out of Docker; this image is for NAS/homelab users who
-# want `repotory-server` (same-origin web UI) on a volume they can back up.
+# want `cinder-server` (same-origin web UI) on a volume they can back up.
 
 # --- web dist (server build: base /, output web/dist-server) -----------------
 # The Node version comes from .nvmrc (the single source for the whole repo).
@@ -40,12 +40,14 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/repotory-server ./cmd/server
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/cinder-server ./cmd/server
 
 # --- runtime ------------------------------------------------------------------
 FROM alpine:3.20
 RUN adduser -D -H -u 1000 repotory
-COPY --from=build /out/repotory-server /usr/local/bin/repotory-server
+COPY --from=build /out/cinder-server /usr/local/bin/cinder-server
+# Pre-rename name, for images/scripts that still call it that (ADR-0049 补注).
+RUN ln -s /usr/local/bin/cinder-server /usr/local/bin/repotory-server
 COPY --from=web /src/web/dist-server /app/web-dist
 
 # os.UserConfigDir() follows XDG_CONFIG_HOME on Linux, so the whole data
@@ -55,5 +57,5 @@ ENV XDG_CONFIG_HOME=/data \
 VOLUME ["/data"]
 EXPOSE 18765
 USER repotory
-ENTRYPOINT ["repotory-server"]
+ENTRYPOINT ["cinder-server"]
 CMD ["--port", "18765", "--web-dist", "/app/web-dist"]

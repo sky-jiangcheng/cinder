@@ -198,15 +198,28 @@ func (s *Service) CheckUpdate() (*UpdateInfo, error) {
 }
 
 // appAssetPattern matches the desktop app's own release bundles: the file
-// name CI produces for each target, e.g. "repotory-darwin-arm64.dmg" or
-// "repotory-windows-amd64.zip".
+// name CI produces for each target. The name carries the brand AND the
+// version, e.g. "Cinder-2.33.0-darwin-arm64.dmg" or
+// "Cinder-2.33.0-windows-amd64.zip".
 //
 // It is deliberately an exact-shape pattern rather than a substring search.
-// The same release also carries repotory-mcp-*.tar.gz, repotory-server-*,
-// the VSIX and the JetBrains plugin zip — all of which contain "repotory"
-// and a platform token, so a looser match would offer the user an MCP server
+// The same release also carries cinder-mcp-*.tar.gz, cinder-server-*, the
+// VSIX and the JetBrains plugin zip — all of which contain "cinder" and a
+// platform token, so a looser match would offer the user an MCP server
 // archive as "the new version of the app".
-var appAssetPattern = regexp.MustCompile(`^repotory-(darwin|windows|linux)-(amd64|arm64)\.(dmg|zip|tar\.gz|AppImage|deb|msi)$`)
+var appAssetPattern = regexp.MustCompile(`^Cinder-(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)-(darwin|windows|linux)-(amd64|arm64)\.(dmg|zip|tar\.gz|AppImage|deb|msi)$`)
+
+// legacyAppAssetPattern is the pre-rename shape ("repotory-darwin-arm64.dmg").
+// It stays matched so an older build of this app — whose updater only knows
+// this pattern — is not the only reader that has to be considered, and so a
+// download of a pre-rename release still resolves to its bundle.
+var legacyAppAssetPattern = regexp.MustCompile(`^repotory-(darwin|windows|linux)-(amd64|arm64)\.(dmg|zip|tar\.gz|AppImage|deb|msi)$`)
+
+// isAppAsset reports whether name is one of the app's own bundles, in either
+// naming era.
+func isAppAsset(name string) bool {
+	return appAssetPattern.MatchString(name) || legacyAppAssetPattern.MatchString(name)
+}
 
 // collectAppAssets keeps only the desktop app bundles out of the release's
 // asset list.
@@ -218,7 +231,7 @@ func collectAppAssets(raw []struct {
 }) []UpdateAsset {
 	out := make([]UpdateAsset, 0, len(raw))
 	for _, a := range raw {
-		if !appAssetPattern.MatchString(a.Name) {
+		if !isAppAsset(a.Name) {
 			continue
 		}
 		out = append(out, UpdateAsset{Name: a.Name, URL: a.URL, Size: a.Size, Digest: a.Digest})
@@ -230,9 +243,11 @@ func collectAppAssets(raw []struct {
 // zero value when the release ships none (e.g. linux/arm64, which CI does
 // not build). The UI then falls back to the release page.
 func platformAsset(assets []UpdateAsset) UpdateAsset {
-	want := "repotory-" + runtime.GOOS + "-" + runtime.GOARCH + "."
+	// The version sits between the brand and the platform token now, so the
+	// platform is matched inside the name rather than as a prefix.
+	want := "-" + runtime.GOOS + "-" + runtime.GOARCH + "."
 	for _, a := range assets {
-		if strings.HasPrefix(a.Name, want) {
+		if strings.Contains(a.Name, want) {
 			return a
 		}
 	}

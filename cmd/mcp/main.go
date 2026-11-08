@@ -1,4 +1,4 @@
-// repotory-mcp is the Cinder MCP server: it exposes the local Git knowledge
+// cinder-mcp is the Cinder MCP server: it exposes the local Git knowledge
 // base (notes, projects, search) to AI agents over the Model Context
 // Protocol on stdio. The database is opened once at startup and every tool
 // call shares the same service instance as the desktop app.
@@ -45,6 +45,7 @@ func main() {
 	registerContextTools(mcpServer, svc)
 	registerScanTool(mcpServer, svc)
 	registerAuditTools(mcpServer, svc)
+	registerReviewTools(mcpServer, svc)
 
 	// Seed the default scan roots so a headless (MCP-only) install can discover
 	// repositories via repotory_scan without ever opening the desktop app.

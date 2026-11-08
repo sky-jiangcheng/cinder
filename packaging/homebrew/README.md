@@ -10,9 +10,14 @@ published into it, and the set grows without the tap being renamed.
 
 | Manifest | Package | Platform | Artifact |
 |----------|---------|----------|----------|
-| [`Casks/repotory.rb`](Casks/repotory.rb) | `repotory` | macOS | `repotory-darwin-<arch>.dmg` — the Wails desktop app |
-| [`Casks/repotory-mcp.rb`](Casks/repotory-mcp.rb) | `repotory-mcp` | macOS | `repotory-mcp-<target>.tar.gz` — the MCP stdio server |
-| [`Formula/repotory-mcp.rb`](Formula/repotory-mcp.rb) | `repotory-mcp` | macOS + Linux | `repotory-mcp-<target>.tar.gz` — the MCP stdio server |
+| [`Casks/repotory.rb`](Casks/repotory.rb) | `repotory` | macOS | `Cinder-<version>-darwin-<arch>.dmg` — the Wails desktop app |
+| [`Casks/repotory-mcp.rb`](Casks/repotory-mcp.rb) | `repotory-mcp` | macOS | `cinder-mcp-<version>-<target>.tar.gz` — the MCP stdio server |
+| [`Formula/repotory-mcp.rb`](Formula/repotory-mcp.rb) | `repotory-mcp` | macOS + Linux | `cinder-mcp-<version>-<target>.tar.gz` — the MCP stdio server |
+
+The cask/formula tokens are still `repotory` / `repotory-mcp` (a frozen identity —
+changing them would break every saved `brew install` command); what ships inside
+the archives is `cinder` / `cinder-mcp`, with `repotory*` kept as a compatibility
+alias. See the *Naming Layers* section in the [root README](../../README.md).
 
 The desktop app is a GUI bundle, so it ships as a **Cask** and only exists for
 macOS. The MCP server is a single static binary with no UI dependency, so it
@@ -44,7 +49,7 @@ brew install sky-jiangcheng/homebrew-repo/repotory-mcp
 After installing the MCP server, register it with an AI client:
 
 ```bash
-claude mcp add repotory -- "$(which repotory-mcp)"
+claude mcp add repotory -- "$(which cinder-mcp)"
 ```
 
 The desktop app is **not** required to use the MCP server. Both read the same

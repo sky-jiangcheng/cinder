@@ -14,7 +14,9 @@
       "light": "月之亮面",
       "dark": "月之暗面",
       "system": "跟随系统"
-    }
+    },
+    "codeReview": "代码审查",
+    "reviewNeedsAttention": "{{count}} 条新增审查问题待看"
   },
   "shell": {
     "contextTitle": "上下文",
@@ -215,7 +217,8 @@
       "plugins": "插件",
       "actions": "操作",
       "ai": "AI",
-      "updates": "更新"
+      "updates": "更新",
+      "review": "每日审查"
     },
     "scanRoots": "扫描根目录",
     "addRoot": "添加新目录：",
@@ -328,7 +331,7 @@
     "agentSetupVirtualProject": "「未分类」不是一个真实目录，接不进去；请选一个真实项目。",
     "agentSetupAutoGroupedProject": "该项目是自动归组的容器目录（通常是家目录），接不进去；请选一个具体项目。",
     "agentSetupMissingDirectory": "项目目录不存在或已被移走，未接入。",
-    "agentSetupBinaryMissing": "本机没有找到 repotory-mcp，没有可注册的服务；请先安装它（或让它与 Cinder 装在一起）。",
+    "agentSetupBinaryMissing": "本机没有找到 cinder-mcp，没有可注册的服务；请先安装它（或让它与 Cinder 装在一起）。",
     "agentStatusCreated": "新建",
     "agentStatusUpdated": "已更新",
     "agentStatusUnchanged": "无变化",
@@ -407,7 +410,8 @@
       "plugins": "管理知识导入源、全局记忆归属项目与会话捕捉",
       "ai": "配置对话端点、语义检索（embedding 与向量存储）、会话捕捉，以及 wiki 编译与模型检查的开关",
       "actions": "手动触发全量扫描或导入历史记忆",
-      "updates": "检查新版本、查看更新说明并下载安装包"
+      "updates": "检查新版本、查看更新说明并下载安装包",
+      "review": "每天自动看一眼昨日提交，只报本次变更引入、编译不会报错的运行时风险。"
     },
     "ai": {
       "title": "AI 对话端点",
@@ -546,6 +550,28 @@
       "verdictBlocked": "已拦截",
       "verdictFlagged": "已标记",
       "verdictAllow": "通过"
+    },
+    "review": {
+      "title": "每日审查",
+      "desc": "审查读取收藏项目的源码。规则层在本机跑，只有候选条目可能交给模型复核——默认关闭，开启即表示同意这两件事。",
+      "enabled": "启用每日审查",
+      "enabledHint": "关闭时不会读任何源码，也不会有定时任务。",
+      "at": "每天运行时间",
+      "atHint": "过了这个时间点后的十分钟内跑一次；当天已出报告就不再跑。",
+      "scope": "审查范围",
+      "scopeHint": "collected = 所有收藏项目；project:3,7 = 指定项目 id（逗号分隔）。",
+      "ai": "用模型复核候选",
+      "aiHint": "关掉就是纯规则模式，零外发、零费用；候选为 0 时也不会调用。",
+      "notify": "通知级别",
+      "notifyHigh": "只推高危且已确认",
+      "notifyAll": "全部候选都推",
+      "notifyOff": "不通知",
+      "notifyHint": "默认只推「高危 + 已确认」：误报三次这个功能就会被关掉。",
+      "maxDiff": "单文件 diff 行数上限",
+      "maxDiffHint": "超过上限的文件跳过并计入 skipped，不静默丢弃。",
+      "rules": "规则开关",
+      "rulesHint": "默认关的规则需要显式打开（例如敏感字段日志：各团队的脱敏惯例不同）。",
+      "saved": "审查设置已保存"
     }
   },
   "project": {
@@ -1179,5 +1205,32 @@
     "open": "打开 Agent",
     "empty": "问点什么，答案来自你的记忆库。",
     "questionPlaceholder": "问点什么…（Enter 发送，Shift+Enter 换行）"
+  },
+  "codeReview": {
+    "runNow": "立即审查昨日",
+    "running": "审查中…",
+    "filterLabel": "按级别筛选",
+    "severityAll": "全部 {{count}}",
+    "severity": {
+      "high": "高危 {{count}}",
+      "medium": "中危 {{count}}",
+      "low": "提示 {{count}}"
+    },
+    "verdict": {
+      "confirmed": "已确认",
+      "unverified": "待复核",
+      "dismissed": "已驳回"
+    },
+    "meta": "审的是 {{date}} · {{repos}} 个仓库 · {{commits}} 次提交 · {{files}} 个文件 · {{ai}} 次模型调用 · 跳过 {{skipped}}",
+    "neverRan": "还没有审查报告。",
+    "neverRanHint": "点「立即审查昨日」跑一次，或到设置 → 每日审查里开启自动运行。",
+    "nothingFound": "{{date}} 的提交没有发现问题。",
+    "nothingFoundHint": "只报本次变更引入的问题；历史欠债不在日常报告里。",
+    "findingCount": "{{count}} 条",
+    "showEvidence": "看证据行",
+    "alreadyDone": "这一天已经审过了",
+    "runFinished": "审查完成",
+    "runFinishedDetail": "{{count}} 条候选",
+    "runFailed": "审查失败"
   }
 }

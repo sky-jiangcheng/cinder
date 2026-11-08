@@ -1,0 +1,179 @@
+/* CodeReview.module.css — the code review report (ADR-0053 D7).
+   Layout rule: one file = one block, findings stacked under it, worst first.
+   Severity is carried by a left border AND a text label, never by color alone
+   (the same rule the dashboard uses — a report you cannot read in grayscale
+   is a report half the users cannot read). */
+
+.page {
+  padding: 4px 2px 40px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filters {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.meta {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.emptyHint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.fileGroup {
+  margin-bottom: 22px;
+}
+
+.fileHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.repo {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.file {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  margin-left: auto;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.finding {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--surface-raised, transparent);
+}
+
+.finding.high {
+  border-left-color: var(--danger, #c0392b);
+}
+
+.finding.medium {
+  border-left-color: var(--warning, #c77c02);
+}
+
+.finding.low {
+  border-left-color: var(--border);
+}
+
+.findingHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.sev {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sev.high {
+  color: var(--danger, #c0392b);
+}
+
+.sev.medium {
+  color: var(--warning, #c77c02);
+}
+
+.sev.low {
+  color: var(--text-muted);
+}
+
+.rule {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.line {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.verdict {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.verdict.confirmed {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.suggestion {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.evidence {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.evidence summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.evidence pre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.04));
+  border-radius: var(--radius-sm, 6px);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}

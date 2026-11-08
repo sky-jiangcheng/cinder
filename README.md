@@ -61,10 +61,10 @@ Cinder is engineered as a modular local knowledge suite. Choose the artifact tha
 
 | Artifact | Type | Description & Best For | Quick Access |
 | :--- | :--- | :--- | :--- |
-| **`repotory-mcp`** | 🤖 Standalone MCP Server | **Core agent memory engine.** Runs via stdio. Connects Claude Code, Cursor, Windsurf, and any MCP client to local memory with **zero desktop app required**. | `node scripts/repotory-init/index.mjs` |
+| **`cinder-mcp`** | 🤖 Standalone MCP Server | **Core agent memory engine.** Runs via stdio. Connects Claude Code, Cursor, Windsurf, and any MCP client to local memory with **zero desktop app required**. | `node scripts/repotory-init/index.mjs` |
 | **Cinder Desktop** | 🖥️ Desktop Application | **Visual workspace & review hub.** Native single-file desktop app (Wails v2 + React 19) for macOS, Windows, and Linux. Browse notes, review LLM wiki drafts, explore repo metrics. | [Releases](https://github.com/sky-jiangcheng/cinder/releases) · `brew` · `scoop` |
 | **IDE Extensions** | 🧩 VS Code & JetBrains | **In-editor lookup.** Search notes, todos, and project handoffs directly from your editor sidebar (VS Code / Cursor / Windsurf & IntelliJ family). | [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) · JetBrains Plugins |
-| **CLI & Headless** | ⚡ Automation & Daemon | **Automated capture & headless mode.** `repotory-capture` (auto-session hook), `repotory-server` (headless API), vector setup, and data integrity audit tools. | Included with install script |
+| **CLI & Headless** | ⚡ Automation & Daemon | **Automated capture & headless mode.** `repotory-capture` (auto-session hook), `cinder-server` (headless API), vector setup, and data integrity audit tools. | Included with install script |
 
 ---
 
@@ -72,10 +72,10 @@ Cinder is engineered as a modular local knowledge suite. Choose the artifact tha
 
 ### Option A — Connect Your AI Agents (Fastest, No GUI Required)
 
-`repotory-mcp` is an independent stdio server that talks directly to your local database. Register it with Claude Code, Cursor, VS Code, and Windsurf in one command:
+`cinder-mcp` is an independent stdio server that talks directly to your local database. Register it with Claude Code, Cursor, VS Code, and Windsurf in one command:
 
 ```bash
-# 1. Install repotory-mcp (macOS / Linux)
+# 1. Install cinder-mcp (macOS / Linux)
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. Register MCP with your installed agents, write the read-at-start /
@@ -84,7 +84,7 @@ curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/script
 node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # Or register manually in Claude Code:
-claude mcp add repotory -- "$(which repotory-mcp)"
+claude mcp add repotory -- "$(which cinder-mcp)"
 ```
 
 ### Option B — Install the Desktop App (GUI Workbench)
@@ -93,7 +93,7 @@ Prefer a visual dashboard, markdown note editor, and human review queue?
 
 | Method | Command / Download |
 | :--- | :--- |
-| **Direct Download** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `repotory-darwin-arm64.dmg` / `repotory-linux-amd64.tar.gz` / `repotory-windows-amd64.zip` |
+| **Direct Download** | [GitHub Releases](https://github.com/sky-jiangcheng/cinder/releases) — `Cinder-<version>-darwin-arm64.dmg` / `Cinder-<version>-linux-amd64.tar.gz` / `Cinder-<version>-windows-amd64.zip` |
 | **Homebrew (macOS)** | `brew install --cask sky-jiangcheng/homebrew-repo/repotory` |
 | **Scoop (Windows)** | `scoop install repo/repotory` |
 | **One-Line Script (Windows)** | `iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 \| iex` |
@@ -136,7 +136,7 @@ The dashed line is the key: handoffs live in your local SQLite database, not in 
 > Full feature matrix with tier definitions and ADR links: [docs/en/features-overview.md](docs/en/features-overview.md).
 
 - **Knowledge Base (Core)** — Markdown notes with a `/` block editor, FTS5 trigram search, per-save version history with line-level diff, and global ⌘/Ctrl+K search.
-- **AI-Ready Interfaces (Core)** — `repotory-mcp` (20 MCP tools), one-call `repotory_context` / `repotory_handoff`, llms.txt, 8 built-in memory importers (Claude, Codex, OpenCode, CodeBuddy, Cursor, OpenClaw, Hermes…), and data-integrity audit (`repotory_integrity`).
+- **AI-Ready Interfaces (Core)** — `cinder-mcp` (20 MCP tools), one-call `repotory_context` / `repotory_handoff`, llms.txt, 8 built-in memory importers (Claude, Codex, OpenCode, CodeBuddy, Cursor, OpenClaw, Hermes…), and data-integrity audit (`repotory_integrity`).
 - **Knowledge Graph & LLM Wiki (Support, Human-Gated)** — Notes compile into wiki pages as *pending* drafts; review queue (approve, reject, merge); page versions; community summaries; hybrid semantic search with pluggable vector store (sqlite-vec default, Qdrant / Weaviate remote) — every LLM path is opt-in.
 - **Built-in Backups (Core)** — Daily `VACUUM INTO` snapshots (on by default, 14 kept, 0600 permissions); restore is as simple as copying one file back.
 - **Repository Mining (Core)** — README summary, tech stack (20+ manifest formats), language shares, dependencies, contributors, and activity cached per repository.
@@ -148,7 +148,7 @@ The dashed line is the key: handoffs live in your local SQLite database, not in 
 
 ### VS Code / Cursor / Windsurf Extension
 
-One VSIX covers VS Code, Cursor, and Windsurf as a lightweight client: commands call `repotory-mcp` over stdio and query the local knowledge base directly from your editor.
+One VSIX covers VS Code, Cursor, and Windsurf as a lightweight client: commands call `cinder-mcp` over stdio and query the local knowledge base directly from your editor.
 
 - Install directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=sky-jiangcheng.repotory-vscode) or download the `.vsix` from [Releases](https://github.com/sky-jiangcheng/cinder/releases).
 - Package from source:
@@ -181,7 +181,7 @@ cd web && npm install && npm run build && cd ..
 
 # Build Desktop App & MCP Server
 go build -ldflags "-s -w" -o repotory .
-go build -o repotory-mcp ./cmd/mcp/
+go build -o cinder-mcp ./cmd/mcp/
 ```
 
 Dev mode: `wails dev` (desktop hot reload) or `bash scripts/dev.sh` (headless API on :18765 + Vite on :5173).
@@ -217,10 +217,12 @@ Brand display and machine identifiers are deliberately separated layers:
 | Layer | Value | Used for |
 | :--- | :--- | :--- |
 | **Brand (display)** | `Cinder` | `productName`, in-app logo, documentation, and UI copy |
+| **Downloadable artifacts** | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | Release asset names — every file says which build it is |
+| **Binaries** | `cinder` / `cinder-mcp` / `cinder-server` | What `which` finds. The pre-rename names `repotory*` are still installed as symlinks (Windows: copies / Scoop shims) so existing client configs keep working |
 | **Repo & package identifier** | `repotory` | GitHub repo name, Go module name, npm package names, docs site URL |
-| **Frozen identifiers** | `repotory` | Binary name, user data directory, MCP server `repotory-mcp`, tool prefix `repotory_*` |
+| **Frozen identifiers** | `repotory` | User data directory, `repotory.db`, MCP tool prefix `repotory_*`, plugin ids, cask/bucket tokens, DB sentinel |
 
-Data directories and MCP tool names are external contracts with AI clients — when contributing, please preserve frozen identifiers.
+Data directories and MCP tool names are external contracts with AI clients — when contributing, please preserve the frozen identifiers. Binary names are NOT in that list any more: they were renamed once, with a compatibility alias that ships with every install (ADR-0049 补注).
 
 ---
 

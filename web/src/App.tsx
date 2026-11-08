@@ -25,6 +25,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const Knowledge = lazy(() => import('./pages/Knowledge'))
 const WikiDetail = lazy(() => import('./pages/wiki/WikiDetail'))
 const Review = lazy(() => import('./pages/Review'))
+const CodeReview = lazy(() => import('./pages/CodeReview'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 /**
@@ -265,6 +266,7 @@ function RoutedApp() {
           <Route path="/wiki" element={<WikiRedirect />} />
           <Route path="/wiki/:id" element={<WikiDetail />} />
           <Route path="/review" element={<Review />} />
+          <Route path="/code-review" element={<CodeReview />} />
           <Route path="/settings" element={<Settings />} />
           {/* Catch-all: without it an unmatched URL renders nothing at all —
               a blank page below the navbar that reads like a crash. */}

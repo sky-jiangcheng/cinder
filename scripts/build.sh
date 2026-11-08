@@ -18,9 +18,9 @@ echo "  Frontend built to web/dist/"
 echo "[2/2] Building Go binary..."
 cd "$PROJECT_ROOT"
 export GOPROXY=https://goproxy.cn,direct
-go build -ldflags="-s -w" -o repotory .
-echo "  Binary: $PROJECT_ROOT/repotory"
+go build -ldflags="-s -w" -o cinder .
+echo "  Binary: $PROJECT_ROOT/cinder"
 
 echo ""
 echo "=== Build complete ==="
-ls -lh repotory
+ls -lh cinder

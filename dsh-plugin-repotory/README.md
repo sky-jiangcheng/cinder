@@ -29,7 +29,7 @@ dsh-plugin-repotory ─┴─→ Headless HTTP 服务 (repotory server) ─→ S
 ```bash
 # 在 Cinder 仓库根目录
 GOPROXY=https://goproxy.cn,direct GOSUMDB=off CGO_ENABLED=0 \
-  go build -o repotory-server ./cmd/server
+  go build -o cinder-server ./cmd/server
 ```
 
 ## 配置（环境变量）
@@ -68,14 +68,14 @@ cd dsh-plugin-repotory && npm ci
 pnpm dsh plugin --profile web add /abs/path/to/dsh-plugin-repotory
 
 # 启动并设置环境变量
-export REPOTORY_SERVER_BIN=/abs/path/to/repotory-server
+export REPOTORY_SERVER_BIN=/abs/path/to/cinder-server
 pnpm dsh web
 ```
 
 方式二（patch 调试）：用仓库内的 `cordis.yml` 直接 `--patch`：
 
 ```bash
-export REPOTORY_SERVER_BIN=/abs/path/to/repotory-server
+export REPOTORY_SERVER_BIN=/abs/path/to/cinder-server
 pnpm dsh web --patch ./dsh-plugin-repotory/cordis.yml
 ```
 
@@ -84,7 +84,7 @@ pnpm dsh web --patch ./dsh-plugin-repotory/cordis.yml
 启动 headless 服务后，用 curl 验证插件调用的同一批端点：
 
 ```bash
-REPOTORY_HTTP_PORT=18765 ./repotory-server &
+REPOTORY_HTTP_PORT=18765 ./cinder-server &
 curl -s http://127.0.0.1:18765/health
 curl -s -X POST http://127.0.0.1:18765/api/ai_context
 curl -s "http://127.0.0.1:18765/api/search?q=deploy"

@@ -847,7 +847,7 @@ export type AgentSetupCode =
   | 'auto_grouped_project'
   /** The project's root path is not a directory on disk. */
   | 'missing_directory'
-  /** repotory-mcp is not installed on this machine. */
+  /** cinder-mcp is not installed on this machine. */
   | 'binary_missing'
 
 /** What happened to one file the registration touched. */
@@ -877,7 +877,7 @@ export interface AgentSetupReport {
   code: AgentSetupCode
   /** Nothing was written. */
   blocking: boolean
-  /** The repotory-mcp path that was registered. */
+  /** The cinder-mcp path that was registered. */
   binary: string
   /** One entry per client config file. */
   files: AgentFileResult[]
@@ -892,4 +892,84 @@ export interface AgentSetupReport {
   instructions?: AgentFileResult[]
   /** Per-file failures; a half-succeeded registration is reported, not hidden. */
   warnings?: string[]
+}
+
+// --- incremental code review (ADR-0053) -------------------------------------
+
+/** Severity of one finding. Strings, not numbers: they are stored verbatim. */
+export type ReviewSeverity = 'high' | 'medium' | 'low'
+
+/**
+ * How much of a finding is established.
+ *
+ * `confirmed` means the problem is established (a deterministic rule with no
+ * false-positive boundary, or a model that agreed); `unverified` means a rule
+ * fired but the pattern has a legitimate reading and nothing has checked it
+ * yet; `dismissed` means the model said the claim does not hold here and the
+ * row is kept anyway so a wrong dismissal can be spotted later.
+ */
+export type ReviewVerdict = 'confirmed' | 'unverified' | 'dismissed'
+
+export interface ReviewRun {
+  id: number
+  /** The day being reviewed (YYYY-MM-DD), not the day the job ran. */
+  run_date: string
+  scope: string
+  status: 'running' | 'done' | 'failed'
+  started_at: string
+  finished_at?: string
+  repos: number
+  commits: number
+  files: number
+  candidates: number
+  findings: number
+  /** Files over the diff budget, and repositories that could not be read. */
+  skipped: number
+  /** Model calls this run cost; 0 for a rules-only run. */
+  ai_calls: number
+  error?: string
+}
+
+export interface ReviewFinding {
+  id: number
+  run_id: number
+  repo_path: string
+  commit_sha?: string
+  file_path: string
+  /** 1-based line in the new file; 0 for a file-level finding. */
+  line: number
+  rule: string
+  severity: ReviewSeverity
+  verdict: ReviewVerdict
+  /** The changed line(s) plus context, with '>' marking the hit. */
+  evidence?: string
+  message: string
+  suggestion?: string
+}
+
+/** One run and its findings. A missing run means "never reviewed". */
+export interface ReviewSnapshot {
+  run?: ReviewRun
+  findings: ReviewFinding[]
+}
+
+export interface ReviewConfig {
+  enabled: boolean
+  /** Local wall-clock time of the daily run, "HH:MM". */
+  at: string
+  /** `collected` or `project:<id>,<id>`. */
+  scope: string
+  ai: boolean
+  notify: 'high' | 'all' | 'off'
+  max_diff_lines: number
+  /** Per-rule switches, keyed by rule id. */
+  rules: Record<string, boolean>
+}
+
+/** What a review run reports back. `findings` are the stored rows. */
+export interface ReviewResult {
+  run: ReviewRun
+  findings?: ReviewFinding[]
+  dry_run: boolean
+  already_done?: boolean
 }

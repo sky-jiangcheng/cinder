@@ -468,6 +468,9 @@ func upgradeSchema(db *sql.DB) error {
 		{id: 28, fn: EnsureAICallLog},
 		// v29: persistent cross-client conversations, isolated from knowledge.
 		{id: 29, fn: EnsureChatSchema},
+		// v30: incremental commit review (ADR-0053). Two tables, no
+		// backfill: a review report is generated, never migrated.
+		{id: 30, fn: EnsureReviewSchema},
 	}
 
 	for _, m := range migrations {

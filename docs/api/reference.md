@@ -37,8 +37,8 @@ Cinder 的对外接口是 **Wails 绑定面**：Go 方法经 Wails Bind 暴露�
 
 ```bash
 cd web && npm run build:server              # base /，输出 web/dist-server
-cd .. && go build -o repotory-server ./cmd/server
-./repotory-server --port 18766 --web-dist web/dist-server
+cd .. && go build -o cinder-server ./cmd/server
+./cinder-server --port 18766 --web-dist web/dist-server
 ```
 
 - `/api/*` 与 `/health` 永远路由到 API mux（`cmd/server` 的 `isAPIPath` 与 `httpapi` 注册面由测试钉住同步）；其余路径优先匹配静态文件，未命中回退 `index.html`（客户端路由）

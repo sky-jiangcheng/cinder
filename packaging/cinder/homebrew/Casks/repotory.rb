@@ -6,7 +6,7 @@
 # sha256 must be filled after each release is published; Homebrew hard-fails on
 # a mismatch, which is exactly what we want from a placeholder.
 cask "repotory" do
-  version "2.32.5"
+  version "2.33.0"
   name "Cinder Desktop"
   desc "Local-first code project context base"
   homepage "https://github.com/sky-jiangcheng/cinder"
@@ -15,23 +15,24 @@ cask "repotory" do
   # "undefined method 'license' for Cask". The license is MIT; see README.
 
   on_arm do
-    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-darwin-arm64.dmg"
-    sha256 "63deca398bafbf950a4b06a58efd40d4b4f765ec201fc0573ae9818117ed1943"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/Cinder-#{version}-darwin-arm64.dmg"
+    sha256 "__FILL_SHA256_CINDER_DMG__"
   end
 
   on_intel do
-    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-darwin-amd64.dmg"
-    sha256 "2226f312a18e0aa7265ce6afebc3c4c5bdedcb796bdc7a2ec7e2b7884f505c3b"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/Cinder-#{version}-darwin-amd64.dmg"
+    sha256 "__FILL_SHA256_CINDER_DMG__"
   end
 
   # The bundle inside the DMG is named after wails.json's `name`
-  # ("Cinder"), NOT after the `outputfilename` ("repotory"): the build
-  # produces build/bin/Cinder.app and create-dmg ships that bundle as-is.
+  # ("Cinder"), NOT after the `outputfilename` ("cinder", the executable
+  # inside the bundle): the build produces build/bin/Cinder.app and
+  # create-dmg ships that bundle as-is.
   # macOS volumes are case-insensitive by default, so an earlier spelling
   # resolved anyway — but a case-sensitive volume would not find it, and the
   # tap's tests.yml asserts the installed path, so the two must agree
-  # exactly. The BINARY inside the bundle stays "repotory" (a frozen
-  # identifier); only the bundle directory carries the display name.
+  # exactly. The BINARY inside the bundle is `cinder` (wails.json
+  # outputfilename); this stanza only tracks the bundle directory.
   app "Cinder.app"
 
   # Application Support and Logs paths come from internal/platform; they are

@@ -69,7 +69,7 @@ Options:
   --query TEXT      the full-text query to run (default: a term taken from the snapshot)
   --port PORT       the port for the isolated server (default: a free one)
   --server PATH     the headless server binary (default: built from this checkout,
-                    else repotory-server on PATH)
+                    else cinder-server on PATH)
   --keep            keep the temporary directory for inspection
   -h, --help        this text
 EOF
@@ -352,16 +352,16 @@ if [ -z "$SERVER_BIN" ]; then
   # happens to be installed on the machine.
   if command -v go >/dev/null 2>&1; then
     echo "building the headless server from this checkout..."
-    if ( cd "$ROOT" && go build -o "$TMP/repotory-server" ./cmd/server ); then
-      SERVER_BIN="$TMP/repotory-server"
+    if ( cd "$ROOT" && go build -o "$TMP/cinder-server" ./cmd/server ); then
+      SERVER_BIN="$TMP/cinder-server"
     else
       echo "the build failed; falling back to the installed server" >&2
     fi
   fi
-  if [ -z "$SERVER_BIN" ] && command -v repotory-server >/dev/null 2>&1; then
-    SERVER_BIN="$(command -v repotory-server)"
+  if [ -z "$SERVER_BIN" ] && command -v cinder-server >/dev/null 2>&1; then
+    SERVER_BIN="$(command -v cinder-server)"
   fi
-  [ -n "$SERVER_BIN" ] || fail "no headless server available (install Go, install repotory-server, or pass --server PATH)"
+  [ -n "$SERVER_BIN" ] || fail "no headless server available (install Go, install cinder-server, or pass --server PATH)"
 fi
 [ -x "$SERVER_BIN" ] || fail "the server binary is not executable: $SERVER_BIN"
 echo "server  : $SERVER_BIN"

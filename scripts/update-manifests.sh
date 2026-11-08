@@ -39,7 +39,11 @@ update_file() {
   # differently, which is the same trap that makes `sed -i` unusable here).
   local tmp
   tmp="$(mktemp "${file}.XXXXXX")"
-  if ! sed -E "s|$pattern|$replacement|" "$file" > "$tmp"; then
+  # `#` as the delimiter, not `|`: the asset-name rule below alternates
+  # (`Cinder-|cinder-mcp-|cinder-server-`), and a `|` delimiter ends the s
+  # command at the first alternation — sed then reports "parentheses not
+  # balanced" and the file keeps the old version. No manifest contains `#`.
+  if ! sed -E "s#$pattern#$replacement#" "$file" > "$tmp"; then
     echo "  ERROR: sed failed for $file" >&2
     rm -f "$tmp"
     return 1
@@ -72,6 +76,23 @@ for manifest in packaging/*/scoop/*.json; do
   update_file "$manifest" \
     '(releases/download/)v[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9.-]+)?' \
     "\1v$VERSION"
+  # The asset name carries the version too (Cinder-<ver>-windows-amd64.zip),
+  # and Scoop has no interpolation in the top-level url — so it is a THIRD
+  # copy of the number that has to move with the other two. Missing it points
+  # `scoop install` at an asset that no longer exists, which fails silently
+  # until someone tries to install.
+  #
+  # Two steps, and the reason is the same \1-before-a-digit trap noted above:
+  # a one-step `\1$VERSION` turns into `\12.33.0`, which sed reads as
+  # back-reference 12. Park the number behind a token first, then fill it in.
+  # Group 3 is the target suffix (-windows-amd64.zip) and must be re-emitted,
+  # or the URL names an asset that does not exist.
+  update_file "$manifest" \
+    '((Cinder|cinder-mcp|cinder-server)-)[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9.-]+)?' \
+    '\1@VER@\3'
+  update_file "$manifest" \
+    '@VER@' \
+    "$VERSION"
 done
 
 echo

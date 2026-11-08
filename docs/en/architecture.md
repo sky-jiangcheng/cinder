@@ -97,7 +97,7 @@ Single-file SQLite (WAL + foreign keys), 12 versioned migrations applied automat
 ```mermaid
 flowchart TB
     SRC["Go source"] --> B1["go build → repotory<br/>inlines web/dist"]
-    SRC --> B2["go build → repotory-mcp<br/>cmd/mcp"]
+    SRC --> B2["go build → cinder-mcp<br/>cmd/mcp"]
     B1 --> REL[("GitHub Releases<br/>macOS signing + notarization")]
     B2 --> REL
     MD["docs/**/*.md<br/>zh + en mirrors"] --> B3["build-docs.mjs<br/>mermaid → inline SVG"]
@@ -111,8 +111,8 @@ How to read it: two artifact lines — the desktop app inlines `web/dist` into t
 
 | Artifact | Source | Description |
 |------|------|------|
-| `repotory` | Root package | Wails desktop app (`scripts/build.sh`) |
-| `repotory-mcp` | `cmd/mcp` | MCP stdio server (knowledge base queries + agent-score self-check) |
+| `cinder` | Root package | Wails desktop app (`scripts/build.sh`) |
+| `cinder-mcp` | `cmd/mcp` | MCP stdio server (knowledge base queries + agent-score self-check) |
 
 CI (`.github/workflows/release.yml`) builds for multiple platforms plus macOS signing and notarization; the docs site (`pages.yml`) is generated from `docs/**/*.md` by `scripts/build-docs.mjs` and deployed to GitHub Pages.
 
@@ -131,7 +131,7 @@ flowchart TB
     end
     subgraph AGENT[🤖 AI agent user — tool surface]
         direction LR
-        MCP[repotory-mcp · 20 MCP tools]
+        MCP[cinder-mcp · 22 MCP tools]
         DSH[dsh Harness plugin · llms.txt]
     end
     subgraph CORE[🧠 Local knowledge base — single source of truth]
@@ -157,7 +157,9 @@ The brand presentation layer and the machine identity layer are **intentionally 
 |------|------|------|
 | Brand name | `Cinder` / `Cinder Desktop` | Parent brand; the desktop app's `productName` and documentation copy are `Cinder Desktop` |
 | Full display name | `Cinder Desktop: Local Git Knowledge Base` | Window title (the Wails `options.Title` in `main.go`) and the HTML `<title>` |
+| Downloadable artifacts | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | Release asset names — every file says which build it is |
+| Binaries | `cinder` / `cinder-mcp` / `cinder-server` | What `which` finds. The pre-rename `repotory*` names ship as symlinks on every install (Windows: copies and Scoop shims), so existing client configs keep working |
 | Repository and package identity | `sky-jiangcheng/cinder` / `repotory` | The GitHub repository followed the brand to `cinder`; the Go module and npm package names stay frozen as `repotory` |
-| Frozen identifiers | `repotory` | Binary/command name, user data directory (the `dirName` in `internal/platform`), MCP server name and tool prefix |
+| Frozen identifiers | `repotory` | User data directory (the `dirName` in `internal/platform`), `repotory.db`, the `repotory_*` tool prefix, plugin ids, cask/bucket tokens |
 
-Frozen identifiers are exempt from "brand unification": the data directory has already gone through two migrations (gitboard → gitbuddy → repotory; see the legacy migration logic in `internal/platform/platform.go`), and MCP tool names are an external contract with AI clients.
+Frozen identifiers are exempt from "brand unification": the data directory has already gone through two migrations (gitboard → gitbuddy → repotory; see the legacy migration logic in `internal/platform/platform.go`), and MCP tool names are an external contract with AI clients. **Binary names are not on that frozen list** — they were renamed once, with a compatibility alias that ships with every install (ADR-0049 addendum).

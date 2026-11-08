@@ -17,10 +17,10 @@ Cinder 是给 AI coding agent 的本地优先记忆层，Cinder Desktop 是它�
 
 ### 方式 A：为 AI Agent 接入记忆（无需桌面应用）
 
-如果你主要在终端或 IDE 里使用 Claude Code、Cursor、Windsurf，只需安装 `repotory-mcp` 并一键注册：
+如果你主要在终端或 IDE 里使用 Claude Code、Cursor、Windsurf，只需安装 `cinder-mcp` 并一键注册：
 
 ```bash
-# 1. 下载并安装 repotory-mcp（macOS / Linux）
+# 1. 下载并安装 cinder-mcp（macOS / Linux）
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
 # 2. 一键注册 MCP 到所有已安装 Agent，并把「开局读上下文 / 收尾写交接」
@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/script
 node scripts/repotory-init/index.mjs --with-instructions --with-hook
 
 # 或者在 Claude Code 中手动添加：
-claude mcp add repotory -- "$(which repotory-mcp)"
+claude mcp add repotory -- "$(which cinder-mcp)"
 ```
 
 注册完成后，让 Agent 在项目目录下执行一次 `repotory_scan()` 即可完成初始化。
@@ -44,7 +44,7 @@ claude mcp add repotory -- "$(which repotory-mcp)"
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 ```
-> macOS 安装到 `/Applications/Cinder.app`，Linux 安装到 `/usr/local/bin/repotory`；同时都会把 `repotory-mcp` 放入 PATH。
+> macOS 安装到 `/Applications/Cinder.app`，Linux 安装到 `/usr/local/bin/repotory`；同时都会把 `cinder-mcp` 放入 PATH。
 
 #### Windows 一键脚本
 ```powershell
@@ -139,7 +139,7 @@ flowchart TB
 | **知识库** | 核心 | 跨项目笔记中心：Markdown `/` 块编辑器、标签、置顶、FTS5 全文搜索、版本历史 |
 | **仓库深度挖掘** | 核心 | 自动提取 README 摘要、技术栈识别（20+ 格式）、语言占比、依赖关系、贡献者 |
 | **项目理解与检索** | 核心 | 全局快捷键 `⌘/Ctrl+K`、全局全文搜索、项目上下文直达 |
-| **AI 记忆接口** | 核心 | llms.txt、笔记导出、`repotory-mcp` 20 个 MCP 工具（含 `repotory_context` / `repotory_handoff`） |
+| **AI 记忆接口** | 核心 | llms.txt、笔记导出、`cinder-mcp` 22 个 MCP 工具（含 `repotory_context` / `repotory_handoff`） |
 | **仪表盘与统计** | 支持 | 每日目标进度环、项目卡片、趋势折线图、Git 提交热力图 |
 | **内置记忆导入源** | 内置 | 8 个 Agent 记忆源幂等导入（详见[知识源导入](plugins/overview.md)） |
 
@@ -169,7 +169,7 @@ cd web && npm install && npm run build && cd ..
 
 # 2. 构建桌面端应用与独立 MCP 服务
 go build -ldflags="-s -w" -o repotory .
-go build -o repotory-mcp ./cmd/mcp/
+go build -o cinder-mcp ./cmd/mcp/
 ```
 
 本地联调模式：`wails dev`（桌面前端热更新）；测试全家桶：`go test ./...`，前端 `npm test && npm run build`。

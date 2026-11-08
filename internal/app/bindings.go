@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"repotory/internal/bounds"
@@ -564,6 +565,56 @@ func (a *App) AskAI(projectID int64, question string) (string, error) {
 // as the plain path (and as the no-evidence fallback inside this one).
 func (a *App) AskAIWithEvidence(projectID int64, question string) (*service.EvidenceAnswer, error) {
 	return a.svc.AskAIWithEvidence(projectID, question, service.DefaultEvidenceBudget)
+}
+
+// GetReviewConfig returns the daily-review settings (ADR-0053 D5).
+//
+// It is a desktop surface on purpose: it reports whether the job that reads
+// the user's source code is armed, which is a fact the person in front of the
+// app needs, not something an agent should be able to poll.
+func (a *App) GetReviewConfig() (*service.ReviewConfig, error) {
+	return a.svc.GetReviewConfig()
+}
+
+// UpdateReviewConfig persists the daily-review settings. Turning this on is a
+// human decision — the job reads source and (with AI on) sends excerpts to a
+// configured endpoint — so it is desktop-only for the same reason the other
+// privacy gates are.
+func (a *App) UpdateReviewConfig(cfg service.ReviewConfig) error {
+	return a.svc.UpdateReviewConfig(cfg)
+}
+
+// LatestReviewReport returns the most recent completed review with its
+// findings. The MCP twin is repotory_review_latest; this binding feeds the
+// page, so both render the same rows (ADR-0053 D6).
+func (a *App) LatestReviewReport(severities []string) (*service.ReviewSnapshot, error) {
+	return a.svc.LatestReviewSnapshot(severities)
+}
+
+// RunReviewNow triggers a review from the UI. Parameters are primitives rather
+// than a struct so the JSON-RPC bridge (no named-struct decoding) and the
+// Wails binding accept the same call.
+//
+// A review is idempotent per day+scope: calling this twice returns the
+// existing report unless force is set.
+func (a *App) RunReviewNow(date, scope string, force, noAI, dryRun bool) (*service.ReviewResult, error) {
+	opts := service.ReviewOptions{Scope: scope, Force: force, NoAI: noAI, DryRun: dryRun}
+	if strings.TrimSpace(date) != "" {
+		parsed, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(date), time.Local)
+		if err != nil {
+			return nil, err
+		}
+		opts.Date = parsed
+	}
+	return a.svc.RunReview(context.Background(), opts)
+}
+
+// ReviewNotifyCount is the rail dot's input: how many findings the configured
+// threshold considers worth the user's attention (ADR-0053 D7). Zero means no
+// dot. Desktop-only — an agent does not need to know what the user has not
+// looked at yet.
+func (a *App) ReviewNotifyCount() (int, error) {
+	return a.svc.ReviewNotifyCount()
 }
 
 // GetAIAuditStatus reports the state of the AI call audit plugin (ADR-0030):

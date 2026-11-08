@@ -5,9 +5,9 @@
 //
 // Usage:
 //
-//	go build -o repotory-server ./cmd/server
-//	./repotory-server --port 18765
-//	REPOTORY_HTTP_PORT=18765 ./repotory-server
+//	go build -o cinder-server ./cmd/server
+//	./cinder-server --port 18765
+//	REPOTORY_HTTP_PORT=18765 ./cinder-server
 //
 // (This is its own binary, not a subcommand: the desktop `repotory` executable at
 // the repo root has no argument dispatch — it launches Wails and returns.)

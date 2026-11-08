@@ -1,4 +1,4 @@
-// components/navEntries.ts — the app's five top-level entries.
+// components/navEntries.ts — the app's six top-level entries.
 //
 // The list lives here, not in SideRail, because TWO consumers need it: the
 // left rail that draws it and the agent bot's module chips (ADR-0045
@@ -22,6 +22,7 @@ export const NAV_ENTRIES: NavEntry[] = [
   { to: '/dashboard', labelKey: 'nav.dashboard', icon: 'grid', active: p => p.startsWith('/dashboard') },
   { to: '/knowledge', labelKey: 'nav.knowledge', icon: 'book', active: p => p.startsWith('/knowledge') },
   { to: '/review', labelKey: 'nav.review', icon: 'check', active: p => p.startsWith('/review') },
+  { to: '/code-review', labelKey: 'nav.codeReview', icon: 'shield', active: p => p.startsWith('/code-review') },
   { to: '/settings', labelKey: 'nav.settings', icon: 'settings', active: p => p.startsWith('/settings') },
 ]
 

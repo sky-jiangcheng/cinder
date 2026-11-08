@@ -7,7 +7,7 @@
 services:
   repotory:
     build: .
-    image: repotory-server:latest
+    image: cinder-server:latest
     container_name: repotory
     ports:
       - "127.0.0.1:18765:18765"   # loopback only by default; tighten/relax deliberately

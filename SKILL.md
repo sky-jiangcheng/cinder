@@ -64,14 +64,14 @@ installation readiness, not whether the data is true.
 - **Repo knowledge mining**: README excerpt, tech stack, languages, dependencies, contributors, activity
 - **AI context export**: `llms.txt` and per-note `.md` export
 
-## MCP Server (`repotory-mcp`)
+## MCP Server (`cinder-mcp`)
 
-MCP is the single AI execution interface (the `repotory` CLI is not shipped). stdio server, opens the database once per process. The desktop app is **not** required — `repotory-mcp` reads the same local SQLite database.
+MCP is the single AI execution interface (the `repotory` CLI is not shipped). stdio server, opens the database once per process. The desktop app is **not** required — `cinder-mcp` reads the same local SQLite database.
 
 Install from a release (preferred), then register:
 
 ```bash
-# No prerequisites — download repotory-mcp-<target>.tar.gz / .zip from Releases
+# No prerequisites — download cinder-mcp-<target>.tar.gz / .zip from Releases
 # Or use a package manager:
 #   macOS   : brew tap sky-jiangcheng/homebrew-repo && brew install --cask sky-jiangcheng/homebrew-repo/repotory-mcp
 #   Linux   : brew tap sky-jiangcheng/homebrew-repo && brew install sky-jiangcheng/homebrew-repo/repotory-mcp
@@ -81,7 +81,7 @@ Install from a release (preferred), then register:
 Build from source if none of the above apply:
 
 ```bash
-go build -o /usr/local/bin/repotory-mcp ./cmd/mcp/
+go build -o /usr/local/bin/cinder-mcp ./cmd/mcp/
 ```
 
 ### MCP Tools
@@ -109,7 +109,7 @@ go build -o /usr/local/bin/repotory-mcp ./cmd/mcp/
 **Claude Code** (recommended):
 
 ```bash
-claude mcp add repotory -- /usr/local/bin/repotory-mcp
+claude mcp add repotory -- /usr/local/bin/cinder-mcp
 ```
 
 Or in a project-level `.mcp.json` / user-level MCP config (Cursor: Settings → MCP → Add Server):
@@ -117,12 +117,12 @@ Or in a project-level `.mcp.json` / user-level MCP config (Cursor: Settings → 
 ```json
 {
   "mcpServers": {
-    "repotory": { "command": "/usr/local/bin/repotory-mcp", "args": [] }
+    "repotory": { "command": "/usr/local/bin/cinder-mcp", "args": [] }
   }
 }
 ```
 
-> Windows path example: `"command": "C:\\Tools\\repotory-mcp.exe"`.
+> Windows path example: `"command": "C:\\Tools\\cinder-mcp.exe"`.
 
 ## Key File Paths
 
@@ -145,11 +145,11 @@ Or in a project-level `.mcp.json` / user-level MCP config (Cursor: Settings → 
 
 ## Skill Packages
 
-This file is the platform-agnostic capability card. Hosts with a skill-package mechanism get a packaged version instead — `skill/repotory/` in this repo, shipped as `repotory.skill` with each release:
+This file is the platform-agnostic capability card. Hosts with a skill-package mechanism get a packaged version instead — `skill/repotory/` in this repo, shipped as `cinder-<version>.skill` with each release:
 
 | Host | Install |
 |------|---------|
-| WorkBuddy | `unzip repotory.skill -d ~/.workbuddy/skills/`, then trust the `repotory` MCP server in the connector manager |
+| WorkBuddy | `unzip cinder-<version>.skill -d ~/.workbuddy/skills/`, then trust the `repotory` MCP server in the connector manager |
 | Any host that reads a skill directory | Copy `skill/repotory/` into the host's skills directory |
 
 The package adds what this card cannot: a three-tier fallback (MCP → HTTP RPC → read-only SQLite) so an agent still reaches the knowledge base when no MCP client is wired up, plus the explicit list of bindings that are **desktop-only on purpose** — creating / renaming / deleting a topic, filing a note under a topic, merging projects, compiling and approving wiki pages. Those are organizing and review acts, and they belong to a human.

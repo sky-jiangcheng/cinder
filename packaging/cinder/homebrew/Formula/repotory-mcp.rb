@@ -9,29 +9,31 @@
 class RepotoryMcp < Formula
   desc "MCP stdio server exposing the Cinder local knowledge base to AI agents"
   homepage "https://github.com/sky-jiangcheng/cinder"
-  version "2.32.5"
+  version "2.33.0"
   license "MIT"
 
   if OS.mac? && Hardware::CPU.arm?
-    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-mcp-darwin-arm64.tar.gz"
-    sha256 "617c40d71bf860a52c2faeacbff5544f9529eabd515e3466514505a634741d86"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-mcp-#{version}-darwin-arm64.tar.gz"
+    sha256 "__FILL_SHA256_CINDER_MCP_TGZ__"
   elsif OS.mac? && Hardware::CPU.is_64_bit?
-    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-mcp-darwin-amd64.tar.gz"
-    sha256 "42b3d723860f864c15a4fdd17045c2d5712a5677815f67e8dcdc8a9dd6301e47"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-mcp-#{version}-darwin-amd64.tar.gz"
+    sha256 "__FILL_SHA256_CINDER_MCP_TGZ__"
   else
-    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/repotory-mcp-linux-amd64.tar.gz"
-    sha256 "efc3c69737093d044871cf8591b682b88b44ea287921b05ee1a70f072b186181"
+    url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-mcp-#{version}-linux-amd64.tar.gz"
+    sha256 "__FILL_SHA256_CINDER_MCP_TGZ__"
   end
 
   def install
-    bin.install "repotory-mcp"
+    bin.install "cinder-mcp"
+    # Pre-rename name, for the client configs that already point at it.
+    bin.install_symlink bin/"cinder-mcp" => "repotory-mcp"
   end
 
   # The binary is a stdio MCP server: running it with no stdin makes it block
   # on the JSON-RPC loop, so it cannot be executed as a test. Assert the file
   # landed and is executable instead of pretending to run it.
   test do
-    assert_path_exists bin/"repotory-mcp"
-    assert_predicate bin/"repotory-mcp", :executable?
+    assert_path_exists bin/"cinder-mcp"
+    assert_predicate bin/"cinder-mcp", :executable?
   end
 end
