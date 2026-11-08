@@ -427,7 +427,31 @@ jobs:
           # create-dmg is a dependency of the signing script: the .dmg is
           # built AROUND the notarised app, so signing and packaging are one
           # operation, not two.
-          pip install create-dmg 2>/dev/null || brew install create-dmg 2>/dev/null || curl -sL https://github.com/create-dmg/create-dmg/archive/refs/tags/v1.0.0.tar.gz | tar -xz && cd create-dmg-1.0.0 && sudo make install && cd ..
+          #
+          # The three ways of getting it are chained with `||` and `&&`
+          # together, which is where the old one-liner went wrong: `||` and
+          # `&&` have the SAME precedence and associate left to right, so
+          # `a || b || c && d` reads as `((a || b || c) && d)`. When `brew`
+          # succeeded, the `cd create-dmg-1.0.0` that belongs to the TARBALL
+          # fallback still ran, and the step died on a directory that was
+          # never extracted — with the error pointing at a path that has
+          # nothing to do with the actual problem.
+          #
+          # Written out, the intent is obvious: use create-dmg if it is
+          # there, otherwise install it, and fail loudly if it still is not
+          # there.
+          if ! command -v create-dmg >/dev/null 2>&1; then
+            if ! brew install create-dmg; then
+              curl -sL https://github.com/create-dmg/create-dmg/archive/refs/tags/v1.0.0.tar.gz | tar -xz
+              cd create-dmg-1.0.0
+              sudo make install
+              cd ..
+            fi
+          fi
+          if ! command -v create-dmg >/dev/null 2>&1; then
+            echo "::error::create-dmg is still not on PATH — the .dmg cannot be built."
+            exit 1
+          fi
 
           VER=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
           DMG="release/Cinder-$VER-${{ matrix.target }}.dmg"
