@@ -70,9 +70,20 @@ trap cleanup EXIT
 # ① the certificate, into a keychain of our own so the runner's login keychain
 # stays untouched.
 #
-# `openssl base64 -d` rather than `base64 -d`: BSD base64 on macOS spells the
-# decode flag `-D`, and the two disagree about what a single dash means.
-echo "$APPLE_CERTIFICATE" | openssl base64 -d -out "$CERT_FILE"
+# `base64 --decode` rather than `openssl base64 -d`: the OpenSSL 3 decoder
+# silently produces a ZERO-BYTE file for a long single-line payload (the
+# certificate is about 4 KB of base64 with the newlines stripped), and it
+# does so with exit code 0. The empty file then reaches `security import`
+# as "Unable to decode the provided data", which reads like a corrupt
+# certificate and sends you hunting for a password problem that is not
+# there. BSD base64 gets it right, and `--decode` is also what GNU
+# coreutils spells it, so the same line works on a Linux runner.
+echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_FILE"
+if [ ! -s "$CERT_FILE" ]; then
+  echo "::error::the certificate decoded to an empty file."
+  echo "::error::APPLE_CERTIFICATE is $(printf '%s' "$APPLE_CERTIFICATE" | wc -c | tr -d ' ') base64 characters."
+  exit 1
+fi
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
 security set-keychain-settings -lut 21600 "$KEYCHAIN"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
