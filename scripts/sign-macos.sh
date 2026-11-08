@@ -182,10 +182,10 @@ xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
 echo "::endgroup::"
 
-# ⑤ the .dmg is built around the notarised app and then notarised in its own
-# right. A notarised app inside an un-notarised .dmg still gets the
-# "cannot be verified" dialog, because the .dmg is what the user's browser
-# downloads and what Gatekeeper checks first.
+# ⑤ the .dmg is built around the notarised app. A notarised app inside an
+# un-notarised .dmg still gets the "cannot be verified" dialog, because the
+# .dmg is what the user's browser downloads and what Gatekeeper checks first.
+# The image is signed (step ⑥) and notarised (step ⑦) in its own right.
 echo "::group::Building and notarising the .dmg"
 STAGING="$(mktemp -d)"
 mkdir -p "$STAGING/.background"
@@ -212,14 +212,42 @@ if [ ! -f "$DMG_PATH" ]; then
   exit 1
 fi
 
-# A .dmg is one of the three formats notarytool accepts directly, so it is
+# ⑥ the disk image is signed in its own right, and that signature is what
+# Gatekeeper reads.
+#
+# This is the step that is easy to miss. notarytool will happily accept an
+# UNSIGNED .dmg, staple a ticket onto it and report "Accepted" — but the
+# stapled ticket proves that "something inside this image was notarised", not
+# that the image itself is trustworthy. `spctl --assess --type open` then
+# answers:
+#
+#     release/Cinder-x.y.z-darwin-arm64.dmg: rejected
+#     source=no usable signature
+#
+# Apple documents the order as sign → notarise → staple, and the signature
+# has to be in place before the submission, because the ticket that comes
+# back is bound to the signed bytes.
+#
+# The .app inside was signed and notarised in step ③/④, so signing the image
+# here does not re-sign anything inside it: a disk image is signed as a
+# container, not as a bundle.
+echo "::group::Signing the .dmg"
+codesign --force --timestamp \
+  --sign "$APPLE_SIGNING_IDENTITY" \
+  --keychain "$KEYCHAIN" \
+  "$DMG_PATH"
+codesign --verify --verbose=2 "$DMG_PATH"
+echo "::endgroup::"
+
+# ⑦ a .dmg is one of the three formats notarytool accepts directly, so it is
 # submitted as it is — zipping it first would only add a step.
+echo "::group::Notarising the .dmg"
 xcrun notarytool submit "$DMG_PATH" "${notary_args[@]}" --wait
 xcrun stapler staple "$DMG_PATH"
 xcrun stapler validate "$DMG_PATH"
 echo "::endgroup::"
 
-# ⑥ the proof. `spctl` is what Gatekeeper itself asks, and a pass here means
+# ⑧ the proof. `spctl` is what Gatekeeper itself asks, and a pass here means
 # the app opens without any dialog on a machine that has never seen it.
 echo "::group::Verifying with Gatekeeper"
 spctl --assess --type execute --verbose=4 "$APP_PATH"
