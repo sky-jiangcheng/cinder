@@ -106,6 +106,11 @@ themselves.**
 
 ## 4. Notarisation credentials (pick one)
 
+> **The machine you do this on does not matter.** Notarisation runs on the GitHub Actions
+> macOS runner; your machine only writes the values below into Secrets. Moving to "the other
+> machine that has the key" does not make this step easier — what decides success is whether
+> the credential itself is the right kind.
+
 ### Option A: App Store Connect API key (recommended)
 
 The most reliable in CI: no password in the log, no two-factor prompt in the middle of a release.
@@ -114,6 +119,12 @@ The most reliable in CI: no password in the log, no two-factor prompt in the mid
    → **+** → **App Store Connect** → name it → role **Developer** → Continue → **Download**
    (the `.p8` file — **this download works exactly once**)
 2. The **Issuer ID** (a UUID) is shown above the keys table.
+
+**This has to be a Team Key, not an Individual API Key.** Apple's own wording: individual keys
+"aren't able to use Provisioning endpoints, access Sales and Finance, or **notaryTool**" — an
+individual key fails notarisation outright, and the error rarely says why. On the
+Users and Access → Integrations page the two live in **separate sections**; check which one the
+**+** button belongs to before you click it.
 
 That gives you three values:
 
@@ -126,6 +137,11 @@ openssl base64 -in ~/Downloads/AuthKey_XXXXXXXXXX.p8 -out ~/Desktop/p8-base64.tx
 ```
 
 ### Option B: Apple ID + app-specific password
+
+This route **does not care what kind of key you have**: an Individual API Key cannot be used for
+notarisation, but an Apple ID with an app-specific password can. If the `.p8` you have is an
+individual key, there is no need to hunt for another machine — use this one: one web page, one
+click.
 
 1. [appleid.apple.com](https://appleid.apple.com) → sign in → "Sign-In and Security" →
    **App-Specific Passwords** → create one → you get a 16-character password
@@ -204,8 +220,13 @@ find it for you.
 
 ## 7. If no certificate is configured
 
-**A missing certificate does not fail the release**, but it prints a warning and the artifact is
-unsigned.
+**Neither the certificate nor the notarisation credentials**: the release does not fail, it prints a
+warning and the artifact is unsigned.
+
+**A certificate but no notarisation credentials**: the release **fails**, right in the pre-flight
+check. That is deliberate — a signed but un-notarised artifact still installs, it just makes every
+user dismiss a dialog once, and that failure is invisible in the release pipeline. Only users find
+it for you.
 
 To get past an unsigned dmg:
 

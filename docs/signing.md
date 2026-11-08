@@ -90,12 +90,19 @@ openssl base64 -in ~/Desktop/DeveloperIDApplication.p12 -out ~/Desktop/cert-base
 
 ## 四、公证凭据（二选一）
 
+> **在哪台机器上做都一样。** 公证跑在 GitHub Actions 的 macOS runner 上，本机只负责把下面几样东西写进
+> Secrets。换一台「有密钥」的机器不会让这一步变简单——真正决定成败的是凭据本身对不对。
+
 ### 方案 A：App Store Connect API Key（推荐）
 
 CI 里最稳：没有密码进日志，发版时也不会弹两步验证。
 
 1. [App Store Connect → 用户和访问 → 集成](https://appstoreconnect.apple.com/access/integrations/api) → **+** → 选 **App Store Connect** → 命名 → 权限选 **Developer** → Continue → **Download**（`.p8` 文件，**只能下载一次**）
 2. 同一页面上方能看到 **Issuer ID**（UUID）
+
+**这里要的是「团队密钥」（Team Key），不是「个人 API 密钥」（Individual API Key）。** Apple 官方原话：个人密钥
+「无法使用 Provisioning 接口、访问 Sales and Finance，或 **notaryTool**」——拿个人密钥去公证会直接失败，
+而报错通常不会告诉你是这个原因。「用户和访问 → 集成」页面上这两类密钥是**两个分区**，点 **+** 之前先看清分区标题。
 
 于是你有三样东西：
 
@@ -108,6 +115,9 @@ openssl base64 -in ~/Downloads/AuthKey_XXXXXXXXXX.p8 -out ~/Desktop/p8-base64.tx
 ```
 
 ### 方案 B：Apple ID + app 专用密码
+
+这条路**不挑密钥类型**：个人 API 密钥不能用于公证，但 Apple ID + app 专用密码可以。手上那份 `.p8` 要是个人
+密钥，不用再去找别的机器，直接走这条路——一个网页、一次点击就完事。
 
 1. [appleid.apple.com](https://appleid.apple.com) → 登录 → 「登录与安全」→ **App 专用密码** → 创建一个 → 得到 16 位密码（`abcd-efgh-ijkl-mnop` 形式，**只显示一次**）
 2. `APPLE_ID` = 你的 Apple ID 邮箱
@@ -179,7 +189,10 @@ build job
 
 ## 七、没配证书会怎样
 
-**没配不会导致发版失败**，但会打一条 warning，产物是未签名的。
+**证书和公证凭据都没配**：不会导致发版失败，会打一条 warning，产物是未签名的。
+
+**证书配了但公证凭据没配**：发版**直接失败**，预检当场报错。这是故意的——签了名没公证的产物照样能装上，
+只是每个人打开时都弹一次框，而这种失败在发布流水线上是看不见的，只有用户会替你发现。
 
 未签名的 dmg 怎么绕过：
 
