@@ -99,8 +99,13 @@ jobs:
           test -L "$RUNNER_TEMP/bin/repotory-mcp" || { echo "compat symlink repotory-mcp missing" >&2; exit 1; }
           # cinder-mcp serves MCP over stdio; it must answer an initialize
           # handshake, not just exist as a file.
+          #
+          # The assertion is on the SERVER name, which is `repotory-mcp` on
+          # purpose: the executable was renamed to cinder-mcp, but the name
+          # clients see in `serverInfo` is a frozen contract (ADR-0049 补注).
+          # Asserting the binary name here would re-break that separation.
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
-            | "$RUNNER_TEMP/bin/cinder-mcp" 2>/dev/null | grep -q 'cinder-mcp' || {
+            | "$RUNNER_TEMP/bin/cinder-mcp" 2>/dev/null | grep -q 'repotory-mcp' || {
             echo "cinder-mcp did not answer initialize" >&2; exit 1; }
 
       # The positive run above proves verification *runs*; this proves it can
@@ -198,9 +203,10 @@ jobs:
             echo "cinder-mcp missing or not executable" >&2; exit 1; }
           test -L "$RUNNER_TEMP/bin/repotory-mcp" || {
             echo "compat symlink repotory-mcp missing" >&2; exit 1; }
-          # The MCP binary must actually run, not just exist.
+          # The MCP binary must actually run, not just exist. Same note as the
+          # Linux job: `serverInfo.name` stays `repotory-mcp`, frozen.
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
-            | "$RUNNER_TEMP/bin/cinder-mcp" 2>/dev/null | grep -q 'cinder-mcp' || {
+            | "$RUNNER_TEMP/bin/cinder-mcp" 2>/dev/null | grep -q 'repotory-mcp' || {
             echo "cinder-mcp did not answer initialize" >&2; exit 1; }
 
   windows:
