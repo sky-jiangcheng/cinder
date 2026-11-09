@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/sky-jiangcheng/cinder"><img src="build/icon.svg" width="88" alt="Cinder" /></a>
+  <a href="https://github.com/sky-jiangcheng/cinder"><img src="build/icon.svg" width="96" alt="Cinder" /></a>
 </p>
 
 <h1 align="center">Cinder</h1>

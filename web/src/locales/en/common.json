@@ -956,7 +956,7 @@
     "empty": "No handoff record yet — write one, or one appears here when a session ends",
     "write": "Write a handoff record",
     "auto": "Auto",
-    "openProject": "Open project {{name}}"
+    "openNote": "Open this handoff note in {{name}}"
   },
   "summaryBar": {
     "repos": "Active repos",

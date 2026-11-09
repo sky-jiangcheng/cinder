@@ -221,9 +221,9 @@
 .ring {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 20px;
-  padding: 14px 16px;
+  padding: 18px 20px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -265,28 +265,56 @@
 }
 
 /* 记录条按仪表盘其余卡片的网格排布：记忆环会随记录数向下长，
-   放在滚动区里正好，不必压缩不滚动的仪表盘头部。 */
+   放在滚动区里正好，不必压缩不滚动的仪表盘头部。
+   列宽从 220px 放宽到 320px：原来一条里「项目名 + 自动徽标 + 时间戳」
+   要挤进 196px 的内容区，时间戳被压掉、标题只能单行截断。现在标题可占两行，
+   元信息左右分列，右侧箭头给点击目标一个可见的落点。 */
 .handoffList {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
 }
 
 .handoffItem {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  width: 100%;
   min-width: 0;
   text-align: left;
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 8px 12px;
+  /* Extra right padding leaves room for the chevron; nothing overlaps the text. */
+  padding: 12px 30px 12px 14px;
   cursor: pointer;
   transition: all var(--transition-fast);
+}
+
+/* A quiet chevron: this row opens a NOTE, not the project. It stays visible
+   at low contrast so the target is readable before the click on touch too. */
+.handoffItem::after {
+  content: '';
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--text-muted);
+  border-top: 1.5px solid var(--text-muted);
+  transform: translateY(-50%) rotate(45deg);
+  opacity: 0.5;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.handoffItem:hover::after,
+.handoffItem:focus-visible::after {
+  opacity: 1;
+  transform: translate(2px, -50%) rotate(45deg);
 }
 
 .handoffItem:hover {
@@ -295,27 +323,46 @@
 }
 
 .handoffTitle {
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.45;
   font-weight: 600;
   color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .handoffMeta {
   display: flex;
-  gap: 6px;
+  justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   font-size: 11px;
   color: var(--text-secondary);
 }
 
+.handoffMetaLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .handoffProject {
-  max-width: 140px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.handoffTime {
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 「自动」徽标：会话结束自动捕捉的记录，与手写记录区分开。 */

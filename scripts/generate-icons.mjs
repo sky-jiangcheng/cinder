@@ -23,8 +23,9 @@
 // domains below, so the sync gate covers it too.
 //
 // FOUR SHAPE DOMAINS (ADR-0052 "The Knot" / 结; see CONTRIBUTING):
-//   brand domain — the SSOT verbatim: a flat, square-edged ink field with
-//     the woven band knocked out in paper. Token-bindable, no gradients.
+//   brand domain — the SSOT verbatim: a flat, rounded ink field (rx on the
+//     master's field rect) with the woven band knocked out in paper.
+//     Token-bindable, no gradients.
 //     Favicons, marketplace icons, the JetBrains in-panel mark.
 //   app domain — the same mark in a macOS squircle, with the v6 material
 //     layer (`lift` paper gradient + `press` soft impression shadow).
@@ -200,7 +201,9 @@ function letterOnlySvg(parts, fill) {
 
 /**
  * The JetBrains Marketplace pair: the seal at 40×40, drawn in the 512 grid
- * and scaled by the viewBox.
+ * and scaled by the viewBox. This is the one square-edged surviving surface:
+ * JetBrains applies its own container shape to plugin icons, so rounding
+ * here would be rounded twice. Every surface we own reads the master's rx.
  *
  * The dark variant is a colour inversion, not a different drawing: an ink
  * field at #34322D sits at roughly 1.2:1 against a Darcula list background,
@@ -295,6 +298,7 @@ function smallAppSvg(smallText) {
 // drift from the master again.
 function webviewMarkBlock(masterText) {
   const field = /<rect width="512" height="512" fill="([^"]+)"/.exec(masterText)?.[1]
+  const radius = /<rect[^>]*\srx="(\d+)"/.exec(masterText)?.[1]
   const glyph = /<path[^>]*\sfill="([^"]+)"/.exec(masterText)?.[1]
   const paths = [...masterText.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
   if (!field || !glyph || !paths.length) {
@@ -302,7 +306,7 @@ function webviewMarkBlock(masterText) {
   }
   return [
     'const MARK_SVG = `<svg viewBox="0 0 512 512" width="28" height="28" aria-hidden="true" focusable="false">',
-    `  <rect width="512" height="512" fill="${field}"/>`,
+    `  <rect width="512" height="512" fill="${field}"${radius ? ` rx="${radius}"` : ''}/>`,
     '  <g transform="translate(0 0)">',
     ...paths.map((d) => `    <path fill="${glyph}" fill-rule="nonzero" d="${d}"/>`),
     '  </g>',
@@ -512,7 +516,7 @@ async function main() {
     console.log(`  ✓ icon.ico (6 sizes, app domain, squircle)`)
   }
 
-  // 2. Brand domain — the SSOT verbatim: square-edged printed card.
+  // 2. Brand domain — the SSOT verbatim: rounded printed seal.
   //    Browser favicons: the .ico is the fallback every browser requests
   //    without a <link>; the .svg is the same mark for pages that declare
   //    one (web/index.html and the rebuilt docs pages do).
@@ -524,12 +528,13 @@ async function main() {
     }
   } else {
     fs.writeFileSync(path.join(root, 'docs/favicon.svg'), faviconSvg)
-    console.log('  ✓ docs/favicon.svg (brand domain, square card)')
+    console.log('  ✓ docs/favicon.svg (brand domain, rounded seal)')
   }
 
   // The favicon .ico is its own build from the brand mark — NOT a copy of
   // the app-domain icon.ico: the OS icon wears the squircle, the browser
-  // tab wears the square card, same letterform, different containers.
+  // tab wears the brand-domain rounded seal (no material layer), same
+  // letterform, different containers.
   const faviconIco = await buildIco(brandSvg)
   const DERIVED = [
     { buf: faviconIco, rel: 'docs/favicon.ico' },
@@ -856,7 +861,7 @@ async function main() {
     const scope = trackedOnly ? 'committed artefacts' : 'all three domains'
     console.log(`✓ icon derivatives are in sync with build/icon.svg (${scope})`)
   } else {
-    console.log(`\nAll icons generated (SSOT: build/icon.svg; app domain = squircle, brand domain = square card, glyph domain = single colour on transparent)`)
+    console.log(`\nAll icons generated (SSOT: build/icon.svg; app domain = squircle, brand domain = rounded seal, glyph domain = single colour on transparent)`)
   }
 }
 

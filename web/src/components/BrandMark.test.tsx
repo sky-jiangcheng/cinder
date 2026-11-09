@@ -16,10 +16,13 @@
 // IBM Plex Sans "C").
 //
 // Third regression (2026-10-24 UI sweep): the navbar put a 6px border-radius
-// on the mark. The brand master is a square seal — "no rounded corners, the
-// square edge is the style" — so a radius crop ate the ink field's four
-// corners and the mark read as a torn sticker. A CSS module rule is invisible
-// to a DOM assertion, so the stylesheet is read through node:fs.
+// on the mark, cropping the ink field's corners into a torn sticker. That
+// rule still holds, but for a different reason: the master now carries its
+// own rounded seal (rx on the field rect, matching Warden's rounded PNG), so
+// a CSS radius would round the corners a SECOND time. A CSS module rule is
+// invisible to a DOM assertion, so the stylesheet and the master are both
+// read through node:fs. The old "square edge is the style" rationale died
+// with the hairline frame (ADR-0050); the no-crop guard did not.
 
 // 本文件的 DOM 访问是**显式登记**而非疏漏（ADR-0026 条件 4）：被测对象是装饰性
 // SVG——`aria-hidden` 正是设计意图，所以没有任何 role/name 可查。断言的是
@@ -47,14 +50,11 @@ interface NodeProcess {
   cwd(): string
 }
 
-async function readRailCss(): Promise<string> {
+async function readRepoFile(rel: string): Promise<string> {
   const fs = (await import(/* @vite-ignore */ fsName)) as unknown as NodeFs
   const path = (await import(/* @vite-ignore */ pathName)) as unknown as NodePath
   const proc = (await import(/* @vite-ignore */ procName)) as unknown as NodeProcess
-  return fs.readFileSync(
-    path.resolve(proc.cwd(), 'src/components/SideRail.module.css'),
-    'utf8',
-  )
+  return fs.readFileSync(path.resolve(proc.cwd(), rel), 'utf8')
 }
 
 describe('BrandMark', () => {
@@ -118,28 +118,30 @@ describe('BrandMark', () => {
     expect(named.getAttribute('aria-hidden')).toBeNull()
   })
 
-  it('is not cropped in the rail — the card keeps its square edge', async () => {
+  it('keeps the master rounded field — no CSS crop on top of it', async () => {
     // The load-bearing CSS rule. A border-radius on the mark is a crop, not
-    // a style: the brand master is a square seal, so any visible radius
-    // swallows the ink field's corners and the mark reads as torn.
-    const css = await readRailCss()
+    // a style: the field is already rounded in the SVG, so a second radius
+    // eats its corners and a shadow draws a square halo behind them.
+    const css = await readRepoFile('src/components/SideRail.module.css')
     const rule = /\.brandMark\s*\{([^}]*)\}/.exec(css)
     expect(rule, '.brandMark rule not found in SideRail.module.css').not.toBeNull()
     expect(rule![1]).not.toMatch(/border-radius/)
     expect(rule![1]).not.toMatch(/box-shadow/)
+
+    // Assert the radius as a property of the SSOT, not a magic number: if
+    // the master is re-rounded, the rail must follow or this goes red.
+    const master = await readRepoFile('../build/icon.svg')
+    const masterRx = /<rect[^>]*\sfill="#34322D"[^>]*\srx="(\d+)"/.exec(master)?.[1]
+    expect(masterRx, 'build/icon.svg field has no rx').toBeTruthy()
+    const { container } = render(<BrandMark />)
+    expect(container.querySelector('rect')!.getAttribute('rx')).toBe(masterRx)
   })
 
   it('the mark is the app identity, not a per-section ornament', async () => {
     // The left rail is the ONE place the brand mark belongs. The assistant
     // header used to render it too, so a single home page carried the logo
     // three times (rail, section header, AI message avatar).
-    const fs = (await import(/* @vite-ignore */ fsName)) as unknown as NodeFs
-    const path = (await import(/* @vite-ignore */ pathName)) as unknown as NodePath
-    const proc = (await import(/* @vite-ignore */ procName)) as unknown as NodeProcess
-    const src = fs.readFileSync(
-      path.resolve(proc.cwd(), 'src/pages/home/HomeKnowledgeAssistant.tsx'),
-      'utf8',
-    )
+    const src = await readRepoFile('src/pages/home/HomeKnowledgeAssistant.tsx')
     expect(src).not.toMatch(/BrandMark/)
   })
 

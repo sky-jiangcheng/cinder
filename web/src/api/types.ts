@@ -430,8 +430,9 @@ export interface KnowledgeSyncStatus {
 }
 
 // HandoffEntry is one row of the first-screen memory ring (D25): a handoff
-// note as a content-free entry point. Opening an entry routes to the project;
-// the body stays on the knowledge page. Matches Go service.HandoffEntry.
+// note as a content-free entry point. note_id is the deep-link target —
+// /project/:id?tab=notes&noteId=<note_id> opens that exact note in the
+// project's notes tab, not the project overview. Matches Go service.HandoffEntry.
 export interface HandoffEntry {
   note_id: number
   project_id: number

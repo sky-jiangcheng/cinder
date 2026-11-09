@@ -80,7 +80,7 @@ func TestAiProxyFuncBypassesLoopbackProxy(t *testing.T) {
 		name      string
 		target    string
 		envProxy  *url.URL // value returned by the (injected) env resolver
-		wantProxy bool      // true => the env proxy is returned; false => direct (nil)
+		wantProxy bool     // true => the env proxy is returned; false => direct (nil)
 	}{
 		{"loopback target direct regardless of proxy", "http://127.0.0.1:11434/api", upstreamProxy, false},
 		{"localhost target direct regardless of proxy", "http://localhost:1234/api", upstreamProxy, false},

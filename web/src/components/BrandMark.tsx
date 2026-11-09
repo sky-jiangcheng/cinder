@@ -15,7 +15,11 @@
 // gate 5 byte-compares every one of them against the master.
 //
 // The inverse-seal palette is unchanged: a solid warm-ink field with the
-// knot knocked out in off-white paper, no hairline frame.
+// knot knocked out in off-white paper, no hairline frame. The field carries
+// the master's rounded corners (rx=112 on the 512 grid) — the same rounded
+// seal Warden shows as a PNG. It is drawn as SVG geometry, not a CSS crop:
+// the master is the SSOT, so the README, the docs and the rail stay in step
+// and no consumer can round the corners a second time.
 //
 // Two size regimes:
 //
@@ -58,10 +62,10 @@ export default function BrandMark({ size = 26, className, title }: Props) {
       focusable="false"
     >
       {title && <title>{title}</title>}
-      {/* Solid warm-ink field — same fill as the master's field rect.
-          Dropped in the glyph-only regime, where a solid field at 16px
-          reads as a dark square rather than a shape. */}
-      {!glyphOnly && <rect width="512" height="512" fill="#34322D" />}
+      {/* Solid warm-ink field — same fill AND corner radius as the master's
+          field rect. Dropped in the glyph-only regime, where a solid field
+          at 16px reads as a dark square rather than a shape. */}
+      {!glyphOnly && <rect width="512" height="512" fill="#34322D" rx={112} />}
       {/* Generated data, byte-compared with build/icon.svg by gate 5. */}
       <g transform={BRAND_MARK_TRANSFORM}>
         {BRAND_MARK_PATHS.map((d, i) => (

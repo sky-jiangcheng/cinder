@@ -382,6 +382,25 @@ describe('Dashboard (memory ring, ADR-0038 decision 5)', () => {
     expect(screen.getAllByText('自动')).toHaveLength(1)
   })
 
+  it('opens the exact handoff note, not the project overview', async () => {
+    // A row is one note, not one project. ProjectDetail already accepts
+    // ?tab=notes&noteId= (the Knowledge page uses it) and NoteSection scrolls
+    // to and flashes that note; landing on /project/:id made the click a guess.
+    mockListRecentHandoffs.mockResolvedValue([
+      entry({ note_id: 42, project_id: 7, project_name: 'Alpha' }),
+    ])
+    await renderDashboard()
+    fireEvent.click(tabButton('会话'))
+
+    const row = await screen.findByRole('button', { name: /Session Handoff 2026-10-12 15:04/ })
+    expect(row.getAttribute('title')).toContain('打开这条交接记录')
+    fireEvent.click(row)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/project/7?tab=notes&noteId=42')
+    })
+  })
+
   it('offers the empty hint when no handoff exists yet', async () => {
     await renderDashboard()
     fireEvent.click(tabButton('会话'))

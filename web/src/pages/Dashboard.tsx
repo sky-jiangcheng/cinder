@@ -346,19 +346,26 @@ function Dashboard() {
                 <ul className={s.handoffList}>
                   {entries.map(e => (
                     <li key={e.note_id}>
+                      {/* One row = one note, not one project. The Knowledge page
+                          already deep-links with ?tab=notes&noteId; ProjectDetail
+                          opens the notes tab and NoteSection scrolls to and
+                          flashes that exact note (ADR-0023). Landing on the
+                          project overview instead made the click a guess. */}
                       <button
                         type="button"
                         className={s.handoffItem}
-                        onClick={() => navigate(`/project/${e.project_id}`)}
-                        title={t('handoff.openProject', { defaultValue: '打开项目 {{name}}', name: e.project_name })}
+                        onClick={() => navigate(`/project/${e.project_id}?tab=notes&noteId=${e.note_id}`)}
+                        title={t('handoff.openNote', { defaultValue: '打开这条交接记录 · {{name}}', name: e.project_name })}
                       >
                         <span className={s.handoffTitle}>{e.title}</span>
                         <span className={s.handoffMeta}>
-                          <span className={s.handoffProject}>{e.project_name}</span>
-                          {e.auto_captured && (
-                            <span className={s.autoBadge}>{t('handoff.auto', { defaultValue: '自动' })}</span>
-                          )}
-                          <span>{e.updated_at.slice(0, 16)}</span>
+                          <span className={s.handoffMetaLeft}>
+                            <span className={s.handoffProject}>{e.project_name}</span>
+                            {e.auto_captured && (
+                              <span className={s.autoBadge}>{t('handoff.auto', { defaultValue: '自动' })}</span>
+                            )}
+                          </span>
+                          <time className={s.handoffTime}>{e.updated_at.slice(0, 16)}</time>
                         </span>
                       </button>
                     </li>

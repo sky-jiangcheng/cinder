@@ -165,8 +165,9 @@ type HandoffStatus struct {
 
 // HandoffEntry is one row of the first-screen memory ring (D25). Like
 // HandoffStatus it is deliberately content-free: the ring is an entry point,
-// not a reader — opening an entry routes to the project it belongs to, and
-// the handoff body stays on the knowledge page.
+// not a reader — NoteID is the deep-link target, so opening an entry lands on
+// that exact note in the project's notes tab rather than on the project
+// overview. The body still lives on the project's notes surface.
 type HandoffEntry struct {
 	NoteID       int64  `json:"note_id"`
 	ProjectID    int64  `json:"project_id"`

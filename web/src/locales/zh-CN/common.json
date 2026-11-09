@@ -955,7 +955,7 @@
     "empty": "还没有交接记录——写一条，或等会话结束后出现在这里",
     "write": "写一条交接记录",
     "auto": "自动",
-    "openProject": "打开项目 {{name}}"
+    "openNote": "打开这条交接记录 · {{name}}"
   },
   "summaryBar": {
     "repos": "活跃仓库",
