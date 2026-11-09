@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [2.33.3] - 2026-11-09
+
+### 修复
+
+- **AI 客户端被本地代理卡死，测试连接失败**：远程端点（openrouter）仍走 `http.DefaultClient`，会继承 `HTTPS_PROXY`；当 Clash 注入的代理端口与实际监听端口不一致（或代理未启动）时，请求连死端口 → “nothing is listening on that host:port”。新增独立 `http.Client`：回环目标（localhost / 127.0.0.1 / ::1）永远直连；远程目标解析出的代理若是回环也跳过直连；非回环上游代理仍走 `ProxyFromEnvironment`（保留 `NO_PROXY`）。`internal/service/ai.go` 三处请求全部改走该客户端，并补 `TestAiProxyFuncBypassesLoopbackProxy` / `TestIsLoopbackHost` 锁定行为。
+- **代码审查 dry-run 预览不显示路径**：预览与入库报告各写各的转换、且都丢了文件路径（CLI 填空串、MCP 直接返回 `Stored`——dry-run 时恒为 nil，工具回了个空列表）。现在规则层 `Finding` 带上 `RepoPath` / `FilePath` / `CommitSHA`，service 在遍历仓库时统一盖章；新增 `StoredPreview` 单一转换函数，CLI 与 MCP 共用，预览与报告渲染完全一致。
+- **Java 审查规则误报收敛（rule_rev 2026-11-09）**：排除 `src/test/`、`/test/java/` 与 `*test.java` 测试源；Feign 路由「改名」误报改用 `canonicalPath` 规范化比较（Spring 把 `/x` 与 `x` 视为同一路由）；跨仓库引用检查改为读各文件的 mapping 注解路径而非全文 grep，避免已更新的消费方被当成“仍在引用旧路径”；catch 块 swallow 检测排除“上报告警”与“显式返回失败值”两种正常模式；SQL 注入检测要求 SQL 关键字出现在类 SQL 字符串字面量内、`+` 拼接判定收紧。多条规则 verdict 由 `confirmed` 改为 `unverified`（已知误报边界，按 ADR-0053 D3 只进 notify 阈值、不进 rail）。
+
 ## [2.33.2] - 2026-11-08
 
 ### 修复
@@ -941,7 +949,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.2...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.3...HEAD
+[2.33.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.2...v2.33.3
 [2.33.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.1...v2.33.2
 [2.33.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.0...v2.33.1
 [2.33.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.5...v2.33.0
