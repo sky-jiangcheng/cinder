@@ -242,6 +242,15 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 					aiCalls += calls
 				}
 				for _, found := range fileFindings {
+					// A rule cannot know which repository it was handed
+					// (its input is one file), so the location is stamped
+					// here — the only place that knows it. The stored rows
+					// get the same values from the same loop, and a dry-run
+					// preview now carries real paths, which the stored rows
+					// never can.
+					found.RepoPath = repoPath
+					found.FilePath = ch.Path
+					found.CommitSHA = c.SHA
 					findings = append(findings, found)
 					candidates = append(candidates, db.ReviewFinding{
 						RunID:      run.ID,
@@ -352,6 +361,34 @@ func (s *Service) LatestReview(severities, verdicts []string) (*db.ReviewRun, []
 		return nil, nil, err
 	}
 	return run, findings, nil
+}
+
+// StoredPreview converts the in-memory candidates of a run into the same row
+// shape a stored report has, so the preview (dry run) and the report render
+// identically: same fields, same locations, one conversion.
+//
+// This function exists because until 2026-11-09 each surface made its own
+// translation and each one dropped the file path: the CLI filled empty
+// strings, the MCP returned `Stored` — always nil on a dry run, so the tool
+// answered "here is your preview" with an empty list. A preview without
+// paths is not a preview; you cannot go and look.
+func StoredPreview(findings []review.Finding) []db.ReviewFinding {
+	out := make([]db.ReviewFinding, 0, len(findings))
+	for _, f := range findings {
+		out = append(out, db.ReviewFinding{
+			RepoPath:   f.RepoPath,
+			CommitSHA:  f.CommitSHA,
+			FilePath:   f.FilePath,
+			Line:       f.Line,
+			Rule:       f.Rule,
+			Severity:   string(f.Severity),
+			Verdict:    string(f.Verdict),
+			Evidence:   f.Evidence,
+			Message:    f.Message,
+			Suggestion: f.Suggestion,
+		})
+	}
+	return out
 }
 
 // ReviewRunsSince returns the completed runs of the last n days, newest

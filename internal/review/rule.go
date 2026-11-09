@@ -49,6 +49,16 @@ const (
 
 // Finding is one candidate produced by one rule against one file.
 type Finding struct {
+	// RepoPath, FilePath and CommitSHA locate the finding. The rule layer
+	// leaves them empty — a rule sees one file and cannot know which
+	// repository it arrived from — and the service fills them in while it
+	// walks the repositories. They are here because every renderer needs
+	// the location, including the ones that never touch the database: a
+	// dry-run preview without file paths is not a preview (the CLI and the
+	// MCP both returned empty ones until 2026-11-09).
+	RepoPath  string
+	FilePath  string
+	CommitSHA string
 	// Rule is the rule id, e.g. "feign_missing_body". It is also the key the
 	// per-rule on/off config uses, so it must stay stable.
 	Rule string

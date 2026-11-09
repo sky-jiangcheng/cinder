@@ -1,6 +1,7 @@
 package review
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -52,13 +53,24 @@ func DefaultRules() []Rule {
 // isJava reports whether the file is worth running Java rules on. Tests,
 // generated sources and build output are excluded: a review of `target/`
 // would be noise, and generated code cannot be fixed by hand anyway.
+//
+// Test sources are excluded by path and by name, not by intent — the
+// 2026-11-09 labelling run found three candidates in `*Test.java` under
+// `src/test/`, all of them the standard
+// `try { fail(...); } catch (BusinessException expected) { assertTrue(...) }`
+// shape, which is a test asserting an exception is thrown, not a swallow.
 func isJava(f *File) bool {
 	if !strings.HasSuffix(f.Path, ".java") {
 		return false
 	}
 	lower := strings.ToLower(f.Path)
-	for _, bad := range []string{"/target/", "/build/", "/generated/", "/generated-sources/"} {
+	for _, bad := range []string{"/target/", "/build/", "/generated/", "/generated-sources/", "src/test/", "/test/java/"} {
 		if strings.Contains(lower, bad) {
+			return false
+		}
+	}
+	for _, suffix := range []string{"test.java", "tests.java"} {
+		if strings.HasSuffix(lower, suffix) {
 			return false
 		}
 	}
@@ -175,16 +187,40 @@ func (r feignGetBody) Check(f *File, _ Repo) []Finding {
 }
 
 // routeRenamed: the commit changed a mapping path, and other Java files still
-// reference the old literal. This is the cross-repository half of the Feign
+// reference the OLD route. This is the cross-repository half of the Feign
 // story: the consumer file was not touched, so a diff-only review sees
 // nothing.
 //
 // Known false-positive boundary: the old path may appear only in a comment or
 // a doc string. References are therefore counted per file, not per line, and
 // the message lists the files so a human can judge in one glance.
+//
+// rule_rev 2026-11-09 — two shapes the first version conflated, found in the
+// labelling run (one commit produced 30 of these, all false):
+//
+//  1. `"checkModify"` → `"/checkModify"`. Spring's `PatternParser` treats a
+//     leading slash as optional, so this is the SAME route renamed for
+//     style. Comparing path strings literally called it a rename; comparing
+//     canonicalPath("checkModify") == canonicalPath("/checkModify") does
+//     not. The commit was a 30-line cosmetic sweep across one controller.
+//  2. The reference test was `GrepJava(old)` — a substring search over file
+//     contents. `checkModify` is a substring of `"/checkModify"`, so every
+//     consumer that had already been updated still "referenced the old
+//     path". The test now reads each candidate file's own mapping paths and
+//     compares routes, not text.
 type routeRenamed struct{}
 
 func (routeRenamed) ID() string { return "route_renamed" }
+
+// canonicalPath reduces a mapping literal to the route it matches.
+// `"/x"`, `"x"` and `"/x/"` are one route in Spring; `""` and `"/"` mean
+// "the class-level path", which is not a rename target.
+func canonicalPath(p string) string {
+	p = strings.TrimSpace(p)
+	p = strings.TrimPrefix(p, "/")
+	p = strings.TrimSuffix(p, "/")
+	return p
+}
 
 func (r routeRenamed) Check(f *File, repo Repo) []Finding {
 	if !isJava(f) || repo == nil {
@@ -196,26 +232,46 @@ func (r routeRenamed) Check(f *File, repo Repo) []Finding {
 	}
 	newPaths := map[string]bool{}
 	for _, p := range mappingPaths(addedTexts(f)) {
-		newPaths[p] = true
+		newPaths[canonicalPath(p)] = true
 	}
 	var out []Finding
 	for _, old := range oldPaths {
-		if old == "" || old == "/" || newPaths[old] {
+		want := canonicalPath(old)
+		if want == "" || newPaths[want] {
 			continue
 		}
-		hits := repo.GrepJava(old)
-		others := make([]string, 0, len(hits))
-		for _, h := range hits {
-			if h != f.Path {
-				others = append(others, h)
+		// Which OTHER files still declare this route? Read their mapping
+		// annotations instead of grepping for the text: a Feign consumer
+		// re-declares the route with its own @PostMapping, and that is the
+		// reference worth naming. A comment that merely contains the word
+		// is not (D3's boundary), and neither is an updated `"/x"`.
+		var others []string
+		for _, h := range repo.GrepJava(old) {
+			if h == f.Path {
+				continue
+			}
+			content, ok := repo.Read(h)
+			if !ok {
+				continue
+			}
+			for _, p := range mappingPaths(strings.Split(content, "\n")) {
+				if canonicalPath(p) == want {
+					others = append(others, h)
+					break
+				}
 			}
 		}
 		if len(others) == 0 {
 			continue
 		}
+		sort.Strings(others)
 		line := firstAddedLine(f)
-		out = append(out, finding(f, r.ID(), SeverityHigh, VerdictConfirmed, line,
-			"路由字面量 "+old+" 被改动，但其它 Java 文件仍在引用它："+strings.Join(others, ", "),
+		// unverified, not confirmed: D3 lists this rule's false-positive
+		// boundary and rule.go reserves `confirmed` for rules that have
+		// none. Whether the referring file is a live consumer or a dead
+		// duplicate is a judgement the model pass is for.
+		out = append(out, finding(f, r.ID(), SeverityHigh, VerdictUnverified, line,
+			"路由字面量 "+old+" 被改动，但其它 Java 文件仍在声明它："+strings.Join(others, ", "),
 			"同步修改这些调用方，或保留旧路径一段时间做兼容"))
 	}
 	return out
@@ -294,9 +350,10 @@ func (r swallowException) Check(f *File, _ Repo) []Finding {
 		case len(stripped) == 1 && strings.Contains(stripped[0], "printStackTrace"):
 			out = append(out, finding(f, r.ID(), SeverityMedium, VerdictUnverified, n,
 				"catch 块只调用 printStackTrace()，生产环境没有日志也没有告警", "改用日志框架记录 error 级别"))
-		case hasLogCall(stripped) && !hasRethrow(stripped):
+		case hasLogCall(stripped) && !hasRethrow(stripped) && !escalates(stripped) && !returnsFailure(stripped):
 			out = append(out, finding(f, r.ID(), SeverityMedium, VerdictUnverified, n,
-				"catch 块记录了日志但没有抛出，调用方会以为操作成功", "确认失败必须上抛；确实可忽略时补一句注释说明原因"))
+				"catch 块记了日志，但异常既没上抛也没外发告警，调用方无从得知失败",
+				"确认失败必须上抛；确实可忽略时补一句注释说明原因"))
 		}
 	}
 	return out
@@ -333,6 +390,52 @@ func hasLogCall(lines []string) bool {
 func hasRethrow(lines []string) bool {
 	for _, l := range lines {
 		if strings.HasPrefix(strings.TrimSpace(l), "throw ") {
+			return true
+		}
+	}
+	return false
+}
+
+// escalates reports whether the catch block pushes the failure to an
+// out-of-band alarm channel instead of the call stack. rule_rev 2026-11-09:
+// the shape this assumes is "an identifier containing Alarm, used as either
+// the receiver or the method" (PlatformClientForAlarm.sendAlarmMessage,
+// MonitorAlarm.error, sendWarnAlarmMessage) — a deliberate job pattern, not
+// a swallow. Before this check existed the labelling run counted 11
+// candidates whose bodies did exactly that: log, alarm, continue.
+func escalates(lines []string) bool {
+	for _, l := range lines {
+		lower := strings.ToLower(stripLiteral(l))
+		// Identifiers only: the word "alarm" inside a message string must
+		// not count, which is why stripLiteral runs first.
+		for _, tok := range strings.FieldsFunc(lower, func(r rune) bool {
+			// Non-ASCII is always a separator: byte(r) on a multi-byte rune
+			// would alias into the ASCII ident range and split a Chinese log
+			// message into fake identifiers.
+			return r > 127 || !isIdentChar(byte(r))
+		}) {
+			if strings.Contains(tok, "alarm") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// returnsFailure reports whether the catch block hands the caller an
+// explicit failure value, which is the opposite of "the caller believes the
+// operation succeeded". rule_rev 2026-11-09: `return EasyMsResponseEntity
+// .ofFail(...)`. A bare `return ""` deliberately does not match — falling
+// back to an empty value silently is exactly the shape worth reporting.
+func returnsFailure(lines []string) bool {
+	for _, l := range lines {
+		s := stripLiteral(l)
+		lower := strings.ToLower(s)
+		if !strings.Contains(lower, "return") {
+			continue
+		}
+		if strings.Contains(lower, "offail") || strings.Contains(lower, "fail(") ||
+			strings.Contains(lower, "errorresult") {
 			return true
 		}
 	}
@@ -394,28 +497,119 @@ func (r sqlInjection) Check(f *File, _ Repo) []Finding {
 	var out []Finding
 	for _, n := range f.AddedLines() {
 		line := f.Added[n]
-		lower := strings.ToLower(line)
-		if strings.Contains(line, "${") && (strings.Contains(lower, "select") ||
-			strings.Contains(lower, "insert") || strings.Contains(lower, "update") ||
-			strings.Contains(lower, "delete") || strings.Contains(lower, "order by")) {
+		if strings.Contains(line, "${") && hasSqlLiteral(line) {
 			out = append(out, finding(f, r.ID(), SeverityMedium, VerdictUnverified, n,
 				"SQL 里出现 MyBatis ${} 直接拼接", "改为 #{}；表名/排序字段必须动态时用白名单校验"))
 			continue
 		}
-		if !strings.Contains(lower, "select") && !strings.Contains(lower, "insert") &&
-			!strings.Contains(lower, "update") && !strings.Contains(lower, "delete") &&
-			!strings.Contains(lower, "where") {
+		// Concatenation inside the SQL string, or a '+' joining a variable
+		// into a query constant. rule_rev 2026-11-09: the SQL keyword must
+		// live **inside a string literal that starts like SQL**, not anywhere
+		// on the line. Both of the labelling run's sql_injection candidates
+		// were notification copy — `"please update the documents at your
+		// earliest convenience." + relevant.getFullName() + ...` — where
+		// "update" is prose and the `+` is ordinary message assembly.
+		//
+		// The verdict also changed from confirmed to unverified: this rule
+		// has a known false-positive boundary in ADR-0053 D3 (a whitelisted
+		// dynamic table name), and rule.go reserves `confirmed` for rules
+		// without one. A boundary-having rule that ships `confirmed` gets
+		// past the notify threshold and into the rail dot, which is exactly
+		// the three-false-positives-and-it's-off failure the ADR measures.
+		if !hasSqlLiteral(line) {
 			continue
 		}
-		// Concatenation inside the SQL string, or a '+' joining a variable
-		// into a query constant.
-		if strings.Contains(line, "\" +") || strings.Contains(line, "+ \"") ||
-			strings.Contains(line, "' +") || strings.Contains(line, "+ '") {
-			out = append(out, finding(f, r.ID(), SeverityHigh, VerdictConfirmed, n,
+		if hasSqlConcat(line) {
+			out = append(out, finding(f, r.ID(), SeverityHigh, VerdictUnverified, n,
 				"SQL 通过字符串拼接构造，参数可注入", "改用预编译参数占位符（? / #{}）传值"))
 		}
 	}
 	return out
+}
+
+// hasSqlConcat reports whether a SQL-bearing line joins a literal with a
+// NON-literal operand. rule_rev 2026-11-09: both sql_injection candidates
+// the labelling run produced were `@Select("select r.user_id from t r " +
+// "where not exists (select 1 from u)")` — the `+` concatenates two string
+// CONSTANTS, which javac folds into one literal at compile time. That is not
+// injectable by definition; flagging it is the kind of false positive that
+// gets the feature switched off. Only a `+` with a variable, a call result,
+// or a `%s`/format argument on one side is a real splice.
+func hasSqlConcat(line string) bool {
+	inStr := false
+	escaped := false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if inStr {
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inStr = false
+			}
+			continue
+		}
+		if c == '"' {
+			inStr = true
+			continue
+		}
+		if c == '/' && i+1 < len(line) && (line[i+1] == '/' || line[i+1] == '*') {
+			break
+		}
+		if c != '+' {
+			continue
+		}
+		left := strings.TrimRight(line[:i], " \t")
+		right := strings.TrimLeft(line[i+1:], " \t")
+		if left == "" || right == "" {
+			continue
+		}
+		// Literal on one side, not on the other: the non-literal side is the
+		// injected value.
+		litLeft := strings.HasSuffix(left, "\"") || strings.HasSuffix(left, "'")
+		litRight := strings.HasPrefix(right, "\"") || strings.HasPrefix(right, "'")
+		if litLeft != litRight {
+			return true
+		}
+		// Both sides are expressions (no quotes adjacent): `a + b` inside a
+		// SQL-building statement only matters when one side is a literal
+		// somewhere else on the line, which the loop reaches on that '+'.
+	}
+	return false
+}
+
+// hasSqlLiteral reports whether the line carries a string literal that opens
+// like SQL. It reads the RAW line because stripLiteral makes literal
+// contents invisible on purpose; here the content is the whole question.
+func hasSqlLiteral(line string) bool {
+	inStr := false
+	start := 0
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		if c == '\\' && inStr {
+			i++
+			continue
+		}
+		if c != '"' {
+			continue
+		}
+		if !inStr {
+			inStr = true
+			start = i + 1
+			continue
+		}
+		s := strings.ToLower(strings.TrimSpace(line[start:i]))
+		for _, kw := range []string{"select ", "insert ", "update ", "delete ",
+			"where ", "from ", "order by ", "values ", "set "} {
+			if strings.HasPrefix(s, kw) {
+				return true
+			}
+		}
+		inStr = false
+	}
+	return false
 }
 
 // --------------------------------------------------------------- 日志 ----
@@ -479,6 +673,15 @@ func (r sharedDateFormat) Check(f *File, _ Repo) []Finding {
 // remoteInLoop: a remote call inside a loop body — the N+1 shape. It is only
 // "possibly N+1" because the collection may have three elements; the message
 // says so instead of asserting.
+//
+// rule_rev 2026-11-09: the call must mention the loop's iteration variable.
+// The labelling run found the batch-pagination shape — `while (true) {
+// feign.fix(req(list, batchSize)); if (rsp.count < batchSize) break; }`, with
+// a `//todo 这里不需要循环` comment above it acknowledging the design —
+// reported as N+1. Sending the whole list once per batch is the opposite of
+// N+1. Requiring the per-item variable is the cheapest line between them:
+// `stockClient.query(it.getId())` fires, `feign.fix(identiferNoList,
+// batchSize)` does not.
 type remoteInLoop struct{}
 
 func (remoteInLoop) ID() string { return "remote_in_loop" }
@@ -488,16 +691,39 @@ func (r remoteInLoop) Check(f *File, _ Repo) []Finding {
 		return nil
 	}
 	stacks := blockStack(f.Lines())
+	vars := loopVarStack(f.Lines())
+	lines := f.Lines()
+	seen := map[[2]int]bool{}
 	var out []Finding
 	for _, n := range f.AddedLines() {
 		if !InLoop(stacks, n) {
 			continue
 		}
-		if !looksRemoteCall(stripLiteral(f.Added[n])) {
+		// The statement, not the line: a builder call names its callee on
+		// one line and passes the loop variable two lines down.
+		from, to, stmt := statementWindow(lines, n)
+		if stmt == "" || !looksRemoteCall(stmt) {
 			continue
 		}
-		out = append(out, finding(f, r.ID(), SeverityMedium, VerdictUnverified, n,
-			"循环体内出现远程调用（Client / Api / Feign 后缀），可能是 N+1",
+		looped := false
+		for _, name := range vars[n-1] {
+			if touchesVar(stmt, name) {
+				looped = true
+				break
+			}
+		}
+		if !looped {
+			continue
+		}
+		// One finding per statement, at its first line: five added lines of
+		// the same builder call are one N+1, not five.
+		key := [2]int{from, to}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, finding(f, r.ID(), SeverityMedium, VerdictUnverified, from+1,
+			"循环体内对每个元素发起远程调用，可能是 N+1",
 			"改为批量接口，或在循环外聚合一次调用"))
 	}
 	return out

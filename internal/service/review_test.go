@@ -59,6 +59,27 @@ public class PayController {
     Result<PayInfo> query(@RequestBody PayQueryReq req) { return null; }
 }
 `,
+		// The job shape the 2026-11-09 labelling run found 11 times: a
+		// scheduled task whose catch block logs and then raises an alarm.
+		// The failure is handled out-of-band, so this is not a swallow, and
+		// the end-to-end test asserts the rules stay quiet about it. Before
+		// matchBrace was fixed, this very file produced a "catch 块为空"
+		// candidate.
+		"src/main/java/a/OcbcSyncJob.java": `package a;
+
+@Component
+public class OcbcSyncJob {
+
+    public void execute(String param) {
+        try {
+            syncBiz.sync(param);
+        } catch (Exception e) {
+            log.error("ocbcSyncJob|执行失败", e);
+            PlatformClientForAlarm.sendExceptionAlarmMessage("【CBiPay】OCBC 同步 Job 执行异常", e);
+        }
+    }
+}
+`,
 	}
 	for name, content := range files {
 		full := filepath.Join(dir, name)
@@ -102,8 +123,8 @@ func TestRunReviewEndToEnd(t *testing.T) {
 	if result.Run.Commits != 1 {
 		t.Errorf("commits = %d, want 1", result.Run.Commits)
 	}
-	if result.Run.Files != 2 {
-		t.Errorf("files = %d, want 2 (both Java files)", result.Run.Files)
+	if result.Run.Files != 3 {
+		t.Errorf("files = %d, want 3 (the two Feign files and the job)", result.Run.Files)
 	}
 	if len(result.Stored) == 0 {
 		t.Fatalf("no findings stored; candidates = %d", result.Run.Candidates)
@@ -123,6 +144,14 @@ func TestRunReviewEndToEnd(t *testing.T) {
 	}
 	if !sawFeign {
 		t.Errorf("expected a feign_missing_body finding, got %+v", result.Stored)
+	}
+	// The log-and-alarm job must not appear at all. This assertion is the
+	// end-to-end half of the 2026-11-09 labelling fix: the same shape fired
+	// 11 times in real repositories.
+	for _, f := range result.Stored {
+		if strings.Contains(f.FilePath, "OcbcSyncJob") {
+			t.Errorf("handled catch reported as swallowed: %+v", f)
+		}
 	}
 	if result.Run.Status != db.ReviewStatusDone {
 		t.Errorf("status = %q, want done", result.Run.Status)
@@ -184,6 +213,24 @@ func TestRunReviewDryRunWritesNothing(t *testing.T) {
 	}
 	if !result.DryRun || len(result.Findings) == 0 {
 		t.Fatalf("dry run should compute findings in memory, got %+v", result)
+	}
+	// The preview must carry locations. Until 2026-11-09 the CLI filled
+	// empty strings and the MCP returned nil, so a preview listed findings
+	// you could not open: the report was unreadable exactly when it was
+	// most useful, before anything was written.
+	for _, f := range result.Findings {
+		if f.FilePath == "" || f.RepoPath == "" {
+			t.Errorf("dry-run finding has no location: %+v", f)
+		}
+	}
+	preview := StoredPreview(result.Findings)
+	if len(preview) != len(result.Findings) {
+		t.Fatalf("preview conversion dropped rows: %d -> %d", len(result.Findings), len(preview))
+	}
+	for _, f := range preview {
+		if f.FilePath == "" || f.RepoPath == "" {
+			t.Errorf("StoredPreview lost the location: %+v", f)
+		}
 	}
 	if result.Stored != nil {
 		t.Error("dry run must not return stored rows")

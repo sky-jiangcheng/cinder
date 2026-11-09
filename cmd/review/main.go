@@ -98,7 +98,10 @@ func main() {
 
 // displayedFindings prefers the stored rows (they carry ids) and falls back to
 // the in-memory result on a dry run, applying the severity filter itself
-// because a dry run never reaches the database query that would do it.
+// because a dry run never reaches the database query that would do it. The
+// fallback goes through service.StoredPreview — the one conversion both this
+// CLI and the MCP tool use, so a preview can never render a different shape
+// than a report.
 func displayedFindings(svc *service.Service, result *service.ReviewResult, severities []string) []db.ReviewFinding {
 	if !result.DryRun {
 		_, stored, err := svc.ReviewReport(result.Run.RunDate, result.Run.Scope, severities, nil)
@@ -110,22 +113,15 @@ func displayedFindings(svc *service.Service, result *service.ReviewResult, sever
 	for _, s := range severities {
 		seen[s] = true
 	}
-	out := make([]db.ReviewFinding, 0, len(result.Findings))
-	for _, f := range result.Findings {
-		if len(seen) > 0 && !seen[string(f.Severity)] {
-			continue
+	all := service.StoredPreview(result.Findings)
+	if len(seen) == 0 {
+		return all
+	}
+	out := make([]db.ReviewFinding, 0, len(all))
+	for _, f := range all {
+		if seen[f.Severity] {
+			out = append(out, f)
 		}
-		out = append(out, db.ReviewFinding{
-			RepoPath:   "",
-			FilePath:   "",
-			Line:       f.Line,
-			Rule:       f.Rule,
-			Severity:   string(f.Severity),
-			Verdict:    string(f.Verdict),
-			Evidence:   f.Evidence,
-			Message:    f.Message,
-			Suggestion: f.Suggestion,
-		})
 	}
 	return out
 }

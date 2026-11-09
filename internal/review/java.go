@@ -363,15 +363,22 @@ func matchBrace(lines []string, i int) int {
 	started := false
 	for j := i; j < len(lines); j++ {
 		s := stripLiteral(lines[j])
-		opens := strings.Count(s, "{")
-		closes := strings.Count(s, "}")
 		if !started {
-			if opens == 0 {
+			// The body starts at this line's first `{`. Anything before it is
+			// the end of something else, and counting those braces here is
+			// what broke `} catch (Exception e) {`: the `}` that closes the
+			// try and the `{` that opens the catch cancel out, the matcher
+			// returns the header line as its own end, and swallow_exception
+			// reads an empty body. The 2026-11-09 labelling run caught 20
+			// candidates of which 17 were this one line.
+			first := strings.Index(s, "{")
+			if first < 0 {
 				continue
 			}
+			s = s[first:]
 			started = true
 		}
-		depth += opens - closes
+		depth += strings.Count(s, "{") - strings.Count(s, "}")
 		if depth <= 0 {
 			return j
 		}
@@ -458,4 +465,211 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// loopVarStack returns, per line index, the loop-variable names in scope at
+// that line (innermost last). It walks the same brace stack as blockStack;
+// the difference is that it remembers the declared variable of each loop
+// header it pushes.
+//
+// A for-each `for (Item it : items)` contributes "it"; a C-style
+// `for (int i = 0; ...)` contributes "i". A `while` header contributes
+// nothing — which is the point: the 2026-11-09 labelling run found the
+// classic batch-pagination shape (`while (true) { feign.fix(buildReq(list,
+// batchSize)); if (lastPage) break; }`) reported as N+1. The call passes the
+// whole list each round; there is no per-item variable because there is no
+// per-item loop. Requiring the call to touch a loop variable separates the
+// two shapes with no new mechanism.
+func loopVarStack(lines []string) [][]string {
+	out := make([][]string, len(lines))
+	var stack []string
+	for i, raw := range lines {
+		out[i] = append([]string(nil), stack...)
+		s := stripLiteral(raw)
+		kind := classifyOpener(s)
+		for k := 0; k < strings.Count(s, "{"); k++ {
+			if k == 0 && kind == blockLoop {
+				stack = append(stack, loopVar(s))
+			} else {
+				stack = append(stack, "")
+			}
+		}
+		for k := 0; k < strings.Count(s, "}"); k++ {
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+	return out
+}
+
+// loopVar extracts the iteration variable from a loop header, or "" when the
+// header has none (while, do). Cheap by construction: the first token of the
+// parenthesised part, minus its type prefix.
+//
+// Three shapes, all from real code in the 2026-11-09 labelling run:
+//   - `for (Item it : items)`  -> "it"
+//   - `for (int i = 0; ...)`   -> "i"
+//   - `items.forEach(item -> {` -> "item" — the lambda parameter. The third
+//     one is not decoration: a true N+1 written as a forEach was the only
+//     candidate that would have been LOST by the fix, and a rule whose
+//     precision improves because it stopped seeing real bugs has just
+//     become quieter, not better.
+func loopVar(header string) string {
+	open := strings.Index(header, "(")
+	if open < 0 {
+		return ""
+	}
+	inner := ""
+	if close := matchParenIn(header, open); close >= 0 {
+		inner = strings.TrimSpace(header[open+1 : close])
+	} else {
+		// Unclosed on this line: a lambda opener, `list.forEach(item -> {`.
+		// The parameter lives inside the parenthesis that does not close
+		// until the statement does, so read everything after it.
+		inner = strings.TrimSpace(header[open+1:])
+	}
+	if inner == "" {
+		return ""
+	}
+	if colon := strings.Index(inner, ":"); colon >= 0 && !strings.Contains(inner[:colon], ";") {
+		// for-each: "Type name"
+		fields := strings.Fields(inner[:colon])
+		if len(fields) >= 2 {
+			return fields[len(fields)-1]
+		}
+		return ""
+	}
+	// C-style: "int i = 0; ..." — the declared name is token 2.
+	if idx := strings.Index(inner, ";"); idx >= 0 {
+		fields := strings.Fields(inner[:idx])
+		if len(fields) >= 2 {
+			return fields[1]
+		}
+	}
+	// forEach / stream lambda: the arrow parameter. Either one name or a
+	// parenthesised parameter list; the first is what real call sites look
+	// like, so the list is handled but never required.
+	if arrow := strings.Index(inner, "->"); arrow > 0 {
+		lhs := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(inner[:arrow]), "("), ")")
+		fields := strings.Fields(lhs)
+		if len(fields) == 1 && fields[0] != "" {
+			return fields[0]
+		}
+	}
+	return ""
+}
+
+// touchesVar reports whether the (literal-stripped) line mentions the
+// identifier as a word.
+func touchesVar(line, name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(line); i++ {
+		if !isIdentChar(line[i]) {
+			continue
+		}
+		j := i
+		for j < len(line) && isIdentChar(line[j]) {
+			j++
+		}
+		if line[i:j] == name {
+			return true
+		}
+		i = j
+	}
+	return false
+}
+
+// statementWindow expands a 1-based line to the call statement it belongs to,
+// returning the 0-based index range [from, to] and the joined,
+// literal-stripped text.
+//
+// The reason this exists is that the builder pattern splits one call across
+// six lines, and the loop variable lives on a continuation line, never on the
+// line that names the callee:
+//
+//	boolean ok = cstModifyFeign.judge(CstModifyJudgeReq.builder()   // <- callee
+//	        .reqParam(CstVerifyUtil.buildTriggerVerifyBO(item))     // <- loop var
+//	        .build());
+//
+// A rule that only reads the callee's line cannot see `item`, so it must
+// either report every call in a loop (the batch-pagination false positive) or
+// lose this one. Reading the statement is the only shape that keeps both
+// correct; losing a true positive to buy precision would just be a quieter
+// tool, not a better one.
+//
+// The scan is paren-based, and that is the content of rule_rev 2026-11-09.
+// The first version walked forward to the next `;` at brace depth 0, so a
+// multi-line `if (...) {` header swallowed its whole body and reported the
+// block as one statement — five remote_in_loop candidates from a file that
+// had one. Walking backward only through lines that leave a parenthesis open,
+// and forward until the parens balance **and** the line terminates, keeps an
+// `if` header inside its own window so the body is never read as a
+// continuation.
+func statementWindow(lines []string, line int) (int, int, string) {
+	const cap = 12
+	if line < 1 || line > len(lines) {
+		return 0, 0, ""
+	}
+	i := line - 1
+
+	// Backward: the candidate start is the highest k such that lines
+	// [k..i-1] leave open more parentheses than they close. Each open
+	// paren there must be closed at or after line i, so those lines are
+	// continuations of the statement i belongs to.
+	from := i
+	for k := i - 1; k >= 0 && i-k <= cap; k-- {
+		net := parenNetRange(lines, k, i-1)
+		if net <= 0 {
+			break
+		}
+		pt := strings.TrimSpace(stripLiteral(lines[k]))
+		if pt == "" || strings.HasPrefix(pt, "//") || strings.HasPrefix(pt, "*") {
+			break
+		}
+		from = k
+	}
+
+	// Forward: from the statement's start, the statement ends at the first
+	// line that brings the accumulated parens back to zero AND terminates
+	// with `;` (or a block boundary). depth > 0 means a closer is still
+	// owed, so the body of an `if (...) {` header is never swallowed: the
+	// header itself is the terminating line there.
+	to := from
+	depth := 0
+	for k := from; k < len(lines) && k-from <= cap; k++ {
+		s := stripLiteral(lines[k])
+		depth += parenNet(s)
+		t := strings.TrimSpace(s)
+		to = k
+		if depth <= 0 && (strings.HasSuffix(t, ";") || strings.HasSuffix(t, "{") ||
+			strings.HasSuffix(t, "}") || t == "") {
+			break
+		}
+	}
+
+	parts := make([]string, 0, to-from+1)
+	for k := from; k <= to; k++ {
+		if t := strings.TrimSpace(stripLiteral(lines[k])); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return from, to, strings.Join(parts, " ")
+}
+
+// parenNetRange sums the parenthesis balance of lines [from, to] inclusive.
+func parenNetRange(lines []string, from, to int) int {
+	net := 0
+	for k := from; k <= to && k < len(lines); k++ {
+		net += parenNet(stripLiteral(lines[k]))
+	}
+	return net
+}
+
+// parenNet is the parenthesis balance of a line whose literals are already
+// stripped.
+func parenNet(s string) int {
+	return strings.Count(s, "(") - strings.Count(s, ")")
 }

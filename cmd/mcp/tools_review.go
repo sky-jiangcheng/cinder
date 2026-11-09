@@ -128,9 +128,17 @@ func registerReviewTools(mcpServer *server.MCPServer, svc *service.Service) {
 				"hint":         "this day and scope was already reviewed; pass force=true to redo it",
 			})
 		}
+		// A dry run has no stored rows — `Stored` is nil there, and the tool
+		// used to answer a preview with an empty findings list. The preview
+		// conversion is the same one the CLI uses (service.StoredPreview),
+		// so both surfaces show the same shape with real paths.
+		findings := result.Stored
+		if result.DryRun {
+			findings = service.StoredPreview(result.Findings)
+		}
 		return makeJSONResult("review_run", map[string]any{
 			"run":      result.Run,
-			"findings": result.Stored,
+			"findings": findings,
 			"dry_run":  result.DryRun,
 		})
 	})
