@@ -1,6 +1,8 @@
 package service
 
 import (
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -62,5 +64,74 @@ func TestListAIModels_IPBaseURLStaysParseable(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "invalid port") || strings.Contains(err.Error(), "invalid URL") {
 		t.Errorf("IP base URL produced a parse error instead of a network error: %v", err)
+	}
+}
+
+// aiProxyFunc must keep AI traffic off a dead local proxy: a loopback target is
+// always direct, and a remote target that would have gone through a loopback
+// (developer-box) proxy must also go direct. A genuine non-loopback upstream
+// proxy is still honored. The env resolver is injected so the case table is
+// deterministic and does not depend on the process proxy environment.
+func TestAiProxyFuncBypassesLoopbackProxy(t *testing.T) {
+	loopbackProxy := &url.URL{Scheme: "http", Host: "127.0.0.1:61865"}
+	upstreamProxy := &url.URL{Scheme: "http", Host: "10.0.0.1:8080"}
+
+	cases := []struct {
+		name      string
+		target    string
+		envProxy  *url.URL // value returned by the (injected) env resolver
+		wantProxy bool      // true => the env proxy is returned; false => direct (nil)
+	}{
+		{"loopback target direct regardless of proxy", "http://127.0.0.1:11434/api", upstreamProxy, false},
+		{"localhost target direct regardless of proxy", "http://localhost:1234/api", upstreamProxy, false},
+		{"remote + loopback proxy -> direct", "https://openrouter.ai/api/v1", loopbackProxy, false},
+		{"remote + no proxy -> direct", "https://openrouter.ai/api/v1", nil, false},
+		{"remote + non-loopback upstream proxy -> used", "https://openrouter.ai/api/v1", upstreamProxy, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := func(*http.Request) (*url.URL, error) { return tc.envProxy, nil }
+			req, err := http.NewRequest(http.MethodGet, tc.target, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := aiProxyFuncWith(req, resolver)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantProxy && got == nil {
+				t.Fatalf("want the upstream proxy, got direct (nil)")
+			}
+			if !tc.wantProxy && got != nil {
+				t.Fatalf("want direct (nil), got proxy %v", got)
+			}
+		})
+	}
+}
+
+// isLoopbackHost classifies the host half of an endpoint. Local AI servers
+// (Ollama/LM Studio) and the localhost->127.0.0.1 fallback target sit on the
+// loopback interface; everything else (LAN, public cloud) does not.
+func TestIsLoopbackHost(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"localhost", true},
+		{"127.0.0.1", true},
+		{"::1", true},
+		{"127.0.0.1:11434", true},
+		{"[::1]:11434", true},
+		{"openrouter.ai", false},
+		{"api.openai.com", false},
+		{"192.168.1.50", false},
+		{"10.0.0.1:8080", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := isLoopbackHost(tc.in); got != tc.want {
+				t.Fatalf("isLoopbackHost(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
 	}
 }

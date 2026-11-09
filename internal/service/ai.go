@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -311,6 +312,78 @@ func aiLocalhostFallback(rawURL string) string {
 	return u.String()
 }
 
+// aiHTTPClient is the dedicated transport for AI calls. It deliberately does
+// not use http.DefaultClient: DefaultClient honors HTTP(S)_PROXY from the
+// environment, which on a developer box is often a local proxy (ClashVerge,
+// 127.0.0.1:PORT). When that proxy is down, a remotely-reachable endpoint such
+// as OpenRouter becomes unreachable with "nothing is listening on that
+// host:port" — that is the proxy's own dead port, not the AI host. aiProxyFunc
+// keeps the useful parts of ProxyFromEnvironment (it still honors NO_PROXY and
+// any non-loopback upstream proxy) while never routing through a loopback
+// proxy, and never sending a local AI server (Ollama/LM Studio) out to an
+// external proxy at all.
+var aiHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy: aiProxyFunc,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1500 * time.Millisecond,
+	},
+}
+
+// aiProxyFunc is the Transport's per-request proxy hook. It delegates to
+// aiProxyFuncWith using the environment resolver (ProxyFromEnvironment), which
+// keeps NO_PROXY support and honors any non-loopback upstream proxy.
+func aiProxyFunc(req *http.Request) (*url.URL, error) {
+	return aiProxyFuncWith(req, http.ProxyFromEnvironment)
+}
+
+// aiProxyFuncWith decides per request whether to use a proxy.
+//
+//   - A loopback target host (localhost / 127.0.0.1 / ::1) is always direct:
+//     local model servers never need an external proxy, and a dead local proxy
+//     must not be able to block them.
+//   - For a remote target, defer to the env resolver (so NO_PROXY is still
+//     honored). But if the resolved proxy is itself loopback, skip it and go
+//     direct — a local proxy that is down should not stall a remote call that
+//     works without it.
+//
+// The resolver is a parameter only so the decision can be unit-tested without
+// fighting the process environment; production uses http.ProxyFromEnvironment.
+func aiProxyFuncWith(req *http.Request, envProxy func(*http.Request) (*url.URL, error)) (*url.URL, error) {
+	if isLoopbackHost(req.URL.Hostname()) {
+		return nil, nil
+	}
+	proxy, err := envProxy(req)
+	if err != nil {
+		return nil, err
+	}
+	if proxy != nil && isLoopbackHost(proxy.Hostname()) {
+		return nil, nil
+	}
+	return proxy, nil
+}
+
+// isLoopbackHost reports whether host is the loopback interface. The input may
+// already be port-stripped (url.URL.Hostname), but a raw host:port is also
+// accepted.
+func isLoopbackHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // aiGet/aiPost issue one request, retrying once against 127.0.0.1 when the
 // host was "localhost" and the first attempt failed at the transport level.
 func aiGet(ctx context.Context, rawURL, apiKey string) (int, []byte, error) {
@@ -322,7 +395,7 @@ func aiGet(ctx context.Context, rawURL, apiKey string) (int, []byte, error) {
 		if apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := aiHTTPClient.Do(req)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -349,7 +422,7 @@ func aiPostJSON(ctx context.Context, rawURL, apiKey string, body []byte) (int, [
 		if apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := aiHTTPClient.Do(req)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -384,7 +457,7 @@ func aiPostJSONStream(ctx context.Context, rawURL, apiKey string, body []byte, o
 		if apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := aiHTTPClient.Do(req)
 		if err != nil {
 			return 0, "", err
 		}
