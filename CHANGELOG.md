@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [2.33.4] - 2026-11-09
+
+### 优化
+
+- **品牌标记改圆角印章，不再是一块突兀的方块**：母图 `build/icon.svg` 的墨场加 `rx="112"`（512 网格的 22%），与 Warden 已发布的圆角 app 图标同一轮廓。Cinder 的 PNG 派生件全部是 `.gitignore` 里的生成产物、GitHub 上读不到，所以圆角只能落在 SVG 母图这一处 SSOT：README 横幅、文档站侧栏、favicon、桌面侧栏 `BrandMark`、VS Code 面板内联标记一次全部生效，不靠每个消费端各自 `border-radius` 裁切（二次裁切会吃掉四角）。`generate-icons.mjs` 的 `webviewMarkBlock()` 改为从母图读 `rx`，否则重跑生成器会把面板回滚成方卡；中英 README 图标 88→96px；35 件派生图标重生成。`BrandMark.test.tsx` 里「不许圆角」的断言理由改为「防二次圆角」，并新增 `rx` 与母图同源断言——旧理由随 ADR-0050 移除 hairline 框一起失效了。
+- **仪表盘「会话」列表放宽，点击直达那条交接记录**：记忆环列宽 220→320px、卡片内边距与行距加大、标题由单行截断改为两行、项目名与自动徽标靠左、时间戳靠右分列，右侧一枚常显低调箭头点明「打开的是笔记」。原来点击跳 `/project/:id` 只落在概览；项目页本来就有 `?tab=notes&noteId=` 深链（`ProjectDetail` → `NoteSection` 滚动并高亮），现在仪表盘复用它，落到具体那条交接记录。`HandoffEntry.note_id` 即 `project_notes.id`，前后端注释与中英 `handoff.openNote` 文案同步，并补一条钉住跳转 URL 的回归测试。
+
+### 修复
+
+- **补上 v2.33.3 漏掉的 gofmt 对齐**：`internal/service/ai_url_test.go` 的结构体注释列少一个空格，`Go formatting` 是 v2.33.3 那次 CI 唯一红的 job；本次一并对齐，发布门禁才有机会放行。
+
 ## [2.33.3] - 2026-11-09
 
 ### 修复
@@ -949,7 +960,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.3...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.4...HEAD
+[2.33.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.3...v2.33.4
 [2.33.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.2...v2.33.3
 [2.33.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.1...v2.33.2
 [2.33.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.0...v2.33.1

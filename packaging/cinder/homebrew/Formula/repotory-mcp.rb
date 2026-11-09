@@ -9,7 +9,7 @@
 class RepotoryMcp < Formula
   desc "MCP stdio server exposing the Cinder local knowledge base to AI agents"
   homepage "https://github.com/sky-jiangcheng/cinder"
-  version "2.33.3"
+  version "2.33.4"
   license "MIT"
 
   if OS.mac? && Hardware::CPU.arm?
