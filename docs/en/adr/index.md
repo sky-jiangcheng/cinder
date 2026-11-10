@@ -61,9 +61,10 @@ order: 27
 | [0051](0051-conversation-as-interface.md) | Conversation as the interface — Function Calling tool surface as the unified operation layer, doing UI subtraction | **Accepted (2026-11-06, the user settled on "strongest user experience, cleanest UI")** |
 | [0052](0052-the-knot-brand-mark.md) | Redraw the marks — The Knot (one band threading itself) and four derived domains | **Accepted (2026-11-06, the user settled it with "land v6")**; amended 2026-11-07 (56u card margin, decision 9) |
 | [0053](0053-incremental-commit-review.md) | Incremental review after commits — rules sift candidates, the model only confirms them | **Accepted (2026-11-08, shipped the same day; CLI is its own binary, notification is a rail dot)**; addendum 2026-11-09 (acceptance item 2 labelled: first-version precision **0.17** — the root cause was `matchBrace` reading a `} catch (...) {` header as its own end so **every multi-line catch reported as "empty"**; five rule changes under "change the rules, do not add more" took it to **0.44**, the gate still misses — the remaining 20 false positives are one shape, "a side-effect failure deliberately tolerated", the class D3 reserved for the model pass to dismiss, so the road to 0.7 runs through `review.ai`, not through more rules; zero `high AND confirmed` in the 40-day window, the dot never fired in error; `review.notify=all` still must not be used) |
+| [0054](0054-rolling-checkpoint-handoff.md) | Rolling-checkpoint handoff — milestone dual-type + zero-credit hook priority + rolling instruction block | **Accepted (2026-11-10, landed same day; install actions not yet run — see the implementation record)**: with non-normal termination (credit exhausted / timeout / crash), single session-end handoff is necessarily lost; milestone checkpoints are written per completed work unit, forming rolling snapshots |
 
 ## Conventions
 
 - One ADR per major irreversible decision: Background → Decision → Consequences
 - Superseded ADRs keep their original text and banner; they are never deleted
-- New ADRs increment from `0053`, file name `NNNN-kebab-title.md`
+- New ADRs increment from `0054`, file name `NNNN-kebab-title.md`

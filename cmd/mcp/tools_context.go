@@ -75,6 +75,7 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 		Name: "repotory_handoff",
 		Description: "Record a structured session handoff so the NEXT session (you or any other agent) starts with full context. " +
 			"Call this at the END of a work session with what you did, decided, learned and what should happen next. " +
+			"Set milestone=true to write a rolling checkpoint after each meaningful work unit (ADR-0054), so a session killed mid-work still leaves current state. " +
 			"This writes a persisted record into the project's knowledge base — a note tagged 'handoff'. " +
 			"It does not hand off a live conversation between harnesses or execution environments. " +
 			"repotory_context reads the record back: the latest handoff in full, older ones as a one-line timeline. Returns the created note ID.",
@@ -121,6 +122,10 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 					"type":        "string",
 					"description": "Absolute directory the session worked in. When it lies inside a scanned repository, the handoff is attributed to that repository so the next session opened there leads with it.",
 				},
+				"milestone": map[string]any{
+					"type":        "boolean",
+					"description": "Set true to write a rolling checkpoint (ADR-0054): call this every time you complete a meaningful work unit, so that a session killed mid-work still leaves the last checkpoint as current state. When omitted or false, this is a session-end summary. In a milestone, next_steps means what is currently unfinished; in a summary, it means what the next session should do.",
+				},
 			},
 			Required: []string{"summary"},
 		},
@@ -131,6 +136,7 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 		summary, _ := args["summary"].(string)
 		tags, _ := args["tags"].(string)
 		path, _ := args["path"].(string)
+		milestone, _ := args["milestone"].(bool)
 
 		// project_id is preferred when the caller knows it. Otherwise resolve it from
 		// the workspace path server-side: the alternative is asking a human to type a
@@ -157,6 +163,7 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 			NextSteps:     stringSlice(args["next_steps"]),
 			Tags:          tags,
 			WorkspacePath: path,
+			Milestone:     milestone,
 		})
 		if err != nil {
 			return makeTextResult("error: " + err.Error()), nil

@@ -135,6 +135,16 @@ type Options struct {
 	// because writing into the user's own tracked files is not a decision to
 	// make for them.
 	WithInstructions bool
+	// InstructionsOnly narrows the registration to the instruction block alone:
+	// no client config files, no hook, and — the point — no dependency on the
+	// repotory-mcp binary being installed. It backs the collected-project
+	// checklist (ADR-0054's successor flow): a project missing its
+	// AGENTS.md/CLAUDE.md block can be topped up with one click even on a
+	// machine where the MCP binary has never been installed, because writing a
+	// Markdown block has nothing to do with serving MCP. WithHook is ignored in
+	// this mode (the hook is the Claude-specific automation half, a different
+	// decision the full setup dialog owns).
+	InstructionsOnly bool
 }
 
 // ErrBinaryNotFound means the repotory-mcp binary is not on this machine. The
@@ -165,9 +175,19 @@ func Register(opts Options) (*Report, error) {
 		return nil, fmt.Errorf("target path %s is not a directory", abs)
 	}
 
-	bin, err := FindBinary(opts.BinPath)
-	if err != nil {
-		return nil, err
+	// InstructionsOnly writes Markdown into the project directory; it has no
+	// use for the MCP binary, so a machine without repotory-mcp installed can
+	// still top up a project's instruction files. Every other mode keeps the
+	// hard dependency: a registration that writes .mcp.json pointing at a
+	// binary that does not exist would manufacture the exact silent break the
+	// binary check exists to prevent.
+	var bin string
+	if !opts.InstructionsOnly {
+		b, err := FindBinary(opts.BinPath)
+		if err != nil {
+			return nil, err
+		}
+		bin = b
 	}
 
 	home := opts.HomeDir
@@ -179,27 +199,28 @@ func Register(opts Options) (*Report, error) {
 		home = h
 	}
 
-	clients := opts.Clients
-	if len(clients) == 0 {
-		clients = AllClients
-	}
-
 	report := &Report{Binary: bin}
-	for _, c := range clients {
-		res := registerClient(c, abs, home, bin)
-		if res.Status == StatusFailed {
-			report.Warnings = append(report.Warnings, res.Note)
+	if !opts.InstructionsOnly {
+		clients := opts.Clients
+		if len(clients) == 0 {
+			clients = AllClients
 		}
-		report.Files = append(report.Files, res)
-	}
+		for _, c := range clients {
+			res := registerClient(c, abs, home, bin)
+			if res.Status == StatusFailed {
+				report.Warnings = append(report.Warnings, res.Note)
+			}
+			report.Files = append(report.Files, res)
+		}
 
-	if opts.WithHook {
-		hook, settings, err := installHook(abs)
-		if err != nil {
-			report.Warnings = append(report.Warnings, err.Error())
-		} else {
-			report.Hook = &hook
-			report.HookSettings = &settings
+		if opts.WithHook {
+			hook, settings, err := installHook(abs)
+			if err != nil {
+				report.Warnings = append(report.Warnings, err.Error())
+			} else {
+				report.Hook = &hook
+				report.HookSettings = &settings
+			}
 		}
 	}
 
@@ -346,14 +367,31 @@ type hookEntry struct {
 // session, to write the handoff note — the "next agent can read what this one
 // learned" step that makes the memory layer worth having.
 //
+// ADR-0054: two-tier path. The primary path (repotory-capture) reads the
+// transcript directly and writes a handoff note without calling any model —
+// zero credit, so it survives credit exhaustion. The fallback (claude -p)
+// uses a model call for a more structured handoff, but costs credit and
+// fails when credits are gone. The zero-credit path always wins.
+//
 // The bytes must match the mjs's HOOK_SCRIPT exactly; the contract check
 // compares the sha256 of the two files.
 const hookScript = `#!/bin/sh
 # Cinder SessionEnd hook: write the handoff note when a session ends.
 # Installed by repotory-init. Delete this file and the matching
 # .claude/settings.json entry to uninstall.
-command -v claude >/dev/null 2>&1 || exit 0
+# ADR-0054: zero-credit first, model-driven fallback.
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
+
+# Primary path (ADR-0054): repotory-capture reads the transcript directly
+# and writes a handoff note. Zero credit — survives credit exhaustion.
+if command -v repotory-capture >/dev/null 2>&1; then
+  repotory-capture >/dev/null 2>&1 || true
+  exit 0
+fi
+
+# Fallback: model-driven structured handoff. Costs credit, but produces a
+# more complete summary when credit is available.
+command -v claude >/dev/null 2>&1 || exit 0
 [ -f .mcp.json ] || exit 0
 claude -p --mcp-config .mcp.json \
   'This session ended. Call repotory_handoff for the current project: a concise summary plus next_steps. If the project cannot be resolved, call repotory_context once first. Do nothing else.' \

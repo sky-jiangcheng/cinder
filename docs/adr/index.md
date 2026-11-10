@@ -62,6 +62,7 @@ order: 27
 | [0051](0051-conversation-as-interface.md) | 对话即界面——以 Function Calling 工具面作为统一操作层做界面减法 | **Accepted（2026-11-06，用户按「用户体验最强、UI 最清爽」批准）** |
 | [0052](0052-the-knot-brand-mark.md) | 标识重做——The Knot（一条带子穿过自己）与四域派生 | **Accepted（2026-11-06，用户以「就以 v6 进行落地」拍定）**；2026-11-07 修订（卡片留白 56u，见决策⑨） |
 | [0053](0053-incremental-commit-review.md) | 提交后增量审查——规则筛候选，模型只复核候选 | **Accepted（2026-11-08，同日落地，CLI 是独立二进制、通知走导航红点）**；2026-11-09 补注（验收 2 标注完成：首版 precision **0.17**——根因是 `matchBrace` 在 `} catch (...) {` 上把 catch 体读成空，**每条多行 catch 都被报「catch 块为空」**；按「改规则不加规则」修五处后 **0.44**，门仍未过，剩下的 20 条误报是同一形状「副作用失败有意容忍」，属 D3 留给模型复核驳回的那一类——到 0.7 的路在 `review.ai` 不在规则层；40 天窗口内 `high AND confirmed` 为 **0**，红点无误发；`review.notify=all` 继续不要用） |
+| [0054](0054-rolling-checkpoint-handoff.md) | Handoff 滚动检查点化——milestone 双类型 + hook 零 credit 优先 + 指令块滚动化 | **Accepted（2026-11-10，同日落地；安装动作未跑、残余断链见 ADR 落地记录）**：credit 耗尽 / 超时 / 崩溃等非正常终止场景下，会话末一次性 handoff 必然丢失；milestone 检查点每完成一个工作单元就写一条，形成滚动快照 |
 
 
 
@@ -69,4 +70,4 @@ order: 27
 
 - 每个重大不可逆决策一篇：背景 → 决策 → 后果
 - 被 superseded 的 ADR 保留原文与横幅，不删除
-- 新 ADR 从 `0053` 递增编号，文件名 `NNNN-kebab-title.md`
+- 新 ADR 从 `0054` 递增编号，文件名 `NNNN-kebab-title.md`

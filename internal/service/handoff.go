@@ -15,6 +15,12 @@ import (
 // reads the previous one's exit record before anything else.
 const handoffTag = "handoff"
 
+// milestoneTag marks a handoff as a rolling checkpoint (ADR-0054): it is
+// written every time the agent completes a meaningful work unit, not just at
+// session end. The tag lets readers distinguish "current state" from "session
+// summary" without a new DB column or kind.
+const milestoneTag = "milestone"
+
 // Handoff write bounds. A handoff is agent-authored JSON arriving over MCP,
 // so it is untrusted input: without caps a runaway agent could write a
 // multi-megabyte summary or thousands of bullets in one call, and the next
@@ -57,6 +63,17 @@ type HandoffInput struct {
 	// identity, so renaming or moving the folder does not orphan the attribution
 	// silently, and the note never leaks an absolute path into its content.
 	WorkspacePath string
+	// Milestone marks this handoff as a rolling checkpoint (ADR-0054), not a
+	// session-end summary. A milestone is written every time the agent completes
+	// a meaningful work unit (a feature, a fix, a test run), so that a session
+	// killed mid-work — by credit exhaustion, timeout, crash — still leaves the
+	// last checkpoint as "current state" for the next session.
+	//
+	// Milestone=true → title "Milestone Handoff", tag "milestone", Next Steps
+	// means "what is currently unfinished". Milestone=false (default) → title
+	// "Session Handoff", tag unchanged, Next Steps means "what the next session
+	// should do" — the full plan.
+	Milestone bool
 }
 
 // CreateHandoffNote persists a session handoff as a knowledge note rendered
@@ -76,8 +93,11 @@ func (s *Service) CreateHandoffNote(in HandoffInput) (*HandoffResult, error) {
 		return nil, err
 	}
 
-	title := fmt.Sprintf("Session Handoff %s", time.Now().Format("2006-01-02 15:04"))
+	title := handoffTitle(in.Milestone)
 	tags := handoffTag
+	if in.Milestone {
+		tags = tags + ", " + milestoneTag
+	}
 	if extra := strings.TrimSpace(in.Tags); extra != "" {
 		tags = tags + ", " + extra
 	}
@@ -90,7 +110,7 @@ func (s *Service) CreateHandoffNote(in HandoffInput) (*HandoffResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := &HandoffResult{NoteID: note.ID, Title: note.Title, Tags: tags}
+	res := &HandoffResult{NoteID: note.ID, Title: note.Title, Tags: tags, Milestone: in.Milestone}
 
 	// Attribute the note to the repository the session was standing in. This is the
 	// writer note_repositories never had; without it the repository scope in
@@ -143,6 +163,10 @@ type HandoffResult struct {
 	NoteID int64  `json:"note_id"`
 	Title  string `json:"title"`
 	Tags   string `json:"tags"`
+	// Milestone reports whether this handoff is a rolling checkpoint (ADR-0054)
+	// or a session-end summary, so the calling agent can confirm the write
+	// landed as the right type.
+	Milestone bool `json:"milestone"`
 	// RepositoryID / RepositoryPath echo the attribution when it succeeded, so the
 	// caller can tell "recorded against this module" from "recorded against the
 	// project" instead of assuming the finer scope happened.
@@ -249,12 +273,32 @@ func handoffHasContent(in HandoffInput) bool {
 	return false
 }
 
+// handoffTitle returns the note title for a handoff, distinguishing a rolling
+// checkpoint (ADR-0054) from a session-end summary. The timestamp is the same
+// for both — the distinction is in the word, because the next session reads the
+// title to know whether this is "where we are now" or "how the last session
+// ended".
+func handoffTitle(milestone bool) string {
+	word := "Session"
+	if milestone {
+		word = "Milestone"
+	}
+	return fmt.Sprintf("%s Handoff %s", word, time.Now().Format("2006-01-02 15:04"))
+}
+
 // renderHandoffMarkdown renders the canonical handoff template. Sections with
 // no content are omitted entirely: an absent heading tells the reader "the
 // previous session recorded nothing here" without a wall of empty bullets.
+//
+// A milestone handoff is labelled in the header so the reader knows it is a
+// checkpoint, not a summary: the Next Steps section in a milestone means
+// "what is currently unfinished", not "what the next session should do".
 func renderHandoffMarkdown(in HandoffInput, summary string) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("# Session Handoff\n\n"))
+	if in.Milestone {
+		b.WriteString("**[Rolling checkpoint — not a session summary]**\n\n")
+	}
 	if agent := strings.TrimSpace(in.Agent); agent != "" {
 		b.WriteString(fmt.Sprintf("> Written by `%s`\n\n", agent))
 	}

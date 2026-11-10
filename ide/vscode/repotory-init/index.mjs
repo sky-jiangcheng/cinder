@@ -197,8 +197,19 @@ const HOOK_SCRIPT = `#!/bin/sh
 # Cinder SessionEnd hook: write the handoff note when a session ends.
 # Installed by repotory-init. Delete this file and the matching
 # .claude/settings.json entry to uninstall.
-command -v claude >/dev/null 2>&1 || exit 0
+# ADR-0054: zero-credit first, model-driven fallback.
 cd "\${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
+
+# Primary path (ADR-0054): repotory-capture reads the transcript directly
+# and writes a handoff note. Zero credit — survives credit exhaustion.
+if command -v repotory-capture >/dev/null 2>&1; then
+  repotory-capture >/dev/null 2>&1 || true
+  exit 0
+fi
+
+# Fallback: model-driven structured handoff. Costs credit, but produces a
+# more complete summary when credit is available.
+command -v claude >/dev/null 2>&1 || exit 0
 [ -f .mcp.json ] || exit 0
 claude -p --mcp-config .mcp.json \\
   'This session ended. Call repotory_handoff for the current project: a concise summary plus next_steps. If the project cannot be resolved, call repotory_context once first. Do nothing else.' \\
@@ -284,8 +295,14 @@ database, reachable through the repotory_* MCP tools.
 - At the start of work, call repotory_context with the current repository path
   and read what it returns before you plan. Its first entry is the most recent
   session handoff, so the previous session's conclusions come first.
-- Before you finish, call repotory_handoff for this project with the fields
-  gotchas, decisions, changes, next_steps and a short summary.
+- After each meaningful work unit (a feature, a fix, a test run), call
+  repotory_handoff with milestone=true to record the current state and what is
+  still unfinished. This is a rolling checkpoint: if the session is killed
+  mid-work, the last checkpoint is the next session's starting point.
+- Before you finish, call repotory_handoff (without milestone) for a session
+  summary with gotchas, decisions, changes, next_steps and a short summary.
+- If you detect credits are running low, write a milestone handoff immediately
+  before continuing.
 - Record what a later session would otherwise re-learn the hard way \u2014 a
   constraint that is not visible in the code, a decision and the alternative
   it rejected, a trap you just hit. Do not record what the commit log already

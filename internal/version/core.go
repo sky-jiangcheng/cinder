@@ -16,4 +16,4 @@ package version
 //
 // The value is pinned next to the tool list in cmd/mcp/main_test.go, and
 // scripts/check-version-drift.mjs fails if the two drift apart.
-const CoreVersion = "1.2.0"
+const CoreVersion = "1.3.0"

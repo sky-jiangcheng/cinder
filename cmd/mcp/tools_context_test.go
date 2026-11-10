@@ -103,3 +103,36 @@ func TestHandoffToolValidation(t *testing.T) {
 		t.Errorf("summary-only handoff should be reported\n%s", got)
 	}
 }
+
+// ADR-0054: milestone=true writes a rolling checkpoint that the next session
+// reads as current state, not a session-end summary. The MCP tool must
+// accept the milestone flag and surface it in the result.
+func TestHandoffToolMilestoneFlag(t *testing.T) {
+	ts := newTestServer(t)
+	pid := ts.seedProject("demo", "/home/me/demo")
+
+	res := ts.call("repotory_handoff", map[string]any{
+		"project_id": float64(pid),
+		"summary":    "checkpoint: parser refactor done",
+		"changes":    []any{"rewrote parser"},
+		"next_steps": []any{"update wiki", "run regression"},
+		"milestone":  true,
+	})
+	payload := ts.jsonPayload(res)
+	if payload["milestone"] != true {
+		t.Fatalf("handoff result should report milestone=true, got %v", payload["milestone"])
+	}
+	if payload["note_id"] == nil || payload["note_id"].(float64) <= 0 {
+		t.Fatalf("handoff should return the created note_id, got %v", payload)
+	}
+
+	// The milestone handoff must be visible to the next context call and
+	// labelled as a rolling checkpoint.
+	text := ts.text(ts.call("repotory_context", map[string]any{"project_id": float64(pid)}))
+	if !strings.Contains(text, "[Rolling checkpoint") {
+		t.Errorf("context should label the milestone as a checkpoint\n%s", text)
+	}
+	if !strings.Contains(text, "checkpoint: parser refactor done") {
+		t.Errorf("context should surface the milestone summary\n%s", text)
+	}
+}

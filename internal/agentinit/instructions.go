@@ -47,16 +47,17 @@ var InstructionFiles = []string{"AGENTS.md", "CLAUDE.md"}
 
 // instructionsBlockBody is the text inside the markers.
 //
-// Three sentences and a negative criterion, deliberately short: this lands in
-// the user's repository and every agent reads it into its context on every
+// Four rules and a negative criterion, deliberately short: this lands in the
+// user's repository and every agent reads it into its context on every
 // session, so it competes for the same attention as the project's own
 // instructions. It is in English for the same reason the hook's prompt is —
 // it is machine-facing instruction text, not UI copy, so it does not go through
 // web/src/locales and is shared by both implementations as one string.
 //
-// The negative criterion is the substance of this file. Without it the
-// instruction makes agents log activity — the shape this product's upstream
-// already starved on (idea notes 0, manual notes 1) — instead of carrying over
+// ADR-0054 upgrades rule 2 from "before you finish" to "after each work unit":
+// a handoff is no longer a session-end summary but a rolling checkpoint. The
+// negative criterion (rule 5) is unchanged — it is the substance of this file:
+// without it the instruction makes agents log activity instead of carrying over
 // the state a later session would otherwise re-discover the hard way.
 const instructionsBlockBody = `## Cinder memory layer
 
@@ -66,8 +67,14 @@ database, reachable through the repotory_* MCP tools.
 - At the start of work, call repotory_context with the current repository path
   and read what it returns before you plan. Its first entry is the most recent
   session handoff, so the previous session's conclusions come first.
-- Before you finish, call repotory_handoff for this project with the fields
-  gotchas, decisions, changes, next_steps and a short summary.
+- After each meaningful work unit (a feature, a fix, a test run), call
+  repotory_handoff with milestone=true to record the current state and what is
+  still unfinished. This is a rolling checkpoint: if the session is killed
+  mid-work, the last checkpoint is the next session's starting point.
+- Before you finish, call repotory_handoff (without milestone) for a session
+  summary with gotchas, decisions, changes, next_steps and a short summary.
+- If you detect credits are running low, write a milestone handoff immediately
+  before continuing.
 - Record what a later session would otherwise re-learn the hard way — a
   constraint that is not visible in the code, a decision and the alternative
   it rejected, a trap you just hit. Do not record what the commit log already

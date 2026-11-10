@@ -260,6 +260,118 @@ func TestCreateHandoffNoteRecordsTheActualSource(t *testing.T) {
 	}
 }
 
+// A milestone handoff (ADR-0054) is a rolling checkpoint, not a session summary.
+// It carries the "milestone" tag, a "Milestone Handoff" title, and a
+// "[Rolling checkpoint" label in the body so the next session knows this is
+// current state, not an exit record.
+func TestCreateHandoffNoteMilestoneCheckpoint(t *testing.T) {
+	s, _ := setupService(t)
+	pid := seedProject(t, s.db, "demo", "/home/me/demo")
+
+	res, err := s.CreateHandoffNote(HandoffInput{
+		ProjectID: pid,
+		Summary:   "finished the parser refactor, tests green",
+		Changes:   []string{"rewrote internal/parser"},
+		NextSteps: []string{"update the wiki page", "run full regression"},
+		Milestone: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Milestone {
+		t.Errorf("HandoffResult.Milestone = false, want true")
+	}
+
+	note, err := db.GetNoteByID(s.db, res.NoteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(note.Tags, milestoneTag) {
+		t.Errorf("milestone handoff must carry %q tag, tags=%q", milestoneTag, note.Tags)
+	}
+	if !strings.Contains(note.Title, "Milestone Handoff") {
+		t.Errorf("milestone title should say %q, got %q", "Milestone Handoff", note.Title)
+	}
+	if !strings.Contains(note.Content, "[Rolling checkpoint") {
+		t.Errorf("milestone body should label itself as a checkpoint\n%s", note.Content)
+	}
+
+	// A non-milestone handoff (default) must NOT have the milestone tag or label.
+	res2, err := s.CreateHandoffNote(HandoffInput{
+		ProjectID: pid,
+		Summary:   "session ended cleanly",
+		Changes:   []string{"merged the PR"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Milestone {
+		t.Errorf("default handoff must not be a milestone")
+	}
+	note2, err := db.GetNoteByID(s.db, res2.NoteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(note2.Tags, milestoneTag) {
+		t.Errorf("session summary must not carry the milestone tag, tags=%q", note2.Tags)
+	}
+	if strings.Contains(note2.Title, "Milestone") {
+		t.Errorf("session summary title must not say Milestone, got %q", note2.Title)
+	}
+	if strings.Contains(note2.Content, "[Rolling checkpoint") {
+		t.Errorf("session summary must not label itself as a checkpoint\n%s", note2.Content)
+	}
+}
+
+// The latest handoff — whether milestone or summary — must still lead the
+// next session's context. A milestone written more recently than a summary
+// wins by updated_at ordering, which is the whole point of the rolling
+// checkpoint model.
+func TestBuildProjectContextMilestoneLeadsWhenNewer(t *testing.T) {
+	s, _ := setupService(t)
+	pid := seedProject(t, s.db, "demo", "/home/me/demo")
+
+	// Older session summary.
+	if _, err := s.CreateHandoffNote(HandoffInput{
+		ProjectID: pid, Summary: "older session summary",
+		Changes: []string{"did stuff"}, NextSteps: []string{"next stuff"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Newer milestone checkpoint.
+	res, err := s.CreateHandoffNote(HandoffInput{
+		ProjectID: pid, Summary: "newer milestone checkpoint",
+		Changes: []string{"current work"}, NextSteps: []string{"still pending"},
+		Milestone: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Milestone {
+		t.Errorf("CreateHandoffNote should report Milestone=true")
+	}
+
+	ctx := s.BuildProjectContext(s.ResolveProject("demo"))
+	// The milestone content must appear first in the context.
+	if !strings.Contains(ctx, "newer milestone checkpoint") {
+		t.Errorf("context must lead with the newest handoff\n%s", ctx)
+	}
+	// The milestone must be labelled as a rolling checkpoint.
+	if !strings.Contains(ctx, "[Rolling checkpoint") {
+		t.Errorf("context should label the milestone as a checkpoint\n%s", ctx)
+	}
+	// The older summary should still be visible (compressed), not gone.
+	if !strings.Contains(ctx, "older session summary") {
+		t.Errorf("context should retain the older handoff as history\n%s", ctx)
+	}
+	// The milestone must render before the "Earlier Handoffs" section.
+	milestoneIdx := strings.Index(ctx, "newer milestone checkpoint")
+	earlierIdx := strings.Index(ctx, "### Earlier Handoffs")
+	if earlierIdx == -1 || milestoneIdx > earlierIdx {
+		t.Errorf("milestone must render before Earlier Handoffs\n%s", ctx)
+	}
+}
+
 func TestNoteAndHandoffWriteBounds(t *testing.T) {
 	s, _ := setupService(t)
 	pid := seedProject(t, s.db, "demo", "/home/me/demo")
