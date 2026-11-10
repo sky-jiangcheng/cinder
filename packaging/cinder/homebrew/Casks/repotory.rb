@@ -16,12 +16,12 @@ cask "repotory" do
 
   on_arm do
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/Cinder-#{version}-darwin-arm64.dmg"
-    sha256 "92fd69799e5c8ca0e487eb5b7fd2240f375c834c235fe29e2438816a407cb93c"
+    sha256 "b2762899062354168ab8814026edcdc9255239299884f6953d8215d445de3658"
   end
 
   on_intel do
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/Cinder-#{version}-darwin-amd64.dmg"
-    sha256 "2e169e410a322fafca4b7b15b0629060fefbb144dd392e6fc546f907d36b6b85"
+    sha256 "83c035ddea8af62f4a36c23d2791573d6abe33ba7a6b3d66069d99d0aef87add"
   end
 
   # The bundle inside the DMG is named after wails.json's `name`
