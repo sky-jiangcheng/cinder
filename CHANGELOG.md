@@ -6,6 +6,28 @@
 
 ## [Unreleased]
 
+## [2.34.0] - 2026-11-10
+
+### 新增
+
+- **ADR-0054：handoff 改为滚动检查点，credit 耗尽不再裸奔**。排查确认 2026-10-26 之后 189 个 commit 里一条 handoff 都没落——会话末一次性快照的协议在三处断链（SessionEnd hook 被 iTerm2 占着、AGENTS.md 缺指令块、`.mcp.json` 指向不存在的二进制），且就算全接通，credit 硬杀时「主动调 repotory_handoff」和 `claude -p` hook 两条路都要花 credit，等于必然丢交接。本次三刀：**① `repotory_handoff` 新增可选参数 `milestone`**（true = 每完成一个工作单元写一条滚动检查点，tag 加 `milestone`、标题 `Milestone Handoff`、正文标 `[Rolling checkpoint — not a session summary]`；会话被掐断时最新一条就是当前状态；老调用全部不传，行为不变——契约 minor bump，`CoreVersion` 1.2.0 → **1.3.0**，`cmd/mcp/main_test.go` 钉版同批）；**② SessionEnd hook 改零 credit 优先**（主路径 `repotory-capture` 直接读 transcript 落盘、不调任何模型——credit 已耗尽也写得出去；失败才降级 `claude -p` 结构化总结；`agentinit.go` 与 `scripts/repotory-init/index.mjs` 两份拷贝同批重写，`testdata/contract.json` 经 `-update` 重生成，`ide/vscode/scripts/sync-init.mjs` 同步 VSIX 拷贝）；**③ 指令块从「会话结束写一次」改为「每完成一个工作单元写检查点 + 结束前写总结 + 发现 credit 见底先写一条再继续」**——滚动语义不依赖 harness 暴露 credit 状态。读取侧零查询改动：`ListRecentHandoffNotes` 按 `updated_at DESC` 最新置顶，milestone 写得勤自然领先；`repotory_context` 最新全文 / 更早一行的结构本就兼容。schema 不动（v30），无新表无迁移；Go 与 mjs 双实现由 `check-agent-init-contract.mjs` 钉死字节一致，测试 +3（service 里程碑类型与上下文置顶、MCP 工具 milestone 贯通），go test / docs-mirror / i18n-keys / version-drift / agent-init-contract 全绿。中英 ADR 与两份 index 登记同批。
+
+### 修复
+
+- **界面「一直转圈」这一族 bug 的根因是失败没有出口，本次一并收口**。四个形状：① `useApiData` 的共享请求去重只让发起方处理失败，其余等待方 `await` 一个已 reject 的 promise 然后什么都不做，于是**同一份数据的第二个组件永久停在 loading**——改为 owner 向所有等待方广播成功或失败；② `useScanPolling` 与 `downloadStatus` 的轮询对失败只做指数退避、**没有放弃条件**，后端不再应答时界面永远显示「扫描中」/「下载中」——各加连续 5 次失败即停止并报错的出口；③ `ErrorBoundary` 的「重试」按钮写的是 `window.location.href = '/'`，在桌面端（HashRouter）等于整页重载并被弹回首页——改 `window.location.hash = '#/'`，文案同时从硬编码英文改为走 i18n（`common.errorTitle` / `common.retry`）；④ `useDebouncedCallback` 此前不暴露 `cancel`，切换视图时旧防抖回调仍会打一次请求——现在返回带 `cancel()` 的稳定函数（callable 只建一次、`delay` 经 ref 读，避免调用方因身份变化重复订阅）。回归：`useApiData.test.tsx` / `useScanPolling.test.ts` / `useDebouncedCallback.test.tsx` / `updateStatus.test.ts` 各补失败路径断言。
+- **代码审查的「完成」不再谎称模型看过**：`refineWithCandidates` 原先**发请求就计入 `ai_calls`**，一个持续返回 500 的端点能记出「今天调了 N 次模型」的报告而实际一次都没成功——现在只有成功的调用计数，失败次数另走一路写进 `review_runs.error`（复用既有列，不新增状态值：规则层的报告仍然可用，所以状态仍是 `done`，但 `done` 不再读作「全查过了」）。连带修两处：**`review.enabled=0` 时导航红点归零**（总开关关掉后 `ReviewNotifyCount` 仍按阈值数历史 finding，功能已关却持续画红点）；**每一条规则开关都是真开关**——原先只有 `OptInRule`（`sensitive_log`）读 `review.rule.<id>`，九条默认规则不看配置，于是设置页把某个开关拨到关只是改了界面状态、跑起来照旧全开；现在统一读配置（缺失 = 保持默认，从未碰过开关的老安装行为不变），`TestReviewRuleSetHonoursAllRuleSwitches` 与 `TestRefineCountsOnlySuccessfulCalls` / `TestRunReviewRecordsModelFailures` 钉住三处。
+- **搜索结果终于落到那条记录，而不是项目概览**：命令面板与仪表盘搜索框命中一条笔记/待办后一律 `navigate('/project/<id>')`，用户还得自己在页面里找——现在共用 `HomeKnowledgeAssistant` 的 `hitHref`（笔记带 `?tab=notes&noteId=` 深链并高亮、待办落待办页签），知识助手里的 page 类证据从跳概览改为直达 `/wiki/<id>`，无 `project_id` 的命中退回 `/knowledge` 而不是拼出 `/project/0`。同批：仪表盘的未星标项目名此前是**纯 `span`**（注释写明「点了会落到空页」），现在它是链接；`navEntries.ts` 让 `/project/*` 归仪表盘、`/wiki/*` 归知识库——这两个子路由此前没有任何导航项处于选中态。
+- **项目详情页的统计卡与趋势图回答的不是同一个问题**：下方三张卡（新增/删除/变更文件）把**全部历史**加总，而上面的图和写着「所选范围」的标签只画 7/30 天窗口——同一屏两个数字互相矛盾。现在两者共用同一份 `scopedDates`。另修 `?date=` 深链：从热力图点某一天进来时窗口固定是 7 天，四十天前的那一天落在窗外、页面显示「无数据」，现在按日期年龄自动选 7/30/全部窗口（桌面端 HashRouter 把 query 放在 hash 内，两路都读）。`ProjectDetail` 的当前页签从本地 `useState` 副本改为**从 URL 派生**，后退/前进与外部深链不再被一个过期的本地副本盖住；返回按钮由固定跳 `/dashboard` 改为 `navigate(-1)`。
+- **MCP stdio 进程退出时不再丢后台写入、也不再漏掉关库错误**：`cmd/mcp/main.go` 原先 `defer d.Close()` 且用 `log.Fatalf` 处理 serve 错误——`Fatalf` 直接 `os.Exit`，任何 deferred 清理都不跑。现在改为 `svc.Shutdown()` 排空工具触发的后台任务后再 `Close()` 并记录失败；同时补上 `RegisterKnowledgeSources()`：这条进程此前没有注册任何知识源，`repotory_knowledge_sources` 与导入类工具在 MCP 侧永远读到一个空列表（桌面端有、命令行没有）。注册**故意不走 `Startup()`**——stdio 进程通常与桌面应用同时打开同一个 SQLite 文件，备份/同步/编译/embedding 那几个 ticker 会在单连接上与应用侧的写入相撞。
+- **可取消的两处长操作**：扫描事务从 `db.Begin()` 改为 `db.BeginTx(ctx, nil)`，`CleanupStaleDataTx` 新增带 ctx 的版本（旧签名保留为兼容包装）——此前取消一次扫描后，那几条长 `DELETE` 仍把**唯一一条数据库连接**占到最后一次循环迭代，期间桌面端一切读写排队等待；`cinder-review` CLI 装上 `signal.NotifyContext`（Ctrl-C / SIGTERM 现在中断当次审查，而不是等它跑完）。项目概览的知识挖掘补 2 分钟失败退避（`mineBackoff`）：一个坏掉的 miner 此前会被相邻的每一次项目页打开重新触发；`repo_meta` 缓存超过完整性检查的同一个 staleness 窗口即视为过期（时间戳解析不出来也按过期处理，不留给遗留行永久可信）。助手的流式问答从 `App` 层下沉到 `service.StartAskStream`（recover、超时、按 streamID 去重归服务管，绑定层只留事件通道）。
+
+### 优化
+
+- **失败不再被静默吞掉：一处出错既留在日志里也让用户看得见**。此前全仓有三十多处以 `_ = err` / `.catch(() => {})` / `err == nil &&` 的方式把失败吃掉——最贵的一例是本仓的真实事故：审核队列只显示「加载失败」，真实原因（`unknown method: ListPendingWikiPages`，一个早于审查绑定的旧 `repotory-server` 二进制）藏了两天。本次统一改法：**失败记进日志**（`refresh.go` 的统计回填会数失败次数并汇总输出，不再把只写进一半的回填报成干净完成；`wiki_export.go` 出链/反链/来源笔记三处查询；`update_state.go` 下载状态落盘的每一步；`platform.go` 数据目录迁移；`app.go` 关库）；**HTTP 层不把内部错误原样吐给前端**（`httpapi/rpc.go`、`httpapi/server.go` 响应体改成固定文案，原始错误进日志）；**前端显示失败而不是画成空列表**（`Heatmap`、`StatusBar`、`CommandPalette`、`ProjectSearchDropdown`、`Knowledge`、`Review`、`useProjectDetail` 各补加载失败态，新增中英词条 `common.loadFailed`）。`Review.tsx` 六路并发从 `Promise.all` 改为 `Promise.allSettled`——一个队列挂掉不再把另外五个清零，错误按队列分别显示。
+- **未保存的内容不再被静默丢弃**：笔记编辑器把在编草稿按 note id 落 `localStorage`，刷新或切页签回来接着编辑（保存或显式取消才清除）；handoff 面板在有内容时关闭先问一句（新增中英 `common.confirmDiscard`）。`App` 侧加一道全局 `beforeunload` 守卫——各编辑面通过 `cinder:dirty` 事件自报有无未保存内容，任一为真才拦关闭，这样新增一个编辑面不需要各自复制一份确认框。
+- **知识库页切换视图不再重新拉全库**：`NotesBody` 与 `WikiPagesView` 改为**常驻挂载、用 `hidden` 切换**，两个 body 不再互相覆盖对方的计数与失败态（此前每切一次都要重取整库并闪一次骨架屏），并加 30 秒缓存（与 `useApiData` 同 TTL，`invalidateKnowledgeCache` 负责失效）；URL 只留**一个写入方**（键入与筛选 REPLACE，视图/子页签切换 PUSH），此前两条路径会各写一次、把 PUSH 覆盖成 REPLACE 而吃掉后退一步；计数条从 `count > 0` 才显示改为**恒在**，零结果时读作「搜到 0 条」而不是「什么都没渲染」。设置页与项目详情的页签切换由 `replace` 改为 `push`，后退键终于走得到上一个页签。仪表盘的 `getConfig` 加同款 30 秒缓存（读取失败保留上次的目标值而不是回落 500），星标切换现在同时失效 `projects:all` 与 `dashProjects` 两族缓存（此前只清一族，列表与笔记下拉框的星标会不一致）。
+- **CI 装依赖不再执行第三方 install 脚本**：`icons` 与 `pages` 两个 job 的 `npm install` 补 `--ignore-scripts`。这两个 job 本来就是 `contents: read`，`sharp` / `mermaid` / `jsdom` 的安装脚本在这里没有任何必要跑。
+
 ## [2.33.5] - 2026-11-10
 
 ### 修复
@@ -966,7 +988,9 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.4...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...HEAD
+[2.34.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.5...v2.34.0
+[2.33.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.4...v2.33.5
 [2.33.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.3...v2.33.4
 [2.33.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.2...v2.33.3
 [2.33.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.1...v2.33.2
