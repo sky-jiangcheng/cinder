@@ -4,7 +4,7 @@
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
   "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.33.5/Cinder-2.33.5-windows-amd64.zip",
-  "hash": "sha256:f935e8c8ead29d3e92bdf20b167530b0a7517091bb127c36a450eedc2c8d2a3b",
+  "hash": "sha256:f4eb95acff63c98a93398cadfb694d4dafa0e826d00f35c6b4977146b4a6b5b1",
   "bin": ["cinder.exe", ["cinder.exe", "repotory"]],
   "checkver": {
     "url": "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest",
