@@ -61,7 +61,7 @@ order: 27
 
 | [0051](0051-conversation-as-interface.md) | 对话即界面——以 Function Calling 工具面作为统一操作层做界面减法 | **Accepted（2026-11-06，用户按「用户体验最强、UI 最清爽」批准）** |
 | [0052](0052-the-knot-brand-mark.md) | 标识重做——The Knot（一条带子穿过自己）与四域派生 | **Accepted（2026-11-06，用户以「就以 v6 进行落地」拍定）**；2026-11-07 修订（卡片留白 56u，见决策⑨） |
-| [0053](0053-incremental-commit-review.md) | 提交后增量审查——规则筛候选，模型只复核候选 | **Accepted（2026-11-08，同日落地，CLI 是独立二进制、通知走导航红点）** |
+| [0053](0053-incremental-commit-review.md) | 提交后增量审查——规则筛候选，模型只复核候选 | **Accepted（2026-11-08，同日落地，CLI 是独立二进制、通知走导航红点）**；2026-11-09 补注（验收 2 标注完成：首版 precision **0.17**——根因是 `matchBrace` 在 `} catch (...) {` 上把 catch 体读成空，**每条多行 catch 都被报「catch 块为空」**；按「改规则不加规则」修五处后 **0.44**，门仍未过，剩下的 20 条误报是同一形状「副作用失败有意容忍」，属 D3 留给模型复核驳回的那一类——到 0.7 的路在 `review.ai` 不在规则层；40 天窗口内 `high AND confirmed` 为 **0**，红点无误发；`review.notify=all` 继续不要用） |
 
 
 

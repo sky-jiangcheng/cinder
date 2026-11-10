@@ -60,7 +60,7 @@ behaviour it assumes.
 Five fields per finding are worth your attention:
 
 - **`severity`**: `high` / `medium` / `low`.
-- **`verdict`**: `confirmed` means the model checked and the problem stands; `unverified` means a rule fired and **nobody checked** — the code may well have a legitimate reading. **Do not treat `unverified` as broken.**
+- **`verdict`**: `confirmed` means the problem stands — either the rule itself has no legitimate reading (a `@Transactional` self-call, a `@RequestBody` on a GET), or the model review confirmed it; `unverified` means a rule fired and **nobody checked** — the code may well have a legitimate reading (a Feign method missing `@RequestBody`, a swallowed exception). **Do not treat `unverified` as broken.**
 - **`evidence`**: the actual lines that matched, expandable. Without evidence there is no judgement.
 - **`skipped`**: how many files exceeded the diff budget (2000 lines by default) and were skipped. **A skip is counted, never silently dropped.**
 - **`ai_calls`**: how many model calls this run cost. Zero means rules only (no model configured, or "no AI" ticked).

@@ -1,6 +1,6 @@
 # ADR-0053: Incremental review after commits — rules sift candidates, the model only confirms them
 
-Status: **Accepted (2026-11-08, implemented the same day; deviations in the Implementation record at the end)**
+Status: **Accepted (2026-11-08, implemented the same day; deviations in the Implementation record at the end; the acceptance-item-2 labelling result and the five rule fixes in the Addendum (2026-11-09))**
 Date: 2026-11-08
 Related: [ADR-0016](0016-async-batch-jobs.md) (reuses "submit returns, progress is queryable"), [ADR-0030](0030-ai-call-audit.md) (every model call goes through the audit log), [ADR-0051](0051-conversation-as-interface.md) (the conversation is the interface: findings must be askable, not another UI language), [ADR-0048](0048-core-contract-version.md) (new MCP tools bump the contract version)
 Starting schema: v29 → **v30** (two tables); `CoreVersion` 1.1.0 → **1.2.0** (two tools)
@@ -212,3 +212,61 @@ reach precision 0.7 — was not done. That is why the first version only raises 
 the most conservative threshold; do not use `review.notify=all` before the labelling
 happens. A note to a future self: rules are not a quantity game. When precision misses,
 change the rules, do not add more.
+
+## Addendum (2026-11-09): acceptance item 2 is done, the gate did not pass — five rules were fixed before measuring
+
+The labelling ran. The method: forty days of real commits against a `.backup` copy of the
+live database (**the live DB was never touched**), every candidate opened against the real
+code. Three parts; the first is bad news.
+
+**1. First-version precision = 0.17 (4 of 20 held), far below 0.7.** But the cause was not
+"the rules imagine things" — **a code bug was making the rules lie**. When `matchBrace`
+reaches a line `} catch (Exception e) {` it counts the try's `}` and the catch's `{` as a
+net-zero pair and **returns that line as its own end**, so the body reads empty —
+and `swallow_exception` therefore reported "catch 块为空" on **every multi-line catch**.
+Real code is nearly all multi-line catch, so 17 of the 20 came from this one line. The
+fixture happened to write `try { run(); } catch (Exception e) {` on **one line** (net +1,
+exactly dodging the bug), which is why **every test was green**. Without this fix any
+precision number is just metering a broken counter.
+
+**2. Five changes under "change the rules, do not add more" (no new rule):**
+
+| What changed | Why |
+|---|---|
+| `matchBrace` starts counting depth only after the first `{` on the start line | The above; it also lets `catchBody` read a real body |
+| `swallow_exception` recognises three "handled" shapes: rethrow / out-of-band alarm / returned failure | 11 labelled candidates were the log-then-alarm job convention — exactly the class D3 reserved for the model pass to dismiss |
+| All rules skip test sources (`src/test/`, `*Test.java`) | 3 came from `try { fail(); } catch (Biz expected) { assertTrue(); }` — that is **asserting a throw**, not a swallow |
+| `sql_injection` requires the SQL keyword at the **start of a literal**, and the concatenation to have **a non-literal side** | 2 candidates were `"select ... " + "where not exists(...)"` — two string constants, folded by javac, **not injectable**; 2 more were the word "update" inside English notification copy |
+| `route_renamed` compares `canonicalPath` and counts **declarations**, not text | One 30-line style sweep `"checkModify"` → `"/checkModify"` **produced 30 high findings**. Spring's `PatternParser` treats the leading slash as optional — **the route never moved** — and `GrepJava(old)` hits because `checkModify` is a substring of `"/checkModify"`, so a consumer that **was already migrated** still counted as "still referencing" |
+| `remote_in_loop` requires the call to **touch the loop variable**, and reads the whole statement rather than one line | Batch pagination (`while(true)` + the whole list per round) is not N+1; while builder line-wrapping puts the loop variable on a continuation line, so reading only the callee's line **loses a real N+1** |
+
+Also added: the **`rule_rev` comments** D3 required but the implementation never had, and one
+**contract violation** fixed — `sql_injection` and `route_renamed` used to emit `confirmed`,
+while `rule.go` reserves `confirmed` for rules **without** a known false-positive boundary. A
+boundary-carrying rule that ships `confirmed` slips past the `high AND confirmed` threshold
+and lights the rail dot, which is precisely the "three false positives and it's switched
+off" the Background measured. Both are `unverified` now.
+
+**3. Re-measured: precision = 0.44 (16 of 36 hold) — the 0.7 gate still misses.**
+The dot path is clean: in forty days there was **not one `high AND confirmed`**, so no
+notification ever fired in error. What is not clean is the report page: `remote_in_loop`
+is 9 for 9, `swallow_exception` is 20 false out of 27.
+
+Those 20 are not random noise, they are **one shape**: "a side-effect failure is
+deliberately tolerated" — a notification email failing must not break the main flow (the
+source says so in a comment), a batch task leaves a failed row unmarked for retry, UA/IP
+parsing falls back to the raw value, a validation degrades to an empty return. **That is
+exactly the class D3 reserved for the model pass to dismiss**, not something the rule layer
+should keep chasing: the next step would be regexes reading comments and judging intent,
+which turns the rules back into the unreproducible guesser this design exists to avoid.
+**So the road to 0.7 runs through `review.ai`, not through more rules** — reopening the
+gate means letting a model actually run over those 20 and dismiss them, which needs a
+reachable inference endpoint (this machine's LM Studio was not reachable), and what gets
+measured is "how many rows survive the review into the report are real", not the rules'
+number alone.
+
+**Conclusion and wording discipline**: acceptance 2 **was done and the gate missed**, so
+`review.notify=all` still must not be used; `high` (the only path that can light the dot)
+is safe to switch on because its reading in this window is 0. The rule layer alone sits at
+0.44 and **that number must not be written as "the feature works"** — it is "no longer
+lying", not "sees accurately".

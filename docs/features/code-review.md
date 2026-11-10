@@ -53,7 +53,7 @@ order: 9
 每条 finding 有五个字段值得看：
 
 - **`severity`**：`high` / `medium` / `low`。
-- **`verdict`**：`confirmed` = 模型复核后确认问题成立；`unverified` = 规则命中但**没人复核过**，可能这段代码本来就有合法读法。**别把 `unverified` 当成有问题**。
+- **`verdict`**：`confirmed` = 问题成立——要么这条规则本身没有已知误读法（如 `@Transactional` 同类自调用、GET 带 `@RequestBody`），要么模型复核确认过；`unverified` = 规则命中但**没人复核过**，这段代码可能有合法读法（如 Feign 缺 body、吞异常）。**别把 `unverified` 当成有问题**。
 - **`evidence`**：命中的那几行原文，展开可见——不看证据就没法判断。
 - **`skipped`**：单文件 diff 超过阈值（默认 2000 行）被跳过的文件数。**跳过是计数，不是静默丢弃**。
 - **`ai_calls`**：这次审查花了多少次模型调用。0 表示纯规则跑（没配模型，或勾了「不用 AI」）。
