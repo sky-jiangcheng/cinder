@@ -3,7 +3,10 @@ package service
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"repotory/internal/agentinit"
@@ -212,4 +215,162 @@ func parseAgentClients(names []string) ([]agentinit.Client, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// --- Collected-project instruction checklist -------------------------------
+//
+// The 2026-11-10 audit found the handoff feature idle for 15 days, and the
+// first cause was boring: the projects the agents worked in never received the
+// ADR-0043 instruction block ("call repotory_context at the start, write a
+// handoff at the end"), so every session started blind. The block is written
+// by SetupAgentClients / repotory-init — both opt-in setup acts nobody ran.
+//
+// This checklist closes that gap at the moment the user actually does something
+// (collecting projects in a scan) instead of hoping they run a setup wizard:
+// the desktop surfaces ask "does this project's directory carry the managed
+// block in AGENTS.md or CLAUDE.md", and offer a one-click top-up that writes
+// ONLY the instruction block — no client configs, no hook, no MCP binary
+// dependency (agentinit.Options.InstructionsOnly). Writing into the user's
+// tracked files stays a click the user makes, never a background side effect.
+
+// The three states a project's instruction checklist can report, plus the
+// not-applicable one for containers.
+const (
+	// AgentInstrStateOK — at least one instruction file exists AND carries the
+	// managed repotory block.
+	AgentInstrStateOK = "ok"
+	// AgentInstrStateNoBlock — an instruction file exists but none of them
+	// carries the block. The file is the user's; Cinder must not assume it may
+	// append without asking, so this surfaces as the same one-click offer.
+	AgentInstrStateNoBlock = "no_block"
+	// AgentInstrStateMissing — no instruction file exists at all.
+	AgentInstrStateMissing = "missing"
+	// AgentInstrStateSkipped — the project has no writable project directory
+	// (the synthetic default row, or a scan-time container): the checklist does
+	// not apply, and the UI must not nag about it.
+	AgentInstrStateSkipped = "skipped"
+)
+
+// AgentInstructionsStatus is the checklist answer for one project. Files lists
+// the instruction files that exist on disk, Missing the standard names that do
+// not — the UI can show "AGENTS.md missing" instead of a bare boolean.
+type AgentInstructionsStatus struct {
+	State   string   `json:"state"`
+	Files   []string `json:"files"`
+	Missing []string `json:"missing"`
+}
+
+// instructionFilesState does the two stat() calls and the block-marker scan
+// for one directory. Kept free of the service so the scan pipeline can call it
+// without a receiver.
+func instructionFilesState(dir string) *AgentInstructionsStatus {
+	st := &AgentInstructionsStatus{State: AgentInstrStateMissing}
+	hasBlock := false
+	for _, rel := range agentinit.InstructionFiles {
+		path := filepath.Join(dir, rel)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			st.Missing = append(st.Missing, rel)
+			continue
+		}
+		st.Files = append(st.Files, rel)
+		if strings.Contains(string(raw), agentinit.InstructionsBeginMark) {
+			hasBlock = true
+		}
+	}
+	switch {
+	case len(st.Files) == 0:
+		st.State = AgentInstrStateMissing
+	case hasBlock:
+		st.State = AgentInstrStateOK
+	default:
+		st.State = AgentInstrStateNoBlock
+	}
+	return st
+}
+
+// AgentInstructionsStatusFor reports the checklist for one project. A container
+// or the synthetic default row answers "skipped" rather than an error: the UI
+// renders the answer, and "not applicable" is the honest one.
+func (s *Service) AgentInstructionsStatusFor(projectID int64) (*AgentInstructionsStatus, error) {
+	project, err := db.GetProjectByID(s.db, projectID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("project %d not found", projectID)
+		}
+		return nil, err
+	}
+	if refusalForProject(project) != AgentSetupOK {
+		return &AgentInstructionsStatus{State: AgentInstrStateSkipped}, nil
+	}
+	return instructionFilesState(strings.TrimSpace(project.RootPath)), nil
+}
+
+// MissingAgentInstructionsCount returns how many collected projects are
+// missing the managed block, for the dashboard/rail badge. Read-only and
+// deliberately recomputed on every call: storing the verdict would go stale
+// the moment the user creates the file by hand, and a handful of stat() calls
+// per refresh cost nothing.
+func (s *Service) MissingAgentInstructionsCount() int {
+	projects, err := db.GetAllProjects(s.db)
+	if err != nil {
+		log.Printf("agent instructions count: %v", err)
+		return 0
+	}
+	n := 0
+	for i := range projects {
+		p := &projects[i]
+		if !p.Collected || refusalForProject(p) != AgentSetupOK {
+			continue
+		}
+		if st := instructionFilesState(strings.TrimSpace(p.RootPath)); st.State != AgentInstrStateOK {
+			n++
+		}
+	}
+	return n
+}
+
+// InstallAgentInstructions tops up ONE project's instruction files with the
+// managed block, and nothing else. It exists so the checklist's one-click
+// action never needs the MCP binary, never touches client configs, and never
+// installs the Claude hook — those remain the full setup dialog's decisions.
+//
+// The refusals mirror SetupAgentClients (same codes, same reasoning): a
+// container is not a project, and the desktop UI renders the code instead of
+// the backend guessing at a language.
+func (s *Service) InstallAgentInstructions(projectID int64) (AgentSetupReport, error) {
+	var report AgentSetupReport
+
+	project, err := db.GetProjectByID(s.db, projectID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			report.Code = AgentSetupProjectNotFound
+			report.Blocking = true
+			return report, nil
+		}
+		return report, err
+	}
+	if code := refusalForProject(project); code != AgentSetupOK {
+		report.Code = code
+		report.Blocking = true
+		return report, nil
+	}
+	dir := strings.TrimSpace(project.RootPath)
+	if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+		report.Code = AgentSetupMissingDirectory
+		report.Blocking = true
+		return report, nil
+	}
+
+	res, err := agentinit.Register(agentinit.Options{
+		TargetDir:        dir,
+		InstructionsOnly: true,
+		WithInstructions: true,
+	})
+	if err != nil {
+		return report, err
+	}
+	report.Instructions = res.Instructions
+	report.Warnings = res.Warnings
+	return report, nil
 }

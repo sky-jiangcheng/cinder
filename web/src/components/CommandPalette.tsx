@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import DOMPurify from 'dompurify'
 import { useApiData } from '../hooks/useApiData'
 import HandoffComposer from './HandoffComposer'
+import { hitHref } from '../pages/home/HomeKnowledgeAssistant'
 import s from './CommandPalette.module.css'
 
 interface Props {
@@ -24,6 +25,7 @@ export default function CommandPalette({ open, onClose }: Props) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
+  const [searchError, setSearchError] = useState(false)
   // Handoff mode (D25, ADR-0017 附录 4): the palette's first action switches
   // into project-pick for a one-click Claude-session capture, so creating a
   // handoff is reachable from the keyboard without leaving the palette.
@@ -50,6 +52,7 @@ export default function CommandPalette({ open, onClose }: Props) {
       previouslyFocused.current = document.activeElement as HTMLElement
       setQuery('') // eslint-disable-line react-hooks/set-state-in-effect
       setHits([])
+      setSearchError(false)
       setActiveIndex(0)
       setHandoffMode(false)
       setHandoffMsg(null)
@@ -67,12 +70,16 @@ export default function CommandPalette({ open, onClose }: Props) {
   useEffect(() => {
     if (!open || handoffMode) return
     const trimmed = query.trim()
-    if (!trimmed) { setHits([]); setActiveIndex(0); return } // eslint-disable-line react-hooks/set-state-in-effect
+    if (!trimmed) { setHits([]); setActiveIndex(0); setSearchError(false); return } // eslint-disable-line react-hooks/set-state-in-effect
     let cancelled = false
     const timer = setTimeout(() => {
       searchAll(trimmed).then(r => {
-        if (!cancelled) { setHits(r ?? []); setActiveIndex(0) }
-      }).catch(() => { if (!cancelled) setHits([]) })
+        if (!cancelled) { setHits(r ?? []); setActiveIndex(0); setSearchError(false) }
+      }).catch((e: unknown) => {
+        if (cancelled) return
+        console.error('[CommandPalette] search failed:', e)
+        setSearchError(true)
+      })
     }, 150)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [query, open, handoffMode])
@@ -131,7 +138,7 @@ export default function CommandPalette({ open, onClose }: Props) {
     }
     if (index < hits.length) {
       const h = hits[index]
-      if (h) { navigate(`/project/${h.project_id}`); onClose() }
+      if (h) { navigate(hitHref(h)); onClose() }
     } else {
       const p = filteredProjects[index - hits.length]
       if (p) { navigate(`/project/${p.id}`); onClose() }
@@ -190,6 +197,7 @@ export default function CommandPalette({ open, onClose }: Props) {
                   : t('commandPalette.startSearch', { defaultValue: 'Start searching' })}
             </div>
           )}
+          {searchError && <div className={s.cmdkEmpty}>{t('common.loadFailed')}</div>}
           {showHandoffActions && (
             <>
               <button
@@ -233,7 +241,7 @@ export default function CommandPalette({ open, onClose }: Props) {
             <Link
               key={`${h.type}-${h.id}`}
               id={`cmdk-opt-${idx}`}
-              to={`/project/${h.project_id}`}
+              to={hitHref(h)}
               className={`${s.cmdkItem} ${activeIndex === idx ? s.cmdkItemActive : ''}`}
               role="option"
               aria-selected={activeIndex === idx}

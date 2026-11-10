@@ -345,3 +345,32 @@ func TestReviewResultJSONUsesSnakeCase(t *testing.T) {
 		}
 	}
 }
+
+// Every rule switch is real: turning one off removes it, and a fresh install
+// that never wrote any switch still runs all nine non-opt-in rules.
+func TestReviewRuleSetHonoursAllRuleSwitches(t *testing.T) {
+	svc, _ := setupService(t)
+	has := func(id string) bool {
+		for _, r := range svc.reviewRuleSet() {
+			if r.ID() == id {
+				return true
+			}
+		}
+		return false
+	}
+	if rules := svc.reviewRuleSet(); len(rules) != 9 {
+		t.Fatalf("default config must keep 9 non-opt-in rules, got %d", len(rules))
+	}
+	if has("sensitive_log") {
+		t.Fatal("sensitive_log is opt-in and must stay off by default")
+	}
+	if err := db.SetConfig(svc.db, reviewOptInRuleKey+"feign_missing_body", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if has("feign_missing_body") {
+		t.Fatal("turning feign_missing_body off must remove it from the rule set")
+	}
+	if rules := svc.reviewRuleSet(); len(rules) != 8 {
+		t.Fatalf("only the switched-off rule should disappear, got %d", len(rules))
+	}
+}

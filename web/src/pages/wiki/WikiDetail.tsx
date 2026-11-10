@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { getProjects, getWikiPage } from '../../api/client'
 import type { PageEdge, Project, WikiPageDetail } from '../../api/client'
@@ -27,8 +27,18 @@ const WIKILINK_PREFIX = '#wikilink:'
 export default function WikiDetail() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams()
   const pageId = Number(id)
+
+  // Return to the list with the query and scope that led here.
+  const from = location.state as { q?: string; project?: number } | null
+  const backTo = useMemo(() => {
+    const params = new URLSearchParams({ view: 'pages' })
+    if (from?.q) params.set('q', from.q)
+    if (from?.project) params.set('project', String(from.project))
+    return `/knowledge?${params.toString()}`
+  }, [from])
 
   const [loaded, setLoaded] = useState<{ id: number; page: WikiPageDetail } | null>(null)
   const [failure, setFailure] = useState<{ id: number; message: string } | null>(null)
@@ -123,7 +133,7 @@ export default function WikiDetail() {
   if (error || !page) {
     return (
       <div className={s.page}>
-        <Link to="/knowledge?view=pages" className={s.back}>
+        <Link to={backTo} className={s.back}>
           <Icon name="arrow-up" size={14} className={s.backIcon} />
           {t('wiki.backToList')}
         </Link>
@@ -134,7 +144,7 @@ export default function WikiDetail() {
 
   return (
     <div className={s.page}>
-      <Link to="/knowledge?view=pages" className={s.back}>
+      <Link to={backTo} className={s.back}>
         <Icon name="arrow-up" size={14} className={s.backIcon} />
         {t('wiki.backToList')}
       </Link>

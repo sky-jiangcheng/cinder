@@ -93,9 +93,7 @@ export function cardFromSearchHit(hit: SearchHit, index: number, projectName?: s
 // share the number. Landing on the todos tab is the same rule the Knowledge
 // page uses (Knowledge.tsx).
 export function knowledgeHref(item: EvidenceItem, fallbackProjectId: number): string {
-  if (item.type === 'page') {
-    return item.project_id && item.project_id > 0 ? `/project/${item.project_id}` : '/review'
-  }
+  if (item.type === 'page') return `/wiki/${item.id}`
   const pid = item.project_id && item.project_id > 0 ? item.project_id : fallbackProjectId
   return item.type === 'todo'
     ? `/project/${pid}?tab=todos`
@@ -103,7 +101,8 @@ export function knowledgeHref(item: EvidenceItem, fallbackProjectId: number): st
 }
 
 /** 一条检索命中的落点：笔记直接定位到那篇笔记，待办落到待办页签。 */
-function hitHref(hit: SearchHit): string {
+export function hitHref(hit: SearchHit): string {
+  if (!hit.project_id || hit.project_id <= 0) return '/knowledge'
   return hit.type === 'note'
     ? `/project/${hit.project_id}?tab=notes&noteId=${hit.id}`
     : `/project/${hit.project_id}?tab=todos`
@@ -235,6 +234,8 @@ export default function HomeKnowledgeAssistant({
   const [input, setInput] = useState('')
   const [asking, setAsking] = useState(false)
   const [searching, setSearching] = useState(false)
+  // Only the latest search may clear the shared spinner.
+  const searchSeqRef = useRef(0)
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [messages, setMessages] = useState<DialogueMessage[]>([])
   const [tags, setTags] = useState<string[]>([])
@@ -320,6 +321,7 @@ export default function HomeKnowledgeAssistant({
     async (rawQuery: string) => {
       const q = rawQuery.trim()
       if (!q) return
+      const seq = ++searchSeqRef.current
       const targetProject = projects.find(p => p.id === scopeProjectId)
       const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       const userId = `q-${Date.now()}`
@@ -359,6 +361,7 @@ export default function HomeKnowledgeAssistant({
             ? projects.filter(p => p.name.toLowerCase().includes(needle)).slice(0, 8)
             : []
 
+        if (searchSeqRef.current !== seq) return
         setMessages(prev =>
           prev.map(m =>
             m.id === resultId
@@ -367,6 +370,7 @@ export default function HomeKnowledgeAssistant({
           ),
         )
       } catch (err) {
+        if (searchSeqRef.current !== seq) return
         const detail = err instanceof Error ? err.message : String(err)
         setMessages(prev =>
           prev.map(m =>
@@ -380,7 +384,7 @@ export default function HomeKnowledgeAssistant({
           ),
         )
       } finally {
-        setSearching(false)
+        if (searchSeqRef.current === seq) setSearching(false)
       }
     },
     [projects, scopeProjectId, t],
@@ -415,6 +419,9 @@ export default function HomeKnowledgeAssistant({
     // Wait for the project list: the "project name matched" hits need it.
     if (!projectsReady) return
     void runSearch(queryToRun)
+    // Consume the token once: a language switch or a refreshed project list
+    // rebuilds runSearch but must not re-run the previous query.
+    setQueryToRun(null)
   }, [queryToRun, searchRequest, projectsReady, runSearch])
 
   // Stop active streaming request

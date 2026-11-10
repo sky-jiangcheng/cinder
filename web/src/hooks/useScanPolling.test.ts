@@ -106,4 +106,16 @@ describe('useScanPolling', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2000) })   // healthy interval again
     expect(result.current.scanning).toBe(false)
   })
+
+  it('gives up after repeated failures instead of scanning forever', async () => {
+    mockGetScanStatus.mockRejectedValue(new Error('backend down'))
+
+    const { result } = renderHook(() => useScanPolling(() => {}))
+    act(() => { result.current.start('Scanning…') })
+
+    // Enough time to exhaust the failure budget through the growing backoff.
+    await act(async () => { await vi.advanceTimersByTimeAsync(120_000) })
+    expect(result.current.scanning).toBe(false)
+    expect(result.current.message).toBe('Scan failed')
+  })
 })

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigationType, useSearchParams } from 'react-router-dom'
+import { Link, useNavigationType, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   approveWikiPage, assignWikiPageProject, cancelCompileJob, deleteCompiledPage, diffWikiPageVersion,
@@ -171,22 +171,17 @@ function ReviewPage() {
   const [dismissed, setDismissed] = useState<string[]>([])
   const [community, setCommunity] = useState<WikiCommunityReport | null>(null)
   const [communityBusy, setCommunityBusy] = useState(false)
-  const [loadError, setLoadError] = useState('')
+  const [queueErrors, setQueueErrors] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
   const reload = useCallback(() => setReloadToken(n => n + 1), [])
 
   useEffect(() => {
-    // House pattern: the effect body only wires promises and cleanup — every
-    // setState happens inside a .then/.catch. Calling a setState-bearing function
-    // directly here is what the react-hooks lint rule rejects, and a synchronous
-    // setState on mount would cascade-render the whole page.
-    //
-    // The merge candidate pass rides along because it is free and structural
-    // (ADR-0019 决策 2: no model, no vector, no writes) — a reviewer sees what is
-    // waiting before anything is enabled.
+    // Each queue is independent: one failure must not blank the others.
     let cancelled = false
-    Promise.all([
+    setLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
+    Promise.allSettled([
       getProjects(),
       listPendingWikiPages(projectFilter),
       listRejectedWikiPages(projectFilter),
@@ -195,35 +190,33 @@ function ReviewPage() {
       findMergeCandidates(projectFilter, mergeTopK),
     ]).then(([projs, pend, rej, appr, jb, cand]) => {
       if (cancelled) return
-      setProjects(projs)
-      setPending(pend)
-      setRejected(rej)
-      setApproved(appr)
-      setJobs(jb)
-      setMerge(cand)
-      setLoadError('')
-    }).catch((e) => {
-      // Surface the underlying message next to the generic banner. A bare
-      // "加载审核队列失败" once hid the real cause ("unknown method:
-      // ListPendingWikiPages" — a stale repotory-server binary predating the
-      // review bindings) for two days; the RPC layer rejects with either an
-      // Error or a plain string (Wails mode), so handle both shapes.
-      if (cancelled) return
-      const detail = e instanceof Error ? e.message : String(e)
-      setLoadError(detail ? `${t('review.loadError')}: ${detail}` : t('review.loadError'))
+      const errors: Record<string, string> = {}
+      const detail = (r: PromiseRejectedResult) => r.reason instanceof Error ? r.reason.message : String(r.reason)
+      if (projs.status === 'fulfilled') setProjects(projs.value); else errors.projects = detail(projs)
+      if (pend.status === 'fulfilled') setPending(pend.value); else errors.pending = detail(pend)
+      if (rej.status === 'fulfilled') setRejected(rej.value); else errors.rejected = detail(rej)
+      if (appr.status === 'fulfilled') setApproved(appr.value); else errors.approved = detail(appr)
+      if (jb.status === 'fulfilled') setJobs(jb.value); else errors.jobs = detail(jb)
+      if (cand.status === 'fulfilled') setMerge(cand.value); else errors.merge = detail(cand)
+      setQueueErrors(errors)
+      setLoading(false)
     })
     return () => { cancelled = true }
-  }, [projectFilter, reloadToken, t])
+  }, [projectFilter, reloadToken])
 
-  // Poll only while a job is alive; stop the instant none are, so a finished
-  // review session never keeps hammering the backend. The interval callback
-  // setting state is fine — it is not the effect body.
+  // A running job only changes the job list, so the poll refreshes just that
+  // queue instead of re-issuing all six requests.
+  const fetchJobs = useCallback(() => {
+    listCompileJobs(projectFilter, '', 10)
+      .then(jb => setJobs(jb))
+      .catch(() => { /* keep the last job list on a failed poll */ })
+  }, [projectFilter])
   const anyActive = jobs.some(j => j.status === 'queued' || j.status === 'running')
   useEffect(() => {
     if (!anyActive) return
-    const id = setInterval(reload, jobPollMs)
+    const id = setInterval(fetchJobs, jobPollMs)
     return () => clearInterval(id)
-  }, [anyActive, reload])
+  }, [anyActive, fetchJobs])
 
   const runGuarded = useCallback(async (fn: () => Promise<unknown>) => {
     setBusy(true)
@@ -438,8 +431,12 @@ function ReviewPage() {
       <div className={s.content}>
         <p className={s.lead}>{t('review.subtitle')}</p>
 
-        {loadError && <ErrorBanner message={loadError} onRetry={reload} />}
+        {loading && <p className="empty-hint">{t('common.loading')}</p>}
+        {!loading && Object.entries(queueErrors).map(([queue, msg]) => (
+          <ErrorBanner key={queue} message={`${t('review.loadError')}: ${msg}`} onRetry={reload} />
+        ))}
 
+        {!loading && (<>
         {activeView === 'pending' && (
           <div
             role="tabpanel"
@@ -564,6 +561,7 @@ function ReviewPage() {
             )}
           </div>
         )}
+        </>)}
       </div>
     </PageShell>
   )
@@ -877,7 +875,13 @@ function ReviewCard({
         <div className={s.metaRow}>
           <span className={s.metaLabel}>{t('review.sourceNotes')}</span>
           {item.source_note_ids.map(id => (
-            <span key={id} className={s.chip}>{t('review.noteRef', { n: id })}</span>
+            p.project_id === 0 ? (
+              <span key={id} className={s.chip}>{t('review.noteRef', { n: id })}</span>
+            ) : (
+              <Link key={id} to={`/project/${p.project_id}?tab=notes&noteId=${id}`} className={s.chip}>
+                {t('review.noteRef', { n: id })}
+              </Link>
+            )
           ))}
         </div>
       )}
@@ -885,7 +889,7 @@ function ReviewCard({
         <div className={s.metaRow}>
           <span className={s.metaLabel}>{t('review.inLinks')}</span>
           {item.in_links.map(l => (
-            <span key={`${l.page_id}-${l.relation}`} className={s.chip}>{l.title || l.slug}</span>
+            <Link key={`${l.page_id}-${l.relation}`} to={`/wiki/${l.page_id}`} className={s.chip}>{l.title || l.slug}</Link>
           ))}
         </div>
       )}
@@ -893,7 +897,7 @@ function ReviewCard({
         <div className={s.metaRow}>
           <span className={s.metaLabel}>{t('review.outLinks')}</span>
           {item.out_links.map(l => (
-            <span key={`${l.page_id}-${l.relation}`} className={s.chip}>{l.title || l.slug}</span>
+            <Link key={`${l.page_id}-${l.relation}`} to={`/wiki/${l.page_id}`} className={s.chip}>{l.title || l.slug}</Link>
           ))}
         </div>
       )}

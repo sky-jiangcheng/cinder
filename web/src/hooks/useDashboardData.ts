@@ -10,6 +10,11 @@ import {
   getDashboardScope, setDashboardScope, subscribeDashboardScope,
 } from '../state/dashboardScope'
 
+// getConfig() is scope-independent; cache it for the same 30s TTL useApiData
+// uses so a date/starred change does not refetch it every time.
+const CONFIG_TTL = 30_000
+let goalCache: { value: number; at: number } | null = null
+
 export type SortKey = 'name' | 'my_added' | 'my_files' | 'repo_count'
 
 /**
@@ -19,7 +24,7 @@ export type SortKey = 'name' | 'my_added' | 'my_files' | 'repo_count'
 export function useDashboardData() {
   const { t } = useTranslation()
   const [summary, setSummary] = useState<Summary | null>(null)
-  const [dailyGoal, setDailyGoal] = useState(500)
+  const [dailyGoal, setDailyGoal] = useState(() => goalCache?.value ?? 500)
   const [sortKey, setSortKey] = useState<SortKey>('my_added')
   const [confirmScan, setConfirmScan] = useState(false)
   const [todoCounts, setTodoCounts] = useState<TodoCount[]>([])
@@ -88,14 +93,26 @@ export function useDashboardData() {
     () => { void fetchSummary(date); void refetchProjects() }
   )
 
+  // Config does not depend on the scope, so it is loaded once (with a 30s
+  // cache). A failed read keeps the last known goal instead of the default.
   useEffect(() => {
+    if (goalCache && Date.now() - goalCache.at < CONFIG_TTL) return
     getConfig()
       .then(c => {
         const v = parseInt(c.config.daily_code_standard || '500', 10)
-        if (!isNaN(v) && v > 0) setDailyGoal(v)
+        if (!isNaN(v) && v > 0) {
+          goalCache = { value: v, at: Date.now() }
+          setDailyGoal(v)
+        }
       })
-      .catch(() => {})
-    // First load: non-silent so loading state is properly managed.
+      .catch((e: unknown) => {
+        // Do not silently reset the target to 500 on a failed read.
+        console.error('[useDashboardData] getConfig failed', e)
+      })
+  }, [])
+
+  // First load: non-silent so loading state is properly managed.
+  useEffect(() => {
     void fetchSummary(date) // eslint-disable-line react-hooks/set-state-in-effect
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, showStarredOnly])
@@ -118,8 +135,11 @@ export function useDashboardData() {
     try {
       const newStarred = await toggleStar(projectId)
       setStarOverride(prev => ({ ...prev, [projectId]: newStarred }))
-      // Refresh the shared base list so NoteSection/CommandPalette reflect it.
+      // Star state feeds both the scoped dashboard list and the
+      // 'projects:all' consumers (NoteSection/CommandPalette); a single
+      // prefix does not cover both, so invalidate each family.
       invalidateCache('projects:all')
+      invalidateCache('dashProjects')
       return newStarred
     } catch (e: unknown) {
       setStarOverride(prev => { const n = { ...prev }; delete n[projectId]; return n })

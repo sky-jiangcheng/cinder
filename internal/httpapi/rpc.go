@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -70,7 +71,8 @@ func (h *handler) rpc(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
 			return
 		}
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request: " + err.Error()})
+		log.Printf("rpc: decode request: %v", err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
 	if rpcBlockedMethods[req.Method] {
@@ -120,11 +122,13 @@ func (h *handler) rpc(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case len(out) == 1 && out[0].Type() == errorType:
 		if !out[0].IsNil() {
+			log.Printf("rpc: %s failed: %v", req.Method, out[0].Interface().(error))
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": out[0].Interface().(error).Error()})
 			return
 		}
 	case len(out) == 2: // (T, error), signature verified above
 		if !out[1].IsNil() {
+			log.Printf("rpc: %s failed: %v", req.Method, out[1].Interface().(error))
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": out[1].Interface().(error).Error()})
 			return
 		}

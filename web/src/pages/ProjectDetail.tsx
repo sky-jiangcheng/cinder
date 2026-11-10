@@ -39,32 +39,24 @@ function ProjectDetailPage() {
   // (heatmap, trends, repos, notes) sat below the fold. The active tab is
   // mirrored into ?tab= so a section is linkable; ?newNote=1 (Knowledge page
   // jump) lands on the notes tab where the create form actually lives.
-  const initialTab = (): DetailTab => {
-    // A ?noteId= deep link (from the Knowledge page) must open on the notes tab
-    // so the target note is visible and can be highlighted.
-    if (searchParams.get('newNote') === '1' || searchParams.get('noteId')) return 'notes'
-    const raw = searchParams.get('tab')
-    // 'repos' merged into 'commits': the per-repo breakdown IS the commit
-    // view — heatmap/trends project-wide, breakdown by repository below.
-    const normalized: DetailTab | null =
-      raw === 'repos' ? 'commits'
-      : raw && TAB_KEYS.includes(raw as DetailTab) ? (raw as DetailTab)
-      : null
-    return normalized ?? 'overview'
-  }
-  const [tab, setTab] = useState<DetailTab>(initialTab)
+  // Derive the tab from the URL so a back/forward or another deep link switches
+  // it without a stale local copy. A ?noteId= link opens on notes.
+  const rawTab = searchParams.get('tab')
+  const tab: DetailTab =
+    rawTab === 'repos' ? 'commits'
+    : rawTab && TAB_KEYS.includes(rawTab as DetailTab) ? (rawTab as DetailTab)
+    : searchParams.get('newNote') === '1' || searchParams.get('noteId') ? 'notes'
+    : 'overview'
 
   // The note a deep link asked to focus (Knowledge page → this project). Passed
   // to NoteSection, which scrolls to it and flashes it once.
   const focusNoteId = Number(searchParams.get('noteId') || '') || undefined
 
   const selectTab = (next: DetailTab) => {
-    setTab(next)
     const params = new URLSearchParams(searchParams)
     params.set('tab', next)
     params.delete('newNote')
-    params.delete('noteId')
-    setSearchParams(params, { replace: true })
+    setSearchParams(params, { replace: false })
   }
 
   const [copied, setCopied] = useState(false)
@@ -200,7 +192,7 @@ function ProjectDetailPage() {
             <h3>{t('project.notFoundTitle')}</h3>
             <p>{t('project.notFoundDesc')}</p>
             <div className="empty-actions">
-              <button className="btn btn-primary" onClick={() => navigate('/dashboard')}>
+              <button className="btn btn-primary" onClick={() => navigate(-1)}>
                 {t('project.backToDashboard')}
               </button>
             </div>
@@ -210,7 +202,7 @@ function ProjectDetailPage() {
     }
     return (
       <PageShell footer={<StatusBar />}>
-        <button className={`btn btn-secondary ${s.backButton}`} onClick={() => navigate('/dashboard')}>&larr; {t('project.backToDashboard')}</button>
+        <button className={`btn btn-secondary ${s.backButton}`} onClick={() => navigate(-1)}>&larr; {t('project.backToDashboard')}</button>
         <ErrorBanner message={error || t('project.noRepos')} onRetry={retry} />
       </PageShell>
     )
@@ -228,7 +220,7 @@ function ProjectDetailPage() {
               into ~120px so the tab panels own the viewport. */}
           <div className={s.head}>
             <div className={s.headLine}>
-              <button className="btn btn-secondary btn-sm" onClick={() => navigate('/dashboard')}>
+              <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)}>
                 &larr; {t('project.backToDashboard')}
               </button>
               <h1>{project.name}</h1>

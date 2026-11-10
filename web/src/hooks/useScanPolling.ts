@@ -12,6 +12,9 @@ interface ScanPollingState {
 // it stops answering.
 const POLL_INTERVAL = 2000
 const MAX_BACKOFF = 30000
+// Give up after this many consecutive failed polls; a backend that never
+// answers must not leave scanning=true forever.
+const MAX_FAILURES = 5
 
 /**
  * Polls the backend scan status while a scan runs and invokes `onFinish`
@@ -71,6 +74,15 @@ export function useScanPolling(onFinish: () => void): ScanPollingState & { start
         // and fills the log for no benefit. Consecutive failures back off
         // exponentially up to MAX_BACKOFF; one successful poll resets it.
         failures.current += 1
+        if (failures.current >= MAX_FAILURES) {
+          // No failure exit used to exist: the UI stayed "scanning" forever.
+          // Stop and surface the error through the existing message field.
+          stop()
+          setScanning(false)
+          setDoneMessage('')
+          setMessage(tRef.current('common.failed', { defaultValue: 'Scan failed' }))
+          return
+        }
         delay = Math.min(POLL_INTERVAL * 2 ** failures.current, MAX_BACKOFF)
       }
       if (!alive.current) return

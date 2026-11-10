@@ -107,6 +107,13 @@ type Service struct {
 	// goroutines when the user rapidly switches between projects.
 	miningInFlight sync.Map
 
+	// askStreams deduplicates in-flight streaming asks by streamID.
+	askStreams sync.Map
+
+	// mineBackoff records the last failed mining time per repoID so a burst of
+	// requests cannot retry a broken miner back-to-back.
+	mineBackoff sync.Map
+
 	// gitUserMu guards guser so the git_author config key can be applied at
 	// runtime instead of only at construction time.
 	gitUserMu sync.RWMutex

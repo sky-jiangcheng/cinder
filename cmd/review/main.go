@@ -19,7 +19,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"repotory/internal/db"
@@ -58,7 +60,9 @@ func main() {
 	defer database.Close()
 
 	svc := service.New(database, "review-cli")
-	result, err := svc.RunReview(context.Background(), service.ReviewOptions{
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	result, err := svc.RunReview(ctx, service.ReviewOptions{
 		Date:   day,
 		Scope:  *scope,
 		DryRun: *dryRun,

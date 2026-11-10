@@ -11,6 +11,7 @@ package platform
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,7 +121,9 @@ func migrateLegacyData() {
 	if _, err := os.Stat(current); err == nil {
 		return
 	}
-	_ = os.Rename(old, current)
+	if err := os.Rename(old, current); err != nil {
+		log.Printf("migrate legacy data dir %q -> %q: %v", old, current, err)
+	}
 }
 
 // fallbackDir returns a private (0700) directory for degraded environments

@@ -46,6 +46,14 @@ func TestReviewNotifyCountDefaultsToConfirmedHigh(t *testing.T) {
 		finding("medium", "confirmed"), // below the threshold
 		finding("low", "confirmed"),
 	})
+	cfg, err := svc.GetReviewConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Enabled = true
+	if err := svc.UpdateReviewConfig(*cfg); err != nil {
+		t.Fatal(err)
+	}
 	n, err := svc.ReviewNotifyCount()
 	if err != nil {
 		t.Fatalf("ReviewNotifyCount: %v", err)
@@ -66,6 +74,7 @@ func TestReviewNotifyCountAllAndOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg.Enabled = true
 
 	cfg.Notify = "all"
 	if err := svc.UpdateReviewConfig(*cfg); err != nil {
@@ -92,5 +101,42 @@ func TestReviewNotifyCountWithoutAnyRun(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatalf("never reviewed means no dot, got %d", n)
+	}
+}
+
+// Disabled is the master switch: with review.enabled=0 there is no scheduled
+// run and no rail dot, even when the notify threshold would otherwise fire.
+func TestReviewNotifyCountDisabledIsSilent(t *testing.T) {
+	svc, _ := setupService(t)
+	seedReview(t, svc, []db.ReviewFinding{
+		finding("high", "confirmed"),
+		finding("medium", "confirmed"),
+	})
+	cfg, err := svc.GetReviewConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Enabled {
+		t.Fatal("review.enabled must default to off")
+	}
+	// The most permissive threshold must still stay silent while disabled.
+	cfg.Notify = "all"
+	if err := svc.UpdateReviewConfig(*cfg); err != nil {
+		t.Fatal(err)
+	}
+	n, err := svc.ReviewNotifyCount()
+	if err != nil {
+		t.Fatalf("ReviewNotifyCount: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("disabled review must be silent, got %d", n)
+	}
+	// Flipping the master switch on lets the same findings produce a dot.
+	cfg.Enabled = true
+	if err := svc.UpdateReviewConfig(*cfg); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := svc.ReviewNotifyCount(); n != 2 {
+		t.Fatalf("enabled review with notify=all must count findings, got %d", n)
 	}
 }

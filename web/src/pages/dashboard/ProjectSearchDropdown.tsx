@@ -5,6 +5,7 @@ import { searchAll, searchProjects, type Project, type SearchHit } from '../../a
 import { useDebouncedCallback } from '../../hooks/useDebouncedCallback'
 import DOMPurify from 'dompurify'
 import Icon from '../../components/Icon'
+import { hitHref } from '../home/HomeKnowledgeAssistant'
 import s from './ProjectSearchDropdown.module.css'
 
 interface Props {
@@ -22,6 +23,7 @@ export default function ProjectSearchDropdown({ onToggleStar }: Props) {
   const [noteHits, setNoteHits] = useState<SearchHit[] | null>(null)
   const [projectHits, setProjectHits] = useState<Project[] | null>(null)
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
   // Sequence guard: the debounce serialises the requests, but responses can
   // still arrive out of order — without the guard a slow older response
@@ -33,17 +35,20 @@ export default function ProjectSearchDropdown({ onToggleStar }: Props) {
       setNoteHits(null)
       setProjectHits(null)
       setSearching(false)
+      setSearchError(false)
       return
     }
     const seq = ++searchSeqRef.current
+    let failed = false
     Promise.all([
-      searchAll(q).catch(() => [] as SearchHit[]),
-      searchProjects(q).catch(() => [] as Project[]),
+      searchAll(q).catch((e: unknown) => { console.error('[ProjectSearchDropdown] searchAll failed:', e); failed = true; return [] as SearchHit[] }),
+      searchProjects(q).catch((e: unknown) => { console.error('[ProjectSearchDropdown] searchProjects failed:', e); failed = true; return [] as Project[] }),
     ]).then(([hits, projects]) => {
       if (searchSeqRef.current !== seq) return
       setNoteHits(hits)
       setProjectHits(projects)
       setSearching(false)
+      setSearchError(failed)
     })
   }, 300)
 
@@ -87,6 +92,7 @@ export default function ProjectSearchDropdown({ onToggleStar }: Props) {
       />
       {noteHits !== null && (
         <div className={s.searchDropdown}>
+          {searchError && <div className={s.searchEmpty}>{t('common.loadFailed')}</div>}
           {searching ? (
             <div className={s.searchLoading}>{t('dashboard.searching')}</div>
           ) : noteHits.length === 0 && (!projectHits || projectHits.length === 0) ? (
@@ -116,7 +122,7 @@ export default function ProjectSearchDropdown({ onToggleStar }: Props) {
                 <div className={s.searchGroup}>
                   <div className={s.searchGroupHeader}>{t('dashboard.groupNotesTodos')}</div>
                   {noteHits.map(h => (
-                    <Link key={`${h.type}-${h.id}`} to={`/project/${h.project_id}`} className={s.searchResultItem}>
+                    <Link key={`${h.type}-${h.id}`} to={hitHref(h)} className={s.searchResultItem}>
                       <div className={s.searchResultHeader}>
                         <span className={`${s.hitTypeMini} hit-type-${h.type}`}>{h.type === 'note' ? t('dashboard.noteType') : t('summaryBar.todos')}</span>
                         <span className={s.searchResultProject}>{h.project_name}</span>

@@ -45,6 +45,15 @@ describe('useDebouncedCallback', () => {
     expect(fn).not.toHaveBeenCalled()
   })
 
+  it('cancel() drops a pending call', () => {
+    const fn = vi.fn()
+    const { result } = renderHook(() => useDebouncedCallback(fn, 300))
+    act(() => result.current('x'))
+    act(() => result.current.cancel())
+    act(() => vi.advanceTimersByTime(300))
+    expect(fn).not.toHaveBeenCalled()
+  })
+
   it('stays a stable reference across renders', () => {
     const fn = vi.fn()
     const { result, rerender } = renderHook(({ cb }) => useDebouncedCallback(cb, 100), {

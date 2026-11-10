@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 const checkUpdateMock = vi.fn()
 const getConfigMock = vi.fn()
+const startUpdateDownloadMock = vi.fn()
+const cancelUpdateDownloadMock = vi.fn()
+const updateDownloadStateMock = vi.fn()
 
 vi.mock('./endpoints', () => ({
   checkUpdate: (...args: unknown[]) => checkUpdateMock(...args),
   getConfig: (...args: unknown[]) => getConfigMock(...args),
+  startUpdateDownload: (...args: unknown[]) => startUpdateDownloadMock(...args),
+  cancelUpdateDownload: (...args: unknown[]) => cancelUpdateDownloadMock(...args),
+  updateDownloadState: (...args: unknown[]) => updateDownloadStateMock(...args),
 }))
 
 import {
@@ -16,6 +22,7 @@ import {
   subscribeUpdateState,
   type UpdateState,
 } from './updateStatus'
+import { beginUpdateDownload, getDownloadSnapshot } from './downloadStatus'
 
 // The store is module-level, so its state survives between tests in this
 // file. Each test resets it by publishing a fresh verdict.
@@ -124,5 +131,28 @@ describe('startUpdateCheck', () => {
     await startUpdateCheck()
     expect(getConfigMock).not.toHaveBeenCalled()
     expect(checkUpdateMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('download status polling', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    startUpdateDownloadMock.mockResolvedValue(undefined)
+    updateDownloadStateMock.mockRejectedValue(new Error('rpc down'))
+  })
+
+  afterEach(() => { vi.useRealTimers() })
+
+  it('stops polling and publishes a failed state after repeated backend errors', async () => {
+    await beginUpdateDownload('https://example.invalid/a.dmg', 'a.dmg', 'sha', '2.13.0')
+    // One refresh runs before the timer starts, then the 400ms ticks take
+    // over; ten ticks are more than the 5-failure budget.
+    await vi.advanceTimersByTimeAsync(400 * 10)
+
+    expect(getDownloadSnapshot().state.phase).toBe('failed')
+    const calls = updateDownloadStateMock.mock.calls.length
+    await vi.advanceTimersByTimeAsync(4000)
+    // The interval is gone: no further polls after giving up.
+    expect(updateDownloadStateMock.mock.calls.length).toBe(calls)
   })
 })

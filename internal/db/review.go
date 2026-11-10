@@ -172,13 +172,19 @@ func StartReviewRun(database *sql.DB, runDate, scope string, force bool) (int64,
 // "already reviewed today" rather than an error the user must understand.
 var ErrReviewAlreadyDone = fmt.Errorf("review already completed for this date and scope")
 
-// FinishReviewRun stamps a run as done with its counters.
+// FinishReviewRun stamps a run as done with its counters. A non-empty
+// run.Error is written to the existing error column while the status stays
+// done, so partial model failures are visible without a new status value.
 func FinishReviewRun(database *sql.DB, run *ReviewRun) error {
+	var runErr any
+	if run.Error != "" {
+		runErr = run.Error
+	}
 	_, err := database.Exec(`UPDATE review_runs SET status = ?, finished_at = ?,
-		repos = ?, commits = ?, files = ?, candidates = ?, findings = ?, skipped = ?, ai_calls = ?
+		repos = ?, commits = ?, files = ?, candidates = ?, findings = ?, skipped = ?, ai_calls = ?, error = ?
 		WHERE id = ?`,
 		ReviewStatusDone, time.Now().Format(time.RFC3339),
-		run.Repos, run.Commits, run.Files, run.Candidates, run.Findings, run.Skipped, run.AICalls, run.ID)
+		run.Repos, run.Commits, run.Files, run.Candidates, run.Findings, run.Skipped, run.AICalls, runErr, run.ID)
 	return err
 }
 

@@ -13,6 +13,24 @@ interface DailyStat {
   commits: number
 }
 
+/** A ?date= deep link names the day the user came from; pick a default window
+ *  that actually contains it instead of always the last 7 days. */
+function defaultScopeFromUrl(): 'week' | 'month' | 'all' {
+  // BrowserRouter keeps the query in search; HashRouter (the desktop build)
+  // keeps it inside the hash after the path, so read both.
+  const hash = window.location.hash
+  const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?')) : ''
+  const date = new URLSearchParams(window.location.search).get('date')
+    || new URLSearchParams(hashQuery).get('date') || ''
+  if (!date) return 'week'
+  const ts = new Date(date.slice(0, 10) + 'T00:00:00').getTime()
+  if (isNaN(ts)) return 'week'
+  const ageDays = Math.floor((Date.now() - ts) / 86_400_000)
+  if (ageDays > 30) return 'all'
+  if (ageDays > 7) return 'month'
+  return 'week'
+}
+
 export function useProjectDetail(id: string | undefined) {
   const { t } = useTranslation()
 
@@ -38,7 +56,7 @@ export function useProjectDetail(id: string | undefined) {
     // A new project gets a fresh widening budget and the default window;
     // carrying either over would show project B in project A's scope.
     autoWidened.current = false
-    setScope('week')
+    setScope(defaultScopeFromUrl())
     getProjectDetail(Number(id))
       .then(p => {
         if (!current()) return
@@ -64,7 +82,11 @@ export function useProjectDetail(id: string | undefined) {
         // guard, or a late overview could still land after the next load.
         getProjectOverview(Number(id))
           .then(ov => { if (current()) setOverview(ov) })
-          .catch(() => {})
+          .catch((e: unknown) => {
+            // Overview is optional decoration: keep the page state intact,
+            // but never swallow the failure silently.
+            console.error('[useProjectDetail] getProjectOverview failed', e)
+          })
       })
       .catch((e) => { if (current()) setError(e instanceof Error ? e.message : t('common.failed')) })
       .finally(() => { if (current()) setLoading(false) })
@@ -140,7 +162,9 @@ export function useProjectDetail(id: string | undefined) {
     return map
   }, [project])
 
-  const trendData = useMemo(() => {
+  // The chart and the stat strip must answer the same question: both use the
+  // SAME date window (the page labels the totals "selected range").
+  const scopedDates = useMemo(() => {
     // stat_date carries the DATETIME storage format in some rows; the axis
     // must show bare calendar days, not "2025-10-09T00:00:00Z".
     let dates = Array.from(stats.keys()).map(d => d.slice(0, 10)).sort()
@@ -151,27 +175,32 @@ export function useProjectDetail(id: string | undefined) {
       const monthDates = new Set(getLastDays(30))
       dates = dates.filter((d) => monthDates.has(d))
     }
+    return dates
+  }, [stats, scope])
 
+  const trendData = useMemo(() => {
     return {
-      labels: dates,
+      labels: scopedDates,
       datasets: [
-        { label: t('dashboard.sortMyAdded', { defaultValue: 'Lines Added' }), data: dates.map((d) => stats.get(d)!.added), color: '--success' },
-        { label: t('project.deletedLines'), data: dates.map((d) => stats.get(d)!.deleted), color: '--danger' },
-        { label: t('dashboard.sortMyFiles', { defaultValue: 'Files Changed' }), data: dates.map((d) => stats.get(d)!.files), color: '--info' },
+        { label: t('dashboard.sortMyAdded', { defaultValue: 'Lines Added' }), data: scopedDates.map((d) => stats.get(d)!.added), color: '--success' },
+        { label: t('project.deletedLines'), data: scopedDates.map((d) => stats.get(d)!.deleted), color: '--danger' },
+        { label: t('dashboard.sortMyFiles', { defaultValue: 'Files Changed' }), data: scopedDates.map((d) => stats.get(d)!.files), color: '--info' },
       ] as TrendDataset[],
     }
-  }, [stats, scope, t])
+  }, [stats, scopedDates, t])
 
   const totals = useMemo(() => {
     let added = 0, deleted = 0, files = 0, active = 0
-    stats.forEach((v) => {
+    scopedDates.forEach((d) => {
+      const v = stats.get(d)
+      if (!v) return
       added += v.added
       deleted += v.deleted
       files += v.files
       if (v.added + v.deleted > 0) active++
     })
     return { added, deleted, files, active, repos: project?.repos?.length || 0 }
-  }, [stats, project])
+  }, [stats, scopedDates, project])
 
   return {
     project,

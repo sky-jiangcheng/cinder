@@ -21,8 +21,15 @@ type ScanResult struct {
 	// SyncErrors counts project groups whose DB sync failed while others
 	// succeeded. A partial sync used to report plain success, leaving the
 	// agent to believe the knowledge base was complete.
-	SyncErrors int    `json:"sync_errors,omitempty"`
-	TaskID     string `json:"task_id,omitempty"`
+	SyncErrors int `json:"sync_errors,omitempty"`
+	// AgentInstructionsMissing counts collected projects whose directory has
+	// no AGENTS.md/CLAUDE.md carrying the managed repotory block. These are
+	// exactly the projects whose agent sessions start without the memory-layer
+	// instructions — the condition that let the handoff protocol idle for two
+	// weeks unnoticed. The desktop offers a one-click top-up; an agent reading
+	// this after repotory_scan can tell the user which projects to fix.
+	AgentInstructionsMissing int    `json:"agent_instructions_missing,omitempty"`
+	TaskID                   string `json:"task_id,omitempty"`
 }
 
 // ScanStatus holds the current scanning progress.
@@ -253,7 +260,10 @@ func (s *Service) runCollectedScan(ctx context.Context) (out ScanResult, err err
 			len(roots), db.ErrNoScannedPaths)
 	}
 
-	tx, err := s.db.Begin()
+	// BeginTx binds the whole transaction to the caller's context: cancelling a
+	// scan rolls it back instead of leaving the single DB connection held until
+	// the loop happens to notice at its next iteration.
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ScanResult{ReposFound: len(repos)}, fmt.Errorf("begin scan transaction: %w", err)
 	}
@@ -294,7 +304,7 @@ func (s *Service) runCollectedScan(ctx context.Context) (out ScanResult, err err
 		return ScanResult{}, fmt.Errorf("scan sync failed for all %d discovered project group(s)", len(groups))
 	}
 
-	if err := db.CleanupStaleDataTx(tx, scannedPaths); err != nil {
+	if err := db.CleanupStaleDataTxContext(ctx, tx, scannedPaths); err != nil {
 		return ScanResult{ReposFound: len(repos)}, fmt.Errorf("cleanup stale data: %w", err)
 	}
 
@@ -326,6 +336,12 @@ func (s *Service) runCollectedScan(ctx context.Context) (out ScanResult, err err
 	}
 	s.refreshCollectedStats(ctx, collectedIDs)
 	_ = db.SetConfig(s.db, "last_stats_backfill", s.git.GetTodayDate())
-	log.Printf("scan complete: %d repos, %d projects (%d sync errors)", len(repos), len(groups), syncErrs)
-	return ScanResult{ReposFound: len(repos), Projects: len(groups), SyncErrors: syncErrs}, nil
+	// The instruction checklist rides the scan result (ADR-0054 follow-up): a
+	// collection just happened, which is the moment the user can act on "these
+	// N projects have no AGENTS.md/CLAUDE.md block, so their agent sessions
+	// start blind". The count is a handful of stat() calls; agents reading
+	// repotory_scan get it for free, the desktop overlays live status on top.
+	missing := s.MissingAgentInstructionsCount()
+	log.Printf("scan complete: %d repos, %d projects (%d sync errors, %d missing agent instructions)", len(repos), len(groups), syncErrs, missing)
+	return ScanResult{ReposFound: len(repos), Projects: len(groups), SyncErrors: syncErrs, AgentInstructionsMissing: missing}, nil
 }

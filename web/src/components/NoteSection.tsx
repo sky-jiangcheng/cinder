@@ -33,6 +33,23 @@ interface Props {
   focusNoteId?: number
 }
 
+// An in-progress edit is keyed by note id so a reload or a tab switch can
+// restore the typed changes instead of silently dropping them.
+const editDraftKey = (noteId: number) => `repotory-edit-draft-${noteId}`
+
+function loadEditDraft(noteId: number): NoteDraft | null {
+  try {
+    const raw = localStorage.getItem(editDraftKey(noteId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && typeof parsed.content === 'string'
+      ? { ...parsed } as NoteDraft
+      : null
+  } catch {
+    return null
+  }
+}
+
 function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   const { t } = useTranslation()
   const [notes, setNotes] = useState<Note[]>([])
@@ -51,7 +68,7 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   const [proposalNoteId, setProposalNoteId] = useState<number | null>(null)
   // The note id currently flashing due to a ?noteId= deep link.
   const [flashId, setFlashId] = useState<number | null>(null)
-  const focusedRef = useRef(false)
+  const focusedRef = useRef<number | null>(null)
 
   const [draft, setDraft, clearDraft] = useNoteDraft(projectId)
   const { data: projectsData } = useApiData(() => getProjects(undefined, false), [], { cacheKey: 'projects:all' })
@@ -90,6 +107,21 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   const [editDraft, setEditDraft] = useState<NoteDraft>({ ...draft })
 
   useEffect(() => {
+    if (editingId === null) return
+    try {
+      localStorage.setItem(editDraftKey(editingId), JSON.stringify(editDraft))
+    } catch {
+      // A disabled localStorage simply means the draft cannot survive a reload.
+    }
+  }, [editingId, editDraft])
+
+  useEffect(() => {
+    const dirty = editingId !== null || isNew
+    window.dispatchEvent(new CustomEvent('cinder:dirty', { detail: { source: 'note-editor', dirty } }))
+    return () => { window.dispatchEvent(new CustomEvent('cinder:dirty', { detail: { source: 'note-editor', dirty: false } })) }
+  }, [editingId, isNew])
+
+  useEffect(() => {
     if (autoNew) {
       setIsNew(true) // eslint-disable-line react-hooks/set-state-in-effect
       setEditingId(null)
@@ -113,8 +145,8 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   // note, not just the project's notes tab (ADR-0023). Guarded so a filter
   // toggle or refetch does not re-trigger the animation.
   useEffect(() => {
-    if (loading || focusNoteId == null || focusedRef.current) return
-    focusedRef.current = true
+    if (loading || focusNoteId == null || focusedRef.current === focusNoteId) return
+    focusedRef.current = focusNoteId
     const el = document.querySelector(`[data-note-id="${focusNoteId}"]`)
     if (!el) return
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -169,8 +201,9 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   }
 
   const startEdit = (note: Note) => {
+    const saved = loadEditDraft(note.id)
     setEditingId(note.id)
-    setEditDraft({
+    setEditDraft(saved ?? {
       content: note.content,
       title: note.title,
       tags: note.tags,
@@ -195,6 +228,7 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
         editDraft.kind,
         !!editDraft.pinned
       )
+      try { localStorage.removeItem(editDraftKey(editingId)) } catch { /* ignore */ }
       setEditingId(null)
       setOrganizeWarning('')
       setProposalNoteId(null)
@@ -376,7 +410,13 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
               editDraft={editDraft}
               onEditDraftChange={setEditDraft}
               onSaveEdit={handleSaveEdit}
-              onCancelEdit={() => { setEditingId(null); setOrganizeWarning('') }}
+              onCancelEdit={() => {
+                if (editingId !== null) {
+                  try { localStorage.removeItem(editDraftKey(editingId)) } catch { /* ignore */ }
+                }
+                setEditingId(null)
+                setOrganizeWarning('')
+              }}
               saving={saving}
               projects={projects}
               currentProjectId={projectId}

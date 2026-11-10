@@ -64,6 +64,9 @@ export default function WikiPagesView({
   useEffect(() => {
     const q = query.trim()
     let cancelled = false
+    // A new query or scope invalidates the old list and any stale error.
+    setLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
+    setError('')
     // The search is debounced; the browse feed is not (there is nothing to
     // type into it).
     const timer = window.setTimeout(() => {
@@ -127,7 +130,7 @@ export default function WikiPagesView({
     <ul className={s.list}>
       {pages.map(p => (
         <li key={p.id}>
-          <Link to={`/wiki/${p.id}`} className={s.row}>
+          <Link to={`/wiki/${p.id}`} state={{ q: query, project: scope }} className={s.row}>
             <span className={s.rowHead}>
               <span className={`${s.kindBadge} ${s['kindBadge_' + p.kind] ?? ''}`}>
                 {t(`wiki.kind_${p.kind}`, p.kind)}

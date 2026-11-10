@@ -56,8 +56,8 @@ describe('knowledgeHref', () => {
     expect(knowledgeHref(item({ type: 'todo', kind: 'todo', project_id: 0 }), 9)).toBe('/project/9?tab=todos')
   })
 
-  it('sends a page to its project, or to the review queue when it has none', () => {
-    expect(knowledgeHref(item({ type: 'page', project_id: 5 }), 9)).toBe('/project/5')
-    expect(knowledgeHref(item({ type: 'page', project_id: 0 }), 9)).toBe('/review')
+  it('sends a page to its wiki entry, not to the project list', () => {
+    expect(knowledgeHref(item({ type: 'page', project_id: 5 }), 9)).toBe('/wiki/7')
+    expect(knowledgeHref(item({ type: 'page', project_id: 0 }), 9)).toBe('/wiki/7')
   })
 })

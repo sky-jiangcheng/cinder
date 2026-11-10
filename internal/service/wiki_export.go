@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -249,7 +250,9 @@ func (s *Service) renderPage(byID map[int64]db.WikiPage, bySlug map[string]db.Wi
 		}
 	}
 
-	if out, err := db.WikiEdgesFrom(s.db, p.ID); err == nil && len(out) > 0 {
+	if out, err := db.WikiEdgesFrom(s.db, p.ID); err != nil {
+		log.Printf("wiki export: out edges for page %d: %v", p.ID, err)
+	} else if len(out) > 0 {
 		b.WriteString("## 出链\n\n")
 		for _, e := range out {
 			// The FK guarantees the target exists, so no "missing" branch here:
@@ -258,18 +261,26 @@ func (s *Service) renderPage(byID map[int64]db.WikiPage, bySlug map[string]db.Wi
 		}
 		b.WriteString("\n")
 	}
-	if back, err := db.WikiEdgesTo(s.db, p.ID); err == nil && len(back) > 0 {
+	if back, err := db.WikiEdgesTo(s.db, p.ID); err != nil {
+		log.Printf("wiki export: in edges for page %d: %v", p.ID, err)
+	} else if len(back) > 0 {
 		b.WriteString("## 反向链接\n\n")
 		for _, e := range back {
 			fmt.Fprintf(&b, "- [[%s|%s]] — %s\n", e.Slug, e.Title, e.Relation)
 		}
 		b.WriteString("\n")
 	}
-	if notes, err := db.NotesForPage(s.db, p.ID); err == nil && len(notes) > 0 {
+	if notes, err := db.NotesForPage(s.db, p.ID); err != nil {
+		log.Printf("wiki export: source notes for page %d: %v", p.ID, err)
+	} else if len(notes) > 0 {
 		b.WriteString("## 来源笔记\n\n")
 		for _, id := range notes {
 			n, err := db.GetNoteByID(s.db, id)
-			if err != nil || n == nil {
+			if err != nil {
+				log.Printf("wiki export: source note %d for page %d: %v", id, p.ID, err)
+				continue
+			}
+			if n == nil {
 				continue
 			}
 			title := strings.TrimSpace(n.Title)

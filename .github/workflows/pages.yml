@@ -37,7 +37,7 @@ jobs:
           node-version-file: '.nvmrc'
 
       - name: Install docs dependencies (marked + mermaid + jsdom via web)
-        run: npm install --prefix web marked mermaid jsdom
+        run: npm install --ignore-scripts --prefix web marked mermaid jsdom
 
       - name: Generate docs HTML
         run: node scripts/build-docs.mjs

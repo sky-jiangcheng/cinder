@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"repotory/internal/db"
 	"repotory/internal/domain"
+	"repotory/internal/integrity"
 	"repotory/internal/knowledge"
 	"repotory/internal/stats"
 )
@@ -258,6 +260,45 @@ type ProjectOverview struct {
 	Mining          bool                       `json:"mining,omitempty"`
 }
 
+// mineRetryBackoff keeps a broken miner from being retried by every adjacent
+// project-detail request after a failure.
+const mineRetryBackoff = 2 * time.Minute
+
+// repoMetaStale reports whether a repo_meta cache is older than the integrity
+// report's staleness window. An unparseable timestamp counts as stale so a
+// legacy row is refreshed instead of being trusted forever.
+func repoMetaStale(updatedAt string) bool {
+	t, err := time.Parse("2006-01-02 15:04:05", updatedAt)
+	if err != nil {
+		return true
+	}
+	return time.Since(t) > time.Duration(integrity.StaleAfterDays)*24*time.Hour
+}
+
+// mineRecentlyFailed reports whether mining for repoID failed inside the
+// backoff window, so a burst of loads cannot re-trigger it back-to-back.
+func (s *Service) mineRecentlyFailed(repoID int64) bool {
+	if repoID <= 0 {
+		return false
+	}
+	v, ok := s.mineBackoff.Load(repoID)
+	if !ok {
+		return false
+	}
+	return time.Since(v.(time.Time)) < mineRetryBackoff
+}
+
+// recordMineFailure writes the failure to the shared last-error field and arms
+// the per-repo backoff. syncLastErr is the status field the settings page reads.
+func (s *Service) recordMineFailure(repoID int64, err error) {
+	s.syncMu.Lock()
+	s.syncLastErr = err
+	s.syncMu.Unlock()
+	if repoID > 0 {
+		s.mineBackoff.Store(repoID, time.Now())
+	}
+}
+
 // GetProjectOverview returns mined knowledge for a project: README excerpt,
 // detected tech stack, language breakdown and recent commits. Mined results
 // are cached in repo_meta so repeated loads do not re-walk the working tree.
@@ -287,7 +328,10 @@ func (s *Service) projectOverview(projectID, preferRepoID int64) (*ProjectOvervi
 		}
 		return nil, fmt.Errorf("load project %d: %w", projectID, err)
 	}
-	repos, _ := db.GetRepositoriesByProjectID(s.db, projectID)
+	repos, err := db.GetRepositoriesByProjectID(s.db, projectID)
+	if err != nil {
+		log.Printf("project overview: load repositories for project %d: %v", projectID, err)
+	}
 
 	resp := &ProjectOverview{}
 
@@ -317,21 +361,62 @@ func (s *Service) projectOverview(projectID, preferRepoID int64) (*ProjectOvervi
 	} else if len(repos) > 0 {
 		cacheRepoID = repos[0].ID
 	}
+	cacheHit := false
+	needMine := false
 	if cacheRepoID > 0 {
-		if meta, err := db.GetRepoMeta(s.db, cacheRepoID); err == nil && meta != nil && meta.TechStack != "" {
-			_ = json.Unmarshal([]byte(meta.TechStack), &resp.TechStack)
-			_ = json.Unmarshal([]byte(meta.Languages), &resp.Languages)
-			_ = json.Unmarshal([]byte(meta.Dependencies), &resp.Dependencies)
-			_ = json.Unmarshal([]byte(meta.TopContributors), &resp.TopContributors)
-			_ = json.Unmarshal([]byte(meta.Activity), &resp.Activity)
-			resp.ReadmeExcerpt = meta.ReadmeExcerpt
-			resp.Cached = true
+		meta, err := db.GetRepoMeta(s.db, cacheRepoID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("project overview: load repo_meta for repo %d: %v", cacheRepoID, err)
+		} else if err == nil && meta != nil && meta.TechStack != "" {
+			// Only malformed JSON invalidates the cache. Valid JSON of an
+			// unexpected shape (legacy "[]" placeholders in a struct column)
+			// is logged and ignored: an empty column never cost the user their
+			// README or tech stack before, and should not now.
+			valid := true
+			decode := func(field, data string, v any) {
+				if data == "" {
+					return
+				}
+				if !json.Valid([]byte(data)) {
+					log.Printf("project overview: corrupt %s cache for repo %d", field, cacheRepoID)
+					valid = false
+					return
+				}
+				if !jsonUnmarshal(data, v) {
+					log.Printf("project overview: unexpected %s shape for repo %d; ignoring", field, cacheRepoID)
+				}
+			}
+			decode("tech_stack", meta.TechStack, &resp.TechStack)
+			decode("languages", meta.Languages, &resp.Languages)
+			decode("dependencies", meta.Dependencies, &resp.Dependencies)
+			decode("top_contributors", meta.TopContributors, &resp.TopContributors)
+			decode("activity", meta.Activity, &resp.Activity)
+			if valid {
+				resp.ReadmeExcerpt = meta.ReadmeExcerpt
+				resp.Cached = true
+				cacheHit = true
+				if repoMetaStale(meta.UpdatedAt) {
+					needMine = true
+				}
+			} else {
+				// A corrupt cache is a miss: drop every partially decoded field
+				// so the response never mixes stale and empty data.
+				resp.TechStack = nil
+				resp.Languages = nil
+				resp.Dependencies = nil
+				resp.TopContributors = nil
+				resp.Activity = nil
+			}
 		}
 	}
 
-	// Mine fresh when no cache was found — trigger async so the API returns quickly.
-	if !resp.Cached {
-		resp.Mining = true
+	// Mine when the cache is missing or stale. A stale cache is still returned,
+	// but a fresh mine runs in the background so the next load is current.
+	if !cacheHit {
+		needMine = true
+	}
+	if needMine && !s.mineRecentlyFailed(cacheRepoID) {
+		resp.Mining = !cacheHit
 		miningRepos := scopeRepos
 		root := miningRoot
 		s.bgGo(fmt.Sprintf("mine project %d repo %d", projectID, cacheRepoID), func(_ context.Context) {
@@ -391,6 +476,11 @@ func (s *Service) mineAndCache(cacheRepoID int64, rootPath string, repos []domai
 	}
 	k, err := knowledge.Mine(minePath)
 	if err != nil || k == nil {
+		if err == nil {
+			err = fmt.Errorf("miner returned no knowledge")
+		}
+		log.Printf("mineAndCache: mine %q failed: %v", minePath, err)
+		s.recordMineFailure(cacheRepoID, err)
 		return
 	}
 	// The project root of a grouping is a container directory, not a git
@@ -418,6 +508,9 @@ func (s *Service) mineAndCache(cacheRepoID int64, rootPath string, repos []domai
 		aa, _ := json.Marshal(k.Activity)
 		if err := db.UpsertRepoMeta(s.db, cacheRepoID, string(ts), k.ReadmeExcerpt, string(ls), string(ds), string(tc), string(aa)); err != nil {
 			log.Printf("mineAndCache: upsert repo_meta for repo %d failed: %v", cacheRepoID, err)
+			s.recordMineFailure(cacheRepoID, err)
+		} else {
+			s.mineBackoff.Delete(cacheRepoID)
 		}
 	}
 }

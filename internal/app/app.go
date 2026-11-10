@@ -17,6 +17,7 @@ package app
 
 import (
 	"context"
+	"log"
 
 	"repotory/internal/service"
 )
@@ -88,7 +89,9 @@ func (a *App) Startup(ctx context.Context) {
 // Shutdown is called when the application exits.
 func (a *App) Shutdown(_ context.Context) {
 	a.svc.Shutdown()
-	_ = a.svc.Close()
+	if err := a.svc.Close(); err != nil {
+		log.Printf("close database: %v", err)
+	}
 }
 
 // Health returns a health-check payload for the frontend.

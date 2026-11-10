@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"strings"
@@ -27,7 +28,15 @@ var ErrNoScannedPaths = errors.New("refusing to clean up: scan produced no repos
 //
 // scannedPaths must be non-empty; an empty slice returns ErrNoScannedPaths
 // rather than deleting every repository and stat. See that error for why.
+// It is a compatibility wrapper over CleanupStaleDataTxContext.
 func CleanupStaleDataTx(tx *sql.Tx, scannedPaths []string) error {
+	return CleanupStaleDataTxContext(context.Background(), tx, scannedPaths)
+}
+
+// CleanupStaleDataTxContext is CleanupStaleDataTx with a caller context, so a
+// cancelled scan interrupts the long DELETEs instead of holding the single
+// database connection for the whole transaction.
+func CleanupStaleDataTxContext(ctx context.Context, tx *sql.Tx, scannedPaths []string) error {
 	if len(scannedPaths) == 0 {
 		return ErrNoScannedPaths
 	}
@@ -37,12 +46,12 @@ func CleanupStaleDataTx(tx *sql.Tx, scannedPaths []string) error {
 	for i, p := range scannedPaths {
 		args[i] = p
 	}
-	if _, err := tx.Exec(
+	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM daily_stats WHERE repository_id IN (SELECT id FROM repositories WHERE path NOT IN ("+placeholders+"))",
 		args...); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(
+	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM repositories WHERE path NOT IN ("+placeholders+")",
 		args...); err != nil {
 		return err
@@ -53,10 +62,10 @@ func CleanupStaleDataTx(tx *sql.Tx, scannedPaths []string) error {
 	// (ADR-0023). Import placeholders are NOT exempt — an emptied placeholder
 	// (all notes organized away) should be cleaned, while one that still holds
 	// notes is kept by the notes predicate regardless of kind.
-	_, err := tx.Exec(
-		"DELETE FROM projects WHERE project_kind != 'default' " +
-			"AND NOT EXISTS (SELECT 1 FROM repositories WHERE repositories.project_id = projects.id) " +
-			"AND NOT EXISTS (SELECT 1 FROM project_notes WHERE project_notes.project_id = projects.id) " +
+	_, err := tx.ExecContext(ctx,
+		"DELETE FROM projects WHERE project_kind != 'default' "+
+			"AND NOT EXISTS (SELECT 1 FROM repositories WHERE repositories.project_id = projects.id) "+
+			"AND NOT EXISTS (SELECT 1 FROM project_notes WHERE project_notes.project_id = projects.id) "+
 			"AND NOT EXISTS (SELECT 1 FROM project_todos WHERE project_todos.project_id = projects.id)")
 	return err
 }

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -227,7 +228,8 @@ func (h *handler) project(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		log.Printf("project %d request failed: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 	}
 
 	switch {

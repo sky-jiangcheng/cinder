@@ -69,9 +69,8 @@ function ProjectCard({ project, date, todoCount, noteCount, dailyGoal = 0, isWor
         >
           <Icon name="star" size={16} />
         </button>
-        {/* Unstarred repos only show name + star button (no detail page) — clicking
-            would lead to an empty detail page with no stats, so it is non-interactive. */}
-        <span className={s.name} title={project.root_path}>{project.name}</span>
+        {/* The name is the link; the star stays a sibling of the anchor. */}
+        <Link to={to} className={s.name} title={project.root_path}>{project.name}</Link>
         {kindBadge && <span className={`badge ${kindBadge.cls}`}>{kindBadge.label}</span>}
       </div>
     )

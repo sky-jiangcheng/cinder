@@ -26,6 +26,11 @@ func (s *Service) ReviewNotifyCount() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// The master switch means the feature is off entirely: no scheduled run
+	// and no rail dot, regardless of the notify threshold (ADR-0053 D5).
+	if !cfg.Enabled {
+		return 0, nil
+	}
 	if cfg.Notify == "off" {
 		return 0, nil
 	}

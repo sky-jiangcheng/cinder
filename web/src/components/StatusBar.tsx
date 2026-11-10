@@ -8,18 +8,25 @@ import s from './StatusBar.module.css'
 // 保留在 markup 里作为将来挂样式的锚点，删留都不影响行为。
 
 export default function StatusBar() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [data, setData] = useState<StatusBarData | null>(null)
   const [connKind, setConnKind] = useState(getConnectionKind())
-
-  const fetch = () => {
-    getStatusBar().then(setData).catch(() => {})
-  }
+  const [loadFailed, setLoadFailed] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
+    const fetch = () => {
+      getStatusBar()
+        .then(d => { if (!cancelled) { setData(d); setLoadFailed(false) } })
+        .catch((e: unknown) => {
+          if (cancelled) return
+          console.error('[StatusBar] fetch failed:', e)
+          setLoadFailed(true)
+        })
+    }
     fetch()
     const timer = setInterval(fetch, 30000)
-    return () => clearInterval(timer)
+    return () => { cancelled = true; clearInterval(timer) }
   }, [])
 
   useEffect(() => {
@@ -33,7 +40,10 @@ export default function StatusBar() {
     return () => clearInterval(timer)
   }, [])
 
-  const currentTime = now.toLocaleString('zh-CN', {
+  // The clock follows the interface language. The language instance comes
+  // from the translation hook, so the clock follows a language switch too.
+  const locale = i18n?.resolvedLanguage || i18n?.language || 'zh-CN'
+  const currentTime = now.toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -49,11 +59,11 @@ export default function StatusBar() {
       : null
 
   return (
-    <div className={s.statusBar} aria-live="polite">
+    <div className={s.statusBar}>
       <div className={s.statusLeft}>
         <span className={s.statusItem}>
           <span className={`${s.statusDot} ${connKind !== 'ok' ? s.statusDotError : ''}`} />
-          {statusText && <span className="status-warn">{statusText}</span>}
+          <span className="status-warn" aria-live="polite">{statusText ?? (loadFailed ? t('common.loadFailed') : '')}</span>
           {t('status.time')}{currentTime}
         </span>
       </div>

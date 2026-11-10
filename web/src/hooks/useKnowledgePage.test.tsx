@@ -21,7 +21,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: mockT }),
 }))
 
-import { useKnowledgePage } from './useKnowledgePage'
+import { useKnowledgePage, invalidateKnowledgeCache } from './useKnowledgePage'
 import { getProjects, listAllNotes, listAllTags, searchAll, type NoteWithProject, type Project } from '../api/client'
 
 const mockListAllNotes = vi.mocked(listAllNotes)
@@ -70,6 +70,7 @@ const note = (id: number, projectId: number, projectName: string): NoteWithProje
 })
 
 beforeEach(() => {
+  invalidateKnowledgeCache()
   mockListAllNotes.mockReset().mockResolvedValue([])
   mockListAllTags.mockReset().mockResolvedValue([])
   mockGetProjects.mockReset().mockResolvedValue([])

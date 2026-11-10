@@ -68,6 +68,9 @@ function readSub(raw: string | null): KnowledgeSub {
   return raw === 'organize' ? 'organize' : 'notes'
 }
 
+// Stable no-op so a hidden body's report callbacks keep a fixed identity.
+const noop = () => {}
+
 /**
  * The search params for a given state. The view is left out when it is the
  * default, so the common URL stays short ("/knowledge") while a shared
@@ -111,6 +114,8 @@ export default function Knowledge() {
   // location while our own write is in flight, and adopting that as an
   // external change would wipe the tail of what the user just typed.
   const written = useRef({ v: urlView, q: urlQuery, p: urlScope, s: urlSub })
+  // The single URL writer below PUSHes only when a view/sub switch set this.
+  const pushNext = useRef(false)
   // Only a history navigation (back / forward) may overwrite the local state;
   // our own PUSH/REPLACE writes must not.
   const navType = useNavigationType()
@@ -134,14 +139,14 @@ export default function Knowledge() {
     return () => { cancelled = true }
   }, [])
 
-  // The URL follows the local state. REPLACE, not PUSH: typing a query must
-  // not push a history entry per keystroke, and the scope dropdown is one
-  // step, not a trail. (The view and sub switches are the exceptions — see
-  // switchView / switchSub.)
+  // The one URL writer: a keystroke or scope change REPLACEs, a view/sub
+  // switch PUSHes. Writing here only keeps the two paths from double-writing.
   useEffect(() => {
     const q = query.trim()
     written.current = { v: view, q, p: scope, s: sub }
-    setSearchParams(buildParams(view, sub, q, scope), { replace: true })
+    const replace = !pushNext.current
+    pushNext.current = false
+    setSearchParams(buildParams(view, sub, q, scope), { replace })
   }, [view, sub, query, scope, setSearchParams])
 
   // What the body underneath reports: the count the shared count bar shows,
@@ -173,19 +178,13 @@ export default function Knowledge() {
   const switchView = useCallback((next: KnowledgeView) => {
     if (next === view) return
     setView(next)
-    // The notes drawer's inner view does not survive a drawer switch: coming
-    // back to the notes must not land on the workbench the user left two
-    // steps ago.
     setSub('notes')
-    // PUSH, not REPLACE: the back button has to be able to walk back
-    // through a view switch — with REPLACE it would step over it and land
-    // on the page before the tab, which reads as "the tab ate my history".
-    setSearchParams(buildParams(next, 'notes', query, scope), { replace: false })
+    pushNext.current = true
     // The old body's count / failure belong to the old body.
     setCount(0)
     setBodyError('')
     setBodyLoading(true)
-  }, [view, query, scope, setSearchParams])
+  }, [view])
 
   // Switching the notes drawer's inner view is a navigation step, not a
   // keystroke: PUSH, so the back button walks back through it — the same
@@ -193,8 +192,8 @@ export default function Knowledge() {
   const switchSub = useCallback((next: KnowledgeSub) => {
     if (next === sub) return
     setSub(next)
-    setSearchParams(buildParams(view, next, query, scope), { replace: false })
-  }, [sub, view, query, scope, setSearchParams])
+    pushNext.current = true
+  }, [sub])
 
   // The two tabs of the notes drawer. The organize tab only takes up room
   // when there is something to file (the same "no backlog, no entry" rule the
@@ -320,33 +319,36 @@ export default function Knowledge() {
           looking at, and how much of it there is. The organize workbench has
           no list of its own to count, so the notes count steps aside while
           it is open. */}
-      {count > 0 && !(view === 'notes' && sub === 'organize') && (
+      {!(view === 'notes' && sub === 'organize') && (
         <div className={s.resultCount} aria-live="polite">
           {t(countKey, { count })}
         </div>
       )}
 
-      {view === 'notes' ? (
+      {/* Both bodies stay mounted so switching never refetches or drops the
+          other body's filters; only the visible one reports to the skeleton. */}
+      <div hidden={view !== 'notes'}>
         <NotesBody
           sub={sub}
           query={query}
           scope={scope}
           projects={projects}
           onPendingOrganize={setPendingOrganize}
-          onCount={handleCount}
-          onError={handleError}
-          onLoading={handleLoading}
+          onCount={view === 'notes' ? handleCount : noop}
+          onError={view === 'notes' ? handleError : noop}
+          onLoading={view === 'notes' ? handleLoading : noop}
         />
-      ) : (
+      </div>
+      <div hidden={view !== 'pages'}>
         <WikiPagesView
           query={query}
           scope={scope}
           projects={projects}
-          onCount={handleCount}
-          onError={handleError}
-          onLoading={handleLoading}
+          onCount={view === 'pages' ? handleCount : noop}
+          onError={view === 'pages' ? handleError : noop}
+          onLoading={view === 'pages' ? handleLoading : noop}
         />
-      )}
+      </div>
     </PageShell>
   )
 }

@@ -79,19 +79,24 @@ type ReviewResult struct {
 	DryRun      bool `json:"dry_run"`
 }
 
-// reviewRuleSet returns the rules to run, honouring per-rule opt-in config.
-// Rules that implement review.OptInRule stay off unless `review.rule.<id>` is
-// "1" — the ADR's decision that `sensitive_log` must not fire without an
-// explicit choice, because masking conventions differ per codebase.
+// reviewRuleSet returns the rules to run, honouring per-rule config. Every
+// rule reads `review.rule.<id>`; an absent key keeps the default (on for
+// normal rules, off for OptInRule ones), so an existing install that never
+// touched the switches keeps all nine default rules on. This mirrors
+// GetReviewConfig so the settings page and the runner cannot disagree.
 func (s *Service) reviewRuleSet() []review.Rule {
 	all := review.DefaultRules()
 	out := make([]review.Rule, 0, len(all))
 	for _, r := range all {
+		on := true
 		if opt, ok := r.(review.OptInRule); ok && opt.OptIn() {
-			v, _ := db.GetConfig(s.db, reviewOptInRuleKey+r.ID())
-			if v != "1" && !strings.EqualFold(v, "true") {
-				continue
-			}
+			on = false
+		}
+		if v, _ := db.GetConfig(s.db, reviewOptInRuleKey+r.ID()); v != "" {
+			on = v == "1" || strings.EqualFold(v, "true")
+		}
+		if !on {
+			continue
 		}
 		out = append(out, r)
 	}
@@ -175,6 +180,7 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 		files      int
 		commits    int
 		aiCalls    int
+		aiFailures int
 	)
 
 	for _, repoPath := range repos {
@@ -237,9 +243,10 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 				// and only when there is something to review — the "zero
 				// candidates, zero calls" property in ADR-0053 D2.
 				if aiEnabled && len(fileFindings) > 0 {
-					var calls int
-					fileFindings, calls = s.refineWithCandidates(ctx, ch.Path, content, fileFindings)
+					var calls, failures int
+					fileFindings, calls, failures = s.refineWithCandidates(ctx, ch.Path, content, fileFindings)
 					aiCalls += calls
+					aiFailures += failures
 				}
 				for _, found := range fileFindings {
 					// A rule cannot know which repository it was handed
@@ -278,6 +285,12 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 	run.Skipped = skipped
 	run.AICalls = aiCalls
 	run.Status = db.ReviewStatusDone
+	// Model-pass failures stay visible on the run without changing its status:
+	// the rule-only report is still usable, but "done" must not read as
+	// "the model checked everything".
+	if aiFailures > 0 {
+		run.Error = fmt.Sprintf("%d model passes failed", aiFailures)
+	}
 
 	result := &ReviewResult{Findings: findings, DryRun: opts.DryRun}
 	if opts.DryRun {

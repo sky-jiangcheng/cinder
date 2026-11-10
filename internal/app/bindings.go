@@ -606,7 +606,11 @@ func (a *App) RunReviewNow(date, scope string, force, noAI, dryRun bool) (*servi
 		}
 		opts.Date = parsed
 	}
-	return a.svc.RunReview(context.Background(), opts)
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return a.svc.RunReview(ctx, opts)
 }
 
 // ReviewNotifyCount is the rail dot's input: how many findings the configured
@@ -638,9 +642,7 @@ func (a *App) ListAICallAudit(limit int) ([]db.AICallLog, error) {
 
 // AskStreamResult is the immediate acknowledgement of StartAskStream: the
 // stream id the frontend uses to correlate the async events that follow.
-type AskStreamResult struct {
-	StreamID string `json:"stream_id"`
-}
+type AskStreamResult = service.AskStreamResult
 
 // StartAskStream launches the streaming evidence-backed ask and returns at
 // once with a stream id; the answer then arrives progressively as UI events
@@ -655,56 +657,9 @@ type AskStreamResult struct {
 // Desktop-only transport: the browser/standalone runtime has no Wails event
 // channel and uses the HTTP SSE endpoint (/api/ai/ask-stream) instead, so this
 // binding is deliberately absent from the /api/rpc bridge (rpcBlockedMethods).
+// The goroutine lifecycle (recover, deadline, dedup) lives in the service.
 func (a *App) StartAskStream(projectID int64, question string) (*AskStreamResult, error) {
-	streamID := fmt.Sprintf("ask-%d", time.Now().UnixNano())
-	go func() {
-		ans, err := a.svc.AskAIWithEvidenceStream(
-			projectID, question, service.DefaultEvidenceBudget,
-			func(delta string) {
-				a.emitEvent("ai.ask.stream", map[string]any{
-					"stream_id": streamID,
-					"type":      "delta",
-					"delta":     delta,
-				})
-			},
-			func(id, name string) {
-				a.emitEvent("ai.ask.stream", map[string]any{
-					"stream_id": streamID,
-					"type":      "tool_call",
-					"tool_call": map[string]any{
-						"id":   id,
-						"name": name,
-					},
-				})
-			},
-			func(id string, result any) {
-				a.emitEvent("ai.ask.stream", map[string]any{
-					"stream_id":    streamID,
-					"type":         "tool_result",
-					"tool_call_id": id,
-					"content":      result,
-				})
-			},
-		)
-		if a.ctx == nil {
-			return
-		}
-		if err != nil {
-			a.emitEvent("ai.ask.stream", map[string]any{
-				"stream_id": streamID,
-				"error":     err.Error(),
-			})
-			return
-		}
-		a.emitEvent("ai.ask.stream", map[string]any{
-			"stream_id": streamID,
-			"done":      true,
-			"reply":     ans.Reply,
-			"evidence":  ans.Evidence,
-			"truncated": ans.Truncated,
-		})
-	}()
-	return &AskStreamResult{StreamID: streamID}, nil
+	return a.svc.StartAskStream(a.ctx, projectID, question, a.emitEvent)
 }
 
 // FileAnswerAsPage closes ADR-0014's query loop: a good answer becomes a `query`

@@ -1,4 +1,4 @@
-import { lazy, Suspense, type CSSProperties, type ReactNode, useEffect, useState } from 'react'
+import { lazy, Suspense, type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
 import { BrowserRouter, HashRouter, Navigate, Routes, Route, useLocation, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import CommandPalette from './components/CommandPalette'
@@ -106,6 +106,29 @@ function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredTheme())
   const [contextCollapsed, setContextCollapsed] = useState(readContextRailCollapsed)
 
+  // Global unsaved-changes guard. A surface holding a draft reports it with a
+  // `cinder:dirty` event so closing the tab warns instead of dropping the work.
+  const dirtySources = useRef(new Set<string>())
+  useEffect(() => {
+    const onDirty = (e: Event) => {
+      const detail = (e as CustomEvent<{ source?: string; dirty?: boolean }>).detail
+      if (!detail?.source) return
+      if (detail.dirty) dirtySources.current.add(detail.source)
+      else dirtySources.current.delete(detail.source)
+    }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirtySources.current.size === 0) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('cinder:dirty', onDirty)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('cinder:dirty', onDirty)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  }, [])
+
   // Start periodic health polling on mount.
   useEffect(() => {
     return startHealthPoll()
@@ -175,7 +198,7 @@ function App() {
       pushToast({
         kind: 'success',
         title: `${t('common.imported', { defaultValue: 'Imported' })} ${data.source}`,
-        message: `${t('common.add', { defaultValue: '+' })}${data.created} · ${t('common.edit', { defaultValue: '~' })}${data.updated} · ${t('common.remove', { defaultValue: '-' })}${data.skipped}`,
+        message: `+${data.created} · ~${data.updated} · -${data.skipped}`,
       })
     })
     return unsubscribe
@@ -210,7 +233,7 @@ function App() {
           {connBanner && (
             <div className="conn-banner" role="alert" aria-live="polite">{connBanner}</div>
           )}
-          <a className={s.skipLink} href="#main-content" onClick={skipToContent}>{t('common.show', { defaultValue: 'Skip to main content' })}</a>
+          <a className={s.skipLink} href="#main-content" onClick={skipToContent}>{t('common.skipToContent', { defaultValue: 'Skip to main content' })}</a>
           <div className={`${s.shell} ${MAC_DESKTOP ? s.shellWithControls : ''}`}>
             <SideRail
               themeMode={themeMode}

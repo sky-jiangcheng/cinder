@@ -386,7 +386,7 @@ jobs:
           node-version-file: '.nvmrc'
 
       - name: Install sharp
-        run: npm install --no-save sharp
+        run: npm install --ignore-scripts --no-save sharp
 
       # The real gate: every COMMITTED derivative must match what the
       # generator produces from build/icon.svg right now.

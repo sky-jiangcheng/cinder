@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import Icon from './Icon'
+import i18n from '../i18n'
 import s from './ErrorBoundary.module.css'
 
 interface Props {
@@ -44,7 +45,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   private handleReset = () => {
     this.setState({ hasError: false, error: null })
-    window.location.href = '/'
+    window.location.hash = '#/'
   }
 
   render() {
@@ -53,10 +54,10 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className={`${s.errorBoundaryFallback}`}>
           <div className={`${s.errorBoundaryIcon}`}><Icon name="warning" size={34} /></div>
-          <h2>Something went wrong</h2>
+          <h2>{i18n.t('common.errorTitle')}</h2>
           <p className={`${s.errorBoundaryMessage}`}>{this.state.error?.message}</p>
           <button className="btn btn-primary" onClick={this.handleReset}>
-            Try again
+            {i18n.t('common.retry')}
           </button>
         </div>
       )

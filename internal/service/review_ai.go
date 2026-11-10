@@ -59,38 +59,42 @@ func (s *Service) reviewAIEnabled() bool {
 }
 
 // refineWithCandidates is the model pass for one file. It returns the findings
-// with verdicts applied, plus the number of calls actually issued.
+// with verdicts applied, the number of calls that actually succeeded, and the
+// number of failed calls. Only successful calls count toward ai_calls, so a
+// run whose endpoint kept failing never looks fully reviewed.
 //
 // A failure is deliberately soft: the rules' output is already a usable report,
 // so an unreachable endpoint degrades the report (candidates stay unverified)
 // instead of losing the day.
-func (s *Service) refineWithCandidates(ctx context.Context, path, content string, findings []review.Finding) ([]review.Finding, int) {
+func (s *Service) refineWithCandidates(ctx context.Context, path, content string, findings []review.Finding) ([]review.Finding, int, int) {
 	if len(findings) == 0 {
-		return findings, 0
+		return findings, 0, 0
 	}
 	cfg, err := s.aiChatConfig()
 	if err != nil {
 		log.Printf("review: model pass skipped: %v", err)
-		return findings, 0
+		return findings, 0, 0
 	}
 
 	calls := 0
+	failures := 0
 	for start := 0; start < len(findings); start += reviewAIChunk {
 		end := start + reviewAIChunk
 		if end > len(findings) {
 			end = len(findings)
 		}
 		if err := ctx.Err(); err != nil {
-			return findings, calls
+			return findings, calls, failures
 		}
 		chunk := findings[start:end]
 		messages := reviewPrompt(path, content, chunk)
 		res, err := s.chatWithAudit(cfg, messages, reviewAITimeout)
-		calls++
 		if err != nil {
 			log.Printf("review: model pass failed for %s: %v", path, err)
+			failures++
 			continue
 		}
+		calls++
 		for _, v := range parseReviewVerdicts(res.Reply) {
 			if v.Index < 0 || v.Index >= len(chunk) {
 				continue // a hallucinated index must not touch anything
@@ -112,7 +116,7 @@ func (s *Service) refineWithCandidates(ctx context.Context, path, content string
 			}
 		}
 	}
-	return findings, calls
+	return findings, calls, failures
 }
 
 // reviewPrompt builds the two messages. The candidate list is JSON so the

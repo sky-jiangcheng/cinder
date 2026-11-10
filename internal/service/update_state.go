@@ -15,6 +15,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -78,6 +79,7 @@ func downloadStatePathOverride() func() (string, error) {
 func (s *Service) persistDownloadState(st DownloadState) {
 	path, err := downloadStatePath()
 	if err != nil {
+		log.Printf("persist download state: resolve path: %v", err)
 		return
 	}
 	s.persistDownloadStateAt(path, st)
@@ -94,6 +96,7 @@ func (s *Service) persistDownloadStateAt(path string, st DownloadState) {
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		log.Printf("persist download state: create dir for %q: %v", path, err)
 		return
 	}
 	payload := persistedDownload{
@@ -106,15 +109,19 @@ func (s *Service) persistDownloadStateAt(path string, st DownloadState) {
 	}
 	buf, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
+		log.Printf("persist download state: marshal: %v", err)
 		return
 	}
 	// Written to a sibling first and renamed: a half-written state file would
 	// be read back as garbage and lose the user's pointer to the bundle.
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, buf, 0600); err != nil {
+		log.Printf("persist download state: write %q: %v", tmp, err)
 		return
 	}
-	_ = os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		log.Printf("persist download state: rename %q -> %q: %v", tmp, path, err)
+	}
 }
 
 // restorePersistedDownload reads the last download back at startup.

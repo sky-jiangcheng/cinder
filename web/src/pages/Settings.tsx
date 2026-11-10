@@ -40,7 +40,7 @@ function Settings() {
   const rawTab = searchParams.get('tab')
   const tab: TabKey = isTabKey(rawTab) ? rawTab : 'scan'
   const selectTab = useCallback((key: TabKey) => {
-    setSearchParams({ tab: key }, { replace: true })
+    setSearchParams({ tab: key }, { replace: false })
   }, [setSearchParams])
 
   const showMessage = (msg: string) => {
@@ -165,9 +165,7 @@ function Settings() {
           <PluginsTab key="plugins" initialAutoImport={data.config.auto_import !== '0'} initialClaudeCapture={data.config.claude_session_capture === '1'} initialTargets={{ openclaw_project: data.config.openclaw_project || '', hermes_project: data.config.hermes_project || '', codebuddy_project: data.config.codebuddy_project || '' }} initialConfig={data.config} showMessage={showMessage} />
         )}
         {tab === 'ai' && data && (
-          <div role="tabpanel" id="settings-panel-ai" aria-labelledby="settings-tab-ai">
-            <AiTab config={data.config} showMessage={showMessage} onSaved={loadConfig} />
-          </div>
+          <AiTab config={data.config} showMessage={showMessage} onSaved={loadConfig} />
         )}
 
         {tab === 'review' && <ReviewTab showMessage={showMessage} />}

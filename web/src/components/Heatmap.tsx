@@ -77,12 +77,17 @@ export default function Heatmap({ onDayClick, projectId = 0, scope = 'all', onSc
   const { t } = useTranslation()
   const [days, setDays] = useState<HeatmapDay[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     getHeatmapData(projectId)
-      .then(res => { if (!cancelled) setDays(res.days) })
-      .catch(() => { if (!cancelled) setDays([]) })
+      .then(res => { if (!cancelled) { setDays(res.days); setLoadFailed(false) } })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        console.error('[Heatmap] load failed:', e)
+        setLoadFailed(true)
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [projectId])
@@ -135,6 +140,8 @@ export default function Heatmap({ onDayClick, projectId = 0, scope = 'all', onSc
     )
   }
 
+  const failedHint = loadFailed ? <p className="empty-hint">{t('common.loadFailed')}</p> : null
+
   if (stats.active === 0) {
     // The component holds a full year of days regardless of scope, so it can
     // tell "nothing anywhere" from "nothing in this narrow window" — the
@@ -153,6 +160,7 @@ export default function Heatmap({ onDayClick, projectId = 0, scope = 'all', onSc
     return (
       <div className={`${s.simple} ${s.heatmapEmptyState}`}>
         <div className={s.emptyBody}>
+          {failedHint}
           <p className="empty-hint">{t('heatmap.noActivityInRange')}</p>
           {canWiden && (
             <div className="empty-actions">
@@ -173,6 +181,7 @@ export default function Heatmap({ onDayClick, projectId = 0, scope = 'all', onSc
 
   return (
     <div className={s.simple}>
+      {failedHint}
       <div className={s.header}>
         <div className={s.stats}>
           <div className={s.stat}>

@@ -197,7 +197,7 @@ function CodeReview() {
         <section key={g.key} className={s.fileGroup}>
           <h2 className={s.fileHead} title={g.repo}>
             <span className={s.repo}>{g.repo.split('/').pop()}</span>
-            <span className={s.file}>{g.file}</span>
+            <a className={s.file} href={`vscode://file/${g.repo}/${g.file}#${g.findings[0]?.line ?? 1}`} title={t('project.openEditor')}>{g.file}</a>
             <span className={s.badge}>{t('codeReview.findingCount', { count: g.findings.length })}</span>
           </h2>
           {g.findings.map(f => (
@@ -205,7 +205,7 @@ function CodeReview() {
               <div className={s.findingHead}>
                 <span className={`${s.sev} ${s[f.severity] ?? ''}`}>{t(`codeReview.severity.${f.severity}`)}</span>
                 <code className={s.rule}>{f.rule}</code>
-                {f.line > 0 && <span className={s.line}>:{f.line}</span>}
+                {f.line > 0 && <a className={s.line} href={`vscode://file/${g.repo}/${g.file}#${f.line}`} title={t('project.openEditor')}>:{f.line}</a>}
                 <span className={`${s.verdict} ${s[f.verdict] ?? ''}`}>{t(`codeReview.verdict.${f.verdict}`)}</span>
               </div>
               <p className={s.message}>{f.message}</p>

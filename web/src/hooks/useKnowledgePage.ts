@@ -9,6 +9,21 @@ import { parseTags } from '../utils/markdown'
 import { copyText } from '../utils/clipboard'
 import { useDebouncedCallback } from './useDebouncedCallback'
 
+// A 30s cache (same TTL as useApiData) keeps the knowledge tab from
+// refetching the whole library every time its body remounts on a view switch.
+const FETCH_TTL = 30_000
+let fetchAllCache: {
+  notes: NoteWithProject[]
+  tags: string[]
+  projects: Project[]
+  at: number
+} | null = null
+
+/** Drop the cached library so the next mount fetches fresh data. */
+export function invalidateKnowledgeCache() {
+  fetchAllCache = null
+}
+
 export type KindFilter = 'all' | 'knowledge' | 'other'
 
 export interface UseKnowledgePageOptions {
@@ -79,16 +94,33 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
     const ps = ext ? Promise.resolve(ext) : getProjects()
     Promise.all([listAllNotes(), listAllTags(), ps])
       .then(([n, tg, p]) => {
+        fetchAllCache = { notes: n, tags: tg, projects: p, at: Date.now() }
         setNotes(n)
         setTags(tg)
         if (!ext) setOwnProjects(p)
       })
-      .catch((e: unknown) => { setError(e instanceof Error ? e.message : t('common.failed')) })
+      .catch((e: unknown) => {
+        // Keep whatever is already on screen: a failed refresh must not look
+        // like an empty library.
+        console.error('[useKnowledgePage] fetchAll failed', e)
+        setError(e instanceof Error ? e.message : t('common.failed'))
+      })
       .finally(() => setLoading(false))
   }, [t])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void fetchAll() }, [fetchAll])
+  useEffect(() => {
+    const ext = externalRef.current
+    const cached = fetchAllCache
+    if (cached && Date.now() - cached.at < FETCH_TTL) {
+      setError('') // eslint-disable-line react-hooks/set-state-in-effect
+      setNotes(cached.notes)
+      setTags(cached.tags)
+      if (!ext) setOwnProjects(cached.projects)
+      setLoading(false)
+      return
+    }
+    void fetchAll()
+  }, [fetchAll])
 
   const runSearch = useDebouncedCallback((q: string, ask: boolean) => {
     if (!q.trim()) { setHits(null); return }

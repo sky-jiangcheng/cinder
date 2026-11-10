@@ -70,10 +70,16 @@ export default function HandoffComposer({ open, onClose, projectId, onCreated }:
     setSaving(false)
   }, [])
 
-  const close = useCallback(() => {
+  const finish = useCallback(() => {
     reset()
     onClose()
   }, [reset, onClose])
+
+  const close = useCallback(() => {
+    const hasContent = summary.trim() !== '' || SECTIONS.some(({ key }) => sections[key].trim() !== '')
+    if (hasContent && !window.confirm(t('common.confirmDiscard'))) return
+    finish()
+  }, [finish, summary, sections, t])
 
   useEffect(() => {
     if (!open) return
@@ -102,6 +108,13 @@ export default function HandoffComposer({ open, onClose, projectId, onCreated }:
     return () => window.removeEventListener('keydown', onKey)
   }, [open, close])
 
+  useEffect(() => {
+    if (!open) return
+    const dirty = summary.trim() !== '' || SECTIONS.some(({ key }) => sections[key].trim() !== '')
+    window.dispatchEvent(new CustomEvent('cinder:dirty', { detail: { source: 'handoff-composer', dirty } }))
+    return () => { window.dispatchEvent(new CustomEvent('cinder:dirty', { detail: { source: 'handoff-composer', dirty: false } })) }
+  }, [open, summary, sections])
+
   const bullets = useMemo(
     () => Object.fromEntries(SECTIONS.map(({ key }) => [key, toBullets(sections[key])])) as Record<SectionKey, string[]>,
     [sections],
@@ -123,7 +136,7 @@ export default function HandoffComposer({ open, onClose, projectId, onCreated }:
         nextSteps: bullets.nextSteps,
       })
       onCreated?.(res.note_id)
-      close()
+      finish()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setSaving(false)

@@ -14,6 +14,18 @@ type Fetcher<T> = () => Promise<T>
 const cache = new Map<string, { data: unknown; at: number }>()
 const inflight = new Map<string, Promise<unknown>>()
 
+// Consumers waiting on one shared request. Each owns its own state, so the
+// owner must broadcast the outcome (success or failure) to all of them.
+type InflightResult = { ok: true; data: unknown } | { ok: false; error: string }
+const waiters = new Map<string, Set<(r: InflightResult) => void>>()
+
+function settleWaiters(key: string, result: InflightResult) {
+  const set = waiters.get(key)
+  if (!set) return
+  waiters.delete(key)
+  for (const cb of set) cb(result)
+}
+
 const listeners = new Set<() => void>()
 function notify() { listeners.forEach(l => l()) }
 
@@ -61,14 +73,17 @@ export function useApiData<T>(
         if (isCurrent()) setState({ data: hit.data as T, loading: false, error: null })
         return
       }
-      const pending = inflight.get(fullKey)
-      if (pending) {
-        try {
-          const data = (await pending) as T
-          if (isCurrent()) setState({ data, loading: false, error: null })
-        } catch {
-          /* the original requester reports the error */
-        }
+      if (inflight.has(fullKey)) {
+        // Register instead of awaiting: the owner broadcasts the outcome to
+        // every waiter, so a failure clears loading here too, not only in the
+        // owner's own component.
+        let set = waiters.get(fullKey)
+        if (!set) { set = new Set(); waiters.set(fullKey, set) }
+        set.add((r) => {
+          if (!isCurrent()) return
+          if (r.ok) setState({ data: r.data as T, loading: false, error: null })
+          else setState({ data: null, loading: false, error: r.error })
+        })
         return
       }
     }
@@ -80,17 +95,21 @@ export function useApiData<T>(
       if (fullKey) {
         cache.set(fullKey, { data, at: Date.now() })
         inflight.delete(fullKey)
+        settleWaiters(fullKey, { ok: true, data })
       }
       if (isCurrent()) setState({ data, loading: false, error: null })
     } catch (e) {
-      if (fullKey) inflight.delete(fullKey)
-      if (isCurrent()) setState({ data: null, loading: false, error: e instanceof Error ? e.message : 'request failed' })
+      const error = e instanceof Error ? e.message : 'request failed'
+      if (fullKey) {
+        inflight.delete(fullKey)
+        settleWaiters(fullKey, { ok: false, error })
+      }
+      if (isCurrent()) setState({ data: null, loading: false, error })
     }
   }, [fullKey, ttl])
 
   useEffect(() => {
     const token = ++requestSeq.current
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load(false, token)
     // Invalidate this effect's request when dependencies change or the
     // component unmounts; late results are ignored by the sequence guard.

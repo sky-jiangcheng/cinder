@@ -103,6 +103,10 @@ let pollTimer: number | null = null
 /** How often the progress is read while a download is in flight. */
 const POLL_INTERVAL_MS = 400
 
+/** Give up after this many consecutive failed polls. */
+const MAX_POLL_FAILURES = 5
+let pollFailures = 0
+
 function stopPolling() {
   if (pollTimer !== null) {
     clearInterval(pollTimer)
@@ -112,6 +116,8 @@ function stopPolling() {
 
 function startPolling() {
   if (pollTimer !== null) return
+  // A fresh polling run starts with a clean failure budget.
+  pollFailures = 0
   pollTimer = window.setInterval(() => {
     void refreshDownloadState()
   }, POLL_INTERVAL_MS)
@@ -120,12 +126,25 @@ function startPolling() {
 async function refreshDownloadState(): Promise<DownloadState> {
   try {
     const state = await updateDownloadState()
+    pollFailures = 0
     publish({ ...snapshot, state })
     if (!isDownloading(state)) stopPolling()
     return state
-  } catch {
-    // A failed poll says nothing about the download itself — the backend
-    // may be momentarily busy. Keep polling; the next tick usually works.
+  } catch (e) {
+    // A single failed poll usually means a momentarily busy backend, but one
+    // that never answers must not hold the UI at "running" forever.
+    pollFailures += 1
+    if (pollFailures >= MAX_POLL_FAILURES) {
+      stopPolling()
+      publish({
+        ...snapshot,
+        state: {
+          ...snapshot.state,
+          phase: 'failed',
+          error: e instanceof Error ? e.message : 'download status unavailable',
+        },
+      })
+    }
     return snapshot.state
   }
 }

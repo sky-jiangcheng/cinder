@@ -28,11 +28,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("database error: %v", err)
 	}
-	defer d.Close()
 	svc := service.New(d, platform.GetGitUserName())
 	// This process IS the MCP surface (ADR-0030): every model call it makes
 	// is an agent call, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceMCP)
+	// Drain any tool-triggered background work before closing the shared DB
+	// handle, and report a close failure instead of dropping it.
+	defer func() {
+		svc.Shutdown()
+		if err := svc.Close(); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
 
 	// serverInfo.version carries the memory-layer CONTRACT version, not the
 	// release version. A client asking "what may I rely on" wants the answer
@@ -51,10 +58,19 @@ func main() {
 	// repositories via repotory_scan without ever opening the desktop app.
 	svc.EnsureDefaultScanRoots()
 
+	// Register the knowledge sources so the agent-facing source registry is
+	// usable. Deliberately NOT Startup(): this stdio process usually runs at the
+	// same time as the desktop app against the same SQLite file, and full startup
+	// starts backup, sync, compile and embedding tickers that would race with the
+	// desktop's writers on the single DB connection.
+	svc.RegisterKnowledgeSources()
+
 	log.Printf("Cinder MCP server v%s starting on stdio... (release %s, memory-layer contract %s)",
 		version.CoreVersion, version.Version, version.CoreVersion)
+	// Report and return so the deferred Shutdown/Close runs; log.Fatalf here
+	// would os.Exit straight past that cleanup.
 	if err := server.ServeStdio(mcpServer); err != nil {
-		log.Fatalf("MCP server error: %v", err)
+		log.Printf("MCP server error: %v", err)
 	}
 }
 

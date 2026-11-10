@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -755,6 +756,69 @@ func (s *Service) AskAIWithEvidenceStream(
 		Evidence:  ev,
 		Truncated: truncatedHint(string(reason)) != "",
 	}, nil
+}
+
+// AskStreamResult is the immediate acknowledgement of StartAskStream: the
+// stream id the frontend uses to correlate the async events that follow.
+type AskStreamResult struct {
+	StreamID string `json:"stream_id"`
+}
+
+// StartAskStream launches the streaming evidence-backed ask on a tracked
+// background goroutine and returns at once with a stream id. The Wails binding
+// supplies emit, so the transport stays in the UI layer while recover,
+// cancellation and deduplication live here.
+func (s *Service) StartAskStream(ctx context.Context, projectID int64, question string, emit func(string, any)) (*AskStreamResult, error) {
+	if ctx == nil {
+		ctx = s.bgCtx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	streamID := fmt.Sprintf("ask-%d", time.Now().UnixNano())
+	if _, loaded := s.askStreams.LoadOrStore(streamID, true); loaded {
+		return nil, fmt.Errorf("ask stream %s already running", streamID)
+	}
+	streamCtx, cancel := context.WithTimeout(ctx, aiAskTimeout)
+	s.bgGo("ask-stream "+streamID, func(_ context.Context) {
+		defer cancel()
+		defer s.askStreams.Delete(streamID)
+		send := func(payload map[string]any) {
+			payload["stream_id"] = streamID
+			emit("ai.ask.stream", payload)
+		}
+		if err := streamCtx.Err(); err != nil {
+			send(map[string]any{"error": err.Error()})
+			return
+		}
+		ans, err := s.AskAIWithEvidenceStream(
+			projectID, question, DefaultEvidenceBudget,
+			func(delta string) {
+				send(map[string]any{"type": "delta", "delta": delta})
+			},
+			func(id, name string) {
+				send(map[string]any{"type": "tool_call", "tool_call": map[string]any{"id": id, "name": name}})
+			},
+			func(id string, result any) {
+				send(map[string]any{"type": "tool_result", "tool_call_id": id, "content": result})
+			},
+		)
+		if err := streamCtx.Err(); err != nil {
+			send(map[string]any{"error": "ask stream cancelled: " + err.Error()})
+			return
+		}
+		if err != nil {
+			send(map[string]any{"error": err.Error()})
+			return
+		}
+		send(map[string]any{
+			"done":      true,
+			"reply":     ans.Reply,
+			"evidence":  ans.Evidence,
+			"truncated": ans.Truncated,
+		})
+	})
+	return &AskStreamResult{StreamID: streamID}, nil
 }
 
 func max0(n int) int {

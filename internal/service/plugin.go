@@ -20,6 +20,18 @@ func jsonUnmarshal(data string, v any) bool {
 	return json.Unmarshal([]byte(data), v) == nil
 }
 
+// RegisterKnowledgeSources wires the built-in importers into the runtime so
+// GetKnowledgeSources and TriggerKnowledgeImport work without a full Startup.
+// It deliberately starts NO background tickers: the MCP stdio server commonly
+// runs beside the desktop app against the same SQLite file, where concurrent
+// backup, knowledge-sync, compile and embedding tickers would race on writes.
+func (s *Service) RegisterKnowledgeSources() {
+	if s.rt == nil || len(s.rt.SourceStatuses()) > 0 {
+		return
+	}
+	s.registerBuiltinImporters()
+}
+
 // GetKnowledgeSources returns registered knowledge importers with their state.
 func (s *Service) GetKnowledgeSources() []pluginruntime.SourceStatus {
 	if s.rt == nil {

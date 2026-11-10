@@ -117,4 +117,22 @@ describe('useApiData', () => {
     a.unmount()
     b.unmount()
   })
+
+  it('propagates a deduplicated failure to both consumers', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('backend down'))
+    const a = renderHook(() => useApiData(fetcher, [], { cacheKey: 'shared-fail' }))
+    const b = renderHook(() => useApiData(fetcher, [], { cacheKey: 'shared-fail' }))
+    await flush()
+
+    // Two mounts, one shared request, and BOTH must leave loading with the
+    // error — the waiter used to stay stuck at loading:true forever.
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    for (const r of [a, b]) {
+      expect(r.result.current.error).toBe('backend down')
+      expect(r.result.current.loading).toBe(false)
+      expect(r.result.current.data).toBeNull()
+    }
+    a.unmount()
+    b.unmount()
+  })
 })
