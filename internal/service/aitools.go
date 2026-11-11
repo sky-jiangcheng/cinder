@@ -39,6 +39,101 @@ type toolCall struct {
 	} `json:"function"`
 }
 
+// inlineToolCalls parses the tool-call form some models emit as CONTENT —
+// `<tool_call><function=name><parameter=k>v</parameter></function></tool_call>`
+// — instead of the OpenAI tool_calls field. Observed live against
+// nvidia/nemotron on OpenRouter (2026-11-11): the header told the model which
+// tools exist, it chose the right repo and date, and the loop never ran the
+// call — the raw XML reached the user as the answer. Only the parameters'
+// inner text is untrusted model output and is never executed as anything but
+// a JSON argument value; names must match a REGISTERED tool before anything
+// runs. Returns nil when the content carries no inline calls; the caller
+// keeps the text as the answer in that case.
+func inlineToolCalls(content string) []toolCall {
+	open := "<tool_call>"
+	var calls []toolCall
+	for {
+		start := strings.Index(content, open)
+		if start < 0 {
+			break
+		}
+		rest := content[start+len(open):]
+		end := strings.Index(rest, "</tool_call>")
+		if end < 0 {
+			break
+		}
+		body := rest[:end]
+		content = rest[end+len("</tool_call>"):]
+		call := toolCall{Type: "function"}
+		if name := xmlBetween(body, "<function=", ">"); name != "" {
+			call.Function.Name = name
+		} else if name = xmlBetween(body, "<function>", "</function>"); name != "" {
+			call.Function.Name = name
+		}
+		if call.Function.Name == "" {
+			continue
+		}
+		args := map[string]any{}
+		for _, chunk := range strings.Split(body, "<parameter=")[1:] {
+			eq := strings.Index(chunk, ">")
+			if eq < 0 {
+				continue
+			}
+			key := chunk[:eq]
+			val := chunk[eq+1:]
+			const close = "</parameter>"
+			if !strings.Contains(val, close) {
+				continue
+			}
+			args[strings.TrimSpace(key)] = strings.TrimSpace(val[:strings.Index(val, close)])
+		}
+		b, err := json.Marshal(args)
+		if err != nil {
+			continue
+		}
+		call.Function.Arguments = string(b)
+		calls = append(calls, call)
+	}
+	return calls
+}
+
+// xmlBetween returns the text between the first occurrence of open and the
+// following close, or "" when either is missing. (Named to stay clear of
+// review_ai.go byte-delimited between.)
+func xmlBetween(s, open, close string) string {
+	i := strings.Index(s, open)
+	if i < 0 {
+		return ""
+	}
+	rest := s[i+len(open):]
+	j := strings.Index(rest, close)
+	if j < 0 {
+		return ""
+	}
+	return rest[:j]
+}
+
+// contentWithoutInlineCalls strips the inline tool-call XML so a mixed turn
+// (prose plus calls) does not repeat the call syntax around the answer. The
+// full original content is still echoed to the provider on the follow-up
+// round; this cleaned form is only for display if the turn ends up final.
+func contentWithoutInlineCalls(content string) string {
+	out := content
+	for {
+		start := strings.Index(out, "<tool_call>")
+		if start < 0 {
+			break
+		}
+		rest := out[start:]
+		end := strings.Index(rest, "</tool_call>")
+		if end < 0 {
+			break
+		}
+		out = out[:start] + rest[end+len("</tool_call>"):]
+	}
+	return strings.TrimSpace(out)
+}
+
 // toolFunc is the server-side implementation of one callable tool.
 type toolFunc func(ctx context.Context, args map[string]any) (any, error)
 
@@ -370,12 +465,20 @@ func (s *Service) askWithTools(cfg aiChatConfig, messages []chatMessage, tools [
 		}
 		msg := cr.Choices[0].Message
 		assistantContent := msg.Content
+		calls := msg.ToolCalls
+		// Some models emit tool calls as inline XML in content instead of the
+		// tool_calls field (see inlineToolCalls). Recognising them here is the
+		// difference between the loop running the query and the user reading
+		// raw `<tool_call>` syntax as the answer.
+		if len(calls) == 0 {
+			calls = inlineToolCalls(assistantContent)
+		}
 		// The echo carries the tool_calls the model emitted: a tool message is
 		// only defined as the response to a PRECEDING assistant message with
 		// tool_calls, and strict providers reject the pairing when the
 		// assistant half is missing.
-		messages = append(messages, chatMessage{Role: "assistant", Content: assistantContent, ToolCalls: msg.ToolCalls})
-		if len(msg.ToolCalls) == 0 {
+		messages = append(messages, chatMessage{Role: "assistant", Content: assistantContent, ToolCalls: calls})
+		if len(calls) == 0 {
 			return assistantContent, cr.Choices[0].FinishReason, nil
 		}
 		if tools == nil {
@@ -389,8 +492,11 @@ func (s *Service) askWithTools(cfg aiChatConfig, messages []chatMessage, tools [
 			// WITHOUT tools forces an answer in text.
 			tools = nil
 		}
-		for _, call := range msg.ToolCalls {
-			result, err := s.toolRegistry.call(context.Background(), call.Function.Name, call.Function.Arguments)
+		for i := range calls {
+			if calls[i].ID == "" {
+				calls[i].ID = fmt.Sprintf("call_%d", i)
+			}
+			result, err := s.toolRegistry.call(context.Background(), calls[i].Function.Name, calls[i].Function.Arguments)
 			var content string
 			if err != nil {
 				content = fmt.Sprintf("{\"error\": \"%s\"}", err.Error())
@@ -401,7 +507,7 @@ func (s *Service) askWithTools(cfg aiChatConfig, messages []chatMessage, tools [
 			messages = append(messages, chatMessage{
 				Role:       "tool",
 				Content:    content,
-				ToolCallID: call.ID,
+				ToolCallID: calls[i].ID,
 			})
 		}
 	}
@@ -790,7 +896,16 @@ func (s *Service) streamAskWithTools(
 			return "", "", err
 		}
 
-		// No tool calls: final answer.
+		// Inline XML tool calls (see inlineToolCalls) fold into the same
+		// accumulator shape the native protocol uses, so execution below is
+		// one path for both forms.
+		if len(calls) == 0 {
+			for _, tc := range inlineToolCalls(acc.String()) {
+				acc := toolCallAcc{ID: tc.ID, Name: tc.Function.Name}
+				acc.Args.WriteString(tc.Function.Arguments)
+				calls = append(calls, acc)
+			}
+		}
 		if len(calls) == 0 {
 			return acc.String(), finishReason, nil
 		}

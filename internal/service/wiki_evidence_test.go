@@ -625,6 +625,43 @@ func TestEvidenceMessages_UnscopedCarriesContext(t *testing.T) {
 	}
 }
 
+// "昨天提交了多少代码" was answered by pasting the retrieved note cards back at
+// the user: the prompt carried no date (so "yesterday" was unresolvable) and
+// never said the query tools exist (so the model treated the evidence block as
+// the answer). The header must be present in every assembly shape, including
+// the empty one — a library with no memory and no hits still has tools.
+func TestEvidenceMessages_HeaderNamesDateAndTools(t *testing.T) {
+	svc, git := setupService(t)
+	for _, tc := range []struct {
+		name      string
+		projectID int64
+		ev        string
+	}{
+		{"full", 0, "EVIDENCE"},
+		{"base-only", 0, ""},
+		{"ev-only", -1, "EVIDENCE"}, // no project, no memory: only the evidence block
+		{"bare", -1, ""},            // nothing but the header must survive
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			msgs := svc.evidenceMessages(tc.projectID, "q", tc.ev)
+			if len(msgs) != 2 || msgs[0].Role != "system" {
+				t.Fatalf("messages = %+v", msgs)
+			}
+			sys := msgs[0].Content
+			if !strings.Contains(sys, git.GetTodayDate()) {
+				t.Errorf("no today's date in header: %q", sys)
+			}
+			if !strings.Contains(sys, "query_project_stats") || !strings.Contains(sys, "query_daily_stats") {
+				t.Errorf("tools not named for the model to pick: %q", sys)
+			}
+			// The old contradiction must not come back through the fallback.
+			if strings.Contains(sys, "Use only the context below") {
+				t.Errorf("the pre-tool sentence contradicts the tool guidance: %q", sys)
+			}
+		})
+	}
+}
+
 // A handoff record is the previous session's exit record. It has to reach the
 // model on its own channel: its title is English ("Session Handoff …") and
 // its body is a fixed template, so keyword search in Chinese never finds it.

@@ -255,6 +255,80 @@ func TestAskWithToolsRoundCapForcesAFinalTextOnlyRound(t *testing.T) {
 	}
 }
 
+// Some models answer a tool-enabled request with the call written as CONTENT —
+// `<tool_call><function=name><parameter=k>v</parameter></function></tool_call>`
+// — instead of the tool_calls field. Observed live (nvidia/nemotron via
+// OpenRouter, 2026-11-11): the model had picked the right repo and date, and
+// the loop still never ran it; the raw XML reached the user as the answer.
+func TestInlineToolCallsParse(t *testing.T) {
+	raw := "Let me check. <tool_call>\n<function=query_daily_stats>\n<parameter=repo_path>\n/tmp/repo\n</parameter>\n<parameter=date>\n2026-11-10\n</parameter>\n</function>\n</tool_call>"
+	calls := inlineToolCalls(raw)
+	if len(calls) != 1 {
+		t.Fatalf("parsed %d calls, want 1", len(calls))
+	}
+	if calls[0].Function.Name != "query_daily_stats" {
+		t.Errorf("name = %q", calls[0].Function.Name)
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(calls[0].Function.Arguments), &args); err != nil {
+		t.Fatalf("arguments not JSON: %v", err)
+	}
+	if args["repo_path"] != "/tmp/repo" || args["date"] != "2026-11-10" {
+		t.Errorf("args = %v", args)
+	}
+	// The whitespace around parameter values must not survive into them.
+	if strings.ContainsAny(calls[0].Function.Arguments, "\n") {
+		t.Errorf("arguments keep raw newlines: %q", calls[0].Function.Arguments)
+	}
+	if calls := inlineToolCalls("just an answer with <tool_call> but no close"); len(calls) != 0 {
+		t.Errorf("unclosed call parsed as %v", calls)
+	}
+	if calls := inlineToolCalls("plain answer"); len(calls) != 0 {
+		t.Errorf("plain text parsed as %v", calls)
+	}
+}
+
+// End to end through the non-streaming loop: the inline form must execute and
+// feed the result back, exactly like a native tool_calls turn.
+func TestAskWithToolsRunsInlineContentCalls(t *testing.T) {
+	requests := 0
+	var followUp map[string]any
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			respondJSON(t, w, map[string]any{
+				"choices": []map[string]any{{
+					"message": map[string]any{
+						"content": "<tool_call><function=list_projects></function></tool_call>",
+					},
+					"finish_reason": "stop",
+				}},
+			})
+			return
+		}
+		followUp = map[string]any{}
+		if err := json.NewDecoder(r.Body).Decode(&followUp); err != nil {
+			t.Fatalf("decode follow-up: %v", err)
+		}
+		respondJSON(t, w, textTurn("two projects"))
+	}
+	svc := newAuditTestService(t, handler)
+	cfg := mustCfg(t, svc)
+
+	reply, _, err := svc.askWithTools(cfg, []chatMessage{{Role: "user", Content: "how many projects?"}}, svc.toolRegistry.definitions(), 5*time.Second)
+	if err != nil {
+		t.Fatalf("askWithTools: %v", err)
+	}
+	if reply != "two projects" || requests != 2 {
+		t.Fatalf("reply = %q after %d requests; the inline call did not loop", reply, requests)
+	}
+	// The tool result must reference the synthetic id the echo carried.
+	tool := messageAt(t, followUp, 2)
+	if tool["role"] != "tool" || tool["tool_call_id"] != "call_0" {
+		t.Fatalf("tool message = %v, want tool_call_id call_0", tool)
+	}
+}
+
 func stubChunk(t *testing.T, body any) string {
 	t.Helper()
 	raw, err := json.Marshal(body)
