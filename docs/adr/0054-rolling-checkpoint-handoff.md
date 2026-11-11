@@ -116,6 +116,8 @@
 2. 零 credit 主路径受 ADR-0010 的 `claude_session_capture` 默认关约束——未开启时 hook 走降级，属预期门。
 3. `build/bin/repotory-mcp` 不存在导致 `.mcp.json` 指向空位：那是构建产物路径问题，不在本 ADR 范围；本次只动协议面。
 
+**后续（2026-11-10 收藏体检）**：前提 1 的"指望用户跑安装向导"已收窄——收藏项目体检上线（`agentinit.Options.InstructionsOnly` + `AgentInstructionsStatusFor` / `MissingAgentInstructionsCount` / `InstallAgentInstructions`，`repotory_scan` 返回 `agent_instructions_missing` 计数）：项目详情页对缺 AGENTS.md/CLAUDE.md 块的项目显示横幅并提供一键补齐（只写指令块、不依赖 MCP 二进制），写入仍由用户点击触发。详见 CHANGELOG [2.35.0]。
+
 ## 关联文档
 
 - [ADR-0010: Claude session capture](0010-claude-session-capture.md)——SessionEnd hook 与 transcript 捕捉的隐私门

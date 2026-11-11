@@ -706,6 +706,15 @@
     "levelChanged": "分组已更新",
     "levelNoSibling": "当前目录没有可合并或拆分的相邻项目",
     "levelUpConfirm": "将把 {{count}} 个同级项目合并进「{{target}}」并删除它们：\n{{names}}\n随之迁移：{{repos}} 个仓库、{{notes}} 条笔记、{{todos}} 条待办。\n注意：此操作无法自动撤销——“按仓库拆分”不会还原原来的项目结构。确定合并？",
+    "agentInstructions": {
+      "banner_missing": "该项目目录还没有 AGENTS.md / CLAUDE.md（缺：{{files}}），AI 会话拿不到记忆层指令——交接记录、项目上下文都接不上。可一键写入 Cinder 的指令块（只补指令块，不动其他配置），或自行手动添加。",
+      "banner_no_block": "该项目已有指令文件，但里面没有 Cinder 的记忆层指令块，AI 会话仍接不上交接记录。可一键追加指令块（原文件内容保持不动，只在末尾追加），或自行手动处理。",
+      "topUp": "一键补齐",
+      "working": "写入中…",
+      "dismiss": "我知道了",
+      "done": "指令块已写入，下个 AI 会话即可读到交接记录",
+      "refused": "未执行：{{code}}"
+    },
     "tab_overview": "概览",
     "tab_commits": "提交",
     "tab_repos": "仓库",

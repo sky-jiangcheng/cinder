@@ -8,6 +8,7 @@ import type {
   AIAuditStatus,
   QueryProjectStatsBatchResult,
   AgentSetupReport,
+  AgentInstructionsStatus,
   AppConfig,
   BackupCopyTargetReport,
   CompileJob,
@@ -742,6 +743,30 @@ export function setupAgentClients(
   return call<AgentSetupReport>({
     method: 'SetupAgentClients',
     args: [projectId, clients, withHook, withInstructions],
+  }).then(d => d ?? { code: '', blocking: false, binary: '', files: [] })
+}
+
+/**
+ * Does this project's directory carry the managed repotory block in
+ * AGENTS.md/CLAUDE.md? Backs the collected-project checklist banner. A
+ * container answers state "skipped" — the banner must not nag about it.
+ */
+export function getAgentInstructionsStatus(projectId: number): Promise<AgentInstructionsStatus> {
+  return call<AgentInstructionsStatus>({
+    method: 'AgentInstructionsStatusFor',
+    args: [projectId],
+  }).then(d => d ?? { state: 'skipped', files: [], missing: [] })
+}
+
+/**
+ * Top up ONE project's instruction files with the managed block, and nothing
+ * else: no client configs, no hook, no MCP binary dependency. The checklist
+ * banner's one-click action; refusals come back as codes, not errors.
+ */
+export function installAgentInstructions(projectId: number): Promise<AgentSetupReport> {
+  return call<AgentSetupReport>({
+    method: 'InstallAgentInstructions',
+    args: [projectId],
   }).then(d => d ?? { code: '', blocking: false, binary: '', files: [] })
 }
 

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import TrendChart from '../components/TrendChart'
@@ -13,6 +13,8 @@ import PageShell from '../components/PageShell'
 import TodoSection from '../components/TodoSection'
 import { useProjectDetail } from '../hooks/useProjectDetail'
 import { copyText } from '../utils/clipboard'
+import { getAgentInstructionsStatus, installAgentInstructions } from '../api/endpoints'
+import type { AgentInstructionsStatus as AgentInstructionsStatusData } from '../api/types'
 import s from './ProjectDetail.module.css'
 import trendCss from '../components/TrendChart.module.css'
 
@@ -62,6 +64,57 @@ function ProjectDetailPage() {
   const [copied, setCopied] = useState(false)
   const [actionMsg, setActionMsg] = useState('')
   const actionTimer = useRef<number | null>(null)
+
+  // --- Collected-project instruction checklist (ADR-0054 follow-up) ---------
+  // A project whose AGENTS.md/CLAUDE.md carries no managed repotory block is
+  // exactly the project whose agent sessions start blind — the condition that
+  // let the handoff protocol idle for two weeks. The banner says so once per
+  // project visit and offers the one-click top-up (block only, no configs, no
+  // hook); "dismiss" is per-visit local state, never persisted, so the banner
+  // returns next visit until the block actually exists.
+  //
+  // Both pieces of state carry the project id they belong to and are compared
+  // at render time instead of being cleared synchronously in the effect — an
+  // async fetch cannot race a project switch that way, and the effect stays
+  // free of render-phase setState.
+  const [instrStatus, setInstrStatus] = useState<(AgentInstructionsStatusData & { pid: number }) | null>(null)
+  const [instrDismissedFor, setInstrDismissedFor] = useState<number | null>(null)
+  const [instrBusy, setInstrBusy] = useState(false)
+
+  useEffect(() => {
+    if (!project?.id) return
+    const pid = project.id
+    let alive = true
+    getAgentInstructionsStatus(pid)
+      .then(st => { if (alive) setInstrStatus({ ...st, pid }) })
+      .catch(() => { if (alive) setInstrStatus(null) })
+    return () => { alive = false }
+  }, [project?.id])
+
+  const topUpInstructions = async () => {
+    if (!project?.id || instrBusy) return
+    const pid = project.id
+    setInstrBusy(true)
+    try {
+      const report = await installAgentInstructions(pid)
+      if (report.blocking || report.code) {
+        flashAction(t('project.agentInstructions.refused', { code: report.code, defaultValue: `未执行：${report.code}` }))
+      } else {
+        flashAction(t('project.agentInstructions.done'))
+        const st = await getAgentInstructionsStatus(pid)
+        setInstrStatus({ ...st, pid })
+      }
+    } catch {
+      flashAction(t('common.failed'))
+    } finally {
+      setInstrBusy(false)
+    }
+  }
+
+  const instrBannerVisible =
+    !!instrStatus && instrStatus.pid === project?.id &&
+    (instrStatus.state === 'missing' || instrStatus.state === 'no_block') &&
+    instrDismissedFor !== project?.id
 
   const flashAction = (msg: string) => {
     setActionMsg(msg)
@@ -213,6 +266,32 @@ function ProjectDetailPage() {
       header={
         <>
           {actionMsg && <div className="message-banner" role="status">{actionMsg}</div>}
+
+          {/* Instruction checklist banner: shows while this project's directory
+              lacks the managed repotory block, with the one-click top-up. The
+              "skipped" and "ok" states render nothing on purpose — a container
+              is nobody's working directory, and "ok" is not a message worth the
+              user's attention (the same rule the review rail dot follows). */}
+          {instrBannerVisible && instrStatus && (
+            <div className="message-banner" role="status">
+              <span>
+                {t(`project.agentInstructions.banner_${instrStatus.state}`, {
+                  files: instrStatus.missing.join(', '),
+                  defaultValue: '',
+                })}
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={instrBusy}
+                onClick={topUpInstructions}
+              >
+                {instrBusy ? t('project.agentInstructions.working') : t('project.agentInstructions.topUp')}
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setInstrDismissedFor(project!.id)}>
+                {t('project.agentInstructions.dismiss')}
+              </button>
+            </div>
+          )}
 
           {/* Compact head: identity + copy action on line 1, one stat strip on
               line 2, tab strip on line 3. Everything that used to be a stacked

@@ -116,6 +116,8 @@ fallback: claude -p (model summarizes, costs credit)
 2. the zero-credit primary path sits behind ADR-0010's `claude_session_capture` gate (default off); with it off the hook takes the `claude -p` fallback, which is intended.
 3. `build/bin/repotory-mcp` being absent breaks `.mcp.json`'s path — a build-artifact issue outside this ADR's scope; this change only touches the protocol surface.
 
+**Follow-up (2026-11-10, the collection checklist)**: precondition 1's "hope the user runs the setup wizard" has been narrowed — the collected-project checklist shipped (`agentinit.Options.InstructionsOnly` plus `AgentInstructionsStatusFor` / `MissingAgentInstructionsCount` / `InstallAgentInstructions`, and `repotory_scan` now returns an `agent_instructions_missing` count): the project page shows a banner for projects whose AGENTS.md/CLAUDE.md lacks the block and offers a one-click top-up (block only, no MCP binary dependency); the write still happens only on a user click. See CHANGELOG [2.35.0].
+
 ## Links
 
 - [ADR-0010: Claude session capture](0010-claude-session-capture.md) — the hook and the privacy gate

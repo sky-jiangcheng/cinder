@@ -895,6 +895,26 @@ export interface AgentSetupReport {
   warnings?: string[]
 }
 
+/**
+ * Whether one project's directory carries the managed repotory block in
+ * AGENTS.md/CLAUDE.md — the collected-project checklist (ADR-0054 follow-up).
+ *
+ * - "ok": at least one instruction file carries the block
+ * - "no_block": an instruction file exists but none carries the block
+ * - "missing": no instruction file at all
+ * - "skipped": a container / the synthetic default row — the question does
+ *   not apply, and the UI must not nag
+ */
+export type AgentInstructionsState = 'ok' | 'no_block' | 'missing' | 'skipped'
+
+export interface AgentInstructionsStatus {
+  state: AgentInstructionsState
+  /** Instruction files that exist on disk (e.g. ["AGENTS.md"]). */
+  files: string[]
+  /** Standard names with no file on disk (e.g. ["CLAUDE.md"]). */
+  missing: string[]
+}
+
 // --- incremental code review (ADR-0053) -------------------------------------
 
 /** Severity of one finding. Strings, not numbers: they are stored verbatim. */

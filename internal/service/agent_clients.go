@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -310,17 +311,22 @@ func (s *Service) AgentInstructionsStatusFor(projectID int64) (*AgentInstruction
 // missing the managed block, for the dashboard/rail badge. Read-only and
 // deliberately recomputed on every call: storing the verdict would go stale
 // the moment the user creates the file by hand, and a handful of stat() calls
-// per refresh cost nothing.
+// per refresh cost nothing. The project set comes from GetCollectedProjectIDs
+// (the same query the scan pipeline's backfill uses) — GetAllProjects' row
+// scan predates the collected flag and deliberately stays untouched.
 func (s *Service) MissingAgentInstructionsCount() int {
-	projects, err := db.GetAllProjects(s.db)
+	ids, err := db.GetCollectedProjectIDs(context.Background(), s.db)
 	if err != nil {
 		log.Printf("agent instructions count: %v", err)
 		return 0
 	}
 	n := 0
-	for i := range projects {
-		p := &projects[i]
-		if !p.Collected || refusalForProject(p) != AgentSetupOK {
+	for _, id := range ids {
+		p, err := db.GetProjectByID(s.db, id)
+		if err != nil {
+			continue
+		}
+		if refusalForProject(p) != AgentSetupOK {
 			continue
 		}
 		if st := instructionFilesState(strings.TrimSpace(p.RootPath)); st.State != AgentInstrStateOK {

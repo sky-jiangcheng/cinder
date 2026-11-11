@@ -310,6 +310,64 @@ func TestFindBinaryUsesTheEnvOverride(t *testing.T) {
 // same thing. The fixture is shared with scripts/check-agent-init-contract.mjs.
 //
 // Regenerate with: go test ./internal/agentinit -run TestContractFixture -update
+// InstructionsOnly is the collected-project checklist's one-click top-up: it
+// writes the managed block and nothing else, and — the point of the mode — it
+// must not require the MCP binary, because a machine that has never installed
+// repotory-mcp is exactly the machine whose projects need topping up first.
+func TestRegisterInstructionsOnlySkipsBinaryAndClients(t *testing.T) {
+	dir := t.TempDir()
+
+	report, err := Register(Options{
+		TargetDir: dir,
+		BinPath:   filepath.Join(dir, "does-not-exist"), // would hard-fail any other mode
+		// Clients deliberately empty: in this mode it must NOT mean "all four"
+		// (the Options doc keeps that meaning for the full setup), it must mean
+		// "no client configs at all".
+		InstructionsOnly: true,
+		WithInstructions: true,
+		WithHook:         true, // ignored in this mode: the hook is the full setup's decision
+	})
+	if err != nil {
+		t.Fatalf("Register (instructions-only): %v", err)
+	}
+	if report.Binary != "" {
+		t.Errorf("Binary = %q, want empty (no binary dependency)", report.Binary)
+	}
+	if len(report.Files) != 0 {
+		t.Errorf("Files = %d entries, want 0 (no client configs)", len(report.Files))
+	}
+	if report.Hook != nil || report.HookSettings != nil {
+		t.Errorf("hook must not be installed in instructions-only mode, got %v", report.Hook)
+	}
+	if len(report.Instructions) != len(InstructionFiles) {
+		t.Fatalf("Instructions = %d entries, want %d", len(report.Instructions), len(InstructionFiles))
+	}
+	for _, f := range report.Instructions {
+		if f.Status != StatusCreated {
+			t.Errorf("%s: status = %s (%s), want created", f.Path, f.Status, f.Note)
+		}
+		raw, err := os.ReadFile(f.Path)
+		if err != nil {
+			t.Fatalf("read %s: %v", f.Path, err)
+		}
+		if !strings.Contains(string(raw), InstructionsBeginMark) {
+			t.Errorf("%s must carry the managed block", f.Path)
+		}
+	}
+	// Idempotent: a second run reports unchanged instead of duplicating.
+	report2, err := Register(Options{
+		TargetDir: dir, InstructionsOnly: true, WithInstructions: true,
+	})
+	if err != nil {
+		t.Fatalf("second Register: %v", err)
+	}
+	for _, f := range report2.Instructions {
+		if f.Status != StatusUnchanged {
+			t.Errorf("second run: %s status = %s, want unchanged", f.Path, f.Status)
+		}
+	}
+}
+
 func TestContractFixture(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "repotory-mcp")

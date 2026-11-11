@@ -707,6 +707,15 @@
     "levelChanged": "Grouping updated",
     "levelNoSibling": "No sibling projects here to merge or split",
     "levelUpConfirm": "This merges {{count}} sibling project(s) into \"{{target}}\" and deletes them:\n{{names}}\nMoving with them: {{repos}} repositories, {{notes}} notes, {{todos}} todos.\nNote: this cannot be undone automatically — \"split by repository\" does not restore the previous structure. Merge anyway?",
+    "agentInstructions": {
+      "banner_missing": "This project's directory has no AGENTS.md / CLAUDE.md (missing: {{files}}), so AI sessions start without the memory-layer instructions — handoffs and project context stay disconnected. Top up Cinder's instruction block with one click (block only, nothing else), or add the files yourself.",
+      "banner_no_block": "This project has instruction files, but none carries Cinder's memory-layer block, so AI sessions still miss the handoff records. Append the block with one click (existing content untouched — it is added at the end), or handle it yourself.",
+      "topUp": "Top up",
+      "working": "Writing…",
+      "dismiss": "Got it",
+      "done": "Instruction block written — the next AI session will read the handoff records",
+      "refused": "Not performed: {{code}}"
+    },
     "tab_overview": "Overview",
     "tab_commits": "Commits",
     "tab_repos": "Repositories",
