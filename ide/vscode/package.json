@@ -2,7 +2,7 @@
   "name": "repotory-vscode",
   "displayName": "Cinder Memory",
   "publisher": "sky-jiangcheng",
-  "version": "2.35.3",
+  "version": "2.35.4",
   "description": "The local-first memory layer for AI coding agents. Browse, search and hand off your local knowledge base without leaving the editor. One VSIX covers VS Code, Cursor and Windsurf.",
   "license": "MIT",
   "engines": {

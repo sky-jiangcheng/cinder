@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.35.4] - 2026-11-11
+
+### 修复
+
+- **JetBrains 侧 provider 对话框的「拉取模型 / 测试」改为 IDE 直连——与 VS Code 同一套分工**。JetBrains 的 ProviderDialog 此前和 VS Code 改造前一样：拉模型/测试/读配置/保存全部走本地服务的 RPC 桥，桌面 App 没开时同样以 `connect ECONNREFUSED 127.0.0.1:18765` 挡路。新增 `ProviderProbe.kt`：JDK `HttpClient` 直连 `/models` 与 `/chat/completions`，契约与服务端及 VS Code 端 `aiProbe.ts` 完全一致（`aiCandidateURLs` 近邻候选、404 才换路、401 停、200+error envelope 用 provider 原话、OpenAI `data[].id` / Ollama `models[].name` 双解析、ECONNREFUSED 文案同款），HttpClient 可注入以便测试。`ProviderDialog`：fetchModels 直连；testProvider 有 key 或表单与已存不一致时直连，留空且表单=已存配置时仍走 `TestAIChatConfigured`（key 永不出主机）；save/load 的 ECONNREFUSED 改写成人话（服务没跑、启动桌面 App、哪些动作直连不需要它）；无 key 探测遇 401 时点名两条出路；对话框 hint 同步说明。测试 +6（JDK `HttpServer` 真实 stub 验证候选换路 / 401 停 / reply 提取 / 200 envelope），86 例全绿。
+
 ## [2.35.3] - 2026-11-11
 
 ### 修复
@@ -1016,6 +1022,7 @@
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
 [Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...HEAD
+[2.35.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.3...v2.35.4
 [2.35.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.2...v2.35.3
 [2.35.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.1...v2.35.2
 [2.35.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.0...v2.35.1
