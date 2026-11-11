@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.35.2] - 2026-11-11
+
+### 修复
+
+- **代码审查页对零发现报告不再崩（`null is not an object (evaluating 'c?.findings.length')`）**：「审过了，零发现」的 run 走到 `db.ReviewFindings` 零行时返回 Go 的 nil slice，JSON 序列化成 `findings: null`，而 `CodeReview.tsx` 的 `snapshot?.findings.length`（压缩后即报错里的 `c?.findings.length`）在 `null.length` 上抛 TypeError——页面里专门写的 `nothingFound` 空态永远渲染不到就先崩了。自 ADR-0053 落地起每一版都带，只是「最近一次审查恰好零发现 + 点进页面」才触发。两头修：**db 层**零行返回空切片（序列化恒为 `[]`；desktop 的 `LatestReviewReport` 与 MCP 的 `repotory_review_latest` 同时受益——agent 现在拿到的是空列表而不是 null），**前端** `fetchReport` 归一 `findings` 载荷并给 severityAll 计数补可选链，双保险防旧二进制。回归：Go 端到端断言零发现的 `LatestReviewSnapshot` findings 非 nil 且 JSON 字面量为 `"findings":[]`；前端新增旧后端 null 载荷的存活测试；416 例前端 + service/db/app 全绿。
+
 ## [2.35.1] - 2026-11-11
 
 ### 修复
@@ -1004,6 +1010,7 @@
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
 [Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...HEAD
+[2.35.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.1...v2.35.2
 [2.35.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.0...v2.35.1
 [2.35.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...v2.35.0
 [2.34.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.5...v2.34.0
