@@ -57,8 +57,13 @@ import type {
 export interface Transport {
   /** Call an MCP tool and return its text content. */
   callTool(name: string, args: Record<string, unknown>): Promise<string>;
-  /** Call a headless-service RPC method (the bridge MCP does not carry). */
-  rpc(method: string, args: unknown[]): Promise<unknown>;
+  /**
+   * Call a headless-service RPC method (the bridge MCP does not carry).
+   *
+   * `timeoutMs` is for calls that legitimately take minutes (a model test, a
+   * model list): the default 4 s is a health-probe budget, not an AI budget.
+   */
+  rpc(method: string, args: unknown[], timeoutMs?: number): Promise<unknown>;
   /** The headless service's base URL. */
   serverUrl(): string;
   /** The folder the session is standing in, if any. */
@@ -80,6 +85,12 @@ const ASK_ERROR_PREFIX = "error: ";
 
 /** The prefix the ask tool uses when no AI endpoint is configured at all. */
 const ASK_NO_ENDPOINT_PREFIX = "No AI endpoint is configured";
+
+/** GetConfig's sentinel for a stored secret (service/config.go's secretMask). */
+const SECRET_MASK = "********";
+
+/** How long a provider probe may take: model calls are minutes, not pings. */
+const AI_PROBE_TIMEOUT_MS = 120_000;
 
 export class ChatSession {
   private turns: Turn[] = [];
@@ -221,6 +232,26 @@ export class ChatSession {
       case "pickProject":
         await this.bindWorkspaceToProject(msg.projectId);
         break;
+      // ---- the AI provider sheet -------------------------------------------
+      // The panel used to have no way to name its own model endpoint: a 404 was
+      // the last thing it could say. These four land on the SAME settings rows
+      // the desktop app writes, so the two clients never disagree about which
+      // endpoint answers.
+      case "providerLoad":
+        await this.loadProvider();
+        break;
+      case "providerSave":
+        await this.saveProvider(msg.baseUrl, msg.model, msg.apiKey);
+        break;
+      case "providerTest":
+        await this.testProvider(msg.baseUrl, msg.model, msg.apiKey);
+        break;
+      case "providerModels":
+        await this.fetchProviderModels(msg.baseUrl, msg.apiKey);
+        break;
+      case "providerTestSaved":
+        await this.testSavedProvider();
+        break;
       default:
         break;
     }
@@ -252,6 +283,165 @@ export class ChatSession {
     }
   }
 
+  // ------------------------------------------------------- the AI provider
+  //
+  // The panel used to have no entry for the model endpoint it depends on: a
+  // 404 from `repotory_ask` was the last thing it could say, and the only fix
+  // lived in the desktop app's settings page. These handlers read and write the
+  // SAME settings rows, through the same RPC bridge the desktop UI uses.
+
+  /** The saved chat provider, as far as a client is allowed to see it. */
+  private async readSavedProvider(): Promise<{ baseUrl: string; model: string; hasKey: boolean }> {
+    const response = (await this.transport.rpc("GetConfig", [])) as
+      | { config?: Record<string, string> }
+      | null;
+    const config = response?.config ?? {};
+    return {
+      baseUrl: config["ai_chat_base_url"] ?? "",
+      model: config["ai_chat_model"] ?? "",
+      // GetConfig masks a stored secret with this sentinel (service/config.go);
+      // the sentinel means "a key is set", never the key itself.
+      hasKey: (config["ai_chat_api_key"] ?? "") === SECRET_MASK,
+    };
+  }
+
+  private async loadProvider(): Promise<void> {
+    try {
+      const saved = await this.readSavedProvider();
+      this.post({ type: "providerState", ...saved });
+    } catch (err) {
+      this.post({
+        type: "providerState",
+        baseUrl: "",
+        model: "",
+        hasKey: false,
+        error: `Could not read the saved provider: ${errorText(err)}. Is the local Cinder service running?`,
+      });
+    }
+  }
+
+  private async saveProvider(baseUrl: string, model: string, apiKey: string): Promise<void> {
+    try {
+      const base = baseUrl.trim();
+      const name = model.trim();
+      if (!base || !name) throw new Error("Base URL and model are both required.");
+      await this.transport.rpc("UpdateConfig", ["ai_chat_base_url", base]);
+      await this.transport.rpc("UpdateConfig", ["ai_chat_model", name]);
+      // A blank key means "keep what is stored": writing the mask back would
+      // replace the real credential with asterisks.
+      if (apiKey.trim() && apiKey.trim() !== SECRET_MASK) {
+        await this.transport.rpc("UpdateConfig", ["ai_chat_api_key", apiKey.trim()]);
+      }
+      const saved = await this.readSavedProvider();
+      this.post({ type: "providerState", ...saved });
+      this.post({
+        type: "providerResult",
+        kind: "save",
+        ok: true,
+        message: "Saved. Chat questions in this panel now use this endpoint.",
+      });
+    } catch (err) {
+      this.post({
+        type: "providerResult",
+        kind: "save",
+        ok: false,
+        message: `Save failed: ${aiFailureHint(err)}`,
+      });
+    }
+  }
+
+  private async testProvider(baseUrl: string, model: string, apiKey: string): Promise<void> {
+    try {
+      const base = baseUrl.trim();
+      const name = model.trim();
+      const key = apiKey.trim();
+      if (!base || !name) throw new Error("Base URL and model are both required.");
+      const saved = await this.readSavedProvider().catch(() => null);
+      let result: { reply?: string; resolved_base_url?: string };
+      if (key) {
+        result = (await this.transport.rpc("TestAIChat", [base, name, key], AI_PROBE_TIMEOUT_MS)) as typeof result;
+      } else if (saved && saved.hasKey && saved.baseUrl === base && saved.model === name) {
+        // The stored key never leaves the host, so "test what is saved" has to
+        // be a server-side call.
+        result = (await this.transport.rpc("TestAIChatConfigured", [], AI_PROBE_TIMEOUT_MS)) as typeof result;
+      } else {
+        result = (await this.transport.rpc("TestAIChat", [base, name, ""], AI_PROBE_TIMEOUT_MS)) as typeof result;
+      }
+      const reply = (result?.reply ?? "").trim();
+      this.post({
+        type: "providerResult",
+        kind: "test",
+        ok: true,
+        message: reply ? `Endpoint answered: ${reply.slice(0, 80)}` : "Endpoint answered.",
+        resolvedBaseUrl: result?.resolved_base_url,
+      });
+    } catch (err) {
+      this.post({
+        type: "providerResult",
+        kind: "test",
+        ok: false,
+        message: `Test failed: ${aiFailureHint(err)}`,
+      });
+    }
+  }
+
+  private async testSavedProvider(): Promise<void> {
+    try {
+      const result = (await this.transport.rpc("TestAIChatConfigured", [], AI_PROBE_TIMEOUT_MS)) as {
+        reply?: string;
+        resolved_base_url?: string;
+      };
+      const reply = (result?.reply ?? "").trim();
+      this.post({
+        type: "providerResult",
+        kind: "test",
+        ok: true,
+        message: reply ? `Saved endpoint answered: ${reply.slice(0, 80)}` : "Saved endpoint answered.",
+        resolvedBaseUrl: result?.resolved_base_url,
+      });
+    } catch (err) {
+      this.post({
+        type: "providerResult",
+        kind: "test",
+        ok: false,
+        message: `Test failed: ${aiFailureHint(err)}`,
+      });
+    }
+  }
+
+  private async fetchProviderModels(baseUrl: string, apiKey: string): Promise<void> {
+    try {
+      const base = baseUrl.trim();
+      if (!base) throw new Error("A base URL is required to fetch models.");
+      const key = apiKey.trim();
+      const saved = await this.readSavedProvider().catch(() => null);
+      let result: { models?: string[]; resolved_base_url?: string };
+      if (key) {
+        result = (await this.transport.rpc("ListAIModels", [base, key], AI_PROBE_TIMEOUT_MS)) as typeof result;
+      } else if (saved && saved.hasKey && saved.baseUrl === base) {
+        result = (await this.transport.rpc("ListAIModelsConfigured", [], AI_PROBE_TIMEOUT_MS)) as typeof result;
+      } else {
+        result = (await this.transport.rpc("ListAIModels", [base, ""], AI_PROBE_TIMEOUT_MS)) as typeof result;
+      }
+      const models = result?.models ?? [];
+      this.post({
+        type: "providerResult",
+        kind: "models",
+        ok: true,
+        models,
+        message: `${models.length} model${models.length === 1 ? "" : "s"} reported by the endpoint.`,
+        resolvedBaseUrl: result?.resolved_base_url,
+      });
+    } catch (err) {
+      this.post({
+        type: "providerResult",
+        kind: "models",
+        ok: false,
+        message: `Fetch failed: ${aiFailureHint(err)}`,
+      });
+    }
+  }
+
   /**
    * Ask one question and append the turn to the feed.
    *
@@ -265,7 +455,9 @@ export class ChatSession {
       const threadId = this.shared.threadId!;
       const sent = await this.shared.send(text, async question => {
         const result = await this.transport.callTool("repotory_ask", { query: question });
-        if (result.startsWith(ASK_ERROR_PREFIX)) throw new Error(result.slice(ASK_ERROR_PREFIX.length).trim());
+        if (result.startsWith(ASK_ERROR_PREFIX)) {
+          throw new Error(aiFailureHint(result.slice(ASK_ERROR_PREFIX.length).trim()));
+        }
         if (result.startsWith(ASK_NO_ENDPOINT_PREFIX)) throw new Error("Configure the Cinder AI provider to answer shared questions.");
         return result;
       });
@@ -289,7 +481,15 @@ export class ChatSession {
       turn.state = "error";
       turn.error = err instanceof Error ? err.message : String(err);
       this.post({ type: "turn", turn });
-      this.announce("error", turn.error);
+      // A model-endpoint failure is the one error the reader can fix in this
+      // panel, so it carries the button that opens the provider sheet.
+      this.announce(
+        "error",
+        turn.error,
+        turn.mode === "ask" && needsProvider(turn.error)
+          ? { label: "Configure AI provider", target: "provider" }
+          : undefined,
+      );
     }
   }
 
@@ -775,12 +975,53 @@ export class ChatSession {
     if (response?.error) throw new Error(response.error);
   }
 
-  private announce(level: "info" | "warn" | "error", message: string): void {
-    this.post({ type: "announce", level, message });
+  private announce(
+    level: "info" | "warn" | "error",
+    message: string,
+    action?: { label: string; target: "provider" },
+  ): void {
+    this.post({ type: "announce", level, message, action });
   }
 }
 
 // ------------------------------------------------------------------ helpers
+
+/** The message of an unknown thrown value. */
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * True when an ask failure is about the model endpoint rather than the data.
+ *
+ * Only these failures have an action the panel can offer; a dead MCP server or
+ * an empty knowledge base must not advertise "configure a provider".
+ */
+export function needsProvider(error: string | undefined): boolean {
+  if (!error) return false;
+  return /(AI endpoint|No AI endpoint|not configured|404)/i.test(error);
+}
+
+/**
+ * A model-endpoint failure, with the one sentence that names the usual cause.
+ *
+ * A 404 from an OpenAI-compatible gateway is almost always a Base URL shaped
+ * like a full endpoint ("…/v1/chat/completions") instead of the server root,
+ * and the raw "Not Found" tells the reader nothing about that.
+ */
+export function aiFailureHint(error: unknown): string {
+  const text = errorText(error);
+  if (/404/.test(text)) {
+    return `${text} — a 404 usually means the Base URL points at a full endpoint. Use the server root instead, e.g. https://api.deepseek.com or http://localhost:1234/v1.`;
+  }
+  if (/No AI endpoint is configured|not configured/i.test(text)) {
+    return `${text} — fill in Base URL and model in the AI provider sheet, then Save.`;
+  }
+  if (/auth failed|401|403/i.test(text)) {
+    return `${text} — check the API key for this endpoint.`;
+  }
+  return text;
+}
 
 function toCard(hit: NoteHit): HitCard {
   return {

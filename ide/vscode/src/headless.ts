@@ -27,7 +27,7 @@ export function getJson(base: string, path: string): Promise<unknown> {
   });
 }
 
-export function postJson(base: string, path: string, body: unknown): Promise<unknown> {
+export function postJson(base: string, path: string, body: unknown, timeoutMs = 4000): Promise<unknown> {
   const payload = JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -52,7 +52,7 @@ export function postJson(base: string, path: string, body: unknown): Promise<unk
       },
     );
     req.on("error", reject);
-    req.setTimeout(4000, () => {
+    req.setTimeout(timeoutMs, () => {
       req.destroy(new Error(`timeout: ${path}`));
     });
     req.end(payload);

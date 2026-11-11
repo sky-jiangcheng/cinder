@@ -681,9 +681,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const transport: Transport = {
     callTool,
     // The headless RPC bridge: the one place MCP deliberately does not carry
-    // (project resolution, moving a note between projects).
-    rpc: async (method, args) => {
-      const response = (await postJson(serverUrl(), "/api/rpc", { method, args })) as {
+    // (project resolution, moving a note between projects, the AI provider
+    // settings). `timeoutMs` lets a model probe wait longer than a health ping.
+    rpc: async (method, args, timeoutMs) => {
+      const response = (await postJson(serverUrl(), "/api/rpc", { method, args }, timeoutMs)) as {
         result?: unknown;
         error?: string;
       } | null;

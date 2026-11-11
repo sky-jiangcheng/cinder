@@ -344,7 +344,10 @@ class ChatSession(
                 ChatMode.PAGES -> runPages(turn)
             }
         } catch (e: Exception) {
-            val message = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+            // A model-endpoint failure gets the sentence that names its usual
+            // cause (a Base URL shaped like a full endpoint), so the reader is
+            // not left with a bare "404 Not Found".
+            val message = aiFailureHint(e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName)
             update(turn.id) { it.copy(state = TurnState.ERROR, error = message) }
             announce(ChatLevel.ERROR, message)
         }

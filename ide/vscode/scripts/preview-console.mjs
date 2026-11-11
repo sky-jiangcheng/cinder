@@ -96,9 +96,29 @@ const html = consoleHtml(nonce)
   window.addEventListener('load', function () {
     var api = { type: 'init', mode: 'ask', scope: { projectId: 4, projectName: 'CBiPay', repository: 'pay-common', locked: true }, turns: ${JSON.stringify(turns)} };
     window.postMessage(api, '*');
+    // The history sheet and the provider sheet are the two surfaces the panel
+    // review asked for; both are empty unless the stub feeds them.
+    window.postMessage({
+      type: 'sharedState',
+      threads: [
+        { id: 't-1', title: 'Retry budget review', path: '/work/CBiPay', createdAt: '2026-11-09T09:00:00Z', updatedAt: '2026-11-09T10:20:00Z' },
+        { id: 't-2', title: 'Deploy hook migration', path: '/work/CBiPay', createdAt: '2026-11-08T09:00:00Z', updatedAt: '2026-11-08T15:40:00Z' }
+      ],
+      threadId: null,
+      turns: ${JSON.stringify(turns)},
+      busy: false,
+      problem: null
+    }, '*');
     setTimeout(function () {
       window.postMessage({ type: 'announce', level: 'warn', message: 'The local Cinder service is not reachable at http://127.0.0.1:18765 — the project lock needs it, so the panel searches across all projects.' }, '*');
     }, 50);
+    setTimeout(function () {
+      window.postMessage({
+        type: 'announce', level: 'error',
+        message: 'AI endpoint returned 404 — a 404 usually means the Base URL points at a full endpoint. Use the server root instead, e.g. https://api.deepseek.com or http://localhost:1234/v1.',
+        action: { label: 'Configure AI provider', target: 'provider' }
+      }, '*');
+    }, 120);
   });
 </script>
 </body>`,

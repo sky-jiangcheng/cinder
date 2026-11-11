@@ -65,6 +65,7 @@ import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -101,6 +102,7 @@ import javax.swing.ImageIcon
 import javax.swing.DefaultListCellRenderer
 import javax.swing.JButton
 import javax.swing.JComboBox
+import javax.swing.JComponent
 import javax.swing.JList
 import javax.swing.Timer
 import javax.swing.JEditorPane
@@ -178,6 +180,23 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private val sharedDrafts = mutableMapOf<String?, String>()
     private val modeToggles = mutableMapOf<ChatMode, JToggleButton>()
 
+    /**
+     * The conversation picker, built once and hosted in a DIALOG.
+     *
+     * It used to sit permanently above the feed (a section combo, a thread
+     * combo, New/Refresh and a status line), which spent the top of a narrow
+     * tool window on chrome. It is now reached from the header's
+     * "Conversations" action and from the topic bar, so the conversation keeps
+     * the room.
+     */
+    private lateinit var pickerPanel: JPanel
+
+    /** The conversation the panel is showing: local console or a shared thread. */
+    private val topicLabel = JLabel("Local console · Ask / Notes / Pages")
+
+    /** Once-per-panel offer to open the AI provider dialog (a 404 is fixable). */
+    private var providerHelpOffered = false
+
     private data class ThreadChoice(val id: String?, val label: String) {
         override fun toString(): String = label
     }
@@ -247,6 +266,9 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
 
         serviceToolbar = buildToolbar("RepotoryService", serviceActions())
         actionToolbar = buildToolbar("RepotoryActions", actionActions())
+        // Built before the header so the "Conversations" action has something
+        // to show; it is added to a dialog on demand, never to the panel.
+        pickerPanel = conversationPicker()
 
         add(headerStrip(), BorderLayout.NORTH)
         add(conversationArea(), BorderLayout.CENTER)
@@ -279,13 +301,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         panel.add(sectionPicker, BorderLayout.NORTH)
         sharedControls.add(threadPicker, BorderLayout.NORTH)
         val actions = JPanel(GridLayout(1, 3, 4, 0))
-        actions.add(JButton("New conversation").apply {
-            addActionListener {
-                val title = Messages.showInputDialog(project, "Conversation title (shared with Warden):",
-                    "New shared conversation", null)?.trim().orEmpty()
-                if (title.isNotEmpty()) background { shared.create(title) }
-            }
-        })
+        actions.add(JButton("New conversation").apply { addActionListener { newSharedConversation() } })
         actions.add(JButton("Refresh").apply { addActionListener { sharedPolling.refreshNow() } })
         sharedControls.add(actions, BorderLayout.CENTER)
         sharedControls.add(sharedStatus, BorderLayout.SOUTH)
@@ -313,6 +329,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             displayedThread = shared.snapshot().selectedId
             inputField.text = if (sharedSection) sharedDrafts[displayedThread].orEmpty() else localDraft
             scopeChipButton.isVisible = !sharedSection
+            renderTopicLabel()
             renderMode()
             renderShared()
             renderFeed()
@@ -321,8 +338,43 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         return panel
     }
 
+    /** The header's "Conversations" action: the picker, in a dialog. */
+    private fun showConversations() {
+        renderShared()
+        PanelDialog("Cinder: Conversations", pickerPanel).show()
+    }
+
+    /** The header's "New" action and the picker's New button share this. */
+    private fun newSharedConversation() {
+        val title = Messages.showInputDialog(
+            project,
+            "Conversation title (shared with Cinder):",
+            "New shared conversation",
+            null,
+        )?.trim().orEmpty()
+        if (title.isNotEmpty()) background { shared.create(title) }
+    }
+
+    /**
+     * One line above the feed naming the conversation in use.
+     *
+     * The picker moved into a dialog, so the panel must still say which
+     * conversation an answer will land in — otherwise "New conversation"
+     * silently changes the destination.
+     */
+    private fun renderTopicLabel() {
+        val state = shared.snapshot()
+        topicLabel.text = if (sharedSection) {
+            val title = state.selected?.title?.takeIf { it.isNotBlank() }
+            "Shared · " + (title ?: "no conversation selected")
+        } else {
+            "Local console · Ask / Notes / Pages"
+        }
+    }
+
     private fun renderShared() {
         val state = shared.snapshot()
+        renderTopicLabel()
         if (sharedSection && displayedThread != state.selectedId) {
             sharedDrafts[displayedThread] = inputField.text
             displayedThread = state.selectedId
@@ -405,6 +457,24 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      * the VS Code panel draws in its header, with the same tooltip wording.
      */
     private fun actionActions(): ActionGroup = DefaultActionGroup(
+        // The same three entries the VS Code panel draws as header icons:
+        // history, new conversation, provider settings. Swing renders dirless
+        // actions as compact text buttons, which is the platform's own shape.
+        object : AnAction("Conversations", "Switch conversation (local console or a shared one)", null), DumbAware {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun actionPerformed(e: AnActionEvent) = showConversations()
+        },
+        object : AnAction("New", "New shared conversation", null), DumbAware {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun actionPerformed(e: AnActionEvent) = newSharedConversation()
+        },
+        object : AnAction("AI provider", "Configure the model endpoint that answers", null), DumbAware {
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+            override fun actionPerformed(e: AnActionEvent) = ProviderDialog().show()
+        },
         object : AnAction("Desktop app", "Open the Cinder Desktop app", AllIcons.General.Web), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
@@ -517,10 +587,31 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      * detail pane beside it, so a narrow tool window never squeezes a column
      * of text into something unreadable.
      */
+    /**
+     * The one-line conversation bar above the feed.
+     *
+     * It replaces the permanently visible picker: the conversation in use is
+     * still named (a switch must never be silent), the switch itself is one
+     * click away, and everything else the picker held lives in its dialog.
+     */
+    private fun topicBar(): JPanel {
+        val bar = JPanel(BorderLayout(JBUI.scale(6), 0))
+        bar.border = JBUI.Borders.empty(3, 8)
+        bar.isOpaque = false
+        topicLabel.font = topicLabel.font.deriveFont(Font.PLAIN)
+        bar.add(topicLabel, BorderLayout.CENTER)
+        val switch = JButton("Switch…").apply {
+            toolTipText = "Choose the local console or a shared conversation"
+            addActionListener { showConversations() }
+        }
+        bar.add(switch, BorderLayout.EAST)
+        return bar
+    }
+
     private fun conversationArea(): JPanel {
         val area = JPanel(BorderLayout(0, 0))
         val top = JPanel(BorderLayout())
-        top.add(conversationPicker(), BorderLayout.NORTH)
+        top.add(topicBar(), BorderLayout.NORTH)
         top.add(announcement, BorderLayout.SOUTH)
         area.add(top, BorderLayout.NORTH)
 
@@ -708,12 +799,48 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private fun applyEvent(event: ChatEvent) {
         when (event) {
             is ChatEvent.Turn -> renderFeed()
-            is ChatEvent.Announce -> showAnnouncement(event.level, event.message)
+            is ChatEvent.Announce -> {
+                showAnnouncement(event.level, event.message)
+                // A model-endpoint failure is the one error the reader can fix
+                // from this panel, so it points at the provider dialog instead
+                // of leaving a dead-end message.
+                if (event.level == ChatLevel.ERROR && needsProviderHint(event.message)) {
+                    offerProviderHelpOnce()
+                }
+            }
             is ChatEvent.Scope -> renderScope()
             is ChatEvent.Mode -> renderMode()
             // The candidates arrived: the chip now has something to offer, so
             // it says "choose a project" instead of "no project".
             is ChatEvent.Candidates -> renderScope()
+        }
+    }
+
+    /** True when an error names the model endpoint rather than the data. */
+    private fun needsProviderHint(message: String): Boolean =
+        message.contains("AI endpoint", ignoreCase = true) ||
+            message.contains("No AI endpoint", ignoreCase = true) ||
+            message.contains("404")
+
+    /**
+     * Offer the provider dialog once per panel.
+     *
+     * A notification, not a modal: the endpoint can fail on every question, and
+     * an unrequested dialog would interrupt the work each time. The reader can
+     * still reach the dialog from the header at any moment.
+     */
+    private fun offerProviderHelpOnce() {
+        if (providerHelpOffered) return
+        providerHelpOffered = true
+        val manager = NotificationGroupManager.getInstance()
+        if (!manager.isGroupRegistered(NOTIFICATION_GROUP)) return
+        manager.getNotificationGroup(NOTIFICATION_GROUP).createNotification(
+            "Cinder: AI provider",
+            "The answer failed at the model endpoint. Configure the Base URL and model in the AI provider dialog.",
+            NotificationType.WARNING,
+        ).apply {
+            addAction(NotificationAction.createSimple("AI provider…") { ProviderDialog().show() })
+            notify(null)
         }
     }
 
@@ -1394,6 +1521,22 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         disposed = true
         sharedPolling.close()
     }
+}
+
+/**
+ * A dialog that hosts an existing Swing panel — the conversation picker.
+ *
+ * The picker used to be a permanent band above the feed; it is now shown on
+ * demand (header action or the topic bar's "Switch…"). A dialog is the
+ * platform's own shape for "a small form over the work".
+ */
+private class PanelDialog(titleText: String, private val content: JComponent) : DialogWrapper(true) {
+    init {
+        title = titleText
+        init()
+    }
+
+    override fun createCenterPanel(): JComponent = content
 }
 
 /**

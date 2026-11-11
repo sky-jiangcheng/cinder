@@ -663,6 +663,36 @@ func TestAIChatWithTimeout(baseURL, model, apiKey string, messages []chatMessage
 	return testAIChatWithTimeout(baseURL, model, apiKey, messages, timeout)
 }
 
+// TestAIChatConfigured verifies the SAVED provider (endpoint, model and key).
+//
+// The IDE panels write the same settings the desktop app writes, but GetConfig
+// masks ai_chat_api_key. A "test connection" that sent the masked value would
+// put "********" in the Authorization header, so a panel that wants to test
+// what is actually stored calls this instead: the key is read server-side and
+// never leaves the host in any response.
+func (s *Service) TestAIChatConfigured() (*AITestResult, error) {
+	cfg, err := s.aiChatConfig()
+	if err != nil {
+		return nil, err
+	}
+	return testAIChatWithTimeout(
+		cfg.baseURL, cfg.model, cfg.apiKey,
+		[]chatMessage{{Role: "user", Content: "Reply with exactly: OK"}},
+		aiChatTimeout,
+	)
+}
+
+// ListAIModelsConfigured lists the SAVED provider's models, for the same
+// reason TestAIChatConfigured exists: the stored API key must never be echoed
+// back to a client just so it can be sent straight back out again.
+func (s *Service) ListAIModelsConfigured() (*AIModelListResult, error) {
+	cfg, err := s.aiChatConfig()
+	if err != nil {
+		return nil, err
+	}
+	return ListAIModels(cfg.baseURL, cfg.apiKey)
+}
+
 // chatWithAudit is the audited entry point for every NON-STREAMING model call.
 //
 // It exists because the package-level TestAIChatWithTimeout has no access to

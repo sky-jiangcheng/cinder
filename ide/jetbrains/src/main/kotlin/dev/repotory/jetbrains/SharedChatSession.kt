@@ -204,7 +204,7 @@ internal class SharedChatSession(
                 if (disposed) return
                 val retained = pending[job.userId] ?: job
                 pending[job.userId] = retained.copy(busy = false, error =
-                    "Not synced / request failed: ${reason(e)}. Retry keeps the same message ids; " +
+                    "Not synced / request failed: ${aiFailureHint(reason(e))}. Retry keeps the same message ids; " +
                         "upgrade Cinder if the shared-conversation tool is unavailable.")
                 changed()
             }

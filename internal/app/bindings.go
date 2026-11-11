@@ -459,6 +459,32 @@ func (a *App) SetupAgentClients(projectID int64, clients []string, withHook, wit
 	return a.svc.SetupAgentClients(projectID, clients, withHook, withInstructions)
 }
 
+// AgentInstructionsStatusFor reports whether one project's directory carries
+// the managed repotory block in AGENTS.md/CLAUDE.md ("ok"), has the files
+// without the block ("no_block"), has neither ("missing"), or is a container
+// where the question does not apply ("skipped"). It backs the collected-project
+// checklist banner on the project page.
+func (a *App) AgentInstructionsStatusFor(projectID int64) (*service.AgentInstructionsStatus, error) {
+	return a.svc.AgentInstructionsStatusFor(projectID)
+}
+
+// MissingAgentInstructionsCount returns how many collected projects lack the
+// managed block, for the dashboard badge. A missing block is the condition
+// that left the handoff protocol idle for two weeks (see the 2026-11-10 audit
+// recorded in the checklist's service comments), so the badge recomputes live
+// instead of trusting a stored verdict.
+func (a *App) MissingAgentInstructionsCount() int { return a.svc.MissingAgentInstructionsCount() }
+
+// InstallAgentInstructions tops up ONE project's AGENTS.md/CLAUDE.md with the
+// managed block and nothing else: no client configs, no hook, no dependency on
+// the MCP binary. It is the checklist banner's one-click action — the user
+// clicks it in the desktop app, which keeps "writing into the user's tracked
+// instruction files" a decision a person makes, never a background side
+// effect. Refusals come back as the same codes SetupAgentClients uses.
+func (a *App) InstallAgentInstructions(projectID int64) (service.AgentSetupReport, error) {
+	return a.svc.InstallAgentInstructions(projectID)
+}
+
 // --- Plugins / knowledge sources ----------------------------------------------
 
 // GetKnowledgeSources returns registered knowledge importers with their state.
@@ -912,6 +938,19 @@ func (a *App) ListAIModels(baseURL, apiKey string) (*service.AIModelListResult, 
 // using the form's current values.
 func (a *App) TestAIChat(baseURL, model, apiKey string) (*service.AITestResult, error) {
 	return service.TestAIChat(baseURL, model, apiKey)
+}
+
+// TestAIChatConfigured verifies the SAVED provider. The settings form cannot
+// know the stored API key (GetConfig masks it), so "test what is actually
+// configured" is a distinct binding, not a client-side echo of a masked value.
+func (a *App) TestAIChatConfigured() (*service.AITestResult, error) {
+	return a.svc.TestAIChatConfigured()
+}
+
+// ListAIModelsConfigured lists the SAVED provider's models, same rationale as
+// TestAIChatConfigured.
+func (a *App) ListAIModelsConfigured() (*service.AIModelListResult, error) {
+	return a.svc.ListAIModelsConfigured()
 }
 
 // CheckUpdate asks GitHub Releases whether a newer stable version exists.

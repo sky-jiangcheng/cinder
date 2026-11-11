@@ -170,6 +170,17 @@ export type ExtMessage =
   | { type: "sharedSelect"; threadId: string | null }
   | { type: "sharedCreate"; title: string }
   | { type: "sharedRefresh" }
+  // ---- the AI provider sheet ------------------------------------------------
+  // The panel used to have no entry for the AI endpoint at all: a 404 from
+  // `repotory_ask` was a dead end, and the only fix lived in the desktop app's
+  // settings page. These four messages let the same panel read, test and write
+  // the provider it is actually using (the desktop app reads the same rows).
+  | { type: "providerLoad" }
+  | { type: "providerSave"; baseUrl: string; model: string; apiKey: string }
+  | { type: "providerTest"; baseUrl: string; model: string; apiKey: string }
+  | { type: "providerModels"; baseUrl: string; apiKey: string }
+  /** Test what is actually SAVED (the stored key never leaves the host). */
+  | { type: "providerTestSaved" }
   /**
    * The webview's script is up.
    *
@@ -206,7 +217,39 @@ export type ViewMessage =
   | ({ type: "sharedState" } & import("./sharedChat.js").SharedChatState)
   | { type: "init"; mode: Mode; scope: ScopeState; turns: Turn[] }
   | { type: "turn"; turn: Turn }
-  | { type: "announce"; level: "info" | "warn" | "error"; message: string }
+  /**
+   * One line of status, optionally with the one action that fixes it.
+   *
+   * A 404 from the AI endpoint used to be a sentence and nothing else; the
+   * action turns it into "open AI provider settings", which is the only useful
+   * next move.
+   */
+  | {
+      type: "announce";
+      level: "info" | "warn" | "error";
+      message: string;
+      action?: { label: string; target: "provider" };
+    }
+  /** The AI provider sheet's current state (secrets stay masked). */
+  | {
+      type: "providerState";
+      baseUrl: string;
+      model: string;
+      /** True when a key is stored; the value itself is never sent. */
+      hasKey: boolean;
+      /** Set when the state could not be read (service down, MCP only, …). */
+      error?: string;
+    }
+  /** The outcome of one provider-sheet action (save / test / model list). */
+  | {
+      type: "providerResult";
+      kind: "save" | "test" | "models";
+      ok: boolean;
+      message: string;
+      models?: string[];
+      /** The base URL that actually answered, when it differs from the typed one. */
+      resolvedBaseUrl?: string;
+    }
   | { type: "scope"; scope: ScopeState }
   | { type: "mode"; mode: Mode }
   | {

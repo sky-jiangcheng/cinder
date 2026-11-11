@@ -12,11 +12,19 @@ export const VISIBLE_TURNS = 2;
 // The icons are inlined instead of loaded from `media/`: the webview has no
 // `localResourceRoots`, so an external file 404s — and a 404 icon shows up in
 // VS Code as an empty box, which is harder to diagnose than a missing button.
-// All four draw with `currentColor`, so they follow the theme by themselves.
-
-
+// All of them draw with `currentColor`, so they follow the theme by themselves.
 
 const ICON_DESKTOP = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 13.5h5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
+
+// Conversation history: three lines, the same glyph Warden uses for its
+// "conversations" sheet. The list itself is HIDDEN until asked for — a sidebar
+// that always draws a topic dropdown plus two buttons above the feed spends
+// the narrowest screen in the product on chrome.
+const ICON_HISTORY = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2.5 4h11M2.5 8h8M2.5 12h5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
+const ICON_PLUS = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2.8v10.4M2.8 8h10.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
+const ICON_GEAR = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.6v1.7M8 12.7v1.7M1.6 8h1.7M12.7 8h1.7M3.5 3.5l1.2 1.2M11.3 11.3l1.2 1.2M12.5 3.5l-1.2 1.2M4.7 11.3l-1.2 1.2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 
 const KINDS = ["knowledge", "log", "idea", "other"];
 
@@ -52,7 +60,7 @@ export function consoleHtml(nonce: string): string {
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
-    margin: 0; display: flex; flex-direction: column; overflow: hidden;
+    margin: 0; position: relative; display: flex; flex-direction: column; overflow: hidden;
     font-family: var(--vscode-font-family, sans-serif);
     font-size: var(--vscode-font-size, 13px);
     color: var(--vscode-foreground, #333);
@@ -63,7 +71,12 @@ export function consoleHtml(nonce: string): string {
   /* The strip used to live in VS Code's view/title, where the host drew it
      at the far right of the sidebar title bar and cropped the third button
      off the panel's edge. The webview cannot draw that strip, so the actions
-     moved in here (ADR-0044 decision 1). */
+     moved in here (ADR-0044 decision 1).
+
+     The conversation controls are ICONS here, and the list itself is a sheet
+     that only exists while it is open: the old always-on topic row (dropdown
+     + "new" + refresh + a status line) spent the top of a 300px sidebar on
+     chrome and left almost nothing for the conversation. */
   header.bar {
     display: flex; align-items: center; gap: 8px; flex: none;
     padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--r-border);
@@ -75,7 +88,7 @@ export function consoleHtml(nonce: string): string {
   }
   .actions { display: flex; align-items: center; gap: 1px; flex: none; }
   .icon-btn {
-    flex: none; width: 24px; height: 24px; cursor: pointer;
+    flex: none; width: 24px; height: 24px; cursor: pointer; position: relative;
     display: flex; align-items: center; justify-content: center;
     background: none; border: none; border-radius: 4px;
     color: var(--vscode-foreground, #333);
@@ -83,6 +96,12 @@ export function consoleHtml(nonce: string): string {
   .icon-btn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
   .icon-btn:focus-visible { outline: 1px solid var(--r-accent); outline-offset: -1px; }
   .icon-btn svg { width: 16px; height: 16px; display: block; }
+  /* A problem in the shared conversation shows as a dot on the history button:
+     the status line lives in the sheet, but its absence must not hide a fault. */
+  .icon-btn.dot::after {
+    content: ""; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px;
+    border-radius: 50%; background: var(--vscode-editorWarning-foreground, #d18616);
+  }
   /* A narrow sidebar has no room for the wordmark; the icons never shrink. */
   @media (max-width: 260px) { .wordmark { display: none; } }
   /* ---------- announcement bar (ADR-0036 decision 5) ---------- */
@@ -96,6 +115,13 @@ export function consoleHtml(nonce: string): string {
   .announce.warn { background: var(--vscode-inputValidation-warningBackground, rgba(255,185,0,.14)); }
   .announce.error { background: var(--vscode-inputValidation-errorBackground, rgba(255,0,0,.12)); }
   .announce .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .announce .act { flex: none; }
+  .announce .act button {
+    padding: 2px 7px; font-size: 11px; cursor: pointer; border-radius: 4px;
+    color: var(--vscode-button-foreground, #fff);
+    background: var(--vscode-button-background, #06c); border: none;
+  }
+  .announce .act button:hover { filter: brightness(1.1); }
   .announce .x {
     flex: none; background: none; border: none; cursor: pointer;
     color: inherit; font-size: 14px; line-height: 1; padding: 0 2px; opacity: .7;
@@ -335,20 +361,66 @@ export function consoleHtml(nonce: string): string {
   }
   .pop-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.18)); }
   .pop-empty { padding: 8px 10px; font-size: 11px; color: var(--r-muted); }
-  .shared-topics { padding: 8px 12px; border-bottom: 1px solid var(--r-border); }
-  .topic-row { display: flex; gap: 6px; align-items: center; min-width: 0; }
-  .topic-row[hidden] { display: none; }
-  .topic-row select, .topic-row input { flex: 1; min-width: 0; width: 0; padding: 6px 8px; border: 1px solid var(--r-border); border-radius: 8px; background: var(--vscode-input-background, transparent); color: var(--vscode-foreground, inherit); font: inherit; }
-  .topic-row button { cursor: pointer; color: var(--vscode-foreground, inherit); background: transparent; border: 1px solid var(--r-border); border-radius: 6px; padding: 5px; }
-  #topic-form { margin-top: 8px; }
-  #topic-status { margin: 6px 0 0; font-size: 11px; line-height: 1.5; color: var(--r-muted); overflow-wrap: anywhere; }
-  #topic-status.error { color: var(--vscode-errorForeground, #c33); }
   button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--vscode-focusBorder, currentColor); outline-offset: 2px; }
+  /* ---------- sheets: the conversation history and the AI provider -------- */
+  /* Both are the panel's own pages, drawn over the conversation. They exist
+     only while open — the Warden app's shape, and the reason the top of the
+     sidebar no longer carries a permanent dropdown plus two buttons. */
+  .sheet {
+    position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    background: var(--vscode-sideBar-background, #fff);
+  }
+  .sheet[hidden] { display: none; }
+  .sheet-head {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-bottom: 1px solid var(--r-border);
+  }
+  .sheet-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+  .sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
+  .sheet-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+  .sheet-actions button, .btn {
+    padding: 4px 9px; font-size: 11px; cursor: pointer; border-radius: 4px;
+    border: 1px solid var(--r-border); background: transparent;
+    color: var(--vscode-foreground, #333);
+  }
+  .btn.primary, .sheet-actions button.primary {
+    color: var(--vscode-button-foreground, #fff);
+    background: var(--vscode-button-background, #06c); border-color: transparent;
+  }
+  .btn:hover, .sheet-actions button:hover { filter: brightness(1.1); }
+  .btn:disabled, .sheet-actions button:disabled { opacity: .5; cursor: default; filter: none; }
+  .topic-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .topic-item {
+    display: block; width: 100%; text-align: left; padding: 7px 9px; cursor: pointer;
+    background: none; border: 1px solid transparent; border-radius: 5px;
+    color: var(--vscode-foreground, #333); font-size: 12px;
+  }
+  .topic-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.16)); }
+  .topic-item.active { border-color: var(--r-accent); }
+  .topic-item .t-title { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .topic-item .t-sub { display: block; margin-top: 2px; font-size: 10px; color: var(--r-muted); overflow-wrap: anywhere; }
+  .topic-status { margin: 10px 0 0; font-size: 10px; line-height: 1.5; color: var(--r-muted); overflow-wrap: anywhere; }
+  .topic-status.error { color: var(--vscode-errorForeground, #c33); }
+  #topic-form { margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
+  #topic-form[hidden] { display: none; }
+  .field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 9px; }
+  .field .flabel { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--r-muted); }
+  .field input, #topic-title {
+    width: 100%; padding: 5px 8px; font-size: 12px;
+    font-family: var(--vscode-font-family, sans-serif);
+    color: var(--vscode-input-foreground, #333);
+    background: var(--vscode-input-background, #fff);
+    border: 1px solid var(--vscode-input-border, #ccc); border-radius: 4px; outline: none;
+  }
+  .field input:focus, #topic-title:focus { border-color: var(--r-accent); }
+  .sheet-hint { margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: var(--r-muted); }
+  .form-status { margin: 8px 0 0; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+  .form-status.ok { color: var(--vscode-testing-iconPassed, #1a7f37); }
+  .form-status.err { color: var(--vscode-errorForeground, #c33); }
   /* ---------- the empty state ---------- */
   .empty { padding: 18px 12px; font-size: 12px; line-height: 1.6; color: var(--r-muted); }
   .empty h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--vscode-foreground, #333); }
   .empty p { margin: 0 0 8px; }
-  .empty .mark { width: 44px; height: 44px; margin-bottom: 12px; }
   .empty kbd {
     padding: 1px 5px; font-size: 10px; border-radius: 3px;
     font-family: var(--vscode-editor-font-family, monospace);
@@ -369,24 +441,15 @@ export function consoleHtml(nonce: string): string {
   <span class="mark">${MARK_SVG}</span>
   <span class="wordmark">Cinder</span>
   <span class="actions">
+    <button class="icon-btn" id="history-open" type="button" title="Conversation history" aria-label="Conversation history" aria-haspopup="dialog" aria-controls="history-sheet">${ICON_HISTORY}</button>
+    <button class="icon-btn" id="topic-new" type="button" title="New conversation" aria-label="New conversation">${ICON_PLUS}</button>
+    <button class="icon-btn" id="provider-open" type="button" title="AI provider settings" aria-label="AI provider settings" aria-haspopup="dialog" aria-controls="provider-sheet">${ICON_GEAR}</button>
     <button class="icon-btn" id="act-desktop" type="button" title="Open the Cinder Desktop app" aria-label="Open the Cinder Desktop app">${ICON_DESKTOP}</button>
   </span>
 </header>
-<section class="shared-topics" aria-label="Shared conversation topics">
-  <div class="topic-row">
-    <select id="topic-select" aria-label="Conversation topic"><option value="">Local knowledge console</option></select>
-    <button class="icon-btn" id="topic-new" type="button" aria-label="New shared conversation" title="New shared conversation">+</button>
-    <button class="icon-btn" id="topic-refresh" type="button" aria-label="Refresh shared conversations" title="Refresh shared conversations">↻</button>
-  </div>
-  <form id="topic-form" class="topic-row" hidden>
-    <input id="topic-title" aria-label="Conversation title" placeholder="Name this conversation" maxlength="160" required>
-    <button type="submit">Create</button>
-    <button id="topic-cancel" type="button">Cancel</button>
-  </form>
-  <p id="topic-status" role="status">Shared through Cinder · connect Cinder MCP to sync</p>
-</section>
 <div class="announce" id="announce" hidden>
   <span class="msg" id="announce-msg"></span>
+  <span class="act" id="announce-act"></span>
   <button class="x" id="announce-x" type="button" title="Dismiss" aria-label="Dismiss">✕</button>
 </div>
 <main class="feed" id="feed"></main>
@@ -405,6 +468,62 @@ export function consoleHtml(nonce: string): string {
     <button class="chip" id="chip" type="button">All projects</button>
   </div>
 </footer>
+
+<!-- The conversation history: opened from the header icon, closed with ✕/Esc. -->
+<section class="sheet" id="history-sheet" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+  <header class="sheet-head">
+    <span class="sheet-title" id="history-title">Conversations</span>
+    <button class="icon-btn" type="button" data-close="history-sheet" aria-label="Close conversation history" title="Close">✕</button>
+  </header>
+  <div class="sheet-body">
+    <div class="sheet-actions">
+      <button class="primary" id="topic-new-in-sheet" type="button">＋ New conversation</button>
+      <button id="topic-refresh" type="button" title="Refresh shared conversations">↻ Refresh</button>
+    </div>
+    <form id="topic-form" hidden>
+      <input id="topic-title" aria-label="Conversation title" placeholder="Name this conversation" maxlength="160" required>
+      <div class="sheet-actions">
+        <button class="primary" type="submit">Create</button>
+        <button id="topic-cancel" type="button">Cancel</button>
+      </div>
+    </form>
+    <ul class="topic-list" id="topic-list" aria-label="Conversation topic"></ul>
+    <p class="topic-status" id="topic-status" role="status">Shared through Cinder · connect Cinder MCP to sync</p>
+  </div>
+</section>
+
+<!-- The AI provider: the entry the panel used to lack entirely. A 404 from
+     repotory_ask was a dead end without it. -->
+<section class="sheet" id="provider-sheet" role="dialog" aria-modal="true" aria-labelledby="provider-title" hidden>
+  <header class="sheet-head">
+    <span class="sheet-title" id="provider-title">AI provider</span>
+    <button class="icon-btn" type="button" data-close="provider-sheet" aria-label="Close AI provider settings" title="Close">✕</button>
+  </header>
+  <div class="sheet-body">
+    <p class="sheet-hint">Any OpenAI-compatible endpoint: OpenRouter, OpenAI, DeepSeek, vLLM, LM Studio, Ollama. Answers are written by this endpoint; the key stays on this machine.</p>
+    <label class="field">
+      <span class="flabel">Base URL</span>
+      <input id="p-base" type="text" placeholder="https://api.deepseek.com  or  http://localhost:1234/v1" spellcheck="false" autocomplete="off">
+    </label>
+    <label class="field">
+      <span class="flabel">Model</span>
+      <input id="p-model" type="text" placeholder="deepseek-chat / gpt-4o-mini / …" list="p-model-list" spellcheck="false" autocomplete="off">
+      <datalist id="p-model-list"></datalist>
+    </label>
+    <label class="field">
+      <span class="flabel">API key</span>
+      <input id="p-key" type="password" placeholder="Optional for local endpoints" autocomplete="off">
+    </label>
+    <p class="sheet-hint" id="p-saved">No key saved.</p>
+    <div class="sheet-actions">
+      <button id="p-fetch" type="button">Fetch models</button>
+      <button id="p-test" type="button">Test</button>
+      <button class="primary" id="p-save" type="button">Save</button>
+    </div>
+    <p class="form-status" id="p-status" role="status"></p>
+  </div>
+</section>
+
 <script nonce="${nonce}">
 const MARK_SVG = ${JSON.stringify(MARK_SVG)};
 const KINDS = ${JSON.stringify(KINDS)};
@@ -413,11 +532,16 @@ const vscode = acquireVsCodeApi();
 const feedEl = document.getElementById('feed');
 const announceEl = document.getElementById('announce');
 const announceMsg = document.getElementById('announce-msg');
+const announceAct = document.getElementById('announce-act');
 const q = document.getElementById('q');
 const sendBtn = document.getElementById('send');
 const chip = document.getElementById('chip');
 const modeBtns = Array.from(document.querySelectorAll('.mode-btn'));
 const popEl = document.getElementById('project-pop');
+const topicList = document.getElementById('topic-list');
+const topicStatus = document.getElementById('topic-status');
+const historyBtn = document.getElementById('history-open');
+const providerStatus = document.getElementById('p-status');
 
 // ---- state -----------------------------------------------------------------
 // The host owns the DATA (the turns); this side owns the FOLD STATE. A
@@ -428,9 +552,8 @@ let turns = [];
 let sharedThreadId = null;
 let sharedBusy = false;
 let sharedSignature = '';
+let threads = [];
 const drafts = new Map();
-const topicSelect = document.getElementById('topic-select');
-const topicStatus = document.getElementById('topic-status');
 let topicSignature = '';
 let collapsedTurns = new Set();
 let expandedSources = new Set();
@@ -443,6 +566,8 @@ let candidates = [];
 // The open editor: { turnId, cardId, node }. The node is kept alive across
 // re-renders so a half-typed draft survives an unrelated turn update.
 let editor = null;
+// Whether a key is stored server-side (the value itself never reaches here).
+let providerHasKey = false;
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -499,6 +624,78 @@ function badge(text, cls) {
 function cardBadge(card) {
   if (card.type === 'wiki') return badge(card.pageKind || 'wiki', 'wiki');
   return badge(card.type, card.type);
+}
+
+// ---- sheets -----------------------------------------------------------------
+function openSheet(id) {
+  for (const el of Array.from(document.querySelectorAll('.sheet'))) el.hidden = true;
+  const sheet = document.getElementById(id);
+  if (!sheet) return;
+  sheet.hidden = false;
+  const focusable = sheet.querySelector('input');
+  if (focusable) focusable.focus();
+}
+
+function closeSheets() {
+  for (const el of Array.from(document.querySelectorAll('.sheet'))) el.hidden = true;
+}
+
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') closeSheets();
+});
+for (const btn of Array.from(document.querySelectorAll('[data-close]'))) {
+  btn.addEventListener('click', () => closeSheets());
+}
+
+// ---- the conversation history -----------------------------------------------
+// Local order: the local console first (this panel's own turns), then the
+// conversations shared through the Cinder MCP service, newest first.
+function renderTopics() {
+  topicList.replaceChildren();
+  const local = document.createElement('button');
+  local.className = 'topic-item' + (sharedThreadId ? '' : ' active');
+  local.type = 'button';
+  const localTitle = document.createElement('span');
+  localTitle.className = 't-title';
+  localTitle.textContent = 'Local knowledge console';
+  const localSub = document.createElement('span');
+  localSub.className = 't-sub';
+  localSub.textContent = 'This panel only · not shared';
+  local.append(localTitle, localSub);
+  local.addEventListener('click', () => {
+    closeSheets();
+    vscode.postMessage({ type: 'sharedSelect', threadId: null });
+  });
+  topicList.appendChild(local);
+
+  const sorted = threads.slice().sort((a, b) => {
+    const at = a.updatedAt || '';
+    const bt = b.updatedAt || '';
+    return at < bt ? 1 : at > bt ? -1 : 0;
+  });
+  for (const thread of sorted) {
+    const item = document.createElement('button');
+    item.className = 'topic-item' + (thread.id === sharedThreadId ? ' active' : '');
+    item.type = 'button';
+    const title = document.createElement('span');
+    title.className = 't-title';
+    title.textContent = thread.title || '(untitled)';
+    const sub = document.createElement('span');
+    sub.className = 't-sub';
+    sub.textContent = thread.path || 'All projects';
+    item.append(title, sub);
+    item.addEventListener('click', () => {
+      closeSheets();
+      vscode.postMessage({ type: 'sharedSelect', threadId: thread.id });
+    });
+    topicList.appendChild(item);
+  }
+  if (!sorted.length) {
+    const empty = document.createElement('li');
+    empty.className = 'topic-status';
+    empty.textContent = 'No shared conversations yet — the local console works without them.';
+    topicList.appendChild(empty);
+  }
 }
 
 // ---- scope chip ------------------------------------------------------------
@@ -562,10 +759,25 @@ function renderPop() {
 
 // ---- announcement bar ------------------------------------------------------
 function renderAnnounce() {
-  if (!announcement) { announceEl.hidden = true; return; }
+  if (!announcement) {
+    announceEl.hidden = true;
+    announceAct.replaceChildren();
+    return;
+  }
   announceEl.hidden = false;
   announceEl.className = 'announce ' + announcement.level;
   announceMsg.textContent = announcement.message;
+  announceAct.replaceChildren();
+  if (announcement.action) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = announcement.action.label;
+    btn.addEventListener('click', () => {
+      openSheet('provider-sheet');
+      vscode.postMessage({ type: 'providerLoad' });
+    });
+    announceAct.appendChild(btn);
+  }
 }
 
 // ---- the feed --------------------------------------------------------------
@@ -577,9 +789,10 @@ function renderFeed() {
     const empty = document.createElement('div');
     empty.className = 'empty';
     // Copy only talks about actions (ADR-0044 decision 4): one question and
-    // three tappable examples. The old four-paragraph pitch described the
-    // product instead of telling the reader what to do.
-    empty.innerHTML = MARK_SVG +
+    // three tappable examples. The brand mark is NOT repeated here — the
+    // header already carries it, and a second logo right under the first was
+    // the redundancy the panel review called out.
+    empty.innerHTML =
       '<h2>Ask what your project knows.</h2>' +
       '<p>Cinder answers from the notes your coding agents left behind, with the sources listed.</p>' +
       '<ul class="examples">' +
@@ -970,6 +1183,16 @@ document.getElementById('act-desktop').addEventListener('click', () => {
   vscode.postMessage({ type: 'openDesktop' });
 });
 
+historyBtn.addEventListener('click', () => {
+  renderTopics();
+  openSheet('history-sheet');
+});
+document.getElementById('provider-open').addEventListener('click', () => {
+  openSheet('provider-sheet');
+  providerStatus.textContent = 'Reading the saved provider…';
+  providerStatus.className = 'form-status';
+  vscode.postMessage({ type: 'providerLoad' });
+});
 
 document.getElementById('announce-x').addEventListener('click', () => {
   announcement = null;
@@ -987,24 +1210,76 @@ q.addEventListener('keydown', (ev) => {
   }
 });
 
-topicSelect.addEventListener('change', () => {
-  drafts.set(sharedThreadId || '', q.value);
-  vscode.postMessage({ type: 'sharedSelect', threadId: topicSelect.value || null });
-});
+// ---- the history sheet's controls ------------------------------------------
 document.getElementById('topic-new').addEventListener('click', () => {
+  // The header "+" goes straight to the create form: one click, then the name.
+  renderTopics();
+  openSheet('history-sheet');
+  document.getElementById('topic-form').hidden = false;
+  document.getElementById('topic-title').focus();
+});
+document.getElementById('topic-new-in-sheet').addEventListener('click', () => {
   document.getElementById('topic-form').hidden = false;
   document.getElementById('topic-title').focus();
 });
 document.getElementById('topic-cancel').addEventListener('click', () => {
   document.getElementById('topic-form').hidden = true;
-  document.getElementById('topic-new').focus();
 });
 document.getElementById('topic-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const title = document.getElementById('topic-title').value.trim();
-  if (title && !sharedBusy) vscode.postMessage({ type: 'sharedCreate', title });
+  if (title && !sharedBusy) {
+    vscode.postMessage({ type: 'sharedCreate', title });
+    document.getElementById('topic-form').hidden = true;
+    document.getElementById('topic-title').value = '';
+  }
 });
 document.getElementById('topic-refresh').addEventListener('click', () => vscode.postMessage({ type: 'sharedRefresh' }));
+
+// ---- the provider sheet's controls ----------------------------------------
+function providerForm() {
+  return {
+    baseUrl: document.getElementById('p-base').value.trim(),
+    model: document.getElementById('p-model').value.trim(),
+    apiKey: document.getElementById('p-key').value,
+  };
+}
+function setProviderStatus(text, cls) {
+  providerStatus.textContent = text;
+  providerStatus.className = 'form-status' + (cls ? ' ' + cls : '');
+}
+document.getElementById('p-save').addEventListener('click', () => {
+  const form = providerForm();
+  if (!form.baseUrl || !form.model) {
+    setProviderStatus('Base URL and model are both required.', 'err');
+    return;
+  }
+  setProviderStatus('Saving…');
+  vscode.postMessage({ type: 'providerSave', ...form });
+});
+document.getElementById('p-test').addEventListener('click', () => {
+  const form = providerForm();
+  if (!form.baseUrl || !form.model) {
+    if (providerHasKey) {
+      setProviderStatus('Testing the saved provider…');
+      vscode.postMessage({ type: 'providerTestSaved' });
+      return;
+    }
+    setProviderStatus('Base URL and model are both required.', 'err');
+    return;
+  }
+  setProviderStatus('Testing…');
+  vscode.postMessage({ type: 'providerTest', ...form });
+});
+document.getElementById('p-fetch').addEventListener('click', () => {
+  const form = providerForm();
+  if (!form.baseUrl) {
+    setProviderStatus('A base URL is required to fetch models.', 'err');
+    return;
+  }
+  setProviderStatus('Fetching models…');
+  vscode.postMessage({ type: 'providerModels', baseUrl: form.baseUrl, apiKey: form.apiKey });
+});
 
 // ---- messages --------------------------------------------------------------
 window.addEventListener('message', (event) => {
@@ -1025,28 +1300,24 @@ window.addEventListener('message', (event) => {
       editor = null;
       if (nextId) setMode('ask');
       document.getElementById('topic-form').hidden = true;
+      closeSheets();
     }
-    const nextTopics = JSON.stringify((msg.threads || []).map(t => [t.id, t.title]));
+    const nextTopics = JSON.stringify((msg.threads || []).map(t => [t.id, t.title, t.path, t.updatedAt]));
     if (nextTopics !== topicSignature) {
       topicSignature = nextTopics;
-      topicSelect.replaceChildren();
-      const local = document.createElement('option');
-      local.value = '';
-      local.textContent = 'Local knowledge console';
-      topicSelect.appendChild(local);
-      for (const thread of msg.threads || []) {
-        const option = document.createElement('option');
-        option.value = thread.id;
-        option.textContent = thread.title;
-        topicSelect.appendChild(option);
-      }
+      threads = (msg.threads || []).map(t => ({
+        id: t.id, title: t.title, path: t.path, updatedAt: t.updatedAt,
+      }));
+      renderTopics();
     }
-    topicSelect.value = sharedThreadId || '';
     sharedBusy = !!msg.busy;
     sendBtn.disabled = !!sharedThreadId && sharedBusy;
     document.getElementById('topic-new').disabled = sharedBusy;
+    document.getElementById('topic-new-in-sheet').disabled = sharedBusy;
     topicStatus.textContent = msg.problem || (sharedThreadId ? 'Shared through Cinder · library Q&A via the Cinder provider' : 'Shared topics · choose a topic or create one');
-    topicStatus.className = msg.problem ? 'error' : '';
+    topicStatus.className = 'topic-status' + (msg.problem ? ' error' : '');
+    // A fault in the shared channel must be visible without opening the sheet.
+    historyBtn.classList.toggle('dot', !!msg.problem);
     const signature = JSON.stringify([sharedThreadId, msg.turns]);
     if (signature !== sharedSignature) {
       sharedSignature = signature;
@@ -1068,7 +1339,7 @@ window.addEventListener('message', (event) => {
     else turns.push(turn);
     renderFeed();
   } else if (msg.type === 'announce') {
-    announcement = { level: msg.level || 'info', message: msg.message || '' };
+    announcement = { level: msg.level || 'info', message: msg.message || '', action: msg.action };
     renderAnnounce();
   } else if (msg.type === 'scope') {
     scope = msg.scope || scope;
@@ -1092,11 +1363,53 @@ window.addEventListener('message', (event) => {
     candidates = msg.candidates || [];
     renderScope();
     if (!popEl.hidden) renderPop();
+  } else if (msg.type === 'providerState') {
+    document.getElementById('p-base').value = msg.baseUrl || '';
+    document.getElementById('p-model').value = msg.model || '';
+    const keyEl = document.getElementById('p-key');
+    keyEl.value = '';
+    providerHasKey = !!msg.hasKey;
+    keyEl.placeholder = msg.hasKey
+      ? 'Saved on this machine — leave blank to keep it'
+      : 'Optional for local endpoints';
+    document.getElementById('p-saved').textContent = msg.hasKey
+      ? 'A key is saved for this endpoint. It is never shown again.'
+      : 'No key saved — local endpoints often need none.';
+    if (msg.error) setProviderStatus(msg.error, 'err');
+    else if (!msg.baseUrl && !msg.model) {
+      setProviderStatus('No provider configured yet — answers fail until one is saved.', 'err');
+    } else setProviderStatus('Configured. Answers use this endpoint.', 'ok');
+  } else if (msg.type === 'providerResult') {
+    const list = document.getElementById('p-model-list');
+    if (msg.kind === 'models' && msg.ok) {
+      list.replaceChildren();
+      for (const m of msg.models || []) {
+        const opt = document.createElement('option');
+        opt.value = m;
+        list.appendChild(opt);
+      }
+      const modelEl = document.getElementById('p-model');
+      if (!modelEl.value && (msg.models || []).length) modelEl.value = msg.models[0];
+      if (msg.resolvedBaseUrl) document.getElementById('p-base').value = msg.resolvedBaseUrl;
+    }
+    if (msg.resolvedBaseUrl && msg.kind === 'test') {
+      document.getElementById('p-base').value = msg.resolvedBaseUrl;
+    }
+    setProviderStatus(msg.message, msg.ok ? 'ok' : 'err');
+    if (msg.kind === 'save' && msg.ok) {
+      providerHasKey = providerHasKey || !!document.getElementById('p-key').value;
+      document.getElementById('p-key').value = '';
+      if (providerHasKey) {
+        document.getElementById('p-key').placeholder = 'Saved on this machine — leave blank to keep it';
+        document.getElementById('p-saved').textContent = 'A key is saved for this endpoint. It is never shown again.';
+      }
+    }
   }
 });
 
 setMode('ask');
 renderScope();
+renderTopics();
 renderFeed();
 // The host answers with the init message — a push before this script ran
 // would be dropped, and the panel would come up empty.

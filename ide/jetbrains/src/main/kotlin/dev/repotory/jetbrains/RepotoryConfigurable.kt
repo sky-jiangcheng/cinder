@@ -102,6 +102,18 @@ class RepotoryConfigurable : Configurable {
             }
         }
 
+        // The model endpoint the answers come from. It lives in the SERVICE's
+        // settings (SharedConfig), so this is an entry to the same dialog the
+        // panel's header opens — not a second copy of those fields.
+        val provider = JButton("Configure AI provider…")
+        provider.addActionListener { ProviderDialog().show() }
+        val providerRow = JPanel(BorderLayout(6, 0))
+        providerRow.add(provider, BorderLayout.WEST)
+        val providerHint = JBLabel(
+            "OpenAI-compatible Base URL + model. A 404 from the panel usually means " +
+                "the Base URL is a full endpoint instead of the server root.",
+        )
+
         return FormBuilder.createFormBuilder()
             .addLabeledComponent(JBLabel("MCP binary:"), mcpRow, 1, false)
             .addComponent(checkMcp)
@@ -110,6 +122,9 @@ class RepotoryConfigurable : Configurable {
             .addComponent(test)
             .addComponent(start)
             .addComponent(status)
+            .addSeparator()
+            .addComponent(providerRow)
+            .addComponent(providerHint)
             .addComponentFillVertically(JPanel(), 0)
             .panel
     }

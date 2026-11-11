@@ -178,6 +178,16 @@ var bindingSurfaces = map[string]BindingSurface{
 	// terminal twin of the same work).
 	"ListAgentClients":  {SurfaceDesktopOnly, "", "the client list behind the settings picker; it exists so the UI cannot offer a client the backend would reject"},
 	"SetupAgentClients": {SurfaceDesktopOnly, "", "writes MCP config files, a SessionEnd hook and the repotory block in AGENTS.md/CLAUDE.md into the user's project directory; that is a setup act on the user's machine, and an agent performing it would edit configuration — and instruction files it will later read — without being asked (the CLI's repotory-init is the terminal twin)"},
+	// The collected-project instruction checklist (ADR-0054 follow-up). The
+	// status answers are desktop checklist chrome; an agent that scanned can
+	// already read agent_instructions_missing off repotory_scan's result, so a
+	// second agent-facing query would duplicate surface without new
+	// information. The installer writes into the user's tracked instruction
+	// files — the same setup-act reasoning as SetupAgentClients, one notch
+	// narrower (block only, no configs, no hook).
+	"AgentInstructionsStatusFor":    {SurfaceDesktopOnly, "", "the project page checklist banner's data; agents see agent_instructions_missing on repotory_scan instead"},
+	"MissingAgentInstructionsCount": {SurfaceDesktopOnly, "", "dashboard badge count; same duplication argument as AgentInstructionsStatusFor"},
+	"InstallAgentInstructions":      {SurfaceDesktopOnly, "", "writes the managed repotory block into the user's AGENTS.md/CLAUDE.md — the same setup act SetupAgentClients guards, scoped to the instruction block only; an agent performing it would edit instruction files it will later read, without being asked"},
 
 	// ---- knowledge sources / memory -----------------------------------------
 	"GetKnowledgeSources":        {SurfaceDesktopOnly, "", "plugins settings tab"},
@@ -193,22 +203,24 @@ var bindingSurfaces = map[string]BindingSurface{
 	"RebuildEmbeddings":          {SurfaceDesktopOnly, "", "bulk sends note text to a configured endpoint; the gate lives in settings, not in an agent call"},
 
 	// ---- AI ------------------------------------------------------------------
-	"AskAI":                 {SurfaceDesktopOnly, "", "the agent-facing twin is repotory_ask, which has no binding (served straight off the service)"},
-	"AskAIWithEvidence":     {SurfaceDesktopOnly, "", "AI ask panel; agents use repotory_ask"},
-	"StartAskStream":        {SurfaceDesktopOnly, "", "replies over Wails events, so an HTTP/MCP caller would get a stream id nobody can read; the browser path is the SSE endpoint"},
-	"FileAnswerAsPage":      {SurfaceDesktopOnly, "", "filing an answer into the knowledge layer is a human decision (ADR-0014 decision 3)"},
-	"RunWikiLint":           {SurfaceDesktopOnly, "", "lint writes todos; scheduled and manual paths are the app's own"},
-	"LayeredProjectContext": {SurfaceDesktopOnly, "", "agent-side assembly is repotory_context; this binding is the UI/CLI preview"},
-	"ListAIModels":          {SurfaceDesktopOnly, "", "model picker in the settings tab; it enumerates a configured endpoint and is not a knowledge capability"},
-	"TestAIChat":            {SurfaceDesktopOnly, "", "settings 'test connection' button"},
-	"RebuildPageEmbeddings": {SurfaceDesktopOnly, "", "admin re-embed of approved pages (ADR-0018 lane 2); same endpoint-spend rationale as RebuildEmbeddings"},
-	"GetReviewConfig":       {SurfaceDesktopOnly, "", "the daily review switches: whether a job that reads the user's source (and may send excerpts to a model) is armed is a human-facing fact, not an agent capability"},
-	"UpdateReviewConfig":    {SurfaceDesktopOnly, "", "arming a job that reads source code and can call a model on the user's behalf is a privacy gate, and an agent must not flip its own gate (ADR-0053 D5)"},
-	"LatestReviewReport":    {SurfaceMCPBacked, "repotory_review_latest", ""},
-	"RunReviewNow":          {SurfaceMCPBacked, "repotory_review_run", ""},
-	"ReviewNotifyCount":     {SurfaceDesktopOnly, "", "the rail dot is an attention budget, not a knowledge capability: it answers 'what has the user not looked at yet'"},
-	"GetAIAuditStatus":      {SurfaceMCPBacked, "repotory_ai_audit", ""},
-	"ListAICallAudit":       {SurfaceMCPBacked, "repotory_ai_audit", ""},
+	"AskAI":                  {SurfaceDesktopOnly, "", "the agent-facing twin is repotory_ask, which has no binding (served straight off the service)"},
+	"AskAIWithEvidence":      {SurfaceDesktopOnly, "", "AI ask panel; agents use repotory_ask"},
+	"StartAskStream":         {SurfaceDesktopOnly, "", "replies over Wails events, so an HTTP/MCP caller would get a stream id nobody can read; the browser path is the SSE endpoint"},
+	"FileAnswerAsPage":       {SurfaceDesktopOnly, "", "filing an answer into the knowledge layer is a human decision (ADR-0014 decision 3)"},
+	"RunWikiLint":            {SurfaceDesktopOnly, "", "lint writes todos; scheduled and manual paths are the app's own"},
+	"LayeredProjectContext":  {SurfaceDesktopOnly, "", "agent-side assembly is repotory_context; this binding is the UI/CLI preview"},
+	"ListAIModels":           {SurfaceDesktopOnly, "", "model picker in the settings tab; it enumerates a configured endpoint and is not a knowledge capability"},
+	"TestAIChat":             {SurfaceDesktopOnly, "", "settings 'test connection' button"},
+	"TestAIChatConfigured":   {SurfaceDesktopOnly, "", "settings 'test connection' against the SAVED provider: the masked key can only be read server-side, never echoed to a client"},
+	"ListAIModelsConfigured": {SurfaceDesktopOnly, "", "settings model picker against the SAVED provider; same stored-key rationale as TestAIChatConfigured"},
+	"RebuildPageEmbeddings":  {SurfaceDesktopOnly, "", "admin re-embed of approved pages (ADR-0018 lane 2); same endpoint-spend rationale as RebuildEmbeddings"},
+	"GetReviewConfig":        {SurfaceDesktopOnly, "", "the daily review switches: whether a job that reads the user's source (and may send excerpts to a model) is armed is a human-facing fact, not an agent capability"},
+	"UpdateReviewConfig":     {SurfaceDesktopOnly, "", "arming a job that reads source code and can call a model on the user's behalf is a privacy gate, and an agent must not flip its own gate (ADR-0053 D5)"},
+	"LatestReviewReport":     {SurfaceMCPBacked, "repotory_review_latest", ""},
+	"RunReviewNow":           {SurfaceMCPBacked, "repotory_review_run", ""},
+	"ReviewNotifyCount":      {SurfaceDesktopOnly, "", "the rail dot is an attention budget, not a knowledge capability: it answers 'what has the user not looked at yet'"},
+	"GetAIAuditStatus":       {SurfaceMCPBacked, "repotory_ai_audit", ""},
+	"ListAICallAudit":        {SurfaceMCPBacked, "repotory_ai_audit", ""},
 
 	// ---- wiki compile & review (the human gate) ------------------------------
 	"CompileNote":           {SurfaceDesktopOnly, "", "an agent able to write pending knowledge would bypass the human gate the whole design rests on (ADR-0015)"},
