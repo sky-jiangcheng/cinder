@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.35.1] - 2026-11-11
+
+### 修复
+
+- **JetBrains 面板首次打开即构建中断（每一版都带的存量崩溃，v2.35.0 仍在）**：`conversationArea` 里 `feedScroll.viewport.border = JBUI.Borders.empty()` 是 `JViewport` 的契约级禁令——`setBorder()` 无条件抛 `IllegalArgumentException`，工具窗首次显示时整个 `RepotoryPanel` 构造在半途被中断，content 创建失败、面板空白，IDE 只弹内部错误，所以自 ADR-0036 对话台改造起一直被容错吞掉（用户报障堆栈的 535 行对应 v2.33.5 / v2.34.0，v2.35.0 里是 626 行——每一版都带着它）。这行从没有成功执行过，删除对渲染零影响：viewport 本就不画边框，视觉边框由 scrollpane 自己的 border 负责。compileKotlin + test 全绿。
+
 ## [2.35.0] - 2026-11-11
 
 ### 新增
@@ -998,6 +1004,7 @@
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
 [Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...HEAD
+[2.35.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.0...v2.35.1
 [2.35.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...v2.35.0
 [2.34.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.5...v2.34.0
 [2.33.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.4...v2.33.5
