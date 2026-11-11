@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -480,5 +481,40 @@ func TestRunReviewFindsCrossRepoProvider(t *testing.T) {
 	// Encoded repo keys must never reach the database, CLI or model prompt.
 	if strings.Contains(hit.Evidence, "\x00") || strings.Contains(hit.Message, "\x00") {
 		t.Errorf("encoded key leaked into the report: evidence=%q message=%q", hit.Evidence, hit.Message)
+	}
+}
+
+// A run with zero findings must reach the page as [], never null: Go marshals
+// a nil slice as JSON null, and the desktop page reads findings.length — a nil
+// slice here turned "reviewed, nothing found" into "null is not an object"
+// the moment the page opened (the crash behind the 2026-11-11 report).
+func TestLatestReviewSnapshotZeroFindingsIsAnEmptyList(t *testing.T) {
+	svc, _ := setupService(t)
+
+	id, err := db.StartReviewRun(svc.db, "2026-11-10", "collected", false)
+	if err != nil {
+		t.Fatalf("StartReviewRun: %v", err)
+	}
+	run := &db.ReviewRun{ID: id, RunDate: "2026-11-10", Scope: "collected", Findings: 0}
+	if err := db.FinishReviewRun(svc.db, run); err != nil {
+		t.Fatalf("FinishReviewRun: %v", err)
+	}
+
+	snap, err := svc.LatestReviewSnapshot(nil)
+	if err != nil {
+		t.Fatalf("LatestReviewSnapshot: %v", err)
+	}
+	if snap.Run == nil {
+		t.Fatal("run = nil, want the stored run")
+	}
+	if snap.Findings == nil || len(snap.Findings) != 0 {
+		t.Errorf("findings = %#v, want a non-nil empty slice", snap.Findings)
+	}
+	blob, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !bytes.Contains(blob, []byte(`"findings":[]`)) {
+		t.Errorf("body = %s, want findings to serialize as []", blob)
 	}
 }

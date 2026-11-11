@@ -67,7 +67,11 @@ function CodeReview() {
   const fetchReport = useCallback(() => {
     return latestReviewReport()
       .then(r => {
-        setSnapshot(r)
+        // Older binaries serialized an empty findings slice as JSON null (a
+        // Go nil slice), and findings.length on null is exactly the crash
+        // "clicking into code review" produced. Normalize here so no renderer
+        // below can meet a null list, whatever the backend answers.
+        setSnapshot({ ...r, findings: r.findings ?? [] })
         setError('')
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : t('common.failed')))
@@ -158,7 +162,7 @@ function CodeReview() {
                   onClick={() => setSeverity(sev)}
                 >
                   {sev === 'all'
-                    ? t('codeReview.severityAll', { count: snapshot?.findings.length ?? 0 })
+                    ? t('codeReview.severityAll', { count: snapshot?.findings?.length ?? 0 })
                     : t(`codeReview.severity.${sev}`, { count: counts[sev] ?? 0 })}
                 </button>
               ))}

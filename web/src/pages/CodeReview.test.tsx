@@ -89,6 +89,22 @@ describe('CodeReview page', () => {
     expect(screen.queryByText('codeReview.neverRan')).toBeNull()
   })
 
+  // Older Go binaries marshaled an empty findings slice as JSON null (a nil
+  // slice), and findings.length on null crashed the whole page — the report
+  // behind "null is not an object (evaluating 'c?.findings.length')". The page
+  // normalizes the payload, so a null list renders as the empty state.
+  it('survives a legacy backend that serialized zero findings as null', async () => {
+    mockLatest.mockResolvedValue({
+      run: run({ findings: 0, candidates: 0 }),
+      findings: null,
+    } as unknown as Awaited<ReturnType<typeof latestReviewReport>>)
+    renderReady(<CodeReview />)
+    expect(await screen.findByText('codeReview.nothingFound')).toBeTruthy()
+    // The toolbar still renders — the null list is normalized to [], so the
+    // "all" filter shows a zero count instead of the page crashing.
+    expect(screen.getByRole('button', { name: 'codeReview.severityAll' })).toBeTruthy()
+  })
+
   it('groups by file, worst file first', async () => {
     mockLatest.mockResolvedValue(
       snapshot([

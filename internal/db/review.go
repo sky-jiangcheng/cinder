@@ -296,7 +296,12 @@ func ReviewFindings(database *sql.DB, runID int64, severities, verdicts []string
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ReviewFinding
+	// A run with zero findings must serialize as [], never null: Go marshals
+	// a nil slice as JSON null, and the desktop page reads findings.length —
+	// a nil slice here turned "reviewed, nothing found" into a TypeError the
+	// moment the page opened. Zero rows is still a LIST, so start from an
+	// empty one and let append grow it.
+	out := make([]ReviewFinding, 0)
 	for rows.Next() {
 		var f ReviewFinding
 		if err := rows.Scan(&f.ID, &f.RunID, &f.RepoPath, &f.CommitSHA, &f.FilePath, &f.Line,
