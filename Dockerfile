@@ -15,7 +15,7 @@
 # name (golang:-alpine) — and the local `docker build` is the only place it
 # shows up, so it was caught by CI on the first push.
 ARG NODE_VERSION=24
-ARG GO_VERSION=1.26.10
+ARG GO_VERSION=1.26.11
 FROM node:${NODE_VERSION}-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./

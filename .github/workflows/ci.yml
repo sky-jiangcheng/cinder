@@ -69,7 +69,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           # go.mod declares `go 1.26.0`; setup-go resolves the newest 1.26.x.
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           # Cache GOMODCACHE keyed on go.sum, so unchanged deps are not
           # re-downloaded on every run.
           cache: true
@@ -132,7 +132,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache: true
 
       # Same reason as in go-test: the root package's `//go:embed all:web/dist`
@@ -184,7 +184,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache: true
 
       - name: Stub web/dist for the embed directive
@@ -219,7 +219,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
 
       - name: Check gofmt
         run: |

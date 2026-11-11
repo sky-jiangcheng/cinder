@@ -9,7 +9,7 @@ go 1.26.0
 // of the shipped one. With this line, GOTOOLCHAIN=auto resolves 1.26.10
 // everywhere. scripts/check-version-drift.mjs fails when it drifts from the
 // workflows or from the Dockerfile.
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	github.com/mark3labs/mcp-go v1.5.0
