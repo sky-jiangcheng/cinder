@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.35.5] - 2026-11-11
+
 ### 修复
 
 - **MCP 的 not-found 不再把驱动原文递给 agent**。`notes_read` / `projects_stats` / `notes_update` 三处的文案是 `fmt.Sprintf("note not found: %v", err)`，实弹测试里模型原样引用了 `sql: no rows in result set` 向用户复述——驱动的错误词是实现的偶然产物，不是诊断。新增 `notFoundOrError`：`sql.ErrNoRows` 收成 `"<what> not found"`，其余错误保留 `"<what> lookup failed: …"`——**失败不许伪装成缺席**（同 auto_import 那条吞错教训的另一半）。3 处钉文案的测试同批加 `strings.Contains(got, "sql:")` 反断言。响应文本内容变化不进契约号：字段、工具、类型都没动，前缀 `note not found` 原样保留。
@@ -14,7 +16,7 @@
 
 ### 文档
 
-- `repotory_metrics` 的 skill 参考 / SKILL.md / 中英 `features/ai-integration` 同步窗口参数与 stale 语义（安装副本同批拷贝）。
+- **`repotory_metrics` 的文档面跟上窗口能力**：skill 参考 / SKILL.md / 中英 `features/ai-integration` 同步窗口参数与 stale 语义（安装副本同批拷贝）。
 
 ## [2.35.4] - 2026-11-11
 
@@ -1031,7 +1033,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.5...HEAD
+[2.35.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.4...v2.35.5
 [2.35.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.3...v2.35.4
 [2.35.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.2...v2.35.3
 [2.35.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.1...v2.35.2

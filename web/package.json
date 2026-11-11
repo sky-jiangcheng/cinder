@@ -1,7 +1,7 @@
 {
   "name": "repotory",
   "private": true,
-  "version": "2.35.4",
+  "version": "2.35.5",
   "type": "module",
   "engines": {
     "node": ">=24"
