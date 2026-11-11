@@ -131,7 +131,7 @@ func (ts *testServer) jsonPayload(res *mcp.CallToolResult) map[string]any {
 //
 // The literal is duplicated in internal/version/core.go; the drift guard in
 // scripts/check-version-drift.mjs fails if the two copies disagree.
-const wantCoreVersion = "1.3.0"
+const wantCoreVersion = "1.4.0"
 
 func TestToolsRegistered(t *testing.T) {
 	ts := newTestServer(t)

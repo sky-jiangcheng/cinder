@@ -374,3 +374,111 @@ func TestReviewRuleSetHonoursAllRuleSwitches(t *testing.T) {
 		t.Fatalf("only the switched-off rule should disappear, got %d", len(rules))
 	}
 }
+
+// crossRepoReviewPair builds two separate repositories: A has a commit dated
+// yesterday with a Feign client missing @RequestBody, B has an old commit
+// outside the review window with the provider that binds @RequestBody.
+func crossRepoReviewPair(t *testing.T) (dirA, dirB string) {
+	t.Helper()
+	makeRepo := func(date string, files map[string]string) string {
+		t.Helper()
+		dir := t.TempDir()
+		run := func(args ...string) {
+			t.Helper()
+			cmd := exec.Command("git", args...)
+			cmd.Dir = dir
+			cmd.Env = append(cmd.Environ(),
+				"GIT_AUTHOR_NAME=Tester", "GIT_AUTHOR_EMAIL=t@example.com",
+				"GIT_COMMITTER_NAME=Tester", "GIT_COMMITTER_EMAIL=t@example.com",
+				"GIT_AUTHOR_DATE="+date, "GIT_COMMITTER_DATE="+date,
+			)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v (%s)", args, err, out)
+			}
+		}
+		run("init", "-q")
+		for name, content := range files {
+			full := filepath.Join(dir, name)
+			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		run("add", ".")
+		run("commit", "-q", "-m", "init")
+		return dir
+	}
+	dirA = makeRepo(time.Now().AddDate(0, 0, -1).Format("2006-01-02T12:00:00"), map[string]string{
+		"src/main/java/a/PayClient.java": `package a;
+
+@FeignClient(name = "pay")
+public interface PayClient {
+
+    @PostMapping("/pay/query")
+    Result<PayInfo> query(PayQueryReq req);
+}
+`,
+	})
+	// B's only commit is long before the window, so it produces no findings of
+	// its own but its files must still be searchable from A.
+	dirB = makeRepo("2020-01-01T12:00:00", map[string]string{
+		"src/main/java/b/PayController.java": `package b;
+
+@RestController
+public class PayController {
+
+    @PostMapping("/pay/query")
+    Result<PayInfo> query(@RequestBody PayQueryReq req) { return null; }
+}
+`,
+	})
+	return
+}
+
+// ADR-0053 D1 end-to-end: A's Feign finding must carry B's provider evidence
+// even though B had no commit in the window.
+func TestRunReviewFindsCrossRepoProvider(t *testing.T) {
+	svc, _ := setupService(t)
+	dirA, dirB := crossRepoReviewPair(t)
+	pid := seedProject(t, svc.db, "pair", t.TempDir())
+	seedRepo(t, svc.db, dirA, pid)
+	seedRepo(t, svc.db, dirB, pid)
+	if _, err := svc.db.Exec("UPDATE projects SET collected = TRUE WHERE id = ?", pid); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := svc.RunReview(context.Background(), ReviewOptions{Date: time.Now().AddDate(0, 0, -1)})
+	if err != nil {
+		t.Fatalf("RunReview: %v", err)
+	}
+	if result.Run.Commits != 1 {
+		t.Errorf("commits = %d, want 1 (only A has a commit in the window)", result.Run.Commits)
+	}
+	var hit *db.ReviewFinding
+	for i := range result.Stored {
+		if result.Stored[i].Rule == "feign_missing_body" {
+			hit = &result.Stored[i]
+		}
+	}
+	if hit == nil {
+		t.Fatalf("no feign_missing_body finding stored: %+v", result.Stored)
+	}
+	if !strings.Contains(hit.Evidence, dirB) {
+		t.Errorf("evidence must name the provider repository B (%s): %q", dirB, hit.Evidence)
+	}
+	if !strings.Contains(hit.Evidence, "@RequestBody") {
+		t.Errorf("evidence must carry the provider's @RequestBody: %q", hit.Evidence)
+	}
+	if hit.RepoPath != dirA {
+		t.Errorf("finding must be stamped on A, got %q want %q", hit.RepoPath, dirA)
+	}
+	if hit.Verdict != "unverified" {
+		t.Errorf("verdict must stay unverified, got %q", hit.Verdict)
+	}
+	// Encoded repo keys must never reach the database, CLI or model prompt.
+	if strings.Contains(hit.Evidence, "\x00") || strings.Contains(hit.Message, "\x00") {
+		t.Errorf("encoded key leaked into the report: evidence=%q message=%q", hit.Evidence, hit.Message)
+	}
+}

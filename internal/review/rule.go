@@ -89,6 +89,8 @@ type Finding struct {
 type File struct {
 	// Path is repo-relative and slash-separated.
 	Path string
+	// Key is the encoded cross-repository key used to exclude the current file from lookups.
+	Key string
 	// Content is the whole file as of that commit ("" for deletions).
 	Content string
 	// Added maps a 1-based new-file line number to its text (without the

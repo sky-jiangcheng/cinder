@@ -116,7 +116,7 @@ type feignMissingBody struct{}
 
 func (feignMissingBody) ID() string { return "feign_missing_body" }
 
-func (r feignMissingBody) Check(f *File, _ Repo) []Finding {
+func (r feignMissingBody) Check(f *File, repo Repo) []Finding {
 	if !isJava(f) || !fileHasAnnotation(f, "feignclient") {
 		return nil
 	}
@@ -147,9 +147,42 @@ func (r feignMissingBody) Check(f *File, _ Repo) []Finding {
 		if len(m.Params) > 1 {
 			sev = SeverityHigh
 		}
-		out = append(out, finding(f, r.ID(), sev, VerdictUnverified, m.Line,
+		fd := finding(f, r.ID(), sev, VerdictUnverified, m.Line,
 			"Feign 方法 "+m.Name+" 的 "+itoa(len(m.Params))+" 个参数都没有绑定注解（@RequestBody / @RequestParam），调用时请求体可能为空",
-			"给请求体参数加 @RequestBody；若确实是查询参数，加 @RequestParam 消除歧义"))
+			"给请求体参数加 @RequestBody；若确实是查询参数，加 @RequestParam 消除歧义")
+		// A nil repo means there is no cross-project index to consult.
+		if repo == nil {
+			out = append(out, fd)
+			continue
+		}
+		// Reverse-look up the provider in the other collected repositories.
+		var peerLines, names []string
+		seen := map[string]bool{}
+		for _, path := range declPaths(f.Lines(), m.Line) {
+			labels, decls, sources := crossRepoDecls(f, repo, path)
+			for _, label := range labels {
+				// Only a provider that binds the body with @RequestBody is a mismatch.
+				if seen[label] || !strings.Contains(strings.ToLower(decls[label]), "@requestbody") {
+					continue
+				}
+				seen[label] = true
+				peerLines = append(peerLines, label+"\n"+sources[label])
+				names = append(names, peerRepo(label))
+			}
+		}
+		if len(peerLines) == 0 {
+			// D3 does not guess: say the provider was not found locally.
+			fd.Message = oneLine(fd.Message + " 未在本机收藏仓找到 provider 声明，需人工确认")
+			out = append(out, fd)
+			continue
+		}
+		sort.Strings(peerLines)
+		if len(peerLines) > 3 {
+			peerLines = peerLines[:3]
+		}
+		fd.Evidence = clip(fd.Evidence+"\n"+strings.Join(peerLines, "\n"), 800)
+		fd.Message = oneLine(fd.Message + " 对端 " + strings.Join(uniqNames(names), "、") + " 的 provider 声明带了 @RequestBody，契约不一致")
+		out = append(out, fd)
 	}
 	return out
 }
@@ -247,7 +280,7 @@ func (r routeRenamed) Check(f *File, repo Repo) []Finding {
 		// is not (D3's boundary), and neither is an updated `"/x"`.
 		var others []string
 		for _, h := range repo.GrepJava(old) {
-			if h == f.Path {
+			if h == f.Path || h == f.Key {
 				continue
 			}
 			content, ok := repo.Read(h)
@@ -256,7 +289,8 @@ func (r routeRenamed) Check(f *File, repo Repo) []Finding {
 			}
 			for _, p := range mappingPaths(strings.Split(content, "\n")) {
 				if canonicalPath(p) == want {
-					others = append(others, h)
+					// Encoded keys are rendered readable so no NUL byte reaches the report.
+					others = append(others, humanKey(h))
 					break
 				}
 			}
@@ -285,7 +319,7 @@ type feignArity struct{}
 
 func (feignArity) ID() string { return "feign_arity" }
 
-func (r feignArity) Check(f *File, _ Repo) []Finding {
+func (r feignArity) Check(f *File, repo Repo) []Finding {
 	if !isJava(f) || !fileHasAnnotation(f, "feignclient") {
 		return nil
 	}
@@ -304,9 +338,54 @@ func (r feignArity) Check(f *File, _ Repo) []Finding {
 		if !seen || before == len(m.Params) || !f.Touches(m.Line, m.Line) {
 			continue
 		}
-		out = append(out, finding(f, r.ID(), SeverityMedium, VerdictUnverified, m.Line,
+		fd := finding(f, r.ID(), SeverityMedium, VerdictUnverified, m.Line,
 			"Feign 方法 "+m.Name+" 的参数个数从 "+itoa(before)+" 变成 "+itoa(len(m.Params))+"，provider 侧方法签名需同步",
-			"核对 provider 的同 path 方法；provider 不在本机时请人工确认后再发布"))
+			"核对 provider 的同 path 方法；provider 不在本机时请人工确认后再发布")
+		// Without an index keep the original unverified behaviour.
+		if repo == nil {
+			out = append(out, fd)
+			continue
+		}
+		// Compare the parameter count against the provider in other repositories.
+		var peerLines, names []string
+		found := false
+		seenLabel := map[string]bool{}
+		for _, path := range declPaths(f.Lines(), m.Line) {
+			labels, decls, sources := crossRepoDecls(f, repo, path)
+			for _, label := range labels {
+				if seenLabel[label] {
+					continue
+				}
+				seenLabel[label] = true
+				_, params, ok := parseSignature(strings.TrimSpace(stripLiteral(decls[label])))
+				if !ok {
+					continue
+				}
+				found = true
+				// Matching counts mean the provider already follows the contract.
+				if len(params) == len(m.Params) {
+					continue
+				}
+				peerLines = append(peerLines, label+" 参数个数="+itoa(len(params))+"\n"+sources[label])
+				names = append(names, peerRepo(label))
+			}
+		}
+		// No provider found: keep the original unverified finding and wording.
+		if !found {
+			out = append(out, fd)
+			continue
+		}
+		// Every provider matches: drop the false positive.
+		if len(peerLines) == 0 {
+			continue
+		}
+		sort.Strings(peerLines)
+		if len(peerLines) > 3 {
+			peerLines = peerLines[:3]
+		}
+		fd.Evidence = clip(fd.Evidence+"\n"+strings.Join(peerLines, "\n"), 800)
+		fd.Message = oneLine(fd.Message + " 对端 " + strings.Join(uniqNames(names), "、") + " 的 provider 参数个数不匹配")
+		out = append(out, fd)
 	}
 	return out
 }
@@ -836,4 +915,138 @@ func itoa(n int) string {
 		buf[i] = '-'
 	}
 	return string(buf[i:])
+}
+
+// declPaths returns the mapping paths on the annotations above a method declaration.
+func declPaths(lines []string, line int) []string {
+	from := line - 4
+	if from < 1 {
+		from = 1
+	}
+	to := line - 1
+	if to > len(lines) {
+		to = len(lines)
+	}
+	if from > to {
+		return nil
+	}
+	return mappingPaths(lines[from-1 : to])
+}
+
+// methodDeclaresPath reports whether a method declares the canonical route want.
+func methodDeclaresPath(lines []string, m method, want string) bool {
+	for _, p := range declPaths(lines, m.Line) {
+		if canonicalPath(p) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// crossRepoDecls finds provider declarations in the other loaded files that re-declare path.
+// It returns sorted labels plus the raw declaration text and a short excerpt per label.
+func crossRepoDecls(f *File, repo Repo, path string) (labels []string, decls, sources map[string]string) {
+	decls = map[string]string{}
+	sources = map[string]string{}
+	if repo == nil {
+		return
+	}
+	want := canonicalPath(path)
+	if want == "" {
+		return
+	}
+	seen := map[string]bool{}
+	for _, h := range repo.GrepJava(path) {
+		// The changed file is not its own provider.
+		if h == f.Path || h == f.Key {
+			continue
+		}
+		content, ok := repo.Read(h)
+		if !ok {
+			continue
+		}
+		lines := strings.Split(content, "\n")
+		for _, pm := range methods(lines) {
+			if !methodDeclaresPath(lines, pm, want) {
+				continue
+			}
+			label := humanKey(h) + ":" + itoa(pm.Line)
+			if seen[label] {
+				continue
+			}
+			seen[label] = true
+			decls[label] = declText(lines, pm.Line)
+			sources[label] = peerSource(lines, pm.Line)
+			labels = append(labels, label)
+		}
+	}
+	sort.Strings(labels)
+	return
+}
+
+// declText joins a declaration with continuation lines until its parens balance.
+func declText(lines []string, line int) string {
+	i := line - 1
+	if i < 0 || i >= len(lines) {
+		return ""
+	}
+	joined := lines[i]
+	for parensOpen(stripLiteral(joined)) && i+1 < len(lines) {
+		i++
+		joined += " " + strings.TrimSpace(lines[i])
+	}
+	return strings.TrimSpace(joined)
+}
+
+// peerSource returns up to three trimmed source lines around a declaration.
+func peerSource(lines []string, line int) string {
+	from := line - 1
+	if from < 1 {
+		from = 1
+	}
+	to := line + 1
+	if to > len(lines) {
+		to = len(lines)
+	}
+	var parts []string
+	for n := from; n <= to; n++ {
+		if t := strings.TrimSpace(lines[n-1]); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// humanKey turns an encoded Repo key into a readable root:rel label without NUL bytes.
+func humanKey(key string) string {
+	root, rel := SplitKey(key)
+	if root != "" {
+		return root + ":" + rel
+	}
+	return rel
+}
+
+// peerRepo returns the repository part of a humanKey label for messages.
+func peerRepo(label string) string {
+	if i := strings.LastIndexByte(label, ':'); i > 0 {
+		label = label[:i]
+	}
+	if i := strings.IndexByte(label, ':'); i > 0 {
+		return label[:i]
+	}
+	return label
+}
+
+// uniqNames sorts and de-duplicates repository names for a message.
+func uniqNames(names []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range names {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

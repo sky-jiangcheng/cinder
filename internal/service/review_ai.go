@@ -148,7 +148,7 @@ func reviewPrompt(path, content string, chunk []review.Finding) []chatMessage {
 // no rule id, no line, no reproducible trigger, and they are exactly the
 // unfalsifiable output this design exists to prevent.
 const reviewSystemPrompt = `You are reviewing code changes that were already flagged by deterministic rules.
-For each candidate, decide whether it is a real problem in THIS file:
+For each candidate, decide whether it is a real problem using the changed file and any provider/consumer evidence from other repositories:
 - "confirmed": the code as written will misbehave at runtime, and the claim is accurate.
 - "dismissed": the claim does not hold here (legitimate usage, already handled elsewhere, dead code, framework version where it works).
 Do not invent new findings. Do not restate the rule. One short reason, one short fix.

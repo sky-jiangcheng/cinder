@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"repotory/internal/db"
 )
@@ -13,6 +14,14 @@ import (
 // Repository/daily counts use the matched repository, or all repositories of a
 // matched project. Notes and review counts use that repository's owning project
 // (review scope is exact, not the retrieval scope's project-plus-global rule).
+//
+// The range fields (since/until/commits/additions/deletions/stale) are the
+// honest date-window answer, added in contract 1.4.0. The legacy *Today trio
+// keeps its old meaning unchanged: it is what the old clients pinned against.
+// The new fields say what a window the cache CANNOT answer means: a day after
+// the last scan has no rows because nobody looked — reporting its sum as 0
+// would be inventing "no commits" out of an expired cache. Stale windows get
+// null counts and stale=true; the caller refreshes with repotory_scan first.
 type Metrics struct {
 	RepositoryCount    int     `json:"repositoryCount"`
 	TotalLines         *int64  `json:"totalLines"`
@@ -22,11 +31,56 @@ type Metrics struct {
 	NotesCount         int     `json:"notesCount"`
 	PendingReviewCount int     `json:"pendingReviewCount"`
 	RefreshedAt        *string `json:"refreshedAt"`
+	Since              string  `json:"since"`
+	Until              string  `json:"until"`
+	Commits            *int    `json:"commits"`
+	Additions          *int    `json:"additions"`
+	Deletions          *int    `json:"deletions"`
+	Stale              bool    `json:"stale"`
 }
 
+// metricsRangeMaxDays bounds the requested window. The refreshers backfill
+// 365 days (statsBackfillDays); a wider window would silently answer from a
+// cache that was never asked to hold those days.
+const metricsRangeMaxDays = 366
+
 func (s *Service) GetMetrics(ctx context.Context, path string) (*Metrics, error) {
+	return s.GetMetricsRange(ctx, path, "", "")
+}
+
+// GetMetricsRange answers for the inclusive window [since, until]
+// (YYYY-MM-DD). Empty since defaults to until; empty until defaults to today.
+// Both empty keeps the legacy behaviour: the window is today.
+func (s *Service) GetMetricsRange(ctx context.Context, path, since, until string) (*Metrics, error) {
 	if err := validateChatPath(path); err != nil {
 		return nil, err
+	}
+	today := s.git.GetTodayDate()
+	if until == "" {
+		until = today
+	}
+	if since == "" {
+		since = until
+	}
+	if err := s.git.ValidateDate(since); err != nil {
+		return nil, fmt.Errorf("invalid since date: %w", err)
+	}
+	if err := s.git.ValidateDate(until); err != nil {
+		return nil, fmt.Errorf("invalid until date: %w", err)
+	}
+	start, err := time.Parse("2006-01-02", since)
+	if err != nil {
+		return nil, fmt.Errorf("invalid since date: %w", err)
+	}
+	end, err := time.Parse("2006-01-02", until)
+	if err != nil {
+		return nil, fmt.Errorf("invalid until date: %w", err)
+	}
+	if end.Before(start) {
+		return nil, fmt.Errorf("until %s is before since %s", until, since)
+	}
+	if days := int(end.Sub(start).Hours() / 24); days > metricsRangeMaxDays {
+		return nil, fmt.Errorf("window spans %d days, max %d", days+1, metricsRangeMaxDays)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

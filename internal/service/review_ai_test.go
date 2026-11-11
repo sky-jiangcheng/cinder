@@ -214,3 +214,13 @@ func TestRunReviewRecordsModelFailures(t *testing.T) {
 		t.Error("the failure count must be persisted to review_runs.error")
 	}
 }
+
+// Cross-repository evidence is pasted into the prompt from Finding.Evidence.
+func TestReviewSystemPromptUsesCrossRepoEvidence(t *testing.T) {
+	if strings.Contains(reviewSystemPrompt, "in THIS file") {
+		t.Error("prompt must not limit the judgement to a single file")
+	}
+	if !strings.Contains(reviewSystemPrompt, "other repositories") {
+		t.Error("prompt should mention evidence from other repositories")
+	}
+}

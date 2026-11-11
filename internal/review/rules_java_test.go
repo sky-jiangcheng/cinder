@@ -549,3 +549,154 @@ func TestDefaultRulesHaveIDs(t *testing.T) {
 		t.Errorf("ADR-0053 D3 lists 10 rules, DefaultRules has %d", len(seen))
 	}
 }
+
+// ADR-0053 D1: a Feign client in repo A has no binder, and the provider in
+// repo B (not part of this commit) binds the same route with @RequestBody.
+func TestFeignMissingBodyCrossRepoProvider(t *testing.T) {
+	src := `package a;
+
+@FeignClient(name = "pay")
+public interface PayClient {
+
+    @PostMapping("/pay/query")
+    Result<PayInfo> query(PayQueryReq req);
+}
+`
+	f := newFile("src/main/java/a/PayClient.java", src, 7)
+	provider := `package b;
+
+@RestController
+public class PayController {
+
+    @PostMapping("/pay/query")
+    Result<PayInfo> query(@RequestBody PayQueryReq req) { return null; }
+}
+`
+	repo := fakeRepo{
+		PathKey("/repos/service-b", "src/main/java/b/PayController.java"): provider,
+	}
+	got := run(t, feignMissingBody{}, f, repo)
+	wantCount(t, got, 1)
+	if !strings.Contains(got[0].Evidence, "/repos/service-b") || !strings.Contains(got[0].Evidence, "PayController.java") {
+		t.Errorf("evidence should name the provider repository and file: %q", got[0].Evidence)
+	}
+	if !strings.Contains(got[0].Evidence, "@RequestBody") {
+		t.Errorf("evidence should carry the provider's @RequestBody: %q", got[0].Evidence)
+	}
+	if got[0].Verdict != VerdictUnverified {
+		t.Errorf("verdict must stay unverified: %+v", got[0])
+	}
+}
+
+// A provider that also omits @RequestBody matches the contract, so the
+// cross-repo lookup must not add evidence or a second finding.
+func TestFeignMissingBodyCrossRepoMatchingContract(t *testing.T) {
+	src := `package a;
+
+@FeignClient(name = "pay")
+public interface PayClient {
+
+    @PostMapping("/pay/query")
+    Result<PayInfo> query(PayQueryReq req);
+}
+`
+	f := newFile("src/main/java/a/PayClient.java", src, 7)
+	provider := `package b;
+@RestController
+public class PayController {
+    @PostMapping("/pay/query")
+    Result<PayInfo> query(PayQueryReq req) { return null; }
+}
+`
+	repo := fakeRepo{
+		PathKey("/repos/service-b", "src/main/java/b/PayController.java"): provider,
+	}
+	got := run(t, feignMissingBody{}, f, repo)
+	wantCount(t, got, 1)
+	if strings.Contains(got[0].Evidence, "service-b") {
+		t.Errorf("a matching provider must not add cross-repo evidence: %q", got[0].Evidence)
+	}
+}
+
+const arityClientSrc = `package a;
+
+@FeignClient("pay")
+public interface PayClient {
+
+    @PostMapping("/pay/query")
+    Result<Foo> query(FooReq req, String channel);
+}
+`
+
+const arityProviderSrc = `package b;
+@RestController
+public class PayController {
+    @PostMapping("/pay/query")
+    Result<Foo> query(@RequestBody FooReq req) { return null; }
+}
+`
+
+// feign_arity compares parameter counts against the cross-repo provider.
+func TestFeignArityCrossRepoMismatch(t *testing.T) {
+	f := newFile("src/main/java/a/PayClient.java", arityClientSrc, 7)
+	f.Removed = []string{`    Result<Foo> query(FooReq req);`}
+	repo := fakeRepo{
+		PathKey("/repos/service-b", "src/main/java/b/PayController.java"): arityProviderSrc,
+	}
+	got := run(t, feignArity{}, f, repo)
+	wantCount(t, got, 1)
+	if !strings.Contains(got[0].Evidence, "PayController.java") {
+		t.Errorf("evidence should carry the provider signature: %q", got[0].Evidence)
+	}
+	if !strings.Contains(got[0].Message, "service-b") || !strings.Contains(got[0].Message, "参数个数不匹配") {
+		t.Errorf("message should name the provider repo and the mismatch: %q", got[0].Message)
+	}
+}
+
+// Without a provider (nil or empty index) arity stays unverified, no panic.
+func TestFeignArityProviderAbsentStaysUnverified(t *testing.T) {
+	f := newFile("src/main/java/a/PayClient.java", arityClientSrc, 7)
+	f.Removed = []string{`    Result<Foo> query(FooReq req);`}
+	if got := run(t, feignArity{}, f, nil); len(got) != 1 || got[0].Verdict != VerdictUnverified {
+		t.Fatalf("nil repo must keep the unverified finding: %+v", got)
+	}
+	got := run(t, feignArity{}, f, fakeRepo{})
+	if len(got) != 1 || got[0].Verdict != VerdictUnverified {
+		t.Fatalf("empty index must keep the unverified finding: %+v", got)
+	}
+	if !strings.Contains(got[0].Suggestion, "人工确认") {
+		t.Errorf("the manual-check wording must survive: %q", got[0].Suggestion)
+	}
+}
+
+// Encoded keys must be excluded via f.Key and rendered without NUL bytes.
+func TestRouteRenamedEncodedKeyExcludesSelf(t *testing.T) {
+	src := `package a;
+@RestController
+public class PayController {
+    @PostMapping("/pay/queryV2")
+    Result<Foo> query() { return null; }
+}
+`
+	const rootA = "/repos/service-a"
+	const rootB = "/repos/service-b"
+	f := newFile("src/main/java/a/PayController.java", src, 4)
+	f.Key = PathKey(rootA, "src/main/java/a/PayController.java")
+	f.Removed = []string{`    @PostMapping("/pay/queryV1")`}
+	repo := fakeRepo{
+		// A still mentions the old route; its encoded key equals f.Key.
+		PathKey(rootA, "src/main/java/a/PayController.java"): `@PostMapping("/pay/queryV1") void legacy();`,
+		PathKey(rootB, "src/main/java/b/Consumer.java"):      `@FeignClient("pay") interface C { @PostMapping("/pay/queryV1") void call(); }`,
+	}
+	got := run(t, routeRenamed{}, f, repo)
+	wantCount(t, got, 1)
+	if !strings.Contains(got[0].Message, rootB) {
+		t.Errorf("message should name the other repository: %q", got[0].Message)
+	}
+	if strings.Contains(got[0].Message, rootA) {
+		t.Errorf("the changed repository must not be listed as its own caller: %q", got[0].Message)
+	}
+	if strings.Contains(got[0].Message, "\x00") {
+		t.Errorf("message must not contain NUL bytes: %q", got[0].Message)
+	}
+}

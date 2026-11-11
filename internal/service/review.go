@@ -183,6 +183,11 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 		aiFailures int
 	)
 
+	// The cross-repository index includes roots with no commits in the window,
+	// so A can find B's provider. Build it only when a file reaches the rules:
+	// a day with no changes costs no git calls.
+	var crossRepo *review.MultiRepo
+
 	for _, repoPath := range repos {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -198,7 +203,6 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 		if len(repoCommits) == 0 {
 			continue
 		}
-		fsRepo := review.NewFSRepo(ctx, repoPath)
 		for _, c := range repoCommits {
 			commits++
 			changes, err := review.CommitPatch(ctx, repoPath, c.SHA)
@@ -223,14 +227,18 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 				files++
 				f := &review.File{
 					Path:    ch.Path,
+					Key:     review.PathKey(repoPath, ch.Path),
 					Content: content,
 					Added:   ch.Added(),
 					Removed: ch.Removed(),
 					Status:  ch.Status,
 				}
+				if crossRepo == nil {
+					crossRepo = review.NewMultiRepo(ctx, repos)
+				}
 				var fileFindings []review.Finding
 				for _, rule := range rules {
-					for _, found := range rule.Check(f, fsRepo) {
+					for _, found := range rule.Check(f, crossRepo) {
 						key := repoPath + "\x00" + ch.Path + "\x00" + strconv.Itoa(found.Line) + "\x00" + found.Rule + "\x00" + found.Message
 						if seen[key] {
 							continue
@@ -275,6 +283,13 @@ func (s *Service) RunReview(ctx context.Context, opts ReviewOptions) (*ReviewRes
 				}
 			}
 		}
+	}
+
+	if crossRepo != nil {
+		if crossRepo.Truncated() || crossRepo.Skipped() > 0 {
+			log.Printf("review: cross-repo index truncated=%t skipped=%d", crossRepo.Truncated(), crossRepo.Skipped())
+		}
+		skipped += crossRepo.Skipped()
 	}
 
 	run.Repos = len(repos)
