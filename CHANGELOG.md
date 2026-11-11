@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.35.6] - 2026-11-11
+
 ### 修复
 
 - **「昨天代码提交量」终于得到数字而不是一堆卡片**。用户在对话台问「昨日代码提交量」，得到的回答是 3 张项目卡 + 6 张 Session Handoff 知识卡——检索把「提交/发布」命中了一堆笔记塞给模型，而这个模型把证据块当成了答案本身。**两层根因**：① `evidenceMessages` 拼的系统提示词从头到尾没有今天的日期（「昨天」无法解析）、没有一个字说查询工具存在，工具注册了 8 个却从未被认领；② 修完提示词后真机联调发现第二层：nvidia/nemotron 把工具调用写成**内联 XML 文本**（`<tool_call><function=…><parameter=…>`）而不是 OpenAI 的 `tool_calls` 字段——模型选对了仓库、算对了日期，循环却不执行，原始 XML 原样透给了用户。**修法按 provider 无关的主路走**：`toolHeader()` 从**注册表动态生成**工具指南（与请求的 `tools` 字段同一来源，加删工具永不漂移），带今天日期（与统计工具同源 `GetTodayDate`）、**call→结果回来→继续 的回环契约**（内联形式只有模型理解这个循环才会被执行器接住）、「事实来自工具或答不知道」；`inlineToolCalls` 把内联形式折回与原生协议同一形状执行（同步与流式共用一条执行路；同步路径顺带补了漏掉的合成 id；参数必须匹配注册过的工具才运行）。`AskAI` 裸路径的「Use only the context below」同步改写——那句前工具时代的话在让模型无视统计工具。测试钉**来源**（每个注册工具必须出现在指南里）而非钉示例名。实弹验证：模型会主动调工具、缺参数时反问澄清、找不到路径时明说工具做不到——回环立住；数字口径（缓存 14 vs 活查 26）是 `--first-parent` 旗标不一致的独立既有问题，本轮不动。
@@ -1037,7 +1039,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.5...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.6...HEAD
+[2.35.6]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.5...v2.35.6
 [2.35.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.4...v2.35.5
 [2.35.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.3...v2.35.4
 [2.35.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.2...v2.35.3
