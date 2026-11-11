@@ -25,7 +25,7 @@ import (
 func reviewRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02T12:00:00")
+	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02") + "T12:00:00"
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
@@ -411,7 +411,7 @@ func crossRepoReviewPair(t *testing.T) (dirA, dirB string) {
 		run("commit", "-q", "-m", "init")
 		return dir
 	}
-	dirA = makeRepo(time.Now().AddDate(0, 0, -1).Format("2006-01-02T12:00:00"), map[string]string{
+	dirA = makeRepo(time.Now().AddDate(0, 0, -1).Format("2006-01-02")+"T12:00:00", map[string]string{
 		"src/main/java/a/PayClient.java": `package a;
 
 @FeignClient(name = "pay")
