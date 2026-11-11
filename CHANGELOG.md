@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [2.35.0] - 2026-11-11
+
+### 新增
+
+- **收藏项目体检：AGENTS.md / CLAUDE.md 缺指令块时一键补齐（ADR-0054 follow-up）**。ADR-0054 落地记录里写明的最大残余断链是「hook 与指令块是安装动作，没人跑 repotory-init 就永远不存在」——本次把这一步从"指望用户跑安装向导"变成"收藏时体检、缺失时提醒"。**后端**：`agentinit.Register` 新增 `InstructionsOnly` 模式（只写指令块，不碰 client 配置、不装 hook、**不依赖 repotory-mcp 二进制存在**——从没装过 MCP 的机器恰恰是最需要先补指令块的机器）；service 层新增收藏项目指令清单三件套：`AgentInstructionsStatusFor`（单项目三态：`ok` / `no_block`（文件在但没块）/ `missing` / 容器项目 `skipped`）、`MissingAgentInstructionsCount`（实时 stat 重算，不存状态——用户手动建文件后徽章立刻消失；项目集改走 `GetCollectedProjectIDs`，与扫描回填同一查询，避开 `GetAllProjects` 那趟先于 collected 标志的行扫描）、`InstallAgentInstructions`（一键补齐，refusal 码复用 SetupAgentClients 同一套）；`repotory_scan` 的 `ScanResult` 新增 `agent_instructions_missing` 计数——agent 扫描完就能告诉用户哪几个项目接不上记忆层。**桌面**：项目详情页新增体检横幅（missing / no_block 两态显示，ok / skipped 刻意不渲染——"没问题"不值得占用户注意力，与 review 红点同一纪律），一键补齐 + 手动处理两路都给；横幅 dismiss 只在本会话生效，块真正写入前下次访问仍会提醒。**不静默写用户文件**：写入只发生在用户点击时，`surface.go` 三条新 binding 全部 desktop-only 并附理由（agent 能读 scan 结果的计数，无需第二个查询工具；写用户自己会读的指令文件是 setup act，与人点击同权）。测试 +8（agentinit instructions-only 含二进制缺失分支与幂等、service 三态/补齐/容器拒装/计数），前端 415 例存量全绿，go test / build / lint / i18n-keys / docs-mirror / version-drift / agent-init-contract / brand 全绿。
+- **Feign 契约终于真正跨仓：provider 侧证据进 finding（ADR-0053 规则层增强）**。ADR-0053 验收时最典型的场景「A 侧方法少了 `@RequestBody`，编译过、联调过、到 B 侧才炸」只能给出 unverified 的单边报告——规则层看得见 A 的 diff，看不见 B 的声明。本次给规则层装上跨仓索引：`review.MultiRepo` 把**全部收藏根**的 Java 文件按 `PathKey(root, rel)` 编码加载一次（上限 20000 文件，超限记 `truncated`/`skipped` 并打日志，不静默丢）、跨根 grep 与读取零额外 git 调用；`RunReview` 惰性构建（第一个文件进规则才建，当天零变更零 git 成本），`File.Key` 让规则把"当前文件"从反查结果里精确排除。三条规则升级：`feign_missing_body` 反查对端 provider 声明，**带 `@RequestBody` 的对端就是契约不一致**（证据行进 finding），找不到对端时明确写「未在本机收藏仓找到 provider 声明，需人工确认」——D3 不猜；`feign_arity` 把参数个数与对端签名比对，个数一致的对端不再报；`route_renamed` 的自排除改用编码 key（报告里的 key 经 `humanKey` 渲染成可读路径，NUL 字节不出现在报告里）。模型复核的 system prompt 同批改写（「用变更文件与其他仓库的 provider/consumer 证据判断」），AI 层不再被单边证据误导。回归：规则层 5 例（跨仓不一致、契约匹配不报、arity 不匹配、provider 缺席保持 unverified、编码 key 自排除）+ service 端到端 1 例（真 git 双仓找出 provider），`TestPathKeyRoundTrip` / `TestMultiRepoGrepAcrossRoots` 钉住索引。
+- **`repotory_metrics` 终于会回答"某个时间窗"而不是只有"今天"（契约 1.4.0）**。`Metrics` 新增 `since` / `until` / `commits` / `additions` / `deletions` / `stale` 六个字段：窗口由请求给出（`GetMetricsRange`，缺省仍是"今天"，老字段 `*Today` 三件套含义不变，老客户端照旧），上限 366 天（回填只有 365 天，更宽的窗口会从没被要求保存过的缓存里编造答案）；**缓存答不了的窗口不再谎称 0**——最后一次扫描之后的日期没有行是因为没人看过，把这些天报成 0 commits 是凭空捏造，所以 stale 窗口给出 null 计数 + `stale=true`，调用方先 `repotory_scan` 再问。这是 MCP 响应面的新增可选字段：`CoreVersion` 1.3.0 → **1.4.0**，`cmd/mcp/main_test.go` 钉版同批（ADR-0048 minor bump）。
+- **IDE 插件面板与 Warden 对齐：对话历史收进 sheet、AI provider 有了配置入口**。两条用户报告驱动：①「vscode 插件排版太挤——对话列表和新增对话按钮完全可以隐藏式设计，+ 号放右上角」——VS Code 面板顶栏改为四个图标（历史 / 新建 / AI provider / 桌面），常驻的「主题下拉 + ＋ + 刷新 + 状态行」整块退役，对话历史改成点开才出现的 sheet（本地控制台 + 共享会话按更新时间排序，同步故障在历史按钮上亮橙点）；JetBrains 面板同批：常驻的 section/thread 下拉控件行移入「Conversations」对话框，feed 上方只留一行话题条（当前会话名 + Switch…），顶栏加同名三个动作——两个 IDE 与 Warden 是同一个产品的三种绘制。②「空状态里第二个品牌标冗余」——header 已有品牌标，空状态不再重复画。③「发消息 404 且没有配置 agent provider 的入口」——后端新增 `TestAIChatConfigured` / `ListAIModelsConfigured` 两个绑定（GetConfig 掩蔽 key，"测试已保存的 provider"只能在服务端做，key 永不出主机；surface 登记为 desktop-only 并附理由），两个 IDE 的 provider 面板读同两行设置、走同一条 /api/rpc 桥：Base URL / Model / API Key / 拉取模型 / 测试 / 保存，留空 key = 保留已存值（掩蔽值永不回写）；404 / 未配置的报错自动带「Configure AI provider」按钮直达面板，错误文案附上最常见的成因（Base URL 填成了完整 endpoint——应为服务端根，如 `https://api.deepseek.com` 或 `http://localhost:1234/v1`）。回归：VS Code 37 例全绿（新增契约消息与 HTML 断言）、Playwright 预览实测四个图标 / 历史 sheet / ＋ 直达新建 / 404 按钮开面板；JetBrains `compileKotlin` + `test` 全绿；go test / surface 门全绿。
+
 ## [2.34.0] - 2026-11-10
 
 ### 新增
@@ -989,6 +998,7 @@
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
 [Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...HEAD
+[2.35.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...v2.35.0
 [2.34.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.5...v2.34.0
 [2.33.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.4...v2.33.5
 [2.33.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.3...v2.33.4
