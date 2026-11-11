@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +17,18 @@ import (
 
 func makeTextResult(text string) *mcp.CallToolResult {
 	return mcp.NewToolResultText(text)
+}
+
+// notFoundOrError is the not-found answer for lookup tools. The driver's
+// "sql: no rows in result set" is an implementation detail that agents have
+// quoted back to users as if it were the diagnosis; a real storage failure
+// must stay distinguishable from absence (a failure must not masquerade as
+// "nothing there"), so only the sentinel is replaced.
+func notFoundOrError(err error, what string) *mcp.CallToolResult {
+	if errors.Is(err, sql.ErrNoRows) {
+		return makeTextResult(what + " not found")
+	}
+	return makeTextResult(what + " lookup failed: " + err.Error())
 }
 
 func makeJSONResult(name string, data any) (*mcp.CallToolResult, error) {

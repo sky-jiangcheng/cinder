@@ -349,6 +349,10 @@ func TestNotesReadMissingID(t *testing.T) {
 	}
 	if got := ts.text(res); !strings.Contains(got, "note not found") {
 		t.Errorf("message = %q, want it to say note not found", got)
+	} else if strings.Contains(got, "sql:") {
+		// The old text appended the driver error: agents quoted "sql: no rows
+		// in result set" back to users as if it were the diagnosis.
+		t.Errorf("driver noise leaked: %q", got)
 	}
 }
 
@@ -360,6 +364,8 @@ func TestProjectsStatsMissingProject(t *testing.T) {
 	}
 	if got := ts.text(res); !strings.Contains(got, "project not found") {
 		t.Errorf("message = %q, want it to say project not found", got)
+	} else if strings.Contains(got, "sql:") {
+		t.Errorf("driver noise leaked: %q", got)
 	}
 }
 
@@ -569,6 +575,10 @@ func TestNotesUpdateMissingNote(t *testing.T) {
 	}
 	if got := ts.text(res); !strings.Contains(got, "note not found") {
 		t.Errorf("message = %q, want it to say note not found", got)
+	} else if strings.Contains(got, "sql:") {
+		// The old text appended the driver error: agents quoted "sql: no rows
+		// in result set" back to users as if it were the diagnosis.
+		t.Errorf("driver noise leaked: %q", got)
 	}
 }
 

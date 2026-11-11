@@ -176,7 +176,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		id, _ := req.GetArguments()["id"].(float64)
 		note, err := svc.GetNote(int64(id))
 		if err != nil {
-			return makeTextResult(fmt.Sprintf("note not found: %v", err)), nil
+			return notFoundOrError(err, "note"), nil
 		}
 		return makeJSONResult("note_read", note)
 	})
@@ -216,7 +216,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		id, _ := req.GetArguments()["id"].(float64)
 		summary, err := svc.GetProjectSummary(int64(id))
 		if err != nil {
-			return makeTextResult(fmt.Sprintf("project not found: %v", err)), nil
+			return notFoundOrError(err, "project"), nil
 		}
 		return makeJSONResult("project_stats", summary)
 	})
@@ -339,7 +339,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		// tags and unpin the note — data loss through a normal tool call.
 		note, err := svc.GetNote(int64(id))
 		if err != nil {
-			return makeTextResult(fmt.Sprintf("note not found: %v", err)), nil
+			return notFoundOrError(err, "note"), nil
 		}
 
 		// Handoff notes are the session-memory protocol's exit records:
@@ -381,7 +381,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		}
 		updated, err := svc.GetNote(note.ID)
 		if err != nil {
-			return makeTextResult(fmt.Sprintf("error fetching note: %v", err)), nil
+			return notFoundOrError(err, "note"), nil
 		}
 		return makeJSONResult("note_updated", updated)
 	})
