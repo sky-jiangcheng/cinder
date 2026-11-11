@@ -622,8 +622,14 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         feed.text = ChatConsoleHtml.render(emptyList(), false, emptySet(), emptySet(), emptySet())
         feed.caretPosition = 0
 
+        // The scroll pane may take an empty border; its VIEWPORT may not:
+        // JViewport.setBorder() is contractually unsupported and THROWS on
+        // every call, which aborted the whole panel's construction — the tool
+        // window came up dead behind an IDE internal error (thrown since the
+        // ADR-0036 rewrite; the panel had never actually finished building).
+        // A viewport draws no border of its own, so deleting the call changes
+        // nothing visually — the call could never have had an effect.
         feedScroll.border = JBUI.Borders.empty()
-        feedScroll.viewport.border = JBUI.Borders.empty()
         area.add(feedScroll, BorderLayout.CENTER)
         return area
     }
