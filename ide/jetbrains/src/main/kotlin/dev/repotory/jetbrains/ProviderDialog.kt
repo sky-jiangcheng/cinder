@@ -54,7 +54,9 @@ class ProviderDialog : DialogWrapper(true) {
             .addComponent(
                 JBLabel(
                     "<html>Any OpenAI-compatible endpoint: OpenRouter, OpenAI, DeepSeek, vLLM, " +
-                        "LM Studio, Ollama. Answers are written by this endpoint; the key stays on this machine.</html>",
+                        "LM Studio, Ollama. Answers are written by this endpoint; the key stays on this machine. " +
+                        "Fetching models and testing the typed values connect directly; saving — and testing " +
+                        "the saved key — need the local Cinder service (start the desktop app).</html>",
                 ),
             )
             .addLabeledComponent(JBLabel("Base URL:"), baseField, 1, false)
@@ -92,7 +94,7 @@ class ProviderDialog : DialogWrapper(true) {
                         "Configured. Answers use this endpoint."
                     }
                 }.onFailure {
-                    status.text = "Could not read the provider: ${it.message ?: it.javaClass.simpleName}. Is the local Cinder service running?"
+                    status.text = "Could not read the provider: ${serviceOfflineHint(it.message)}"
                 }
             }
         }
@@ -126,30 +128,40 @@ class ProviderDialog : DialogWrapper(true) {
         val url = RepotorySettings.serverUrl()
         onPooled {
             val outcome = runCatching {
-                when {
-                    key.isNotEmpty() -> repotoryClient.rpc(url, "TestAIChat", listOf(base, model, key), PROBE_TIMEOUT_MS)
-                    // "Test what is saved": the stored key cannot be echoed to
-                    // the client, so the probe has to run server-side.
-                    hasKey -> repotoryClient.rpc(url, "TestAIChatConfigured", emptyList(), PROBE_TIMEOUT_MS)
-                    else -> repotoryClient.rpc(url, "TestAIChat", listOf(base, model, ""), PROBE_TIMEOUT_MS)
-                } as? JsonObject
+                // When the form matches the SAVED provider, "test" can also mean
+                // "test what is stored" — but that goes through the local service,
+                // because the stored key never leaves the host. Every other case
+                // probes the endpoint DIRECTLY, so it works while the desktop
+                // app — and with it the service — is not running.
+                val saved = if (key.isEmpty()) readConfig(url) else null
+                val testSaved = saved != null && saved.hasKey && saved.baseUrl == base && saved.model == model
+                if (testSaved) {
+                    val obj = repotoryClient.rpc(url, "TestAIChatConfigured", emptyList(), RPC_TIMEOUT_MS) as? JsonObject
+                    obj?.get("resolved_base_url")?.takeIf { it.isJsonPrimitive }?.asString?.also { baseField.text = it }
+                    obj?.get("reply")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty().trim()
+                } else {
+                    val probe = probeChat(base, model, key)
+                    if (probe.resolvedBaseUrl.isNotEmpty()) baseField.text = probe.resolvedBaseUrl
+                    probe.reply
+                }
             }
             onEdt {
-                outcome.onSuccess { obj ->
-                    val reply = obj?.get("reply")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
-                    val resolved = obj?.get("resolved_base_url")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
-                    if (resolved.isNotEmpty()) baseField.text = resolved
-                    status.text = if (reply.isBlank()) {
-                        "Endpoint answered."
-                    } else {
-                        "Endpoint answered: ${reply.take(80)}"
-                    }
-                }.onFailure { status.text = "Test failed: ${aiFailureHint(it.message)}" }
+                outcome.onSuccess { reply ->
+                    status.text = if (reply.isBlank()) "Endpoint answered." else "Endpoint answered: ${reply.take(80)}"
+                }.onFailure { err ->
+                    val msg = err.message ?: err.javaClass.simpleName
+                    val hint = if (key.isEmpty() && msg.contains("auth failed", ignoreCase = true)) {
+                        "$msg. This endpoint requires a key — type it above, or start the Cinder desktop app to test with the saved one."
+                    } else if (msg.contains("ECONNREFUSED", ignoreCase = true)) {
+                        // The service is down: the RPC path (test the saved
+                        // provider) cannot run, the direct one could not be taken.
+                        serviceOfflineHint(msg)
+                    } else aiFailureHint(msg)
+                    status.text = "Test failed: $hint"
+                }
             }
         }
     }
-
-    // ------------------------------------------------------------ model list
 
     private fun fetchModels() {
         val base = baseField.text.trim()
@@ -159,23 +171,17 @@ class ProviderDialog : DialogWrapper(true) {
             return
         }
         status.text = "Fetching models…"
-        val url = RepotorySettings.serverUrl()
         onPooled {
             val outcome = runCatching {
-                val obj = when {
-                    key.isNotEmpty() -> repotoryClient.rpc(url, "ListAIModels", listOf(base, key), PROBE_TIMEOUT_MS)
-                    hasKey -> repotoryClient.rpc(url, "ListAIModelsConfigured", emptyList(), PROBE_TIMEOUT_MS)
-                    else -> repotoryClient.rpc(url, "ListAIModels", listOf(base, ""), PROBE_TIMEOUT_MS)
-                } as? JsonObject
-                val models = obj?.getAsJsonArray("models")
-                    ?.mapNotNull { if (it.isJsonPrimitive) it.asString else null }
-                    .orEmpty()
-                val resolved = obj?.get("resolved_base_url")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
-                models to resolved
+                // DIRECT probe: the model list is the endpoint's own, so the
+                // IDE asks the endpoint — the local service does not need to
+                // be running while the user is setting this up.
+                val probe = probeModels(base, key)
+                if (probe.resolvedBaseUrl.isNotEmpty()) baseField.text = probe.resolvedBaseUrl
+                probe.models
             }
             onEdt {
-                outcome.onSuccess { (models, resolved) ->
-                    if (resolved.isNotEmpty()) baseField.text = resolved
+                outcome.onSuccess { models ->
                     if (models.isEmpty()) {
                         status.text = "The endpoint reported no models."
                     } else {
@@ -183,7 +189,7 @@ class ProviderDialog : DialogWrapper(true) {
                         status.text = "${models.size} model(s): " + models.take(10).joinToString(", ") +
                             if (models.size > 10) "…" else ""
                     }
-                }.onFailure { status.text = "Fetch failed: ${aiFailureHint(it.message)}" }
+                }.onFailure { err -> status.text = "Fetch failed: ${aiFailureHint(err.message)}" }
             }
         }
     }
@@ -211,7 +217,7 @@ class ProviderDialog : DialogWrapper(true) {
             }
             onEdt {
                 outcome.onSuccess { close(OK_EXIT_CODE) }
-                    .onFailure { status.text = "Save failed: ${aiFailureHint(it.message)}" }
+                    .onFailure { status.text = "Save failed: ${serviceOfflineHint(it.message)}" }
             }
         }
     }
@@ -226,9 +232,29 @@ class ProviderDialog : DialogWrapper(true) {
         ApplicationManager.getApplication().invokeLater { if (!isDisposed) work() }
     }
 
-    /** How long a model probe may take: model calls are minutes, not pings. */
+    /** How long a saved-provider RPC probe may take: a model call, not a ping. */
     private companion object {
-        const val PROBE_TIMEOUT_MS = 120_000
+        const val RPC_TIMEOUT_MS = 120_000
+    }
+}
+
+/**
+ * A failure of an RPC against the LOCAL service, told in terms of what to do.
+ *
+ * The settings and the stored key live in the service's database, so reading
+ * and saving the provider go through it — and when it is down (the desktop
+ * app is closed, which is exactly when people fill in forms) a raw
+ * "connect ECONNREFUSED 127.0.0.1:18765" reads like the endpoint is broken.
+ * The message names the real cause and what still works without it.
+ */
+internal fun serviceOfflineHint(message: String?): String {
+    val text = message?.takeIf { it.isNotBlank() } ?: "unknown error"
+    return if (Regex("ECONNREFUSED|timeout|invalid JSON|socket hang up|ECONNRESET", RegexOption.IGNORE_CASE)
+        .containsMatchIn(text)
+    ) {
+        "$text — the local Cinder service is not reachable. Start the Cinder desktop app, then retry: reading and saving the provider settings go through it. Fetching models and testing the typed values connect DIRECTLY and do not need it."
+    } else {
+        aiFailureHint(text)
     }
 }
 
