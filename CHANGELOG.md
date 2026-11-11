@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.35.3] - 2026-11-11
+
+### 修复
+
+- **Provider 面板的「拉取模型 / 测试」改为扩展直连——本地服务没跑不再挡路**。用户在面板里填好 OpenRouter 点「Fetch models」，得到的是 `connect ECONNREFUSED 127.0.0.1:18765`：读配置/保存/测已存 key 走本地服务的 RPC 桥没有错（设置和 key 存在服务端），但「这个端点答不答得了」是端点自己的属性，不该被桌面 App 没开挡住——而桌面 App 没开恰恰是填写配置的常见时刻。新增 `aiProbe.ts`：扩展宿主直连 `/models` 与 `/chat/completions`，完整对齐服务端契约（`aiCandidateURLs` 近邻候选、404 才换路、401 停、200+error envelope 用 provider 原话、OpenAI `data[].id` 与 Ollama `models[].name` 两种解析）——两个 IDE 与桌面应用对同一端点的诊断从此一致。`providerTest` 无 typed key 且表单匹配已存配置时仍走 `TestAIChatConfigured`（key 永不出主机），其余直连；save/load/testSaved 的 ECONNREFUSED 改写成人话（服务没跑、启动桌面 App、哪些动作直连不需要它）；无 key 探测遇 401 时点名两条出路；面板 hint 同步说明。测试 +7（候选 URL / 解析 / 404 换路 / 401 停 / ECONNREFUSED 文案 / 200 envelope），44 例全绿。
+
 ## [2.35.2] - 2026-11-11
 
 ### 修复
@@ -1010,6 +1016,7 @@
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
 [Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...HEAD
+[2.35.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.2...v2.35.3
 [2.35.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.1...v2.35.2
 [2.35.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.0...v2.35.1
 [2.35.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.34.0...v2.35.0
