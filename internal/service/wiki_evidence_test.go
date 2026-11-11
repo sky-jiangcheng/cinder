@@ -632,6 +632,10 @@ func TestEvidenceMessages_UnscopedCarriesContext(t *testing.T) {
 // the empty one — a library with no memory and no hits still has tools.
 func TestEvidenceMessages_HeaderNamesDateAndTools(t *testing.T) {
 	svc, git := setupService(t)
+	registered := svc.toolRegistry.definitions()
+	if len(registered) == 0 {
+		t.Fatal("the registry is empty; the tool guide can never render")
+	}
 	for _, tc := range []struct {
 		name      string
 		projectID int64
@@ -651,8 +655,17 @@ func TestEvidenceMessages_HeaderNamesDateAndTools(t *testing.T) {
 			if !strings.Contains(sys, git.GetTodayDate()) {
 				t.Errorf("no today's date in header: %q", sys)
 			}
-			if !strings.Contains(sys, "query_project_stats") || !strings.Contains(sys, "query_daily_stats") {
-				t.Errorf("tools not named for the model to pick: %q", sys)
+			// Every registered tool must appear with its description — the
+			// guide and the tools field share one source of truth, so the
+			// test pins the SOURCE, not example names that would drift.
+			for _, td := range registered {
+				if !strings.Contains(sys, td.Function.Name) || !strings.Contains(sys, td.Function.Description) {
+					t.Errorf("tool %q missing from the guide", td.Function.Name)
+				}
+			}
+			// The loop contract: call, result comes back, then continue.
+			if !strings.Contains(sys, "result comes back") {
+				t.Errorf("the prompt does not explain the call→result→continue loop: %q", sys)
 			}
 			// The old contradiction must not come back through the fallback.
 			if strings.Contains(sys, "Use only the context below") {
