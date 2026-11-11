@@ -345,6 +345,8 @@ describe('legacy palette', () => {
     return found
   }
 
+  // Walks src/ synchronously; under a full parallel run that I/O can exceed
+  // vitest's 5s default even when the palette is clean.
   it('is not worn anywhere in the UI', async () => {
     const fsName = 'node:' + 'fs'
     const fs = (await import(/* @vite-ignore */ fsName)) as unknown as NodeFs
@@ -362,5 +364,5 @@ describe('legacy palette', () => {
       offenders,
       'the palette ADR-0037 replaced is back in the UI — use the tokens instead',
     ).toEqual([])
-  })
+  }, 15000)
 })
