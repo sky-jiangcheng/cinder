@@ -22,6 +22,7 @@
 //           come back with fewer than N hits) and the panel says so instead
 //           of pretending the count is everything.
 import { SharedChat } from "./sharedChat.js";
+import { probeChat, probeModels } from "./aiProbe.js";
 import {
   excerpt,
   hitText,
@@ -315,7 +316,7 @@ export class ChatSession {
         baseUrl: "",
         model: "",
         hasKey: false,
-        error: `Could not read the saved provider: ${errorText(err)}. Is the local Cinder service running?`,
+        error: serviceOfflineHint(err),
       });
     }
   }
@@ -345,7 +346,7 @@ export class ChatSession {
         type: "providerResult",
         kind: "save",
         ok: false,
-        message: `Save failed: ${aiFailureHint(err)}`,
+        message: `Save failed: ${serviceOfflineHint(err)}`,
       });
     }
   }
@@ -356,17 +357,19 @@ export class ChatSession {
       const name = model.trim();
       const key = apiKey.trim();
       if (!base || !name) throw new Error("Base URL and model are both required.");
-      const saved = await this.readSavedProvider().catch(() => null);
-      let result: { reply?: string; resolved_base_url?: string };
-      if (key) {
-        result = (await this.transport.rpc("TestAIChat", [base, name, key], AI_PROBE_TIMEOUT_MS)) as typeof result;
-      } else if (saved && saved.hasKey && saved.baseUrl === base && saved.model === name) {
-        // The stored key never leaves the host, so "test what is saved" has to
-        // be a server-side call.
-        result = (await this.transport.rpc("TestAIChatConfigured", [], AI_PROBE_TIMEOUT_MS)) as typeof result;
-      } else {
-        result = (await this.transport.rpc("TestAIChat", [base, name, ""], AI_PROBE_TIMEOUT_MS)) as typeof result;
-      }
+      // No key typed: when the form matches the SAVED provider, "test" can
+      // also mean "test what is stored" — but that goes through the local
+      // service, because the stored key never leaves the host. Every other
+      // case probes the endpoint DIRECTLY, so it works while the desktop app
+      // — and with it the service — is not running.
+      const saved = !key ? await this.readSavedProvider().catch(() => null) : null;
+      const testSaved = saved !== null && saved.hasKey && saved.baseUrl === base && saved.model === name;
+      const result: { reply?: string; resolved_base_url?: string } = testSaved
+        ? ((await this.transport.rpc("TestAIChatConfigured", [], AI_PROBE_TIMEOUT_MS)) as {
+            reply?: string;
+            resolved_base_url?: string;
+          })
+        : await probeChat(base, name, key).then((p) => ({ reply: p.reply, resolved_base_url: p.resolvedBaseUrl }));
       const reply = (result?.reply ?? "").trim();
       this.post({
         type: "providerResult",
@@ -376,11 +379,19 @@ export class ChatSession {
         resolvedBaseUrl: result?.resolved_base_url,
       });
     } catch (err) {
+      const text = errorText(err);
+      // An auth failure on a keyless probe usually means the endpoint needs
+      // the key the user has not typed (or the saved one, which only the
+      // local service can test) — name both ways out.
+      const hint =
+        !apiKey.trim() && /auth failed/i.test(text)
+          ? `${text}. This endpoint requires a key — type it above, or start the Cinder desktop app to test with the saved one.`
+          : aiFailureHint(text);
       this.post({
         type: "providerResult",
         kind: "test",
         ok: false,
-        message: `Test failed: ${aiFailureHint(err)}`,
+        message: `Test failed: ${hint}`,
       });
     }
   }
@@ -404,7 +415,7 @@ export class ChatSession {
         type: "providerResult",
         kind: "test",
         ok: false,
-        message: `Test failed: ${aiFailureHint(err)}`,
+        message: `Test failed: ${serviceOfflineHint(err)}`,
       });
     }
   }
@@ -413,24 +424,18 @@ export class ChatSession {
     try {
       const base = baseUrl.trim();
       if (!base) throw new Error("A base URL is required to fetch models.");
-      const key = apiKey.trim();
-      const saved = await this.readSavedProvider().catch(() => null);
-      let result: { models?: string[]; resolved_base_url?: string };
-      if (key) {
-        result = (await this.transport.rpc("ListAIModels", [base, key], AI_PROBE_TIMEOUT_MS)) as typeof result;
-      } else if (saved && saved.hasKey && saved.baseUrl === base) {
-        result = (await this.transport.rpc("ListAIModelsConfigured", [], AI_PROBE_TIMEOUT_MS)) as typeof result;
-      } else {
-        result = (await this.transport.rpc("ListAIModels", [base, ""], AI_PROBE_TIMEOUT_MS)) as typeof result;
-      }
-      const models = result?.models ?? [];
+      // DIRECT probe: the model list is the endpoint's own, so the extension
+      // asks the endpoint — the local service does not need to be running
+      // while the user is setting this up.
+      const probe = await probeModels(base, apiKey);
+      const models = probe.models;
       this.post({
         type: "providerResult",
         kind: "models",
         ok: true,
         models,
         message: `${models.length} model${models.length === 1 ? "" : "s"} reported by the endpoint.`,
-        resolvedBaseUrl: result?.resolved_base_url,
+        resolvedBaseUrl: probe.resolvedBaseUrl,
       });
     } catch (err) {
       this.post({
@@ -989,6 +994,23 @@ export class ChatSession {
 /** The message of an unknown thrown value. */
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * A failure of an RPC against the LOCAL service, told in terms of what to do.
+ *
+ * The settings and the stored key live in the service's database, so reading
+ * and saving the provider go through it — and when it is down (the desktop
+ * app is closed, which is exactly when people fill in forms) a raw
+ * "connect ECONNREFUSED 127.0.0.1:18765" reads like the endpoint is broken.
+ * The message names the real cause and what still works without it.
+ */
+function serviceOfflineHint(error: unknown): string {
+  const text = errorText(error);
+  if (/ECONNREFUSED|timeout:|invalid JSON|socket hang up|ECONNRESET/i.test(text)) {
+    return `${text} — the local Cinder service is not reachable. Start the Cinder desktop app, then retry: reading and saving the provider settings go through it. Fetching models and testing the typed values connect DIRECTLY and do not need it.`;
+  }
+  return aiFailureHint(text);
 }
 
 /**

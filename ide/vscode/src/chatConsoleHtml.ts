@@ -500,7 +500,7 @@ export function consoleHtml(nonce: string): string {
     <button class="icon-btn" type="button" data-close="provider-sheet" aria-label="Close AI provider settings" title="Close">✕</button>
   </header>
   <div class="sheet-body">
-    <p class="sheet-hint">Any OpenAI-compatible endpoint: OpenRouter, OpenAI, DeepSeek, vLLM, LM Studio, Ollama. Answers are written by this endpoint; the key stays on this machine.</p>
+    <p class="sheet-hint">Any OpenAI-compatible endpoint: OpenRouter, OpenAI, DeepSeek, vLLM, LM Studio, Ollama. Answers are written by this endpoint; the key stays on this machine. Fetching models and testing the typed values connect directly; saving — and testing the saved key — need the local Cinder service (start the desktop app).</p>
     <label class="field">
       <span class="flabel">Base URL</span>
       <input id="p-base" type="text" placeholder="https://api.deepseek.com  or  http://localhost:1234/v1" spellcheck="false" autocomplete="off">
