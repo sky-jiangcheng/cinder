@@ -131,7 +131,7 @@ func (ts *testServer) jsonPayload(res *mcp.CallToolResult) map[string]any {
 //
 // The literal is duplicated in internal/version/core.go; the drift guard in
 // scripts/check-version-drift.mjs fails if the two copies disagree.
-const wantCoreVersion = "1.4.0"
+const wantCoreVersion = "1.5.0"
 
 func TestToolsRegistered(t *testing.T) {
 	ts := newTestServer(t)
@@ -211,6 +211,48 @@ func TestProjectsListAndStats(t *testing.T) {
 	payload := ts.jsonPayload(stats)
 	if _, ok := payload["project"]; !ok {
 		t.Errorf("project_stats missing project key: %s", ts.text(stats))
+	}
+}
+
+// TestMetricsToolWindowFace pins the contract 1.5.0 request-face wiring: the schema
+// advertises since/until, the handler passes them through, and the response
+// carries the window echo. A fresh library has no scan, so every window must
+// come back stale with null counts — never a confident zero.
+func TestMetricsToolWindowFace(t *testing.T) {
+	ts := newTestServer(t)
+	tool := ts.s.GetTool("repotory_metrics").Tool
+	for _, key := range []string{"since", "until"} {
+		if _, ok := tool.InputSchema.Properties[key]; !ok {
+			t.Errorf("schema does not advertise %q", key)
+		}
+	}
+
+	res := ts.call("repotory_metrics", map[string]any{"since": "2026-01-01", "until": "2026-01-31"})
+	if res.IsError {
+		t.Fatalf("window call errored: %s", ts.text(res))
+	}
+	got := ts.jsonPayload(res)
+	if got["since"] != "2026-01-01" || got["until"] != "2026-01-31" {
+		t.Errorf("window not echoed: %v..%v", got["since"], got["until"])
+	}
+	if got["stale"] != true {
+		t.Errorf("uns scanned library answered stale=false: %s", ts.text(res))
+	}
+	for _, key := range []string{"commits", "additions", "deletions"} {
+		if got[key] != nil {
+			t.Errorf("%s = %v on a stale window, want null", key, got[key])
+		}
+	}
+
+	// Malformed dates surface as in-band errors the client can read.
+	if res := ts.call("repotory_metrics", map[string]any{"since": "last-tuesday"}); !res.IsError {
+		t.Error("bad since accepted silently")
+	} else if !strings.Contains(ts.text(res), "since") {
+		t.Errorf("error does not name the field: %s", ts.text(res))
+	}
+	// Non-string values must not degrade to the default window.
+	if res := ts.call("repotory_metrics", map[string]any{"until": 42}); !res.IsError {
+		t.Error("numeric until accepted")
 	}
 }
 

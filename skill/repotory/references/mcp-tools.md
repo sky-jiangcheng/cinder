@@ -14,7 +14,7 @@ repotory_handoff(agent: string, changes: array, decisions: array, gotchas: array
                  next_steps: array, path: string, project_id: number, summary*: string,
                  tags: string)
 repotory_integrity()
-repotory_metrics(path: string)
+repotory_metrics(path: string, since: string, until: string)
 repotory_notes_create(category: string, content*: string, project_id*: number,
                        tags: string, title*: string)
 repotory_notes_list(limit: number)
@@ -131,17 +131,22 @@ FTS5 trigram + bm25 全文检索。
 
 单个项目的统计。
 
-### `repotory_metrics(path?)`
+### `repotory_metrics(path?, since?, until?)`
 
-读**已存库**的量化概览：仓库数、代码行、今日提交与增删、笔记数、待人工审批数。
+读**已存库**的量化概览：仓库数、代码行、今日提交与增删、笔记数、待人工审批数，以及一个**日期窗口**的提交与增删。
 
 | 参数 | 说明 |
 |------|------|
 | `path` | 工作区绝对路径；**空 = 全库**。至多 4096 UTF-8 字节 |
+| `since` | 窗口起始日 `YYYY-MM-DD`（含）；缺省 = `until` |
+| `until` | 窗口结束日 `YYYY-MM-DD`（含）；缺省 = 今天。窗口最长 366 天 |
 
-三条必须知道的取数边界：
+窗口回答走 `commits` / `additions` / `deletions` 三个字段（`*Today` 三件套含义不变，永远指今天）。
+
+四条必须知道的取数边界：
 
 - **它不扫盘、不跑 git、不刷新缓存**。想要新的数字得先有人扫描；否则你读到的是上次扫描的结果。`refreshedAt` 是**最近一次仓库扫描的时间**，不是本次请求的时间。
+- **窗口超出最后一次扫描 = `stale: true` 且三个计数为 `null`，不是 0**。没人扫描过的日期在缓存里没有行，把这些天报成 0 commits 是凭空捏造「没人干活」。先 `repotory_scan`，再问同一个窗口。
 - **未知路径返回空计数，绝不回退全库总量**——把「这个目录没入库」说成「这个项目有 4.8 万行」是编造。
 - **`totalLines` 为 `null` 表示「不可信就没有」**：只有缓存的语言 LOC 覆盖了整个作用域才给总数。今日增删/提交用的是全作者缓存 `daily_stats`，不是「你个人今天的量」。
 

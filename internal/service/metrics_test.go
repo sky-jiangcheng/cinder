@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"repotory/internal/db"
 )
@@ -59,20 +60,35 @@ func TestMetricsPersistedScopeAndToday(t *testing.T) {
 	}
 	lines := int64(150)
 	early, late := "2026-08-16T09:00:00.000Z", "2026-08-16T10:00:00.000Z"
+	// The default window equals "today", so each case's window sums must match
+	// its legacy *Today trio — that identity is the legacy/new contract. The
+	// helper fills the pointers from the trio; stale cases already set
+	// Stale=true and keep their null counts.
+	win := func(m Metrics) Metrics {
+		m.Since, m.Until = git.GetTodayDate(), git.GetTodayDate()
+		if m.Stale {
+			return m
+		}
+		c, a, d := m.CommitsToday, m.AdditionsToday, m.DeletionsToday
+		m.Commits, m.Additions, m.Deletions = &c, &a, &d
+		return m
+	}
 	cases := []struct {
 		slash string
 		want  Metrics
 	}{
-		{"", Metrics{RepositoryCount: 4, CommitsToday: 10, AdditionsToday: 100, DeletionsToday: 10, NotesCount: 4, PendingReviewCount: 5, RefreshedAt: &late}},
-		{"/metrics/single", Metrics{RepositoryCount: 1, TotalLines: &lines, CommitsToday: 1, AdditionsToday: 10, DeletionsToday: 1, NotesCount: 2, PendingReviewCount: 1, RefreshedAt: &early}},
-		{"/metrics/single/src/../lib", Metrics{RepositoryCount: 1, TotalLines: &lines, CommitsToday: 1, AdditionsToday: 10, DeletionsToday: 1, NotesCount: 2, PendingReviewCount: 1, RefreshedAt: &early}},
-		{"/metrics/group", Metrics{RepositoryCount: 2, CommitsToday: 5, AdditionsToday: 50, DeletionsToday: 5, NotesCount: 1, PendingReviewCount: 2, RefreshedAt: &late}},
-		{"/metrics/group/a/src", Metrics{RepositoryCount: 1, CommitsToday: 2, AdditionsToday: 20, DeletionsToday: 2, NotesCount: 1, PendingReviewCount: 2, RefreshedAt: &late}},
-		{"/metrics/orphan", Metrics{RepositoryCount: 1, CommitsToday: 4, AdditionsToday: 40, DeletionsToday: 4}},
-		{"/metrics/notes", Metrics{NotesCount: 1, PendingReviewCount: 1}},
-		{"/metrics/single-neighbor", Metrics{}},
-		{"/metrics/group/unknown", Metrics{}}, // auto-grouped containers cannot adopt unknown children
-		{"/never-seen", Metrics{}},
+		{"", win(Metrics{RepositoryCount: 4, CommitsToday: 10, AdditionsToday: 100, DeletionsToday: 10, NotesCount: 4, PendingReviewCount: 5, RefreshedAt: &late})},
+		{"/metrics/single", win(Metrics{RepositoryCount: 1, TotalLines: &lines, CommitsToday: 1, AdditionsToday: 10, DeletionsToday: 1, NotesCount: 2, PendingReviewCount: 1, RefreshedAt: &early})},
+		{"/metrics/single/src/../lib", win(Metrics{RepositoryCount: 1, TotalLines: &lines, CommitsToday: 1, AdditionsToday: 10, DeletionsToday: 1, NotesCount: 2, PendingReviewCount: 1, RefreshedAt: &early})},
+		{"/metrics/group", win(Metrics{RepositoryCount: 2, CommitsToday: 5, AdditionsToday: 50, DeletionsToday: 5, NotesCount: 1, PendingReviewCount: 2, RefreshedAt: &late})},
+		{"/metrics/group/a/src", win(Metrics{RepositoryCount: 1, CommitsToday: 2, AdditionsToday: 20, DeletionsToday: 2, NotesCount: 1, PendingReviewCount: 2, RefreshedAt: &late})},
+		// No scan timestamp in scope: the window cannot be proven covered, so
+		// it is stale with null counts even though legacy rows are visible.
+		{"/metrics/orphan", win(Metrics{RepositoryCount: 1, CommitsToday: 4, AdditionsToday: 40, DeletionsToday: 4, Stale: true})},
+		{"/metrics/notes", win(Metrics{NotesCount: 1, PendingReviewCount: 1, Stale: true})},
+		{"/metrics/single-neighbor", Metrics{Since: git.GetTodayDate(), Until: git.GetTodayDate(), Stale: true}},
+		{"/metrics/group/unknown", Metrics{Since: git.GetTodayDate(), Until: git.GetTodayDate(), Stale: true}}, // auto-grouped containers cannot adopt unknown children
+		{"/never-seen", Metrics{Since: git.GetTodayDate(), Until: git.GetTodayDate(), Stale: true}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.slash, func(t *testing.T) {
@@ -86,6 +102,86 @@ func TestMetricsPersistedScopeAndToday(t *testing.T) {
 				t.Fatalf("read refreshed data instead of observing it: %+v %v", again, err)
 			}
 		})
+	}
+}
+
+func TestMetricsRangeWindowAndStaleness(t *testing.T) {
+	s, git := setupService(t)
+	ctx := context.Background()
+	p1 := seedProject(t, s.db, "range", fixturePath("/range"))
+	r1 := seedRepo(t, s.db, fixturePath("/range"), p1)
+	// last_scanned_at lands on the fake "today" in UTC so the coverage prefix
+	// matches: a window ending today is covered, a window ending later is not.
+	chatExec(t, s.db, "UPDATE repositories SET last_scanned_at = '2026-08-16 10:00:00' WHERE id = ?", r1)
+	if err := db.UpsertDailyStat(s.db, r1, git.GetTodayDate(), "all", 1, 100, 10, 5); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertDailyStat(s.db, r1, git.GetTodayDate(), "me", 9, 999, 99, 9); err != nil {
+		t.Fatal(err) // personal rows never count toward window sums
+	}
+	if err := db.UpsertDailyStat(s.db, r1, git.GetYesterdayDate(), "all", 1, 40, 4, 2); err != nil {
+		t.Fatal(err)
+	}
+	today, yest := git.GetTodayDate(), git.GetYesterdayDate()
+	start, err := time.Parse("2006-01-02", today)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Multi-day window: both days, all-author rows only.
+	got, err := s.GetMetricsRange(ctx, "", yest, today)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Since != yest || got.Until != today || got.Commits == nil || *got.Commits != 7 ||
+		got.Additions == nil || *got.Additions != 140 || got.Deletions == nil || *got.Deletions != 14 || got.Stale {
+		t.Fatalf("window = %+v", got)
+	}
+	// Single day back: yesterday only.
+	got, err = s.GetMetricsRange(ctx, "", yest, yest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Commits == nil || *got.Commits != 2 || got.Additions == nil || *got.Additions != 40 || got.Stale {
+		t.Fatalf("yesterday = %+v", got)
+	}
+	// A window past the scan cannot be proven: null counts, stale flag. The
+	// legacy trio keeps answering from what exists — its contract is pinned.
+	// (Near-future, not 2099: the span cap rejects absurd windows first.)
+	future := start.AddDate(0, 0, 4).Format("2006-01-02")
+	got, err = s.GetMetricsRange(ctx, "", today, future)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Commits != nil || got.Additions != nil || got.Deletions != nil || !got.Stale {
+		t.Fatalf("future window = %+v; want null counts, stale", got)
+	}
+	if got.CommitsToday != 5 || got.AdditionsToday != 100 {
+		t.Fatalf("legacy trio moved with the window: %+v", got)
+	}
+	// Malformed and inverted windows are errors, not silent defaults.
+	for _, bad := range [][2]string{{"not-a-date", ""}, {"", "16-08-2026"}, {today, yest}} {
+		if _, err := s.GetMetricsRange(ctx, "", bad[0], bad[1]); err == nil {
+			t.Fatalf("accepted window %+v", bad)
+		}
+	}
+	// Span cap: 366 days is the widest window the backfill can ever have
+	// filled; one day more must be refused, not answered from a partial cache.
+	far := start.AddDate(0, 0, metricsRangeMaxDays).Format("2006-01-02")
+	if _, err := s.GetMetricsRange(ctx, "", today, far); err == nil {
+		t.Fatalf("accepted %d-day window beyond the %d cap", metricsRangeMaxDays+1, metricsRangeMaxDays)
+	}
+	if _, err := s.GetMetricsRange(ctx, "", start.AddDate(0, 0, -(metricsRangeMaxDays-1)).Format("2006-01-02"), today); err != nil {
+		t.Fatalf("refused the max window: %v", err)
+	}
+	// Unknown path: window echoed, stale — "not in the library" is not "0
+	// commits this week".
+	got, err = s.GetMetricsRange(ctx, fixturePath("/never"), yest, today)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RepositoryCount != 0 || got.Commits != nil || !got.Stale || got.Since != yest || got.Until != today {
+		t.Fatalf("unknown path = %+v", got)
 	}
 }
 
@@ -130,11 +226,13 @@ func TestMetricsTotalLinesRequiresCompleteCache(t *testing.T) {
 }
 
 func TestMetricsEmptyValidationAndStorageErrors(t *testing.T) {
-	s, _ := setupService(t)
+	s, git := setupService(t)
 	ctx := context.Background()
+	// An empty library is a window nobody scanned: stale, never a confident 0.
+	empty := &Metrics{Since: git.GetTodayDate(), Until: git.GetTodayDate(), Stale: true}
 	got, err := s.GetMetrics(ctx, "")
-	if err != nil || !reflect.DeepEqual(got, &Metrics{}) {
-		t.Fatalf("empty: %+v %v", got, err)
+	if err != nil || !reflect.DeepEqual(got, empty) {
+		t.Fatalf("empty: %+v, want %+v (%v)", got, empty, err)
 	}
 	for _, path := range []string{"relative", "  ", "/bad\x00", "/bad\n", "/bad\xff", "/" + strings.Repeat("x", MaxChatPathLen)} {
 		if _, err := s.GetMetrics(ctx, path); err == nil {

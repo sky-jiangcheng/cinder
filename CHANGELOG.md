@@ -8,7 +8,13 @@
 
 ### 修复
 
+- **MCP 的 not-found 不再把驱动原文递给 agent**。`notes_read` / `projects_stats` / `notes_update` 三处的文案是 `fmt.Sprintf("note not found: %v", err)`，实弹测试里模型原样引用了 `sql: no rows in result set` 向用户复述——驱动的错误词是实现的偶然产物，不是诊断。新增 `notFoundOrError`：`sql.ErrNoRows` 收成 `"<what> not found"`，其余错误保留 `"<what> lookup failed: …"`——**失败不许伪装成缺席**（同 auto_import 那条吞错教训的另一半）。3 处钉文案的测试同批加 `strings.Contains(got, "sql:")` 反断言。响应文本内容变化不进契约号：字段、工具、类型都没动，前缀 `note not found` 原样保留。
+- **`repotory_metrics` 的日期窗口从「响应面已有字段」补成「请求面真的能问」**（契约 1.4.0 的收尾 + 契约 1.5.0）。v2.35.0 的条目写着「窗口由请求给出」，但那是半边货：`GetMetricsRange` 的校验与 `since/until/commits/additions/deletions/stale` 六个返回字段都在，**MCP 工具的 schema 却没有这两个入参，handler 也永远按「今天」查**——agent 无论怎么问窗口都拿回今天的数，而 stale 判定整段没接线、六个字段恒为零值。本轮补上：schema 加 `since`/`until`（经 `toolString`，非字符串不静默降级）、handler 走 `GetMetricsRange`、窗口聚合第二查询只加 `author='all'` 行（与 `*Today` 三件套同源不同窗，老字段含义钉死不动）；**stale 语义落地**：`until` 晚于 `refreshedAt` 的天、或作用域从未扫描过（无 `last_scanned_at`），三个窗口计数给 `null` + `stale: true`，未知路径同样回显窗口并标 stale——「没入库」不是「这周 0 提交」。stale 覆盖按 `refreshedAt` 的 UTC 日前缀比较，不用本机时区：东八机上当天扫完存的是 09:00Z，按本地日解释会自己把自己的缓存判成过期。测试 +2 组（service 窗口/stale/上限/坏日期，MCP schema+回显+带内错误）。
 - **代码审查的昨日提交永远查不到——测试里 `Format` 布局写错了（只红测试，产品逻辑无罪）**。`reviewRepo` 用 `time.Now().AddDate(0,0,-1).Format("2006-01-02T12:00:00")` 造「昨天中午」的提交时间，但 Go 的布局串里**根本没有 `12` 这个小时 token**（12 小时制是 `3`/`03`）：`1` 是不补零的月份、`2` 是不补零的日期，11 月 10 日渲染出 `2026-11-10T1110:00:00`，git 把 `1110` 读成时区偏移 `+11:10`，提交落在「11-10 00:00 +1110」= 本机 11-09 20:50，正好在窗口起点之前 3 小时 10 分，`--since/--until` 恒零命中。ADR-0053 落地那天起 6 个审查测试就是红的，与 v2.35.2 的「零发现不再崩」互相咬合：产品代码没问题，是**这道门自己瞎了**。修法是把中午写成字面量：`.Format("2006-01-02") + "T12:00:00"`。
+
+### 文档
+
+- `repotory_metrics` 的 skill 参考 / SKILL.md / 中英 `features/ai-integration` 同步窗口参数与 stale 语义（安装副本同批拷贝）。
 
 ## [2.35.4] - 2026-11-11
 

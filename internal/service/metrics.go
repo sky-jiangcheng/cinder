@@ -16,7 +16,7 @@ import (
 // (review scope is exact, not the retrieval scope's project-plus-global rule).
 //
 // The range fields (since/until/commits/additions/deletions/stale) are the
-// honest date-window answer, added in contract 1.4.0. The legacy *Today trio
+// honest date-window answer, added in contract 1.4.0 and made askable in 1.5.0. The legacy *Today trio
 // keeps its old meaning unchanged: it is what the old clients pinned against.
 // The new fields say what a window the cache CANNOT answer means: a day after
 // the last scan has no rows because nobody looked — reporting its sum as 0
@@ -79,8 +79,8 @@ func (s *Service) GetMetricsRange(ctx context.Context, path, since, until string
 	if end.Before(start) {
 		return nil, fmt.Errorf("until %s is before since %s", until, since)
 	}
-	if days := int(end.Sub(start).Hours() / 24); days > metricsRangeMaxDays {
-		return nil, fmt.Errorf("window spans %d days, max %d", days+1, metricsRangeMaxDays)
+	if days := int(end.Sub(start).Hours()/24) + 1; days > metricsRangeMaxDays {
+		return nil, fmt.Errorf("window spans %d days, max %d", days, metricsRangeMaxDays)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -112,7 +112,11 @@ func (s *Service) GetMetricsRange(ctx context.Context, path, since, until string
 				return nil, err
 			}
 			if project == nil {
-				return &Metrics{}, nil // an unknown path must NEVER fall back to global totals
+				// An unknown path must NEVER fall back to global totals. The
+				// window is still echoed, and stale: a repository the library
+				// has never seen is a window nobody looked at, not one where
+				// nothing happened.
+				return &Metrics{Since: since, Until: until, Stale: true}, nil
 			}
 			projectID = project.ID
 		}
@@ -149,6 +153,40 @@ func (s *Service) GetMetricsRange(ctx context.Context, path, since, until string
 		&out.NotesCount, &out.PendingReviewCount, &out.RefreshedAt)
 	if err != nil {
 		return nil, fmt.Errorf("read stored metrics: %w", err)
+	}
+
+	// The requested window is a second aggregate over the same rows: one query
+	// per answer, never a re-derivation of "today" from these sums — the legacy
+	// trio above keeps its pinned meaning independently.
+	out.Since, out.Until = since, until
+	var wCommits, wAdded, wDeleted int
+	wargs := append([]any{}, scopeArgs...)
+	wargs = append(wargs, since, until)
+	if err := tx.QueryRowContext(ctx, scope+`SELECT
+	 COALESCE(SUM(d.commits), 0), COALESCE(SUM(d.lines_added), 0), COALESCE(SUM(d.lines_deleted), 0)
+	 FROM (SELECT ds.* FROM daily_stats ds JOIN scoped r ON r.id = ds.repository_id
+	 WHERE date(ds.stat_date) >= ? AND date(ds.stat_date) <= ? AND ds.author = 'all') d`, wargs...).Scan(
+		&wCommits, &wAdded, &wDeleted); err != nil {
+		return nil, fmt.Errorf("read stored metrics range: %w", err)
+	}
+	// A window the cache cannot cover is stale, and stale means null counts.
+	// daily_stats only holds days somebody scanned; the days between the last
+	// scan and today are absent, not zero — summing an absent window and
+	// calling it 0 commits invents "nobody worked" out of an expired cache.
+	// Coverage is the scan timestamp's own date. refreshedAt is written by
+	// SQLite's strftime with a 'Z' suffix, so its first ten characters are a
+	// UTC day; comparing that literal day (not a zone-shifted local day) keeps
+	// the answer stable on machines east of Greenwich, where a same-day scan
+	// stored at 09:00Z is already "yesterday" locally. An absent or malformed
+	// timestamp reads as no coverage, which fails toward null.
+	out.Commits, out.Additions, out.Deletions = &wCommits, &wAdded, &wDeleted
+	if out.RefreshedAt == nil || len(*out.RefreshedAt) < 10 {
+		out.Stale = true
+	} else if until > (*out.RefreshedAt)[:10] {
+		out.Stale = true
+	}
+	if out.Stale {
+		out.Commits, out.Additions, out.Deletions = nil, nil, nil
 	}
 
 	// repo_meta.languages is the existing LOC source. Older mining also caches

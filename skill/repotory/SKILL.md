@@ -148,7 +148,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 | `repotory_notes_search` | 精确全文检索 | FTS5 trigram + bm25 排序，支持 CJK |
 | `repotory_notes_read` | 读某条笔记全文 | 按 id |
 | `repotory_notes_list` | 列出全部笔记 | 默认 50，上限 500；单项目工作集用 `context` |
-| `repotory_metrics` | 「这个库 / 这个项目现在多大、今天动了多少」 | 只读**已存库**的缓存数字：不扫盘、不跑 git、不刷新；未知路径给空计数，代码行覆盖不全给 `null` |
+| `repotory_metrics` | 「这个库 / 这个项目现在多大、今天动了多少、某段时间动了多少」 | 只读**已存库**的缓存数字：不扫盘、不跑 git、不刷新；`since`/`until` 给日期窗口（`commits`/`additions`/`deletions`），窗口超出最后扫描时 `stale: true` + 计数 `null` 而**不是 0**；未知路径给空计数，代码行覆盖不全给 `null` |
 
 ### 写
 
