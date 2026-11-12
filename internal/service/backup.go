@@ -40,6 +40,14 @@ const (
 	// backupDefaultRetain keeps two weeks of daily snapshots. At this
 	// database's size (~5MB) that is well under 100MB of disk, forever.
 	backupDefaultRetain = 14
+	// rollingRetain keeps the last six intraday snapshots (ADR-0057 D4). At the
+	// hourly tick that is roughly the last six hours of work, which is the
+	// window a "I broke it this afternoon" recovery needs.
+	rollingRetain = 6
+	// rollingMinGap is the floor between two intraday snapshots. The ticker is
+	// hourly and also fires once at startup; the gap is what keeps a quick
+	// quit-and-relaunch from writing a second full copy.
+	rollingMinGap = 30 * time.Minute
 )
 
 // The snapshot config keys register themselves next to the feature that owns
@@ -106,16 +114,43 @@ func (s *Service) RunBackupNow() (string, error) {
 	return path, nil
 }
 
+// rollingBackupOnce produces an intraday snapshot when the cadence and the
+// write activity allow one (ADR-0057 D4), and is silent about it in the common
+// case where nothing is due.
+//
+// It obeys the same backup_enabled switch as the daily snapshot — one off
+// switch, not two — and it never fails the caller: the daily snapshot is the
+// promise, this is the finer-grained safety net on top of it.
+func (s *Service) rollingBackupOnce() string {
+	if !s.backupEnabled() {
+		return ""
+	}
+	dir := s.backupDir
+	if dir == "" {
+		dir = filepath.Join(filepath.Dir(platform.GetDbPath()), "backups")
+	}
+	path, err := db.CreateRollingBackup(s.db, dir, time.Now(), rollingMinGap, rollingRetain)
+	if err != nil {
+		log.Printf("rolling snapshot skipped: %v", err)
+		return ""
+	}
+	return path
+}
+
 // startBackupTicker launches the local snapshot loop as tracked background
 // work: one snapshot attempt right at startup (the desktop app's "first open
 // of the day" is the natural backup moment) and then hourly retries that are
 // no-ops once today's snapshot exists. Errors are logged, never fatal — a
 // busy disk must not turn into an app failure.
+//
+// Each tick also asks for an intraday snapshot, which is a no-op unless the
+// gap has passed AND something was written since the last one.
 func (s *Service) startBackupTicker() {
 	s.bgGo("backup", func(ctx context.Context) {
 		if _, err := s.RunBackupNow(); err != nil {
 			log.Printf("startup backup skipped: %s", err)
 		}
+		s.rollingBackupOnce()
 		for {
 			t := time.NewTicker(time.Hour)
 			select {
@@ -128,6 +163,7 @@ func (s *Service) startBackupTicker() {
 			if _, err := s.RunBackupNow(); err != nil {
 				log.Printf("scheduled backup skipped: %s", err)
 			}
+			s.rollingBackupOnce()
 		}
 	})
 }

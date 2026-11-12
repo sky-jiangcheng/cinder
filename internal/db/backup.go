@@ -28,6 +28,13 @@ const BackupSnapshotPrefix = "repotory-"
 // this product wrote".
 var snapshotName = regexp.MustCompile(`^` + BackupSnapshotPrefix + `\d{4}-\d{2}-\d{2}\.db$`)
 
+// rollingSnapshotName matches the intraday shape: the prefix, YYYYMMDD-HHMM,
+// and the .db suffix. It is a separate expression, not a looser version of
+// snapshotName, because the two shapes rotate independently: a burst of
+// intraday snapshots must never push out the two weeks of daily history that
+// ADR-0025 promises.
+var rollingSnapshotName = regexp.MustCompile(`^` + BackupSnapshotPrefix + `\d{8}-\d{4}\.db$`)
+
 // CreateBackup produces one consistent snapshot of the live database with
 // VACUUM INTO (ADR-0025 L1) and rotates old snapshots.
 //
@@ -102,6 +109,137 @@ func CreateBackup(database *sql.DB, dir string, now time.Time, retain int) (stri
 		return path, nil
 	}
 	return path, nil
+}
+
+// CreateRollingBackup writes an intraday snapshot — the same VACUUM INTO, a
+// finer cadence, and its own retention (ADR-0057 D4).
+//
+// Why the daily snapshot alone was not enough: after RestoreBackup became a
+// real entry point, "the newest restorable point" turned out to be "before the
+// first app open today". Everything after that could only be recovered edit by
+// edit from the version history — and before schema v31 that history was
+// missing the created state, so a note that was written and then broken within
+// the day had nothing to go back to.
+//
+// Three properties:
+//
+//   - Gap, not schedule. It writes only when the newest rolling snapshot is at
+//     least minGap old. The caller's ticker is coarse (hourly) and also fires
+//     at startup; the gap is what stops two launches five minutes apart from
+//     producing two 5MB copies.
+//   - Writes, not ticks. If nothing has been written to note_versions since the
+//     newest snapshot, the snapshot is skipped and the existing path returned.
+//     The comparison is done in SQL against `datetime(?, 'unixepoch')` on
+//     purpose: note_versions.created_at is UTC (CURRENT_TIMESTAMP) while the
+//     file's mtime is local time, and comparing those two in Go would be
+//     silently off by the timezone offset — on a UTC+8 machine the "changed
+//     since" test would answer "no" every single time.
+//   - Its own rotation. Rolling files match rollingSnapshotName only, so a busy
+//     day cannot evict the daily history.
+//
+// A snapshot that fails verification is removed rather than reported: an
+// unreadable restore point is worse than an absent one, because it silences the
+// "nothing to restore from" signal.
+func CreateRollingBackup(database *sql.DB, dir string, now time.Time, minGap time.Duration, retain int) (string, error) {
+	if dir == "" {
+		return "", fmt.Errorf("a backup directory is required")
+	}
+	if retain < 1 {
+		retain = 1
+	}
+
+	latest, latestMod := newestRollingSnapshot(dir)
+	if latest != "" && now.Sub(latestMod) < minGap {
+		return latest, nil
+	}
+	if latest != "" {
+		written, err := writtenSince(database, latestMod)
+		if err != nil {
+			return "", err
+		}
+		if !written {
+			return latest, nil
+		}
+	}
+
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create backup dir: %w", err)
+	}
+	path := filepath.Join(dir, fmt.Sprintf("%s%s.db", BackupSnapshotPrefix, now.Format("20060102-1504")))
+	q := strings.ReplaceAll(path, "'", "''")
+	if _, err := database.Exec("VACUUM INTO '" + q + "'"); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("vacuum into %s: %w", path, err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("chmod rolling snapshot: %w", err)
+	}
+	if verr := VerifySnapshot(path); verr != nil {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("verify rolling snapshot %s: %w", path, verr)
+	}
+	// Housekeeping only: a failed prune must not fail the snapshot.
+	_ = rotate(dir, retain, rollingSnapshotName)
+	return path, nil
+}
+
+// newestRollingSnapshot returns the newest rolling snapshot in dir and its
+// mtime, or ("", zero) when there is none.
+//
+// Names sort chronologically by construction, so the last one after a plain
+// string sort is the newest; the mtime is read for the gap check only.
+func newestRollingSnapshot(dir string) (string, time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", time.Time{}
+	}
+	newest := ""
+	for _, e := range entries {
+		if e.IsDir() || !rollingSnapshotName.MatchString(e.Name()) {
+			continue
+		}
+		if e.Name() > newest {
+			newest = e.Name()
+		}
+	}
+	if newest == "" {
+		return "", time.Time{}
+	}
+	info, err := os.Stat(filepath.Join(dir, newest))
+	if err != nil {
+		return "", time.Time{}
+	}
+	return filepath.Join(dir, newest), info.ModTime()
+}
+
+// writtenSince reports whether the knowledge base changed at or after t.
+//
+// Two cheap markers, because neither alone is honest: note_versions only gains
+// a row when an existing note is EDITED (v31 records the pre-edit state), so a
+// day of writing brand-new notes would look untouched; project_notes.updated_at
+// moves on creates and edits alike, but says nothing about a restore or a
+// version-driven write. Together they cover every note write, which is what a
+// knowledge base accumulates between snapshots.
+//
+// The comparison happens in SQLite so both sides are UTC (CURRENT_TIMESTAMP
+// writes UTC, the file's mtime is local), and the bound is floored to the
+// second because CURRENT_TIMESTAMP has second resolution — comparing a
+// second-truncated value against a nanosecond mtime would classify a write in
+// that very second as "before the snapshot". >= rather than >: one spurious
+// extra snapshot costs a file, one missed write costs the restore point.
+func writtenSince(database *sql.DB, t time.Time) (bool, error) {
+	bound := t.UTC().Truncate(time.Second).Unix()
+	var n int
+	err := database.QueryRow(`
+		SELECT (SELECT COUNT(*) FROM note_versions WHERE created_at >= datetime(?, 'unixepoch'))
+		     + (SELECT COUNT(*) FROM project_notes WHERE updated_at >= datetime(?, 'unixepoch'))`,
+		bound, bound,
+	).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("check writes since last snapshot: %w", err)
+	}
+	return n > 0, nil
 }
 
 // verifySnapshot opens a snapshot read-only and asks SQLite whether it can
@@ -268,21 +406,28 @@ func CopyBackupTo(srcPath, dstDir string, retain int) (string, error) {
 	return dst, nil
 }
 
-// rotateBackups deletes the oldest snapshots beyond retain. Names sort in
-// chronological order by construction (ISO date inside the filename).
+// rotateBackups deletes the oldest daily snapshots beyond retain (the intraday
+// ones have their own budget — see rotate).
+func rotateBackups(dir string, retain int) error {
+	return rotate(dir, retain, snapshotName)
+}
+
+// rotate deletes the oldest files in dir that match pattern, keeping retain.
+// Names sort in chronological order by construction (both snapshot shapes
+// embed a zero-padded timestamp).
 //
-// Only files whose WHOLE name matches the snapshot shape are considered. The
+// Only files whose WHOLE name matches the pattern are considered. The
 // destination directory is often the user's own (an external disk, a NAS
 // folder), so "starts with repotory-" is not enough to justify deleting
 // somebody's file.
-func rotateBackups(dir string, retain int) error {
+func rotate(dir string, retain int, pattern *regexp.Regexp) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	var snaps []string
 	for _, e := range entries {
-		if !e.IsDir() && snapshotName.MatchString(e.Name()) {
+		if !e.IsDir() && pattern.MatchString(e.Name()) {
 			snaps = append(snaps, e.Name())
 		}
 	}
@@ -296,4 +441,83 @@ func rotateBackups(dir string, retain int) error {
 		}
 	}
 	return nil
+}
+
+// RestoreBackup verifies srcPath and atomically copies it to dstPath, chosen by
+// the caller. It is inert by design: nothing calls it automatically, it never
+// touches the live database, never overwrites or deletes an existing file, and
+// leaves the source untouched. Success means dstPath passes VerifySnapshot;
+// the returned value is the copy size in bytes.
+func RestoreBackup(srcPath, dstPath string) (int64, error) {
+	if srcPath == "" || dstPath == "" {
+		return 0, fmt.Errorf("restore: source and destination paths are required")
+	}
+	srcAbs, err := filepath.Abs(srcPath)
+	if err != nil {
+		return 0, fmt.Errorf("restore: resolve source %s: %w", srcPath, err)
+	}
+	dstAbs, err := filepath.Abs(dstPath)
+	if err != nil {
+		return 0, fmt.Errorf("restore: resolve destination %s: %w", dstPath, err)
+	}
+	if srcAbs == dstAbs {
+		return 0, fmt.Errorf("restore: destination must differ from the source")
+	}
+	if err := VerifySnapshot(srcAbs); err != nil {
+		return 0, fmt.Errorf("restore: source is not a restorable snapshot: %w", err)
+	}
+	if _, err := os.Stat(dstAbs); err == nil {
+		return 0, fmt.Errorf("restore: destination %s already exists, refusing to overwrite", dstAbs)
+	} else if !os.IsNotExist(err) {
+		return 0, fmt.Errorf("restore: inspect destination %s: %w", dstAbs, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dstAbs), 0o700); err != nil {
+		return 0, fmt.Errorf("restore: create destination dir: %w", err)
+	}
+	// A temp file in the destination directory keeps the publish rename within
+	// one filesystem, so it is atomic.
+	tmp, err := os.CreateTemp(filepath.Dir(dstAbs), ".repotory-restore-*.tmp")
+	if err != nil {
+		return 0, fmt.Errorf("restore: create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	published := false
+	defer func() {
+		if !published {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	src, err := os.Open(srcAbs)
+	if err != nil {
+		_ = tmp.Close()
+		return 0, fmt.Errorf("restore: open source: %w", err)
+	}
+	written, err := io.Copy(tmp, src)
+	if cerr := src.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = tmp.Close()
+		return 0, fmt.Errorf("restore: copy snapshot: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return 0, fmt.Errorf("restore: sync copy: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return 0, fmt.Errorf("restore: close copy: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return 0, fmt.Errorf("restore: chmod copy: %w", err)
+	}
+	// Verify before publishing: a copy nobody can restore is worse than none.
+	if err := VerifySnapshot(tmpPath); err != nil {
+		return 0, fmt.Errorf("restore: verify copy: %w", err)
+	}
+	if err := os.Rename(tmpPath, dstAbs); err != nil {
+		return 0, fmt.Errorf("restore: publish %s: %w", dstAbs, err)
+	}
+	published = true
+	return written, nil
 }
