@@ -27,7 +27,7 @@ group = "dev.repotory"
 // the VS Code extension learned the same lesson (scripts/bump-version.sh, 2b).
 // One version, one CHANGELOG (ADR-0017 criterion 3). Rewritten by
 // scripts/bump-version.sh — do not edit by hand.
-version = "2.35.6"
+version = "2.36.0"
 
 repositories {
     mavenCentral()
