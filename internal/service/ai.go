@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"repotory/internal/db"
+	"repotory/internal/service/wikigen"
 )
 
 // AI chat (AskAI): forwards a question plus generated project context to an
@@ -36,14 +37,17 @@ import (
 // ceiling now covers only what it was written for.
 const aiChatTimeout = 90 * time.Second
 
-// DefaultBatchChatTimeout bounds non-interactive batch calls (compile, model-backed
-// lint). These are explicit, user-initiated jobs that already carry their own
-// scope budgets, so a long ceiling is the correct trade: failing after 90 seconds
-// on hardware that would have answered in 4 is not a useful failure.
-// DefaultBatchChatTimeout is exported so the HTTP layer can prove its write
-// deadline sits above it (see cmd/server): a long LLM-backed call must never be
-// cut off after its work already committed.
-const DefaultBatchChatTimeout = 10 * time.Minute
+// DefaultBatchChatTimeout bounds non-interactive batch calls (compile,
+// model-backed lint). The definition moved to wikigen (ADR-0060 step three) with
+// the kernels that make those calls — a local 27B model needed 173s for one
+// compile, which is why the batch ceiling exists. This is an alias, so
+// cmd/server's assertion that its write deadline sits above it keeps holding the
+// same number.
+//
+// These are explicit, user-initiated jobs that already carry their own scope
+// budgets, so a long ceiling is the correct trade: failing after 90 seconds on
+// hardware that would have answered in 4 is not a useful failure.
+const DefaultBatchChatTimeout = wikigen.BatchTimeout
 
 // aiAskTimeout bounds AskAIWithEvidence, the evidence-backed Q&A path.
 //
@@ -213,17 +217,12 @@ func aiFinishReason(cr chatResponse) string {
 // Returns "" when the reply completed normally — callers use that to keep the
 // old "cannot parse" wording, which is still correct for a reply that really
 // was malformed rather than cut short.
+// truncatedHint delegates to the one definition, now in wikigen (ADR-0060 step
+// three) where the generation kernels that receive a Reply live. Kept as a
+// wrapper so this package's other callers — lint's model half, evidence, note
+// organizing — and their test read unchanged.
 func truncatedHint(finishReason string) string {
-	switch finishReason {
-	case "", "stop", "end_turn", "stop_sequence":
-		return ""
-	case "length", "max_tokens", "model_length":
-		return "（回复被输出上限截断，并非格式错误：请换用输出预算更大的模型，或提高 max_tokens 后重试）"
-	case "content_filter":
-		return "（回复被内容过滤器拦截，请调整提问方式后重试）"
-	default:
-		return "（模型以 " + finishReason + " 结束本轮回复，未输出完整结果）"
-	}
+	return wikigen.TruncatedHint(finishReason)
 }
 
 // AIModelListResult is the payload of ListAIModels: the advertised model ids

@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"repotory/internal/db"
+	"repotory/internal/service/wikigen"
 )
 
 // Async compilation (ADR-0016).
@@ -204,11 +206,13 @@ func (s *Service) runCompileJob(ctx context.Context, job *db.CompileJob) bool {
 	}
 	// Newest first: the freshest knowledge is what a compile should reach for
 	// first, and the list from db is oldest-first. Shared with the synchronous
-	// path (compileNoteTargets) so the two cannot disagree about "which notes".
-	targets := compileNoteTargets(notes, job.Requested)
+	// path (wikigen.CompileNoteTargets) so the two cannot disagree about "which
+	// notes".
+	targets := wikigen.CompileNoteTargets(notes, job.Requested)
 	agg := &WikiCompileReport{ProjectID: job.ProjectID}
 	agg.NotesScanned = len(targets)
 	agg.NotesRequested = len(targets)
+	failedNotes := 0
 
 	for i, n := range targets {
 		if err := ctx.Err(); err != nil {
@@ -228,12 +232,13 @@ func (s *Service) runCompileJob(ctx context.Context, job *db.CompileJob) bool {
 			log.Printf("compile job %d: note %d failed: %v", job.ID, n.ID, err)
 			agg.LLMNote = fmt.Sprintf("note %d failed: %v", n.ID, err)
 			agg.RejectedOps++
+			failedNotes++
 		} else {
-			agg.absorb(rep)
+			agg.Absorb(rep)
 		}
 		agg.NotesDone = i + 1
 		agg.NotesRequested = len(targets)
-		if updErr := db.UpdateCompileJobProgress(s.db, job.ID, agg.toJobRow()); updErr != nil {
+		if updErr := db.UpdateCompileJobProgress(s.db, job.ID, agg.ToJobRow()); updErr != nil {
 			log.Printf("compile job %d: progress write failed: %v", job.ID, updErr)
 		}
 	}
@@ -242,24 +247,31 @@ func (s *Service) runCompileJob(ctx context.Context, job *db.CompileJob) bool {
 	if note == "" {
 		note = fmt.Sprintf("%d note(s) processed", agg.NotesDone)
 	}
+	// The status enum has only done/failed/canceled, so a mixed run is still
+	// done — but its note payload says partial:true and carries the failure
+	// count, so a poller can tell it from a clean success (no schema change).
+	note = compileJobNote(note, failedNotes)
 	s.finishJob(job.ID, db.CompileJobDone, note, "")
 	return true
 }
 
-// compileNoteTargets picks which notes a run covers. Shared by the synchronous
-// and the job path so "compile this project" cannot mean two different things
-// depending on which button was pressed.
-//
-// Takes the head of the list, so it depends on db.ListNotes being newest-first
-// (pinned, then updated_at DESC). It used to walk the tail instead, which was
-// only correct while ListNotes was oldest-first — the day that flipped, this
-// silently started compiling a project's stalest notes instead of its freshest.
-func compileNoteTargets(notes []db.Note, limit int) []db.Note {
-	if limit <= 0 || limit > len(notes) {
-		limit = len(notes)
+// compileJobNote renders the finishing note; a partially failed run gets a
+// machine-readable payload instead of a plain "processed" string.
+func compileJobNote(base string, failedNotes int) string {
+	if failedNotes <= 0 {
+		return base
 	}
-	return notes[:limit]
+	payload, _ := json.Marshal(map[string]any{
+		"partial": true,
+		"failed":  failedNotes,
+		"message": base,
+	})
+	return string(payload)
 }
+
+// compileNoteTargets (which notes a run covers) moved to wikigen with the
+// compile kernel — it is the kernel's budget decision, and the job path above
+// calls wikigen.CompileNoteTargets directly.
 
 // recoverInterruptedCompileJobs is the startup path ADR-0016 asks for: work left
 // 'running' by a dead process is marked failed rather than resumed, because the

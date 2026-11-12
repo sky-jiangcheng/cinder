@@ -1,6 +1,7 @@
-package service
+package wikipage
 
 import (
+	"database/sql"
 	"repotory/internal/db"
 )
 
@@ -18,8 +19,8 @@ import (
 // ListWikiPageVersions returns a page's snapshots, newest first. A page that has
 // never had approved content returns an empty list rather than an error — "no
 // history yet" is a fact about the page, not a failure.
-func (s *Service) ListWikiPageVersions(pageID int64) ([]db.PageVersion, error) {
-	vers, err := db.ListPageVersions(s.db, pageID)
+func ListWikiPageVersions(database *sql.DB, pageID int64) ([]db.PageVersion, error) {
+	vers, err := db.ListPageVersions(database, pageID)
 	if err != nil {
 		return nil, err
 	}
@@ -34,6 +35,6 @@ func (s *Service) ListWikiPageVersions(pageID int64) ([]db.PageVersion, error) {
 // DiffWikiPageVersion compares one snapshot against the page's current content, as
 // the same line-diff text note versions use so the review page renders both with one
 // component.
-func (s *Service) DiffWikiPageVersion(pageID, versionID int64) (string, error) {
-	return db.DiffPageVersion(s.db, pageID, versionID)
+func DiffWikiPageVersion(database *sql.DB, pageID, versionID int64) (string, error) {
+	return db.DiffPageVersion(database, pageID, versionID)
 }

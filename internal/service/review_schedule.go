@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"repotory/internal/db"
+	"repotory/internal/service/reviewrun"
 )
 
 // reviewTickInterval is how often the desktop app asks "is it time yet".
@@ -53,7 +54,7 @@ func (s *Service) maybeRunScheduledReview(ctx context.Context) {
 		return
 	}
 	now := time.Now()
-	at, err := parseClock(cfg.At)
+	at, err := reviewrun.ParseClock(cfg.At)
 	if err != nil {
 		log.Printf("review: %v", err)
 		return
@@ -61,7 +62,7 @@ func (s *Service) maybeRunScheduledReview(ctx context.Context) {
 	if now.Hour()*60+now.Minute() < at {
 		return
 	}
-	runDate := reviewRunDateFor(now)
+	runDate := reviewrun.RunDateFor(now)
 	existing, err := db.GetReviewRun(s.db, runDate, cfg.Scope)
 	if err != nil {
 		log.Printf("review: look up today's run: %v", err)

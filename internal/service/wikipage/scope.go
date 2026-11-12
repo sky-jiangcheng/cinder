@@ -1,6 +1,7 @@
-package service
+package wikipage
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 
@@ -43,8 +44,8 @@ import (
 // The project filter keeps its existing meaning: a project id narrows to that
 // project's pages, and 0 means "every page, global ones included" — a global
 // page belongs to no project, so it only shows in the unfiltered view.
-func (s *Service) ListApprovedWikiPages(projectID int64) ([]WikiPendingPage, error) {
-	return s.wikiReviewFeed(db.WikiStatusApproved, projectID)
+func ListApprovedWikiPages(database *sql.DB, projectID int64) ([]WikiPendingPage, error) {
+	return ReviewFeed(database, db.WikiStatusApproved, projectID)
 }
 
 // PromoteWikiPageToGlobal moves an approved page into the global tier: it
@@ -56,8 +57,8 @@ func (s *Service) ListApprovedWikiPages(projectID int64) ([]WikiPendingPage, err
 // compiler, the linter or the community synthesis may call it — the global
 // tier is a curated statement about how the user works, and a model writing it
 // is the failure ADR-0015 exists to prevent.
-func (s *Service) PromoteWikiPageToGlobal(pageID int64) error {
-	p, err := db.GetWikiPageByID(s.db, pageID)
+func PromoteWikiPageToGlobal(database *sql.DB, pageID int64) error {
+	p, err := db.GetWikiPageByID(database, pageID)
 	if err != nil {
 		return fmt.Errorf("page %d not found: %w", pageID, err)
 	}
@@ -68,7 +69,7 @@ func (s *Service) PromoteWikiPageToGlobal(pageID int64) error {
 	if p.ProjectID == 0 {
 		return nil // already global: idempotent
 	}
-	if err := db.SetWikiPageScope(s.db, pageID, 0); err != nil {
+	if err := db.SetWikiPageScope(database, pageID, 0); err != nil {
 		return fmt.Errorf("promote page %d to global: %w", pageID, err)
 	}
 	log.Printf("wiki: page %d (%s) promoted from project %d to the global tier", pageID, p.Slug, p.ProjectID)
@@ -82,11 +83,11 @@ func (s *Service) PromoteWikiPageToGlobal(pageID int64) error {
 //
 // The same approval rule applies — a page that was never published does not
 // get a scope, it gets a review.
-func (s *Service) AssignWikiPageProject(pageID int64, projectID int64) error {
+func AssignWikiPageProject(database *sql.DB, pageID int64, projectID int64) error {
 	if projectID <= 0 {
 		return fmt.Errorf("refusing to assign page %d: project id %d is not a project", pageID, projectID)
 	}
-	p, err := db.GetWikiPageByID(s.db, pageID)
+	p, err := db.GetWikiPageByID(database, pageID)
 	if err != nil {
 		return fmt.Errorf("page %d not found: %w", pageID, err)
 	}
@@ -97,7 +98,7 @@ func (s *Service) AssignWikiPageProject(pageID int64, projectID int64) error {
 	if p.ProjectID == projectID {
 		return nil // already there: idempotent
 	}
-	if err := db.SetWikiPageScope(s.db, pageID, projectID); err != nil {
+	if err := db.SetWikiPageScope(database, pageID, projectID); err != nil {
 		return fmt.Errorf("assign page %d to project %d: %w", pageID, projectID, err)
 	}
 	log.Printf("wiki: page %d (%s) moved from scope %d to project %d", pageID, p.Slug, p.ProjectID, projectID)

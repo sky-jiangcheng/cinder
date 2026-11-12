@@ -10,12 +10,16 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"repotory/internal/core/git"
 	pluginruntime "repotory/internal/core/plugin/runtime"
+	"repotory/internal/db"
 	"repotory/internal/version"
 )
 
@@ -322,12 +326,93 @@ func (s *Service) Health() map[string]any {
 	// "version" stays the release version: the updater and the install-info
 	// path compare it against the latest published release. "core_version" is
 	// the memory-layer contract version, which is what a client programs
-	// against.
+	// against. These three fields are frozen; only runtime metrics are added.
 	return map[string]any{
-		"status":       "ok",
-		"version":      version.Version,
-		"core_version": version.CoreVersion,
+		"status":                  "ok",
+		"version":                 version.Version,
+		"core_version":            version.CoreVersion,
+		"db_size_bytes":           s.databaseSizeBytes(),
+		"last_backup_at":          s.lastBackupAt(),
+		"compile_jobs_failed_24h": s.compileJobsFailed24h(),
 	}
+}
+
+// databaseSizeBytes reads the live SQLite size from pragmas, so it works for
+// both file and in-memory databases without touching the filesystem.
+func (s *Service) databaseSizeBytes() int64 {
+	var pageCount, pageSize int64
+	if err := s.db.QueryRow("PRAGMA page_count").Scan(&pageCount); err != nil {
+		return 0
+	}
+	if err := s.db.QueryRow("PRAGMA page_size").Scan(&pageSize); err != nil {
+		return 0
+	}
+	return pageCount * pageSize
+}
+
+// compileJobsFailed24h counts failed compile/lint jobs from the last 24 hours.
+func (s *Service) compileJobsFailed24h() int64 {
+	var n int64
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM compile_jobs WHERE status = 'failed' AND created_at >= datetime('now', '-24 hours')`,
+	).Scan(&n); err != nil {
+		return 0
+	}
+	return n
+}
+
+// lastBackupAt reports the mtime of the newest daily snapshot, or nil when no
+// snapshot exists. Snapshots are already written by the backup ticker; this
+// only reads them. The live DB path comes from SQLite itself, so an in-memory
+// database cleanly reports no backup without touching user files.
+func (s *Service) lastBackupAt() any {
+	dir := s.backupDir
+	if dir == "" {
+		dbFile := s.liveDatabaseFile()
+		if dbFile == "" {
+			return nil
+		}
+		dir = filepath.Join(filepath.Dir(dbFile), "backups")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var newest time.Time
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), db.BackupSnapshotPrefix) || !strings.HasSuffix(e.Name(), ".db") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	if newest.IsZero() {
+		return nil
+	}
+	return newest.UTC().Format(time.RFC3339)
+}
+
+// liveDatabaseFile returns the main database file path from SQLite, or "" for
+// an in-memory database.
+func (s *Service) liveDatabaseFile() string {
+	rows, err := s.db.Query("PRAGMA database_list")
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq int
+		var name, file string
+		if rows.Scan(&seq, &name, &file) == nil && name == "main" {
+			return file
+		}
+	}
+	return ""
 }
 
 // Close releases the underlying database handle.

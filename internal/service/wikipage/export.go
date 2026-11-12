@@ -1,7 +1,8 @@
-package service
+package wikipage
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -81,7 +82,7 @@ var ErrWikiExportNotEmpty = fmt.Errorf("export directory is not empty")
 // one-way: silently replacing files the user may have annotated in Obsidian would
 // turn a read-only view into an unasked-for destructive writer, which is the exact
 // failure mode ADR-0014 决策 2 was written to avoid.
-func (s *Service) ExportWikiTree(rootDir string, projectID int64, force bool) (*WikiExportReport, error) {
+func ExportWikiTree(database *sql.DB, rootDir string, projectID int64, force bool) (*WikiExportReport, error) {
 	if strings.TrimSpace(rootDir) == "" {
 		return nil, fmt.Errorf("export directory is required")
 	}
@@ -95,7 +96,7 @@ func (s *Service) ExportWikiTree(rootDir string, projectID int64, force bool) (*
 		return nil, err
 	}
 
-	pages, err := db.ListWikiPages(s.db, "", projectID)
+	pages, err := db.ListWikiPages(database, "", projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func (s *Service) ExportWikiTree(rootDir string, projectID int64, force bool) (*
 			report.SkippedPages++
 			continue
 		}
-		body, dangling := s.renderPage(byID, bySlug, p)
+		body, dangling := renderPage(database, byID, bySlug, p)
 		report.DanglingLinks += dangling
 		files[filepath.ToSlash(rel)] = body
 	}
@@ -219,12 +220,12 @@ func findStaleMarkdown(wikiDir string, written map[string]bool) ([]string, error
 	return stale, err
 }
 
-var wikiLinkRe = regexp.MustCompile(`\[\[([^\]|]+)(?:\|[^\]]+)?\]\]`)
+var WikiLinkRe = regexp.MustCompile(`\[\[([^\]|]+)(?:\|[^\]]+)?\]\]`)
 
 // renderPage produces one Markdown document: frontmatter, the page body, its
 // outgoing links as wikilinks, backlinks, and the notes it was compiled from.
 // The second return counts body wikilinks whose target page does not exist.
-func (s *Service) renderPage(byID map[int64]db.WikiPage, bySlug map[string]db.WikiPage, p db.WikiPage) (string, int) {
+func renderPage(database *sql.DB, byID map[int64]db.WikiPage, bySlug map[string]db.WikiPage, p db.WikiPage) (string, int) {
 	dangling := 0
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -243,14 +244,14 @@ func (s *Service) renderPage(byID map[int64]db.WikiPage, bySlug map[string]db.Wi
 		b.WriteString(body + "\n\n")
 		// A [[target]] typed into a body is the one reference this layer cannot
 		// protect with a constraint, so it is checked here and counted.
-		for _, m := range wikiLinkRe.FindAllStringSubmatch(body, -1) {
+		for _, m := range WikiLinkRe.FindAllStringSubmatch(body, -1) {
 			if _, ok := bySlug[m[1]]; !ok {
 				dangling++
 			}
 		}
 	}
 
-	if out, err := db.WikiEdgesFrom(s.db, p.ID); err != nil {
+	if out, err := db.WikiEdgesFrom(database, p.ID); err != nil {
 		log.Printf("wiki export: out edges for page %d: %v", p.ID, err)
 	} else if len(out) > 0 {
 		b.WriteString("## 出链\n\n")
@@ -261,7 +262,7 @@ func (s *Service) renderPage(byID map[int64]db.WikiPage, bySlug map[string]db.Wi
 		}
 		b.WriteString("\n")
 	}
-	if back, err := db.WikiEdgesTo(s.db, p.ID); err != nil {
+	if back, err := db.WikiEdgesTo(database, p.ID); err != nil {
 		log.Printf("wiki export: in edges for page %d: %v", p.ID, err)
 	} else if len(back) > 0 {
 		b.WriteString("## 反向链接\n\n")
@@ -270,12 +271,12 @@ func (s *Service) renderPage(byID map[int64]db.WikiPage, bySlug map[string]db.Wi
 		}
 		b.WriteString("\n")
 	}
-	if notes, err := db.NotesForPage(s.db, p.ID); err != nil {
+	if notes, err := db.NotesForPage(database, p.ID); err != nil {
 		log.Printf("wiki export: source notes for page %d: %v", p.ID, err)
 	} else if len(notes) > 0 {
 		b.WriteString("## 来源笔记\n\n")
 		for _, id := range notes {
-			n, err := db.GetNoteByID(s.db, id)
+			n, err := db.GetNoteByID(database, id)
 			if err != nil {
 				log.Printf("wiki export: source note %d for page %d: %v", id, p.ID, err)
 				continue
@@ -285,7 +286,7 @@ func (s *Service) renderPage(byID map[int64]db.WikiPage, bySlug map[string]db.Wi
 			}
 			title := strings.TrimSpace(n.Title)
 			if title == "" {
-				title = firstLine(n.Content)
+				title = FirstLine(n.Content)
 			}
 			fmt.Fprintf(&b, "- note #%d — %s\n", n.ID, title)
 		}
@@ -318,8 +319,8 @@ func renderIndex(pages []db.WikiPage, byID map[int64]db.WikiPage) string {
 		sort.Slice(group, func(i, j int) bool { return group[i].Slug < group[j].Slug })
 		for _, p := range group {
 			fmt.Fprintf(&b, "- [[%s|%s]]", p.Slug, p.Title)
-			if line := firstLine(p.Content); line != "" && line != p.Title {
-				fmt.Fprintf(&b, " — %s", clipRunes(line, 100))
+			if line := FirstLine(p.Content); line != "" && line != p.Title {
+				fmt.Fprintf(&b, " — %s", ClipRunes(line, 100))
 			}
 			b.WriteString("\n")
 		}
@@ -359,10 +360,45 @@ func yamlQuote(s string) string {
 	return `"` + strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`) + `"`
 }
 
-func firstLine(s string) string {
+func FirstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		return strings.TrimSpace(s[:i])
 	}
 	return s
+}
+
+// ClipRunes truncates to max runes, running on runes rather than bytes so a CJK
+// title is not cut mid-character (the exported Markdown would carry a
+// replacement glyph).
+//
+// This is the one definition. It moved up from an unexported helper when
+// wikigen — the model-driven write side — became the third caller the old
+// comment was waiting for (ADR-0060 step three). internal/service and wikigen
+// both reach it from here, so the "two copies will drift" risk is gone.
+func ClipRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
+// TruncateBytes cuts s to at most max bytes on a UTF-8 rune boundary (never
+// mid-rune), so prompt budgets and the byte-length validation in
+// CreateHandoffNote stay honest for CJK content.
+//
+// This is the one definition, and it is the byte-wise twin of ClipRunes above.
+// It moved here from internal/service (handoff_capture.go) when wikilint became
+// the third package needing it (ADR-0060 step four): internal/service, wikigen
+// and wikilint all reach it from here, so the copies cannot drift.
+func TruncateBytes(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := max
+	for cut > 0 && s[cut]&0xC0 == 0x80 { // skip continuation bytes
+		cut--
+	}
+	return s[:cut]
 }

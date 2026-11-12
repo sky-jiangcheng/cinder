@@ -1,6 +1,7 @@
-package service
+package wikipage
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -68,11 +69,11 @@ type WikiPageDetail struct {
 // An empty query is not involved: the browse feed has no query, so it uses the
 // dedicated list query rather than the search path (which treats an empty
 // query as "no results" — see db.SearchWikiPages).
-func (s *Service) BrowseWikiPages(projectID int64, limit int) ([]WikiPageSummary, error) {
+func BrowseWikiPages(database *sql.DB, projectID int64, limit int) ([]WikiPageSummary, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	pages, err := db.ListVisibleApprovedPages(s.db, projectID, limit)
+	pages, err := db.ListVisibleApprovedPages(database, projectID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -88,11 +89,11 @@ func (s *Service) BrowseWikiPages(projectID int64, limit int) ([]WikiPageSummary
 // It is the same retrieval the evidence path uses (approved-only, bm25, CJK
 // relaxation) with the same project scope, so "what the answer cited" and
 // "what the reader found" cannot disagree about which pages exist.
-func (s *Service) SearchWikiPages(projectID int64, query string, limit int) ([]WikiPageSummary, error) {
+func SearchWikiPages(database *sql.DB, projectID int64, query string, limit int) ([]WikiPageSummary, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	pages, err := db.SearchWikiPages(s.db, query, projectID, limit)
+	pages, err := db.SearchWikiPages(database, query, projectID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -109,23 +110,23 @@ func (s *Service) SearchWikiPages(projectID int64, query string, limit int) ([]W
 // It refuses a page that is not approved: the approval gate decides what may
 // be READ as much as what may be cited, and a detail endpoint that served a
 // pending page would turn the browse surface into a second review surface.
-func (s *Service) GetWikiPage(pageID int64) (*WikiPageDetail, error) {
-	p, err := db.GetWikiPageByID(s.db, pageID)
+func GetWikiPage(database *sql.DB, pageID int64) (*WikiPageDetail, error) {
+	p, err := db.GetWikiPageByID(database, pageID)
 	if err != nil {
 		return nil, fmt.Errorf("page %d not found: %w", pageID, err)
 	}
 	if p.Status != db.WikiStatusApproved {
 		return nil, fmt.Errorf("page %d is %q: only approved pages are readable here", pageID, p.Status)
 	}
-	out, err := db.WikiEdgesFrom(s.db, pageID)
+	out, err := db.WikiEdgesFrom(database, pageID)
 	if err != nil {
 		return nil, err
 	}
-	in, err := db.WikiEdgesTo(s.db, pageID)
+	in, err := db.WikiEdgesTo(database, pageID)
 	if err != nil {
 		return nil, err
 	}
-	notes, err := db.NotesForPage(s.db, pageID)
+	notes, err := db.NotesForPage(database, pageID)
 	if err != nil {
 		return nil, err
 	}

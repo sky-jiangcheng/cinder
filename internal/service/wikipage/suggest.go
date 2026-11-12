@@ -1,6 +1,7 @@
-package service
+package wikipage
 
 import (
+	"database/sql"
 	"strings"
 
 	"repotory/internal/db"
@@ -20,19 +21,19 @@ type WikiLinkSuggestion struct {
 // or slugs, returning candidate concepts that could be turned into [[wikilinks]].
 // It excludes concepts that are already linked in the content (e.g. [[slug]] or [[slug|title]]).
 // Only concepts with titles >= minLen runes are suggested to avoid noise.
-func (s *Service) SuggestWikiLinks(projectID int64, content string) []WikiLinkSuggestion {
+func SuggestWikiLinks(database *sql.DB, projectID int64, content string) []WikiLinkSuggestion {
 	if strings.TrimSpace(content) == "" {
 		return nil
 	}
 
-	pages, err := db.ListWikiPagesByStatus(s.db, db.WikiStatusApproved, projectID)
+	pages, err := db.ListWikiPagesByStatus(database, db.WikiStatusApproved, projectID)
 	if err != nil || len(pages) == 0 {
 		return nil
 	}
 
 	// 1. Gather already linked tokens to avoid redundant suggestions
 	alreadyLinked := make(map[string]bool)
-	for _, m := range wikiLinkRe.FindAllStringSubmatch(content, -1) {
+	for _, m := range WikiLinkRe.FindAllStringSubmatch(content, -1) {
 		token := strings.TrimSpace(m[1])
 		if token != "" {
 			alreadyLinked[strings.ToLower(token)] = true

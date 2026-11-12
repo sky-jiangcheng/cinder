@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"repotory/internal/db"
+	"repotory/internal/service/wikigen"
 )
 
 // ConfigData holds the application configuration sent to the frontend.
@@ -192,10 +193,11 @@ func (s *Service) GetConfig() (*ConfigData, error) {
 
 // wikiLintLLMEnabled is the explicit opt-in for the model-backed lint checks.
 // Anything other than "1" skips them, and the report says why rather than looking
-// like a clean run.
+// like a clean run. The key's one reader now lives in wikigen with the model
+// halves (ADR-0060 step three); this wrapper keeps the lint pass and the lint
+// job submit path calling the predicate they always called.
 func (s *Service) wikiLintLLMEnabled() bool {
-	v, err := db.GetConfig(s.db, wikiLintLLMKey)
-	return err == nil && v == "1"
+	return wikigen.LintLLMEnabled(s.db)
 }
 
 // autoImportEnabled reports whether startup may read other tools' memory files

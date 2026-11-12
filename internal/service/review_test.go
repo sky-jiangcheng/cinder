@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"repotory/internal/db"
+	"repotory/internal/service/reviewrun"
 )
 
 // The review pipeline is tested end-to-end against a real throwaway git repo
@@ -251,7 +252,7 @@ func TestRunReviewCountsSkippedFiles(t *testing.T) {
 	svc, _ := setupService(t)
 	dir := reviewRepo(t)
 	collectedProject(t, svc, dir)
-	if err := db.SetConfig(svc.db, reviewMaxDiffKey, "1"); err != nil {
+	if err := db.SetConfig(svc.db, reviewrun.KeyMaxDiff, "1"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -285,40 +286,6 @@ func TestRunReviewNoAICallsWithoutModel(t *testing.T) {
 	}
 }
 
-func TestReviewReposBadScope(t *testing.T) {
-	svc, _ := setupService(t)
-	if _, err := svc.reviewRepos("project:abc"); err == nil {
-		t.Fatal("expected an error for a non-numeric project id")
-	}
-	if _, err := svc.reviewRepos("everything"); err == nil {
-		t.Fatal("expected an error for an unknown scope")
-	}
-}
-
-func TestReviewRuleSetHonoursOptIn(t *testing.T) {
-	svc, _ := setupService(t)
-	has := func(id string) bool {
-		for _, r := range svc.reviewRuleSet() {
-			if r.ID() == id {
-				return true
-			}
-		}
-		return false
-	}
-	if has("sensitive_log") {
-		t.Error("sensitive_log must be off by default")
-	}
-	if !has("feign_missing_body") {
-		t.Error("feign_missing_body must be on by default")
-	}
-	if err := db.SetConfig(svc.db, reviewOptInRuleKey+"sensitive_log", "1"); err != nil {
-		t.Fatal(err)
-	}
-	if !has("sensitive_log") {
-		t.Error("sensitive_log should turn on when review.rule.sensitive_log=1")
-	}
-}
-
 // TestReviewResultJSONUsesSnakeCase pins the wire shape the frontend reads.
 //
 // ReviewResult crosses the Wails binding and the RPC bridge directly, so its
@@ -344,35 +311,6 @@ func TestReviewResultJSONUsesSnakeCase(t *testing.T) {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("Go field name %s leaked into the wire shape: %s", unwanted, got)
 		}
-	}
-}
-
-// Every rule switch is real: turning one off removes it, and a fresh install
-// that never wrote any switch still runs all nine non-opt-in rules.
-func TestReviewRuleSetHonoursAllRuleSwitches(t *testing.T) {
-	svc, _ := setupService(t)
-	has := func(id string) bool {
-		for _, r := range svc.reviewRuleSet() {
-			if r.ID() == id {
-				return true
-			}
-		}
-		return false
-	}
-	if rules := svc.reviewRuleSet(); len(rules) != 9 {
-		t.Fatalf("default config must keep 9 non-opt-in rules, got %d", len(rules))
-	}
-	if has("sensitive_log") {
-		t.Fatal("sensitive_log is opt-in and must stay off by default")
-	}
-	if err := db.SetConfig(svc.db, reviewOptInRuleKey+"feign_missing_body", "0"); err != nil {
-		t.Fatal(err)
-	}
-	if has("feign_missing_body") {
-		t.Fatal("turning feign_missing_body off must remove it from the rule set")
-	}
-	if rules := svc.reviewRuleSet(); len(rules) != 8 {
-		t.Fatalf("only the switched-off rule should disappear, got %d", len(rules))
 	}
 }
 

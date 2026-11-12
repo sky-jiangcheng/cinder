@@ -357,7 +357,10 @@ func (s *Service) toolSearchNotes(ctx context.Context, args map[string]any) (any
 	if v, ok := args["project_id"].(float64); ok {
 		projectID = int64(v)
 	}
-	hits := s.SearchAll(query)
+	hits, err := s.SearchAll(query)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(hits))
 	for _, h := range hits {
 		if projectID > 0 && h.ProjectID != projectID {

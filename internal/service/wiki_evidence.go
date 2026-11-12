@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"repotory/internal/db"
+	"repotory/internal/service/wikipage"
 )
 
 // Evidence gathering for AI Q&A (ADR-0014 决策 3 / TODO M6-W2).
@@ -85,7 +86,7 @@ const (
 	// past the first entry is not a list.
 	handoffEvidenceLimit = 3
 	// handoffEvidenceRunes is the depth ceiling for the latest handoff. It is
-	// deliberately far below contextHandoffFullLen (4000, the MCP context
+	// deliberately far below contextHandoffFullLen (the MCP context
 	// path): the whole evidence budget is 4000 characters, so a single item
 	// allowed 4000 would leave nothing for the other eleven.
 	handoffEvidenceRunes = 1200
@@ -506,7 +507,11 @@ func (s *Service) evidenceNotes(query string, projectID int64, limit int, start 
 	if time.Since(start) > budget {
 		return nil // the deadline covers the embedding round trip, not just SQL
 	}
-	hits := s.SearchNotes(query)
+	hits, err := s.SearchNotes(query)
+	if err != nil {
+		log.Printf("evidenceNotes: %v", err)
+		return nil
+	}
 	if len(hits) == 0 {
 		return nil
 	}
@@ -585,8 +590,10 @@ func (s *Service) FileAnswerAsPage(projectID int64, question, answer string, ev 
 
 	// Clipped at the same bound the note writers enforce: a long answer filed as a
 	// page must not become the oversized note this layer already refuses.
-	page, err := db.CreateWikiPage(s.db, db.WikiKindQuery, slug, title, projectID,
-		clipRunes(body, db.MaxNoteContentLen))
+	// Model answers land ONLY as pending pages for human review (ADR-0015),
+	// with source "ai" so they are distinguishable from hand-written pages.
+	page, err := db.CreateWikiPageAs(s.db, db.WikiKindQuery, slug, title, projectID,
+		clipRunes(body, db.MaxNoteContentLen), db.WikiStatusPending, "ai")
 	if err != nil {
 		// A repeated question is a re-run, not a failure: update in place so filing
 		// twice does not error and does not spawn a "-2" page.
@@ -875,12 +882,12 @@ func minInt(a, b int) int {
 	return b
 }
 
+// clipRunes is the service-side alias for the one definition, now owned by
+// wikipage (ADR-0060 step three's third caller was wikigen, which triggered the
+// extraction the old comment promised). Kept as a wrapper so the ~18 existing
+// call sites in this package read unchanged.
 func clipRunes(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max]) + "…"
+	return wikipage.ClipRunes(s, max)
 }
 
 func parseInt(s string) (int64, error) {

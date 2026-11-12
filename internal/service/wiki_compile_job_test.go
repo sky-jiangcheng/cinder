@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"repotory/internal/db"
+	"repotory/internal/service/wikigen"
 )
 
 // slowChatStub answers like a local LLM: correctly, but slowly. The whole point of
@@ -261,7 +262,9 @@ func TestCompileNoteTargets_SharesSelectionWithSyncPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := compileNoteTargets(notes, 2)
+	// The selector is now the kernel's (wikigen.CompileNoteTargets); this test
+	// pins that the job path takes the head — the newest note — not the tail.
+	got := wikigen.CompileNoteTargets(notes, 2)
 	if len(got) != 2 {
 		t.Fatalf("targets = %d, want 2", len(got))
 	}

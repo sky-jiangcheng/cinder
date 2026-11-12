@@ -11,6 +11,7 @@ import (
 
 	"repotory/internal/db"
 	"repotory/internal/review"
+	"repotory/internal/service/reviewrun"
 )
 
 // countingHandler answers every chat request with reply and counts them. The
@@ -30,7 +31,7 @@ func TestRefineSendsNothingWithoutCandidates(t *testing.T) {
 	var calls int32
 	svc := newAuditTestService(t, countingHandler(&calls, `{"verdicts":[]}`))
 
-	got, n, _ := svc.refineWithCandidates(context.Background(), "a/Foo.java", "class Foo {}", nil)
+	got, n, _ := reviewrun.Refine(context.Background(), reviewRefiner{s: svc}, "a/Foo.java", "class Foo {}", nil)
 	if len(got) != 0 || n != 0 {
 		t.Fatalf("no candidates should mean no call: findings=%v calls=%d", got, n)
 	}
@@ -53,7 +54,7 @@ func TestRefineAppliesVerdicts(t *testing.T) {
 		{Rule: "feign_missing_body", Severity: review.SeverityMedium, Verdict: review.VerdictUnverified,
 			Line: 12, Evidence: "> Result<X> z(Req r);", Message: "no binder annotation"},
 	}
-	got, n, _ := svc.refineWithCandidates(context.Background(), "a/PayClient.java", "class X {}", in)
+	got, n, _ := reviewrun.Refine(context.Background(), reviewRefiner{s: svc}, "a/PayClient.java", "class X {}", in)
 	if n != 1 || calls != 1 {
 		t.Fatalf("want exactly one call, got %d (requests %d)", n, calls)
 	}
@@ -82,7 +83,7 @@ func TestRefineIgnoresUnknownIndex(t *testing.T) {
 		`{"verdicts":[{"index":7,"verdict":"confirmed","reason":"made up"},{"index":-1,"verdict":"confirmed"}]}`))
 
 	in := []review.Finding{{Rule: "r", Severity: review.SeverityHigh, Verdict: review.VerdictUnverified, Line: 1}}
-	got, _, _ := svc.refineWithCandidates(context.Background(), "a/B.java", "class B {}", in)
+	got, _, _ := reviewrun.Refine(context.Background(), reviewRefiner{s: svc}, "a/B.java", "class B {}", in)
 	if got[0].Verdict != review.VerdictUnverified {
 		t.Fatalf("an out-of-range index must not change anything: %+v", got[0])
 	}
@@ -92,7 +93,7 @@ func TestRefineSurvivesBadReply(t *testing.T) {
 	var calls int32
 	svc := newAuditTestService(t, countingHandler(&calls, "I think this is fine, no JSON here"))
 	in := []review.Finding{{Rule: "r", Severity: review.SeverityHigh, Verdict: review.VerdictUnverified, Line: 1}}
-	got, n, _ := svc.refineWithCandidates(context.Background(), "a/B.java", "class B {}", in)
+	got, n, _ := reviewrun.Refine(context.Background(), reviewRefiner{s: svc}, "a/B.java", "class B {}", in)
 	if n != 1 {
 		t.Errorf("the call still cost money, so it must be counted: %d", n)
 	}
@@ -110,7 +111,7 @@ func TestRefineCountsOnlySuccessfulCalls(t *testing.T) {
 		http.Error(w, "upstream down", http.StatusInternalServerError)
 	})
 	in := []review.Finding{{Rule: "r", Severity: review.SeverityHigh, Verdict: review.VerdictUnverified, Line: 1}}
-	got, n, failed := svc.refineWithCandidates(context.Background(), "a/B.java", "class B {}", in)
+	got, n, failed := reviewrun.Refine(context.Background(), reviewRefiner{s: svc}, "a/B.java", "class B {}", in)
 	if n != 0 {
 		t.Errorf("a failed call must not count as ai_calls, got %d", n)
 	}
@@ -133,8 +134,8 @@ func TestParseReviewVerdictsShapes(t *testing.T) {
 		`not json`:                                                               0,
 	}
 	for reply, want := range cases {
-		if got := parseReviewVerdicts(reply); len(got) != want {
-			t.Errorf("parseReviewVerdicts(%q) = %d verdicts, want %d", reply, len(got), want)
+		if got := reviewrun.ParseVerdicts(reply); len(got) != want {
+			t.Errorf("ParseVerdicts(%q) = %d verdicts, want %d", reply, len(got), want)
 		}
 	}
 }
@@ -170,7 +171,7 @@ func TestRunReviewUsesModelWhenEnabled(t *testing.T) {
 	}
 
 	// NoAI must beat the config: the same day, forced, with zero calls.
-	if err := db.SetConfig(svc.db, reviewAIKey, "0"); err != nil {
+	if err := db.SetConfig(svc.db, reviewrun.KeyAI, "0"); err != nil {
 		t.Fatal(err)
 	}
 	forced, err := svc.RunReview(context.Background(), ReviewOptions{
@@ -217,10 +218,10 @@ func TestRunReviewRecordsModelFailures(t *testing.T) {
 
 // Cross-repository evidence is pasted into the prompt from Finding.Evidence.
 func TestReviewSystemPromptUsesCrossRepoEvidence(t *testing.T) {
-	if strings.Contains(reviewSystemPrompt, "in THIS file") {
+	if strings.Contains(reviewrun.SystemPrompt, "in THIS file") {
 		t.Error("prompt must not limit the judgement to a single file")
 	}
-	if !strings.Contains(reviewSystemPrompt, "other repositories") {
+	if !strings.Contains(reviewrun.SystemPrompt, "other repositories") {
 		t.Error("prompt should mention evidence from other repositories")
 	}
 }
