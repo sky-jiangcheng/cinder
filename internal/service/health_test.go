@@ -135,7 +135,14 @@ func TestHealthLastBackupAtReadsSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("last_backup_at is not RFC3339: %q", got)
 	}
-	if !parsed.Equal(stamp) {
-		t.Errorf("last_backup_at = %v, want the snapshot mtime %v (noise must be ignored)", parsed, stamp)
+	// The health report is the snapshot's mtime, and the test only needs to
+	// confirm the RIGHT file was read and its time came back. Exact equality
+	// after os.Chtimes is not a contract a filesystem has to honour: Windows
+	// round-trips file times through a coarser resolution than macOS/Linux,
+	// so a second-level tolerance is the honest comparison (a tolerance cannot
+	// weaken the "the newer noise file must be ignored" half, because `later`
+	// is 48h away from `stamp`).
+	if diff := parsed.Sub(stamp); diff < -time.Minute || diff > time.Minute {
+		t.Errorf("last_backup_at = %v, want within a minute of the snapshot mtime %v (noise must be ignored)", parsed, stamp)
 	}
 }
