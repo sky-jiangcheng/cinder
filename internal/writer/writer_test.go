@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -283,13 +284,17 @@ func TestEndpointRoundTrip(t *testing.T) {
 	}
 
 	// 0600: the token is the channel's only access control, so the group /
-	// other bits must be empty regardless of umask.
+	// other bits must be empty regardless of umask. Windows does not enforce
+	// POSIX mode bits, so the assertion only applies where they are meaningful
+	// (the same guard backup_test.go and backup_copy_test.go use).
 	fi, err := os.Stat(EndpointPath(dir))
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if perm := fi.Mode().Perm(); perm != 0600 {
-		t.Fatalf("endpoint file mode = %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		if perm := fi.Mode().Perm(); perm != 0600 {
+			t.Fatalf("endpoint file mode = %o, want 600", perm)
+		}
 	}
 
 	// Unpublish only removes THIS writer's publication.

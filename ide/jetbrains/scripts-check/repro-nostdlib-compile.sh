@@ -45,7 +45,7 @@ cat > "$WORK/out/META-INF/plugin.xml" <<'XML'
 <idea-plugin>
     <id>dev.repotory.jetbrains</id>
     <name>Cinder Memory</name>
-    <vendor>Repotory</vendor>
+    <vendor>Cinder</vendor>
     <description><![CDATA[repro: kotlin plugin with NO stdlib on its classpath]]></description>
     <depends>com.intellij.modules.platform</depends>
 </idea-plugin>
