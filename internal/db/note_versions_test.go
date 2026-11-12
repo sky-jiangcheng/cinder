@@ -74,20 +74,37 @@ func TestNoteVersionsSnap_IgnoresStructuralUpdates(t *testing.T) {
 }
 
 // The narrowed trigger must survive a fresh init (v8 creates the old trigger,
-// v11 replaces it) — assert the final SQL carries the WHEN clause.
+// v11 narrows it, v31 replaces it with a writer that stores the PRE-update
+// state) — assert the final SQL carries both properties.
 func TestNoteVersionsSnap_TriggerHasWhenClause(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
 	var sql string
-	err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'note_versions_snap'").Scan(&sql)
+	err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'note_versions_snap_upd'").Scan(&sql)
 	if err != nil {
-		t.Fatalf("trigger not found: %v", err)
+		t.Fatalf("note_versions_snap_upd trigger not found: %v", err)
 	}
 	if !strings.Contains(sql, "WHEN") {
 		t.Errorf("trigger should carry a WHEN clause, got:\n%s", sql)
 	}
 	if !strings.Contains(sql, "new.content IS NOT old.content") {
 		t.Errorf("trigger should compare content, got:\n%s", sql)
+	}
+	// v31 flipped the snapshot from "the state after the edit" to "the state
+	// before it". A trigger that still inserts new.* silently makes every
+	// version list a duplicate of the current note.
+	if !strings.Contains(sql, "old.id") || strings.Contains(sql, "new.id") {
+		t.Errorf("trigger must snapshot old.*, got:\n%s", sql)
+	}
+
+	// The v8/v11 trigger wrote new.*; leaving it in place would double every
+	// edit (once with the state before, once with the state after).
+	var legacy int
+	if err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'note_versions_snap'").Scan(&legacy); err != nil {
+		t.Fatalf("count legacy trigger: %v", err)
+	}
+	if legacy != 0 {
+		t.Errorf("the v11 trigger must be dropped by v31, found %d", legacy)
 	}
 }

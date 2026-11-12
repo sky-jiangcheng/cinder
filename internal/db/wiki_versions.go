@@ -12,8 +12,9 @@ import (
 // Page version snapshots (ADR-0021, schema v22).
 //
 // The page layer had the asymmetry that notes do not: `project_notes` carries
-// `note_versions` (migration v8/v11) so "what did this note say when I saved it"
-// is answerable, while `wiki_pages.content` is overwritten in place — so once a
+// `note_versions` (migration v8/v11, storing the pre-edit state since v31) so
+// "what did this note say before I saved" is answerable, while
+// `wiki_pages.content` is overwritten in place — so once a
 // page is edited or superseded there is no way to see what a human actually
 // approved. For hand-written notes that is a mild loss; for content a model
 // drafted and a person waved through, "the approved version is reproducible" is
@@ -106,11 +107,16 @@ var pageVersionSchemaStatements = []string{
 	// human is signing off on) or when an already-approved page's content, title or
 	// kind CHANGES (freeze the outgoing state before it is gone).
 	//
-	// It stores the NEW row, matching note_versions (v8/v11) for the same reason:
-	// every state the page ever held in the approved set gets exactly one snapshot,
-	// and "version vs current" (DiffPageVersion) then degrades to empty for the
-	// newest entry, which is truthful. Comparing against the previous row instead
-	// would leave the current content with no snapshot at all.
+	// It stores the NEW row. note_versions used to do the same and no longer does
+	// (schema v31 flips it to old.*, ADR-0057 D3), so the two tables now answer
+	// different questions and that divergence is intentional: a page snapshot is
+	// the record of what a HUMAN APPROVED ("what did I sign off on"), which only
+	// exists after the write; a note snapshot is the history of what was there
+	// before, because notes have no approval gate and the pre-edit state is the
+	// thing that would otherwise be lost. Keeping new.* here also means the newest
+	// entry's `DiffPageVersion` against the live page degrades to empty, which is
+	// truthful; comparing with the previous row would leave the current content
+	// with no snapshot at all.
 	//
 	// status/rejected transitions deliberately do NOT fire: turning an approved page
 	// into a merge tombstone (ADR-0019 决策 5) changes new.status away from

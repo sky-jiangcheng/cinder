@@ -471,6 +471,14 @@ func upgradeSchema(db *sql.DB) error {
 		// v30: incremental commit review (ADR-0053). Two tables, no
 		// backfill: a review report is generated, never migrated.
 		{id: 30, fn: EnsureReviewSchema},
+		// v31: the note write contract (ADR-0057) — an idempotency key, an
+		// optimistic-lock version, and version history that stores the state a
+		// note had BEFORE it was changed.
+		//
+		// Three independent defects, one migration: splitting them would mean
+		// three full table rewrites and three chances to leave a database
+		// half-migrated.
+		{id: 31, fn: EnsureNoteWriteContract},
 	}
 
 	for _, m := range migrations {
@@ -485,9 +493,13 @@ func upgradeSchema(db *sql.DB) error {
 				return fmt.Errorf("schema migration %d failed: %w", m.id, err)
 			}
 			logMigrationError(m.id, err)
-		}
-		if err := writeSchemaVersion(db, m.id); err != nil {
-			return fmt.Errorf("failed to stamp schema version %d: %w", m.id, err)
+			// apply() rolls its batch back before returning, so its own stamp
+			// never landed. An "already exists" error means an earlier run got
+			// the schema through, so the version still has to be recorded here
+			// — otherwise the next open re-runs the same migration forever.
+			if err := writeSchemaVersion(db, m.id); err != nil {
+				return fmt.Errorf("failed to stamp schema version %d: %w", m.id, err)
+			}
 		}
 	}
 	return nil
@@ -502,11 +514,37 @@ type migration struct {
 	fn  func(db *sql.DB) error
 }
 
+// apply runs the migration and records the version stamp as part of the same
+// transaction as its last DDL statement, so "schema changed" and "stamped as
+// applied" are one commit. They used to be two: the stamp was written after
+// apply() returned, which left a window in which a kill -9 or a full disk
+// produced a database whose schema was v31 but whose stamp still said v30 — the
+// next start then re-ran the migration against an already-migrated database and
+// only survived because every Ensure*/ALTER happens to be idempotent. Moving
+// the stamp inside removes the window instead of relying on that property.
+//
+// fn migrations are the documented exception: they open their own transactions
+// (they carry data rewrites, not just DDL), so their stamp is still written
+// after the fact. Every fn migration is idempotent by contract — re-running it
+// after a crash is a no-op — which is what covers the remaining window.
 func (m migration) apply(db *sql.DB) error {
 	if m.fn != nil {
-		return m.fn(db)
+		if err := m.fn(db); err != nil {
+			return err
+		}
+		return writeSchemaVersion(db, m.id)
 	}
 	stmts := stmtList(m.sql)
+	// Which statement closes the batch that has to carry the stamp. A trailing
+	// PRAGMA (v4 ends with `PRAGMA foreign_keys = ON`) commits the open
+	// transaction before it runs, so "the last statement" is not necessarily
+	// "the last statement inside the transaction" — find the last one that is.
+	lastDDL := -1
+	for i, s := range stmts {
+		if !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(s)), "PRAGMA") {
+			lastDDL = i
+		}
+	}
 	// Non-PRAGMA statements of one migration run inside a single transaction,
 	// so a multi-step migration cannot leave the schema half-applied if the
 	// process dies between statements — v4 drops and renames the projects
@@ -525,7 +563,11 @@ func (m migration) apply(db *sql.DB) error {
 		tx = nil
 		return err
 	}
-	for _, s := range stmts {
+	// stamped records whether the version was written inside the batch, which
+	// is the normal path; the fallbacks below cover a migration with no DDL at
+	// all and the "last statement was already applied" rollback.
+	stamped := false
+	for i, s := range stmts {
 		upper := strings.ToUpper(strings.TrimSpace(s))
 		if strings.HasPrefix(upper, "PRAGMA") {
 			if err := commit(); err != nil {
@@ -555,6 +597,25 @@ func (m migration) apply(db *sql.DB) error {
 			}
 			return err
 		}
+		if i == lastDDL {
+			// Same transaction, same commit: the schema change and the claim
+			// that it is at version m.id become visible together.
+			if _, err := tx.Exec(
+				"INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)",
+				migrationVersionKey, strconv.Itoa(m.id),
+			); err != nil {
+				_ = tx.Rollback()
+				tx = nil
+				return err
+			}
+			stamped = true
+		}
+	}
+	if !stamped {
+		if err := commit(); err != nil {
+			return err
+		}
+		return writeSchemaVersion(db, m.id)
 	}
 	return commit()
 }
@@ -730,6 +791,80 @@ func insertDefaults(db *sql.DB) error {
 		)
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// EnsureNoteWriteContract is migration v31 (ADR-0057). It gives the note write
+// path the three properties it could not express before, in one pass because
+// each one is a full table rewrite on its own:
+//
+//  1. idempotency_key + a PARTIAL unique index on (project_id, idempotency_key).
+//     Session capture, a retried repotory_handoff and the rolling milestone
+//     checkpoint can all describe the same session; without a key they become
+//     two near-identical handoffs that BuildProjectContext shows side by side,
+//     with no way to tell which one is final. The index — not a "look first,
+//     then insert" check — is what makes that safe: two processes racing both
+//     find nothing and both insert, unless the database refuses the second.
+//     Empty keys stay out of the index, so the callers that do not need
+//     deduplication (desktop editor, MCP notes_create) are unaffected.
+//
+//  2. version for optimistic locking. UpdateNoteFull used to be
+//     `UPDATE ... WHERE id = ?`, i.e. last-write-wins, and the desktop app and
+//     cinder-mcp are two processes with two connections. WAL + busy_timeout
+//     guarantees no SQLITE_BUSY, not that one writer does not silently
+//     overwrite the other. Callers that read a note and write it back pass the
+//     version they read; a mismatch is a conflict, not a lost update.
+//
+//  3. snapshot rows that hold the state BEFORE a change (old.* instead of
+//     new.*). v8/v11 wrote new.*, so note_versions held the post-edit sequence
+//     — a duplicate of what project_notes already says, and the initial
+//     content missing until the second edit. With old.* the table is the
+//     history a row-level snapshot is supposed to be: v1..vN-1, with the
+//     current state in project_notes.
+//
+// Deviation from ADR-0057 D3, decided while implementing: only the UPDATE
+// trigger is created. D3 also asked for an AFTER INSERT trigger so the created
+// state enters history immediately. With old.* the first edit already records
+// exactly that state (old.version = 1, old.content = as created), so the extra
+// trigger would insert the same row twice and spend half of the 50-row budget
+// on duplicates. And a version-keyed dedupe ("skip if this version is already
+// recorded") would silently drop real snapshots, because a writer that goes
+// through raw SQL — a script plugin holding ctx.DB() — can change content
+// without bumping version.
+//
+// Not backfilled, deliberately: pre-v31 history rows keep version = 0 ("state
+// after an edit, version unknown") because their content is a post-change
+// state that cannot be mapped back to a version. Nor are existing duplicate
+// handoffs merged — that is the user's data, not a schema defect.
+func EnsureNoteWriteContract(db *sql.DB) error {
+	stmts := []string{
+		"ALTER TABLE project_notes ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE project_notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_project_notes_idempotency ` +
+			`ON project_notes(project_id, idempotency_key) WHERE idempotency_key <> ''`,
+		"ALTER TABLE note_versions ADD COLUMN version INTEGER NOT NULL DEFAULT 0",
+		// The v8/v11 trigger wrote new.*; drop it before creating its
+		// replacement, or every edit would snapshot twice (once with the state
+		// before, once with the state after).
+		"DROP TRIGGER IF EXISTS note_versions_snap",
+		// Same WHEN clause as v11 (the four columns note_versions stores), so
+		// pinning or moving a note still does not create a no-op version.
+		`CREATE TRIGGER IF NOT EXISTS note_versions_snap_upd AFTER UPDATE ON project_notes` +
+			` FOR EACH ROW WHEN` +
+			`  new.content IS NOT old.content` +
+			`  OR new.title IS NOT old.title` +
+			`  OR new.tags IS NOT old.tags` +
+			`  OR new.kind IS NOT old.kind` +
+			` BEGIN` +
+			`  INSERT INTO note_versions(note_id, version, title, content, tags, kind)` +
+			`  VALUES (old.id, old.version, COALESCE(old.title, ''), old.content, old.tags, old.kind);` +
+			` END`,
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s); err != nil && !isAlreadyExistsErr(err) {
+			return fmt.Errorf("note write contract: %w", err)
 		}
 	}
 	return nil

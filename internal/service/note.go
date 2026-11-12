@@ -81,6 +81,21 @@ func (s *Service) CreateNoteWithMeta(projectID int64, title, content, tags, kind
 	return note, err
 }
 
+// createNoteWithKey is CreateNoteWithMeta plus a server-generated idempotency
+// key (ADR-0057 D1). Not exported to the MCP surface on purpose: a key an
+// agent invents is not a key, so the only callers are writers whose identity
+// the server knows (handoff/capture, plugin import) and the bool reports
+// whether an existing row absorbed the write.
+func (s *Service) createNoteWithKey(projectID int64, title, content, tags, kind, source, key string) (*domain.Note, bool, error) {
+	if strings.TrimSpace(content) == "" {
+		return nil, false, fmt.Errorf("content is required")
+	}
+	if err := validateNoteBounds(title, content, tags); err != nil {
+		return nil, false, err
+	}
+	return db.CreateNoteIdempotent(s.db, projectID, title, content, tags, kind, source, key)
+}
+
 // UpdateNote updates the content of a note.
 func (s *Service) UpdateNote(noteID int64, content string) error {
 	if strings.TrimSpace(content) == "" {
@@ -95,14 +110,18 @@ func (s *Service) UpdateNote(noteID int64, content string) error {
 // UpdateNoteFull updates both content and metadata in a single transaction,
 // avoiding the version-snapshot inconsistency that occurs when content and
 // metadata are updated in separate calls.
-func (s *Service) UpdateNoteFull(noteID int64, content, title, tags, kind string, pinned bool) error {
+//
+// expectedVersion is the optimistic lock (ADR-0057 D2): 0 writes
+// unconditionally, anything else must match the stored version or the write is
+// refused with errcode.ErrVersionConflict.
+func (s *Service) UpdateNoteFull(noteID int64, content, title, tags, kind string, pinned bool, expectedVersion int) error {
 	if strings.TrimSpace(content) == "" {
 		return fmt.Errorf("content is required")
 	}
 	if err := validateNoteBounds(title, content, tags); err != nil {
 		return err
 	}
-	return db.UpdateNoteFull(s.db, noteID, content, title, tags, kind, pinned)
+	return db.UpdateNoteFull(s.db, noteID, content, title, tags, kind, pinned, expectedVersion)
 }
 
 // DeleteNote removes a note.

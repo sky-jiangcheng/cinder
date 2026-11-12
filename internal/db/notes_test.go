@@ -40,7 +40,7 @@ func TestNoteWriteBoundsAtDBLayer(t *testing.T) {
 			return UpdateNote(db, note.ID, strings.Repeat("x", MaxNoteContentLen+1))
 		}},
 		{"UpdateNoteFull oversized title", func() error {
-			return UpdateNoteFull(db, note.ID, "body", strings.Repeat("t", MaxNoteTitleLen+1), "tag", "knowledge", false)
+			return UpdateNoteFull(db, note.ID, "body", strings.Repeat("t", MaxNoteTitleLen+1), "tag", "knowledge", false, 0)
 		}},
 		{"UpdateNoteMeta oversized title", func() error {
 			return UpdateNoteMeta(db, note.ID, strings.Repeat("t", MaxNoteTitleLen+1), "tag", "knowledge", false)

@@ -123,6 +123,12 @@ type Note struct {
 	TopicID   int64  `json:"topic_id"`
 	TopicName string `json:"topic_name,omitempty"`
 	SortOrder int    `json:"sort_order"`
+	// Version is the optimistic-lock counter (schema v31, ADR-0057). It starts
+	// at 1 and every write that changes title/content/tags/kind increments it.
+	// A caller that edits a note passes back the version it read, so a second
+	// writer — the desktop app and cinder-mcp are separate processes — gets a
+	// conflict instead of silently overwriting the first one's work.
+	Version   int    `json:"version"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -149,8 +155,12 @@ type NoteTopic struct {
 
 // NoteVersion represents a historical snapshot of a note.
 type NoteVersion struct {
-	ID        int64  `json:"id"`
-	NoteID    int64  `json:"note_id"`
+	ID     int64 `json:"id"`
+	NoteID int64 `json:"note_id"`
+	// Version is the note version this row is the state of (schema v31,
+	// ADR-0057). 0 means "recorded before v31", whose rows hold post-edit
+	// content that cannot be mapped back to a version number.
+	Version   int    `json:"version"`
 	Title     string `json:"title"`
 	Content   string `json:"content"`
 	Tags      string `json:"tags"`

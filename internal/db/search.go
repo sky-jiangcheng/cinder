@@ -8,9 +8,13 @@ import (
 	"unicode/utf8"
 )
 
+// searchSnippetWindow holds one whole gotcha bullet: a single item can reach
+// 1000 bytes, so the old 100-byte window cut it in half.
+// handoffRankBoost keeps a handoff-tagged hit inside the LIMIT window.
 const (
 	searchResultLimit   = 20
-	searchSnippetWindow = 100
+	searchSnippetWindow = 1024
+	handoffRankBoost    = 10.0
 
 	// maxFTSORTerms caps the relaxed OR expression. CJK expansion turns one
 	// long run into N-2 phrases, so a pasted paragraph (600 distinct runes ->
@@ -64,8 +68,13 @@ func searchNotesFTS(db *sql.DB, q, matchExpr string) ([]SearchHit, error) {
 			"FROM project_notes_fts f "+
 			"JOIN project_notes n ON n.id = f.rowid "+
 			"WHERE project_notes_fts MATCH ? "+
-			"ORDER BY bm25(project_notes_fts), n.pinned DESC, n.updated_at DESC LIMIT ?",
-		matchExpr, searchResultLimit)
+			// A handoff-tagged hit carries the previous session's exit record;
+			// bm25 alone can rank it past the 20-row window. The tag predicate
+			// mirrors notes.go: comma-delimited exact match.
+			"ORDER BY bm25(project_notes_fts) "+
+			"- CASE WHEN ',' || REPLACE(LOWER(n.tags), ' ', '') || ',' LIKE '%,handoff,%' THEN ? ELSE 0 END, "+
+			"n.pinned DESC, n.updated_at DESC LIMIT ?",
+		matchExpr, handoffRankBoost, searchResultLimit)
 	if err != nil {
 		return nil, err
 	}

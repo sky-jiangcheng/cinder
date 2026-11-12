@@ -64,7 +64,7 @@ func TestNoteTriggersIgnoreMetadataOnlyWrites(t *testing.T) {
 	assertDirty(t, db, note.ID, false, "after move")
 
 	// Title IS part of the embedding input, so a title change must dirty.
-	if err := UpdateNoteFull(db, note.ID, "c", "renamed", "new,tags", "log", true); err != nil {
+	if err := UpdateNoteFull(db, note.ID, "c", "renamed", "new,tags", "log", true, 0); err != nil {
 		t.Fatal(err)
 	}
 	assertDirty(t, db, note.ID, true, "after a title change (title is in NoteEmbeddingText)")

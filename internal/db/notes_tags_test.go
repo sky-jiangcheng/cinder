@@ -59,7 +59,7 @@ func TestNoteTagWritePathsNormalize(t *testing.T) {
 		t.Errorf("UpdateNoteMeta stored tags %q, want %q", updated.Tags, "x, y")
 	}
 
-	if err := UpdateNoteFull(db, note.ID, "body2", "title2", "m，n", "other", true); err != nil {
+	if err := UpdateNoteFull(db, note.ID, "body2", "title2", "m，n", "other", true, 0); err != nil {
 		t.Fatalf("UpdateNoteFull: %v", err)
 	}
 	updated, err = GetNoteByID(db, note.ID)
