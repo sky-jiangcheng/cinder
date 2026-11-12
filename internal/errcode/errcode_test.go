@@ -77,3 +77,24 @@ func TestNarrowPredicates(t *testing.T) {
 		t.Error("nil must not match structural predicates")
 	}
 }
+
+// TestClassifyWriterContractSemantics pins the two ADR-0058 additions: the
+// writer-absent sentinel classifies as writer_unavailable + retryable (the
+// remedy is to wait or start the desktop), and a Remote from another process
+// keeps ITS code — re-deriving a conflict from the message text is exactly the
+// downgrade the wire envelope exists to prevent.
+func TestClassifyWriterContractSemantics(t *testing.T) {
+	code, retryable := Classify(ErrWriterUnavailable)
+	if code != WriterUnavailable || !retryable {
+		t.Fatalf("ErrWriterUnavailable = (%s, %v), want (writer_unavailable, true)", code, retryable)
+	}
+
+	remote := fmt.Errorf("forwarded: %w", &Remote{Code: Conflict, Message: "note 3: modified by another writer", Retryable: false})
+	code, retryable = Classify(remote)
+	if code != Conflict || retryable {
+		t.Fatalf("Remote(conflict) = (%s, %v), want (conflict, false)", code, retryable)
+	}
+	if Code(remote) != Conflict {
+		t.Fatalf("Code(Remote) = %s", Code(remote))
+	}
+}

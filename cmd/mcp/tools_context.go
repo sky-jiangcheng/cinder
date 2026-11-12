@@ -9,6 +9,7 @@ import (
 
 	"repotory/internal/bounds"
 	"repotory/internal/service"
+	"repotory/internal/writerapi"
 	"strings"
 )
 
@@ -22,7 +23,7 @@ const maxProjectNameLen = bounds.MaxNameLen
 // repotory_handoff records what the session accomplished (session exit).
 // Together they turn the knowledge base from something an agent has to
 // actively search into a memory layer it starts and ends every session with.
-func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
+func registerContextTools(mcpServer *server.MCPServer, svc *service.Service, w *writerapi.Manager) {
 	mcpServer.AddTool(mcp.Tool{
 		Name: "repotory_context",
 		Description: "Load a project's complete working context in one call: tech stack, README excerpt, languages, dependencies, contributors, recent commits, open todos and the most relevant knowledge notes, led by the previous session's handoff record (the latest handoff in full, older ones as a one-line timeline). " +
@@ -162,7 +163,11 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 			sections[name] = items
 		}
 
-		result, err := svc.CreateHandoffNote(service.HandoffInput{
+		// The contract decides who runs the write (ADR-0058); the handoff's
+		// idempotency key (ADR-0057 D1) makes a forwarded retry collapse onto
+		// the same note, so a re-elected re-send cannot double-append.
+		var result service.HandoffResult
+		if err := w.ExecuteInto(ctx, writerapi.MethodHandoffCreate, writerapi.HandoffCreateArgs{
 			ProjectID:     int64(projectID),
 			Agent:         agent,
 			Summary:       summary,
@@ -173,8 +178,7 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 			Tags:          tags,
 			WorkspacePath: path,
 			Milestone:     milestone,
-		})
-		if err != nil {
+		}, &result); err != nil {
 			return makeErrorResult(err), nil
 		}
 		return makeJSONResult(result)

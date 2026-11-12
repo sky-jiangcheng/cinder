@@ -20,6 +20,7 @@ import (
 	"repotory/internal/db"
 	"repotory/internal/service"
 	"repotory/internal/version"
+	"repotory/internal/writerapi"
 )
 
 // testServer bundles the pieces a test needs: a real MCPServer with every
@@ -45,14 +46,19 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 	svc := service.New(database, "tester")
+	// The write contract runs in direct mode here: an in-memory database has no
+	// data directory to elect over, and every catalogue write then executes in
+	// this process — the same Executor the writer role uses, so handlers stay
+	// on the contract code path instead of a bypass.
+	w := writerapi.Direct(svc)
 	s := server.NewMCPServer("repotory-mcp", "test")
-	registerTools(s, svc)
+	registerTools(s, svc, w)
 	registerAskTool(s, svc)
 	registerWikiTools(s, svc)
-	registerContextTools(s, svc)
-	registerScanTool(s, svc)
+	registerContextTools(s, svc, w)
+	registerScanTool(s, svc, w)
 	registerAuditTools(s, svc)
-	registerReviewTools(s, svc)
+	registerReviewTools(s, svc, w)
 	return &testServer{t: t, s: s, svc: svc, db: database}
 }
 

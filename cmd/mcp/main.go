@@ -21,6 +21,7 @@ import (
 	"repotory/internal/platform"
 	"repotory/internal/service"
 	"repotory/internal/version"
+	"repotory/internal/writerapi"
 )
 
 func main() {
@@ -29,7 +30,8 @@ func main() {
 	// failure), never to stdout, so the protocol stream stays clean.
 	platform.SetupLogging("mcp", true)
 
-	d, err := db.OpenWithRetry(platform.GetDbPath())
+	dbPath := platform.GetDbPath()
+	d, err := db.OpenWithRetry(dbPath)
 	if err != nil {
 		log.Fatalf("database error: %v", err)
 	}
@@ -37,9 +39,31 @@ func main() {
 	// This process IS the MCP surface (ADR-0030): every model call it makes
 	// is an agent call, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceMCP)
+	// The single-writer contract (ADR-0058 / TODO 13.1): at most one Cinder
+	// process writes the shared database. This process either holds that role
+	// itself — which is what keeps the README's "no desktop app required"
+	// install working — or forwards every catalogue write to the process that
+	// does. Tool handlers never call svc's write methods directly.
+	writers, err := writerapi.New(svc, writerapi.Options{
+		DBPath:           dbPath,
+		Process:          "cinder-mcp",
+		Surface:          service.AISurfaceMCP,
+		CoreVersion:      version.CoreVersion,
+		SchemaVersion:    writerapi.CurrentSchemaVersion(d),
+		SelfElectAllowed: true,
+	})
+	if err != nil {
+		log.Fatalf("write contract: %v", err)
+	}
+	// An audit INSERT is a write too: routed through the same contract, or a
+	// non-writer process would either contend with the writer's lock or drop
+	// the row silently — losing exactly the agent calls the trail exists for.
+	svc.SetAuditForwarder(writers.RecordAudit)
 	// Drain any tool-triggered background work before closing the shared DB
-	// handle, and report a close failure instead of dropping it.
+	// handle, and report a close failure instead of dropping it. The writer
+	// role goes FIRST: unpublish, then drain, then close.
 	defer func() {
+		writers.Shutdown()
 		svc.Shutdown()
 		if err := svc.Close(); err != nil {
 			log.Printf("close database: %v", err)
@@ -54,17 +78,21 @@ func main() {
 	// the 22 AddTool sites stay untouched and tools keep their behaviour.
 	mcpServer := server.NewMCPServer("repotory-mcp", version.CoreVersion,
 		server.WithToolHandlerMiddleware(instrumentTools))
-	registerTools(mcpServer, svc)
+	registerTools(mcpServer, svc, writers)
 	registerAskTool(mcpServer, svc)
 	registerWikiTools(mcpServer, svc)
-	registerContextTools(mcpServer, svc)
-	registerScanTool(mcpServer, svc)
+	registerContextTools(mcpServer, svc, writers)
+	registerScanTool(mcpServer, svc, writers)
 	registerAuditTools(mcpServer, svc)
-	registerReviewTools(mcpServer, svc)
+	registerReviewTools(mcpServer, svc, writers)
 
 	// Seed the default scan roots so a headless (MCP-only) install can discover
 	// repositories via repotory_scan without ever opening the desktop app.
-	svc.EnsureDefaultScanRoots()
+	// Only the writer seeds: for a client this would be a direct write past the
+	// contract, and the scan catalogue entry seeds on the writer anyway.
+	if writers.IsWriter() {
+		svc.EnsureDefaultScanRoots()
+	}
 
 	// Register the knowledge sources so the agent-facing source registry is
 	// usable. Deliberately NOT Startup(): this stdio process usually runs at the
@@ -156,8 +184,8 @@ func notesListLimit(req mcp.CallToolRequest) int {
 // tests can build a real server over a fixture service and invoke handlers
 // through the same path a client does, instead of reaching for unexported
 // handlers.
-func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
-	registerChatTool(mcpServer, svc)
+func registerTools(mcpServer *server.MCPServer, svc *service.Service, w *writerapi.Manager) {
+	registerChatTool(mcpServer, svc, w)
 	registerMetricsTool(mcpServer, svc)
 
 	mcpServer.AddTool(mcp.Tool{
@@ -328,8 +356,15 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		}
 		tags, _ := args["tags"].(string)
 
-		note, err := svc.CreateNoteWithMeta(int64(projectID), title, content, tags, category, "mcp")
-		if err != nil {
+		// The write goes through the contract (ADR-0058): executed here if this
+		// process holds the writer role, forwarded to the one that does if not.
+		// Which is the same code the writer runs either way, so the two modes
+		// cannot drift.
+		var note domain.Note
+		if err := w.ExecuteInto(ctx, writerapi.MethodNotesCreate, writerapi.NotesCreateArgs{
+			ProjectID: int64(projectID), Title: title, Content: content,
+			Tags: tags, Kind: category, Source: "mcp",
+		}, &note); err != nil {
 			return makeErrorResult(err), nil
 		}
 		return makeJSONResult(note)
@@ -451,12 +486,13 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		// agent has no editor buffer whose staleness would matter — it just
 		// wrote what it read a moment ago. 0 = "no check"; the human-facing
 		// conflict story is the desktop editor's, which does pass a version.
-		if err := svc.UpdateNoteFull(note.ID, mergedContent, mergedTitle, mergedTags, mergedKind, mergedPinned, 0); err != nil {
+		var updated domain.Note
+		if err := w.ExecuteInto(ctx, writerapi.MethodNotesUpdate, writerapi.NotesUpdateArgs{
+			NoteID: note.ID, Content: mergedContent, Title: mergedTitle,
+			Tags: mergedTags, Kind: mergedKind, Pinned: mergedPinned,
+			ExpectedVersion: 0, // ADR-0057: the agent surface keeps last-write-wins
+		}, &updated); err != nil {
 			return makeErrorResult(err), nil
-		}
-		updated, err := svc.GetNote(note.ID)
-		if err != nil {
-			return notFoundOrError(err, "note"), nil
 		}
 		return makeJSONResult(updated)
 	})

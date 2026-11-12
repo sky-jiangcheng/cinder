@@ -116,7 +116,7 @@ go build -o cinder-server ./cmd/server
 
 ## MCP Server（`cinder-mcp`）
 
-MCP 是唯一的 AI 执行接口（`cinder` 无 CLI 子命令）。stdio 协议，进程内单次开库，22 个工具（含 5 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 共享会话写入）：
+MCP 是唯一的 AI 执行接口（`cinder` 无 CLI 子命令）。stdio 协议，进程内单次开库，22 个工具（含 6 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 每日复盘 + 共享会话写入）：
 
 会话记忆协议的两端在时序上是这样落位的：
 
@@ -136,6 +136,16 @@ sequenceDiagram
 ```
 
 读图：整个协议只有**两个入口调用**——开会话 `repotory_context`、收会话 `repotory_handoff`，中间的工作期走的是普通读写工具。两条关键保证：交接笔记**写入一次即带 `handoff` 标签**，且 `repotory_notes_update` 拒绝覆盖它（所以下一个会话读到的始终是同一条记录，置顶渲染）；落库走的是统一模板，不是自由文本。
+
+### 谁执行这次写：跨进程单写者契约（ADR-0058）
+
+桌面端、`cinder-mcp` 与 SessionEnd 钩子可以同时打开同一个 `repotory.db`。**同一时刻只有一个 Cinder 进程写库**：谁持有数据目录里的 `repotory.writer.lock`（OS 文件锁，进程被杀即释放）谁是写者，其余进程的写操作经本机回环 HTTP 转给写者执行。对 agent 的可见差别只有三条，都不改工具签名：
+
+- **长写不再炸出 `database is locked`**：备份、批量编译这类长事务占锁时，你的写排在写者的队列里等它，而不是 5 秒后失败。
+- **「无需桌面」仍然是真的**：机器上没有别的 Cinder 在跑时，`cinder-mcp` 自己当选写者；桌面一启动就收回写权（有界请求，agent 正忙则桌面暂时继续转发）。
+- **新增一个错误码 `writer_unavailable`（retryable）**：写者消失且无法接管时返回，message 会说明补救动作（启动 Cinder Desktop，或直接重试——另一个存活的 Cinder 会接管）。它可能出现在任何写工具上；`conflict` 等既有码语义不变、跨进程不降级。
+
+**写失败会不会已经生效？** 契约区分两种情形：请求从未送达（写者端口已死）时客户端会透明地重试一次并可能就地接管；请求发出后连接中断则**绝不自动重放**——把歧义报回给你。带幂等键的 `repotory_handoff`（ADR-0057）重发安全；`repotory_notes_update` 重发前请先 `repotory_notes_read` 看一眼。
 
 **完全离线的本地模型**（ollama / LM Studio）接的是同一套 MCP，接线步骤与真机验证记录见[本地 Agent 配方](local-agent-recipe.md)。
 

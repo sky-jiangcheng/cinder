@@ -8,6 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"repotory/internal/service"
+	"repotory/internal/writerapi"
 )
 
 // Incremental commit review (ADR-0053) as two tools: one reads the last
@@ -20,7 +21,7 @@ import (
 // user content: it reads git and the model, and stores a report. That is why
 // it is a tool at all rather than a desktop-only button — an agent that has
 // just finished a session can trigger the review for today.
-func registerReviewTools(mcpServer *server.MCPServer, svc *service.Service) {
+func registerReviewTools(mcpServer *server.MCPServer, svc *service.Service, w *writerapi.Manager) {
 	mcpServer.AddTool(mcp.Tool{
 		Name: "repotory_review_latest",
 		Description: "Read Cinder's most recent incremental code review: which collected projects were reviewed, how many commits/files/candidates, and the findings themselves (repo, file, line, rule, severity, verdict, evidence, message, suggestion). " +
@@ -115,14 +116,18 @@ func registerReviewTools(mcpServer *server.MCPServer, svc *service.Service) {
 		if msg != "" {
 			return makeInvalidResult(msg), nil
 		}
-		result, err := svc.RunReview(ctx, service.ReviewOptions{
+		// A review run writes findings as project todos and a run row (unless
+		// dry_run), so it belongs to the writer even for a preview: one path
+		// beats "forwarded unless a flag says otherwise", which is how two
+		// surfaces start disagreeing about what the tool does.
+		var result service.ReviewResult
+		if err := w.ExecuteInto(ctx, writerapi.MethodReviewRun, writerapi.ReviewRunArgs{
 			Date:   day,
 			Scope:  argString(args["scope"]),
 			DryRun: flags["dry_run"],
 			NoAI:   flags["no_ai"],
 			Force:  flags["force"],
-		})
-		if err != nil {
+		}, &result); err != nil {
 			return makeErrorResult(err), nil
 		}
 		if result.AlreadyDone {

@@ -45,6 +45,12 @@ type Service struct {
 	// set only by tests, for the same reason as backupDir.
 	liveDbPath string
 
+	// auditForwarder, when set, receives every audit row instead of this
+	// process writing it itself. Installed by the agent entry points when
+	// another process holds the single-writer role (ADR-0058). Set once at
+	// startup like auditSurface; read without synchronisation.
+	auditForwarder func(db.AICallLog) error
+
 	// auditSurface names the surface this process serves ("mcp", "http",
 	// "desktop"), written once at startup by each entry point and read when an
 	// AI call is audited (ADR-0030). Each binary IS one surface, so it is

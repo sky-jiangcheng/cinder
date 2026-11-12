@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **跨进程单库写契约落地——写权从「谁先抢到 SQLite 锁」变成「谁持锁谁写、其余转发」（ADR-0058 / TODO 13.1，2026-11-12）**：桌面、`cinder-mcp`、SessionEnd 钩子此前可同时写同一个 `repotory.db`，唯一的仲裁是 `busy_timeout=5000`——一次备份、批量编译或向量回填只要跑得比 5 秒长，另一个进程里 agent 的工具调用就直接拿到 `database is locked`。现在：① **选举**——`<datadir>/repotory.writer.lock` 一把 OS 文件锁（flock / LockFileEx），持锁者即唯一写者；锁归 open file description，**SIGKILL 即释放**，恢复不依赖任何清理代码（真子进程自杀的测试钉住）。② **转发**——非写者的写经回环 HTTP 交给写者执行，一次性 token 落在与 repotory.db 同为 0600 的端点文件里（能读端点文件的进程本来就能读库，通道不新增可攻击面）；**写目录是十个具名方法、一方法一 args 结构体，不走反射**——RPC 桥那种「凡存在即可调」正是写契约的反面；写者与客户端共用同一个 Executor，两种模式没有第二条路径可漂。③ **落地时对 ADR 原决策的一处用户改判**：原 A 的「桌面缺席就拒绝写」会把 README 第一屏「`cinder-mcp` 无需打开桌面应用即可独立使用」当场作废（handoff / notes_create 就是这条产品的存在理由），改为**选举式**——无写者时 agent 就地接管，桌面启动时优先收回（yield 请求有界，agent 正忙则桌面退化为客户端，「同一时刻只有一个写者」这条不变）。④ **错误语义跨进程不降级**——写者对错误的分类随响应走（`errcode.Remote`），`conflict` 不会跳一次进程被重新猜成 `internal`；新增 code `writer_unavailable`（retryable，文案给出可行动路径：起桌面或等接管）。⑤ **「从未送达」与「死在请求中途」严格分开**：只有前者会触发重选举+重试，后者绝不自动重放——这是 ADR-0057 幂等键之外防非幂等写二次生效的第二道闸。⑥ **audit 行走同一条契约**（`SetAuditForwarder`），行内 `surface` 保持发起进程的值——mcp 的调用在桌面的审计面里仍写 `mcp`。⑦ SessionEnd 钩子 `repotory-capture` 接入——它此前不经任何仲裁：会话一结束就自己开库写一条交接，而它跑起来时桌面和某个 MCP 常常正持有连接。验收门的替身：`TestLongWriteQueuesInsteadOfFailingLocked` 让写者持事务**超过 `busy_timeout`** 后断言客户端排队成功；`TestNoDirectServiceWritesOutsideTheContract` 用 AST 扫 `cmd/mcp` 全部非测试文件，任何绕过目录直呼 `svc.<写方法>` 即红（负例注入验证过）；`TestConcurrentForwardedWritesAllLandOnce` 证明排队不丢写。**`CoreVersion` 不动（2.0.0）**：工具名、参数与成功线形全未变，新 code 走 2.0.0 已声明的开放错误枚举。诚实边界：30 分钟双进程+备份+编译的真 soak 未跑（交付的是单元化替身）；`cmd/server` 本轮未接入、仍按旧语义直写（新立 TODO 13.6）；契约管写不管读，`busy_timeout` 作为读路径兜底保留。`golang.org/x/sys` 因 Windows 锁原语从 indirect 升为直接依赖。
+
 ## [2.36.0] - 2026-11-12
 
 ### 新增

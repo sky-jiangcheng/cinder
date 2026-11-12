@@ -217,6 +217,31 @@ func aiMatchRule(text string, rules []*regexp.Regexp) string {
 	return ""
 }
 
+// SetAuditForwarder routes every audit row this process would write through
+// fn instead of straight into the table. The agent processes (cmd/mcp,
+// cmd/repotory-capture) install the single-writer channel (ADR-0058) as the
+// forwarder: an audit INSERT is a write like any other, and a non-writer
+// inserting directly would hit exactly the lock contention the contract removes
+// — or, if it failed silently as today, leave the trail missing precisely the
+// agent calls it exists to cover. The row's Surface is whatever the emitting
+// process declared, so a row executed by the desktop writer still reads `mcp`.
+//
+// Declared once per process at startup, same rule as SetAuditSurface.
+func (s *Service) SetAuditForwarder(fn func(db.AICallLog) error) {
+	s.auditForwarder = fn
+}
+
+// RecordAuditRow writes one audit row directly. Exported for the writer
+// catalogue (writerapi), which reaches it only in the process that holds the
+// write role. The append-only guard (table missing = auditing off) applies here
+// exactly as in recordAICall.
+func (s *Service) RecordAuditRow(entry db.AICallLog) error {
+	if !db.AICallLogTableExists(s.db) {
+		return nil
+	}
+	return db.InsertAICallLog(s.db, entry)
+}
+
 // recordAICall writes one audit row.
 //
 // An audit failure is logged and swallowed, never propagated: losing the
@@ -225,6 +250,14 @@ func aiMatchRule(text string, rules []*regexp.Regexp) string {
 // table is append-only with triggers, so a write here either lands or is
 // rejected outright; there is no partial state to clean up.
 func (s *Service) recordAICall(entry db.AICallLog) {
+	if s.auditForwarder != nil {
+		// The forwarder's own failure is also swallowed by the same rule: no
+		// audit path, direct or forwarded, may fail the model call.
+		if err := s.auditForwarder(entry); err != nil {
+			log.Printf("ai audit: could not forward call record: %v", err)
+		}
+		return
+	}
 	if !db.AICallLogTableExists(s.db) {
 		return
 	}

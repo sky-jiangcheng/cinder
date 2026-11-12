@@ -21,6 +21,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -31,6 +32,8 @@ import (
 	"repotory/internal/db"
 	"repotory/internal/platform"
 	"repotory/internal/service"
+	"repotory/internal/version"
+	"repotory/internal/writerapi"
 )
 
 func main() {
@@ -56,7 +59,30 @@ func main() {
 	defer database.Close()
 
 	svc := service.New(database, "claude-hook")
-	report, err := svc.CaptureClaudeSessionByCwd(cwd)
+	// The hook writes a handoff note, so it is inside the single-writer
+	// contract (ADR-0058): it usually runs while an IDE holds the role, and a
+	// direct INSERT there would either contend with the writer's lock or — with
+	// the hook's `|| true` — vanish without a trace, which is the failure mode
+	// that let handoffs idle for two weeks. Self-election is allowed so the
+	// hook still captures on a machine where no Cinder is running.
+	writers, err := writerapi.New(svc, writerapi.Options{
+		DBPath:           path,
+		Process:          "repotory-capture",
+		Surface:          service.AISurfaceMCP,
+		CoreVersion:      version.CoreVersion,
+		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
+		SelfElectAllowed: true,
+	})
+	if err != nil {
+		recordPending(cwd, fmt.Sprintf("write contract: %v", err))
+		log.Fatalf("repotory-capture: write contract: %v", err)
+	}
+	defer writers.Shutdown()
+	svc.SetAuditForwarder(writers.RecordAudit)
+
+	var report service.HandoffResult
+	err = writers.ExecuteInto(context.Background(), writerapi.MethodCaptureClaude,
+		writerapi.CaptureClaudeArgs{Cwd: cwd}, &report)
 	if err != nil {
 		// Disabled-by-config or no-matching-project are expected, non-fatal for a
 		// hook; still surface them and leave a pending record, but exit 0 so a

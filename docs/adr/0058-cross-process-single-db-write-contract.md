@@ -1,6 +1,6 @@
 # ADR-0058: 跨进程单库写契约——三个入口共享一个 SQLite 时的写权归属
 
-状态：**Accepted（2026-11-12 工程评估提出，同日用户选定 A 单写者代理；未落码，跟踪 TODO 13.1）**
+状态：**Accepted（2026-11-12 工程评估提出，同日用户选定 A 单写者代理；同日落地时按用户改判把「桌面缺席即拒绝」换成选举式单写者——无写者时 agent 进程就地接管，见文末「落地记录」；已落码，跟踪 TODO 13.1）**
 日期：2026-11-12
 关联：[ADR-0002](0002-c-end-repositioning.md)（本地优先单库）、[ADR-0025](0025-backup-recovery.md)（VACUUM INTO 快照）、[ADR-0055](0055-agent-surface-contract-and-observability.md)（问题四：数据层容错）、[ADR-0057](0057-write-idempotency-and-version-history.md)（行级乐观锁）
 起始 schema：v31 → **v31（无 schema 变更）**
@@ -72,3 +72,25 @@
 - 双进程（桌面 + MCP）并发写，同时触发一次备份与一轮编译，30 分钟 soak：`database is locked` 不以工具错误形式冒泡。
 - 任一进程被 `SIGKILL` 后，另一进程在 ≤ 10s 内恢复可写；**代理实现下需额外断言「写者重启后排队中的写请求要么被重放要么被明确拒绝」，不允许静默丢弃**。
 - 有能红的测试：模拟长写占锁，断言的是选定契约行为（排队 / 明确拒绝 / 代理转发），而不是随机超时；另配一条「桌面缺席时 MCP 的写返回可行动错误」的断言，因为它现在是契约的一部分而不是意外。
+
+## 落地记录（2026-11-12）
+
+**先记一条对原决策的用户改判，因为它改变了本篇的一处语义**（原决策与待定表保留原文，冲突处以本节为准）：落地当天确认写权归属改为**选举式单写者**——写权不绑定「桌面端」这个进程，而是绑定 `<datadir>/repotory.writer.lock` 这把 OS 文件锁：**谁持锁谁是唯一写者**。桌面启动时仍按原 ADR 优先接管（向自举的 agent 发 yield，成功即接手；agent 正忙则桌面退化为客户端，契约不破）。改判的理由是 README 第一屏的对外承诺——「`cinder-mcp` 无需打开桌面应用即可独立使用」：写工具（handoff / notes_create / chat）是这条产品的存在理由，按原决策的默认拒绝，headless 安装第一天就断写。选举式保留了选 A 的全部结构收益（同一时刻仍只有一个写者、不造第二套并发原语、备份只由写者拍），把「桌面不在」从「断写」改成「就地接管」。原「落地前仍需确认」两问的答案因此变为：**① 缺席行为 = 接管，接管不能时才明确拒绝并返回可行动错误（`writer_unavailable`，retryable）；② 传输形态 = 回环 HTTP + 一次性 token**（token 写在 0600 的端点文件里，与 repotory.db 同一边界：能读端点文件的进程本来就能读库，通道没有新增可攻击面；UDS 在 Windows 上不通用，而 `x/sys/windows` 锁原语已经要用，两端一份语义更便宜）。
+
+**已落码**（`go build ./...` + 全量 `go test` + 两条负例注入验证）：
+
+- **`internal/writer`**——选举与传输核心，不认识 Service：flock（Windows 走 LockFileEx，`golang.org/x/sys` 从 indirect 升为直接依赖）+ `repotory.writer.lock`（文件内容写明 holder pid，「谁挡了我」可答）+ `repotory.writer.endpoint`（addr / token / pid / 进程名 / 契约与 schema 版本）。锁由 open file description 持有，SIGKILL 即释放——恢复不靠清理代码。`TestLockSurvivesProcessDeath` 用真子进程自杀验证了这条。
+- **`internal/writerapi`**——**写目录（catalogue）**：十个具名方法（notes.create/update、handoff.create、chat.create/append/rename、scan.run、review.run、capture.claude_session、audit.record），一方法一个 args 结构体，**不走反射**——RPC 桥那种「凡存在即可调」在这里就是契约的反面。`Manager` 按角色路由：写者本地执行、客户端转发；**同一个 Executor，两种模式共用一条代码路径**。转发错误按写者的分类走（`errcode.Remote` 保 code），conflict 不会在跳进程后被降级成 internal。
+- **桌面缺席的接管链**：客户端发现写者不可达（连接被拒 = 请求从未执行，`StaleError.PreExecution`）→ 重新选举 → 自己成为写者。**「从未送达」与「死在请求中途」严格分开**：后者绝不自动重放（ADR-0057 的幂等键之外，这是防止非幂等写二次生效的第二道闸），报回歧义由上层决定。
+- **`repotory_scan` 的两处写**（seed roots 的 `EnsureDefaultScanRoots` 与扫描本体对 projects / repositories / daily_stats 的落库）归并进 scan.run 一个目录方法——「一次工具调用 = 一个目录方法」是防漏闸的前提。
+- **audit 行走同一条契约**：`Service.SetAuditForwarder` 让非写者进程的 `ai_call_log` INSERT 经通道落库，行内 `surface` 保持**发起进程**声明的值（mcp 的调用在桌面的审计面里仍写 `mcp`）。审计失败照旧吞：它不该弄挂模型调用，但也不该在并发下撞锁丢行。
+- **接入点**：`main.go`（桌面，AssertWriter，启动即尝试接管）、`cmd/mcp`（六个写工具、8 个目录调用点全部改走 Manager）、`cmd/repotory-capture`（SessionEnd 钩子——它以前不经仲裁：会话一结束就自己开库写交接，而桌面和 MCP 常常正持有连接）。`cmd/server` 本轮未接入，仍按旧语义直写；作为收敛记 TODO。
+- **能红的门**（验收判据逐条对上）：`TestNoDirectServiceWritesOutsideTheContract` 用 AST 扫 `cmd/mcp` 全部非测试文件，任何绕过目录的 `svc.<写方法>` 直呼即红（注入验证过）；`TestWriteToolsCoveredByCatalogue` 反向钉「目录里没有工具到达的方法 = 死契约面」；`TestLongWriteQueuesInsteadOfFailingLocked` 是 30 分钟 soak 的**单元化替身**——写者持事务超过 `busy_timeout=5000` 时，客户端的转发写**排队成功**而不是拿到 `database is locked`；`TestUnreachableWriterIsActionableError` 钉住拒绝文案必须给出可行动路径（起桌面 / 等接管），分类必须是 `writer_unavailable` + retryable；`TestConcurrentForwardedWritesAllLandOnce` 证明排队不丢写。SIGKILL ≤10s 恢复由 `TestWriterDeathTriggersTakeover`（进程内替身）+ 子进程死亡测试共同覆盖。
+
+**代价与残留，照实记**：
+- 每个进程的本地读仍要过 SQLite 自己的锁——契约管写，不管读；`busy_timeout` 保留为读路径的兜底。
+- **开库路径不变**：`db.OpenWithRetry` 仍在每个进程里跑（WAL pragma、`Ensure*` 重放、迁移盖章都是文件级写）。它本来就在多进程间靠 busy_timeout 串行，且是「读到迁移后的库」的前提——非写者不能不开库只读。本轮不动它；若 13.6 把 server 接进来时再评估「非写者只读开库 + 写者负责迁移」。
+- `repotory_scan` 这类分钟级写现在在写者进程里排队，**转发端的取消会传导**（ctx 过 HTTP），但两个 agent 同时 scan 时后者等前者，这是契约的本意，不是回归。
+- 桌面从「唯一写者」变为「优先写者」：agent 自举期间桌面没在跑 backup ticker，快照密度短暂下降；桌面一启动即接管，窗口有界。
+- **桌面的 UI 写面本轮没有接入目录**：它 normally 就是写者，所以没有区别；只有「桌面启动时 agent 正忙、接管被拒」这个窗口里，桌面的绑定写与 agent 写者会并发——退化成契约前的旧行为（busy_timeout 兜底），不是新增的洞，但也不能声称已闭环。收敛方向与 `cmd/server` 同批：绑定层在 `!IsWriter()` 时把写转给持锁者。
+- **`CoreVersion` 不动（2.0.0）**：工具名、参数、成功线形全部未变；新错误 code 走 2.0.0 已声明的开放 code 枚举。fixture（`scripts/mcp-tools.fixture.json`）无需改。

@@ -14,6 +14,7 @@ import (
 	"repotory/internal/platform"
 	"repotory/internal/service"
 	"repotory/internal/version"
+	"repotory/internal/writerapi"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -58,7 +59,36 @@ func main() {
 	// This process IS the desktop surface (ADR-0030): every model call it
 	// makes was started by a human in the app, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceDesktop)
-	svc.EnsureDefaultScanRoots()
+	// The single-writer contract (ADR-0058 / TODO 13.1). The desktop claims the
+	// role: it is the surface a human is looking at, it hosts the backup / sync
+	// / compile tickers that write the most, and Wails enforces it as a
+	// single-instance app. If an agent process self-elected as writer while the
+	// app was closed, this startup asks it to yield and takes over — bounded,
+	// and a busy writer is left alone (the desktop then forwards, which is a
+	// supported state, not a failure).
+	writers, err := writerapi.New(svc, writerapi.Options{
+		DBPath:           dbPath,
+		Process:          "Cinder Desktop",
+		Surface:          service.AISurfaceDesktop,
+		CoreVersion:      version.CoreVersion,
+		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
+		SelfElectAllowed: true,
+		AssertWriter:     true,
+	})
+	if err != nil {
+		log.Fatalf("write contract: %v", err)
+	}
+	// Normally the desktop IS the writer, so this forwarder is a pass-through to
+	// the local executor; it matters in the one case where a busy agent kept
+	// the role, and then the app's own audit INSERT would be a write past the
+	// gate. Same rule as cmd/mcp.
+	svc.SetAuditForwarder(writers.RecordAudit)
+	// Safety net for the path where wails.Run fails before OnShutdown ever
+	// fires; Shutdown is idempotent, the real release is the hook above.
+	defer writers.Shutdown()
+	if writers.IsWriter() {
+		svc.EnsureDefaultScanRoots()
+	}
 	// The Wails runtime is wired here, at the desktop entry point, and nowhere
 	// else. internal/app is also linked into the headless server, and a Wails
 	// import in that package would drag the whole webview frontend stack into
@@ -135,7 +165,14 @@ func main() {
 		OnStartup: func(ctx context.Context) {
 			a.Startup(ctx)
 		},
-		OnShutdown: a.Shutdown,
+		OnShutdown: func(ctx context.Context) {
+			// Ordering matters: a.Shutdown closes the database. The writer
+			// role must go first — unpublish, drain forwarded writes, close
+			// the channel — or a peer's in-flight write lands on a handle
+			// that is being closed underneath it.
+			writers.Shutdown()
+			a.Shutdown(ctx)
+		},
 		Bind: []interface{}{
 			a,
 		},

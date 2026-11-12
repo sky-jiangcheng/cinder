@@ -114,7 +114,7 @@ go build -o cinder-server ./cmd/server
 - For browser development use `bash scripts/dev.sh`: it starts the headless API (default 18765) *and* Vite. Running `npx vite` alone yields a page that loads but 502s every request — that is a missing backend, not a broken app.
 - **Release assets contain only**: the desktop installers (4 platforms), `cinder-mcp-<platform>`, and the VS Code VSIX. `cinder-server`, `cmd/vector-init`, `cmd/abeval`, `cmd/repotory-capture` and `cmd/wiki-export` (the read-only wiki export) must be built yourself (`go build` / `go run`); they are not distributed with releases.
 
-MCP is the only AI execution interface (the `cinder` binary dispatches no CLI subcommands). stdio protocol, the database is opened once per process, 22 tools (including 5 write operations: scan + note create/update + session handoff + shared conversation writes):
+MCP is the only AI execution interface (the `cinder` binary dispatches no CLI subcommands). stdio protocol, the database is opened once per process, 22 tools (including 6 write operations: scan + note create/update + session handoff + daily review + shared conversation writes):
 
 The two ends of the session memory protocol, in sequence:
 
@@ -134,6 +134,16 @@ sequenceDiagram
 ```
 
 How to read it: the protocol has exactly **two entry calls** (`repotory_context` to open a session, `repotory_handoff` to close it) and one guarantee in between — a handoff note is written once, tagged `handoff`, and `repotory_notes_update` refuses to overwrite it, so the next session always reads the same record at the top of its context.
+
+### Who executes this write: the cross-process single-writer contract (ADR-0058)
+
+The desktop app, `cinder-mcp` and the SessionEnd hook can all open the same `repotory.db` at once. **Only one Cinder process writes the database at a time**: whoever holds `repotory.writer.lock` in the data directory (an OS file lock, released the moment a process dies) is the writer, and every other process forwards its writes to it over loopback HTTP. Three differences are visible to an agent, none of them a tool-signature change:
+
+- **Long writes no longer explode with `database is locked`**: while a backup or a batch compile holds the lock, your write waits in the writer's queue instead of failing after five seconds.
+- **"No desktop app required" stays true**: when no other Cinder is running, `cinder-mcp` elects itself as the writer; the desktop reclaims the role as soon as it starts (bounded request — if the agent is mid-write, the desktop keeps forwarding for now).
+- **One new error code, `writer_unavailable` (retryable)**: returned when the writer vanished and none could be reached; the message names the remedy (start Cinder Desktop, or simply retry — another live Cinder will take over). It can appear on any write tool; existing codes like `conflict` keep their meaning and are never downgraded by crossing the process hop.
+
+**Did a failed write land anyway?** The contract separates two cases: when the request demonstrably never reached the writer, the client transparently retries once and may take over itself; when the connection broke after the request went out, it is **never auto-replayed** — the ambiguity is reported to you. `repotory_handoff` carries an idempotency key (ADR-0057) and is safe to resend; for `repotory_notes_update`, read the note back with `repotory_notes_read` first.
 
 A **fully offline local model** (ollama / LM Studio) speaks the same MCP; the wiring steps and the recorded real-machine verification are in the [Local Agent Recipe](local-agent-recipe.md).
 

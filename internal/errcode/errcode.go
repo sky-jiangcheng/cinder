@@ -21,7 +21,32 @@ const (
 	// fails again forever. The caller has to re-read and decide (re-apply /
 	// merge / discard), which is a different action, not a backoff.
 	Conflict = "conflict"
+	// WriterUnavailable is the single-writer contract's answer (ADR-0058):
+	// this process is not the writer and could not reach the one that is. It
+	// is retryable — starting Cinder Desktop, or the writer finishing a long
+	// write, both make the same call succeed later.
+	WriterUnavailable = "writer_unavailable"
 )
+
+// ErrWriterUnavailable is the sentinel for "no process holds the write lock
+// and none will take this write". It is deliberately NOT a lock-contention
+// error: errcode.IsLockContention says "wait and retry the same thing", while
+// this says "the write has to be done by another process" — the caller has to
+// start Cinder Desktop or let an idle process take over.
+var ErrWriterUnavailable = errors.New("no Cinder writer is reachable")
+
+// Remote is a failure that happened in another process, carrying the code that
+// process classified it with. Without it, an error forwarded over the write
+// channel (ADR-0058) would arrive here as a plain string and reclassification
+// would turn a `conflict` into `internal` — the caller would lose exactly the
+// information that made the failure actionable.
+type Remote struct {
+	Code      string
+	Message   string
+	Retryable bool
+}
+
+func (e *Remote) Error() string { return e.Message }
 
 // ErrVersionConflict is the sentinel for an optimistic-lock miss (ADR-0057 D2):
 // the row was written by another process between the caller's read and its
@@ -83,8 +108,18 @@ func Classify(err error) (string, bool) {
 	if err == nil {
 		return Internal, false
 	}
+	// A failure that already carries a code — because it came from another
+	// Cinder process over the write channel — keeps that code. Reclassifying a
+	// remote `conflict` from its message would silently downgrade it.
+	var remote *Remote
+	if errors.As(err, &remote) {
+		return remote.Code, remote.Retryable
+	}
 	if errors.Is(err, ErrVersionConflict) {
 		return Conflict, false
+	}
+	if errors.Is(err, ErrWriterUnavailable) {
+		return WriterUnavailable, true
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return NotFound, false

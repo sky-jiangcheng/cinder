@@ -8,9 +8,10 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"repotory/internal/service"
+	"repotory/internal/writerapi"
 )
 
-func registerChatTool(s *server.MCPServer, svc *service.Service) {
+func registerChatTool(s *server.MCPServer, svc *service.Service, w *writerapi.Manager) {
 	s.AddTool(mcp.Tool{
 		Name:        "repotory_chat",
 		Description: "Share persistent chat threads and messages between Warden and IDE clients. Isolated from knowledge notes, retrieval and approvals. Operations: list (at most 100, optional exact path; empty means all), create (client UUID id, title, optional absolute path — absent or empty is unscoped), read (thread_id; latest 500 messages in insertion order), append (thread_id, client UUID or UUID-reply id, role, content, source, optional reply_to referencing a user UUID in this thread), rename (thread_id, title). Create/append retries with identical IDs and payloads are idempotent; conflicts never overwrite content.",
@@ -71,10 +72,16 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 			if e != nil {
 				return makeErrorResult(e), nil
 			}
-			thread, e := svc.CreateChatThread(ctx, values["id"], values["title"], path)
-			err, payload = e, struct {
-				Thread *service.ChatThread `json:"thread"`
-			}{thread}
+			var thread service.ChatThread
+			if e := w.ExecuteInto(ctx, writerapi.MethodChatCreate, writerapi.ChatCreateArgs{
+				ID: values["id"], Title: values["title"], Path: path,
+			}, &thread); e != nil {
+				err = e
+			} else {
+				payload = struct {
+					Thread *service.ChatThread `json:"thread"`
+				}{&thread}
+			}
 		case "read":
 			payload, err = svc.ReadChatThread(ctx, values["thread_id"])
 		case "append":
@@ -86,18 +93,28 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 				}
 				reply = &value
 			}
-			message, e := svc.AppendChatMessage(ctx, service.ChatAppendInput{
+			var message service.ChatMessage
+			if e := w.ExecuteInto(ctx, writerapi.MethodChatAppend, writerapi.ChatAppendArgs{
 				ThreadID: values["thread_id"], ID: values["id"], Role: values["role"],
 				Content: values["content"], Source: values["source"], ReplyTo: reply,
-			})
-			err, payload = e, struct {
-				Message *service.ChatMessage `json:"message"`
-			}{message}
+			}, &message); e != nil {
+				err = e
+			} else {
+				payload = struct {
+					Message *service.ChatMessage `json:"message"`
+				}{&message}
+			}
 		case "rename":
-			thread, e := svc.RenameChatThread(ctx, values["thread_id"], values["title"])
-			err, payload = e, struct {
-				Thread *service.ChatThread `json:"thread"`
-			}{thread}
+			var thread service.ChatThread
+			if e := w.ExecuteInto(ctx, writerapi.MethodChatRename, writerapi.ChatRenameArgs{
+				ThreadID: values["thread_id"], Title: values["title"],
+			}, &thread); e != nil {
+				err = e
+			} else {
+				payload = struct {
+					Thread *service.ChatThread `json:"thread"`
+				}{&thread}
+			}
 		}
 		if err != nil {
 			return makeErrorResult(err), nil
