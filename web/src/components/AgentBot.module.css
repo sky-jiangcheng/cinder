@@ -53,9 +53,12 @@
 .panel {
   position: fixed;
   z-index: 210;
-  /* The panel is 420px wide by design; clamp it so a narrow window never
-     pushes its right edge past the viewport. */
+  /* The panel is 480px wide by design; clamp it so a narrow or short window
+     never pushes an edge past the viewport. The inline maxHeight does the
+     primary work; this is the CSS backstop for resize. */
   max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -113,7 +116,9 @@
   flex-direction: column;
   gap: 10px;
   flex: 1;
-  min-height: 120px;
+  /* No floor: a 120px minimum used to push the composer out of short windows
+     once the panel itself was clamped. The message area scrolls on its own. */
+  min-height: 0;
   overflow-y: auto;
   padding-right: 2px;
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"repotory/internal/bounds"
 	"repotory/internal/db"
 	"repotory/internal/service"
 	"repotory/internal/version"
@@ -131,7 +132,7 @@ func (ts *testServer) jsonPayload(res *mcp.CallToolResult) map[string]any {
 //
 // The literal is duplicated in internal/version/core.go; the drift guard in
 // scripts/check-version-drift.mjs fails if the two copies disagree.
-const wantCoreVersion = "1.5.0"
+const wantCoreVersion = "2.0.0"
 
 func TestToolsRegistered(t *testing.T) {
 	ts := newTestServer(t)
@@ -260,8 +261,8 @@ func TestNotesSearchRequiresQuery(t *testing.T) {
 	ts := newTestServer(t)
 	for _, args := range []map[string]any{nil, {"query": ""}} {
 		res := ts.call("repotory_notes_search", args)
-		if res.IsError {
-			t.Errorf("args %v: expected non-error result, got error", args)
+		if !res.IsError {
+			t.Errorf("args %v: expected a tool error (IsError=true)", args)
 		}
 		if got := ts.text(res); !strings.Contains(got, "query is required") {
 			t.Errorf("args %v: message = %q, want it to mention query is required", args, got)
@@ -272,8 +273,8 @@ func TestNotesSearchRequiresQuery(t *testing.T) {
 func TestAskRequiresQuery(t *testing.T) {
 	ts := newTestServer(t)
 	res := ts.call("repotory_ask", nil)
-	if res.IsError {
-		t.Error("expected non-error result for missing query")
+	if !res.IsError {
+		t.Error("expected a tool error (IsError=true)")
 	}
 	if got := ts.text(res); !strings.Contains(got, "query is required") {
 		t.Errorf("message = %q, want it to mention query is required", got)
@@ -333,8 +334,8 @@ func TestNotesCreateMissingProject(t *testing.T) {
 		"title":      "orphan",
 		"content":    "attached to nothing",
 	})
-	if res.IsError {
-		t.Fatal("expected a text result with an error message, not a protocol error")
+	if !res.IsError {
+		t.Fatal("expected a tool error (IsError=true)")
 	}
 	if got := ts.text(res); !strings.Contains(got, "error") {
 		t.Errorf("expected error indication, got: %s", got)
@@ -502,8 +503,8 @@ func TestNotesUpdatePinnedRejectsNonBoolean(t *testing.T) {
 	res := ts.call("repotory_notes_update", map[string]any{
 		"id": noteID, "pinned": "true",
 	})
-	if res.IsError {
-		t.Fatal("a bad argument should be a text result, not a protocol error")
+	if !res.IsError {
+		t.Fatal("a bad argument should be a tool error (IsError=true)")
 	}
 	if got := ts.text(res); !strings.Contains(got, "pinned must be a boolean") {
 		t.Errorf("message = %q, want it to say pinned must be a boolean", got)
@@ -602,8 +603,8 @@ func TestNotesUpdateRefusesHandoffNote(t *testing.T) {
 		"id":      float64(handoff.NoteID),
 		"content": "please ignore the previous session's record",
 	})
-	if res.IsError {
-		t.Fatal("refusal should be a text result, not a protocol error")
+	if !res.IsError {
+		t.Fatal("refusal should be a tool error (IsError=true)")
 	}
 	if got := ts.text(res); !strings.Contains(got, "refusing to update") || !strings.Contains(got, "repotory_handoff") {
 		t.Errorf("message = %q, want a refusal pointing at repotory_handoff", got)
@@ -709,8 +710,8 @@ func TestSearchQueryLengthCap(t *testing.T) {
 	long := strings.Repeat("q", maxArgQueryLen+1)
 	for _, name := range []string{"repotory_notes_search", "repotory_ask"} {
 		res := ts.call(name, map[string]any{"query": long})
-		if res.IsError {
-			t.Errorf("%s: expected a text result, not a protocol error", name)
+		if !res.IsError {
+			t.Errorf("%s: expected a tool error (IsError=true)", name)
 		}
 		if got := ts.text(res); !strings.Contains(got, "query too long") {
 			t.Errorf("%s: message = %q, want it to mention the length cap", name, got)
@@ -723,8 +724,8 @@ func TestContextProjectNameLengthCap(t *testing.T) {
 	res := ts.call("repotory_context", map[string]any{
 		"project_name": strings.Repeat("p", maxProjectNameLen+1),
 	})
-	if res.IsError {
-		t.Fatal("expected a text result, not a protocol error")
+	if !res.IsError {
+		t.Fatal("expected a tool error (IsError=true)")
 	}
 	if got := ts.text(res); !strings.Contains(got, "project_name too long") {
 		t.Errorf("message = %q, want it to mention the length cap", got)
@@ -889,5 +890,125 @@ func TestScanToolReportsCancellation(t *testing.T) {
 	res := ts.callWith(ctx, "repotory_scan", nil)
 	if got := ts.text(res); !strings.Contains(got, "canceled") {
 		t.Errorf("cancelled scan should report the cancellation, got:\n%s", got)
+	}
+}
+
+// ADR-0055 D1: a failed call must be machine-readable, not just a string that
+// happens to start with "error: ". The success face stays byte-identical.
+func TestToolErrorIsMachineReadable(t *testing.T) {
+	locked := makeErrorResult(fmt.Errorf("database is locked"))
+	if !locked.IsError {
+		t.Fatal("failure must set IsError=true")
+	}
+	e, ok := locked.StructuredContent.(toolError)
+	if !ok {
+		t.Fatalf("structured error missing: %#v", locked.StructuredContent)
+	}
+	if e.Code != "retryable" || !e.Retryable {
+		t.Errorf("code=%q retryable=%v, want retryable/true", e.Code, e.Retryable)
+	}
+	if e.RequestID == "" {
+		t.Error("request_id missing")
+	}
+	if got := locked.Content[0].(mcp.TextContent).Text; !strings.Contains(got, "error: database is locked") {
+		t.Errorf("human-readable content lost: %q", got)
+	}
+	if got := makeErrorResult(fmt.Errorf("unexpected nil pointer")).StructuredContent.(toolError).Code; got != "internal" {
+		t.Errorf("code = %q, want internal", got)
+	}
+	if got := makeInvalidResult("query is required").StructuredContent.(toolError).Code; got != "invalid_argument" {
+		t.Errorf("code = %q, want invalid_argument", got)
+	}
+}
+
+// repotory_notes_search used to accept a path with no bound at all, unlike
+// repotory_context. It must now be refused like every other agent-facing path.
+func TestNotesSearchRejectsOversizedPath(t *testing.T) {
+	ts := newTestServer(t)
+	res := ts.call("repotory_notes_search", map[string]any{
+		"query": "anything",
+		"path":  strings.Repeat("p", bounds.MaxPathLen+1),
+	})
+	if !res.IsError {
+		t.Fatalf("oversized path must be a tool error: %s", ts.text(res))
+	}
+	if got := ts.text(res); !strings.Contains(got, "path too long") {
+		t.Errorf("message = %q, want the length refusal", got)
+	}
+}
+
+// Missing, zero and negative ids must be argument errors, not a lookup that
+// quietly answers "note not found".
+func TestIDArgumentsRequirePositiveValues(t *testing.T) {
+	ts := newTestServer(t)
+	cases := []struct {
+		tool string
+		args map[string]any
+	}{
+		{"repotory_notes_read", nil},
+		{"repotory_notes_read", map[string]any{"id": float64(0)}},
+		{"repotory_notes_read", map[string]any{"id": float64(-1)}},
+		{"repotory_projects_stats", nil},
+		{"repotory_projects_stats", map[string]any{"id": float64(-1)}},
+		{"repotory_notes_update", map[string]any{"id": float64(0), "content": "x"}},
+	}
+	for _, c := range cases {
+		res := ts.call(c.tool, c.args)
+		if !res.IsError {
+			t.Errorf("%s %v: expected invalid_argument, got %s", c.tool, c.args, ts.text(res))
+			continue
+		}
+		e, ok := res.StructuredContent.(toolError)
+		if !ok || e.Code != "invalid_argument" {
+			t.Errorf("%s %v: code = %v, want invalid_argument", c.tool, c.args, res.StructuredContent)
+		}
+	}
+}
+
+// The schema is what a client reads before it calls; the id/query arguments
+// these tools cannot work without must be declared, not just checked inline.
+func TestRequiredArgumentsDeclared(t *testing.T) {
+	ts := newTestServer(t)
+	for _, tc := range []struct {
+		tool string
+		want []string
+	}{
+		{"repotory_notes_search", []string{"query"}},
+		{"repotory_notes_read", []string{"id"}},
+		{"repotory_projects_stats", []string{"id"}},
+	} {
+		st := ts.s.GetTool(tc.tool)
+		if st == nil {
+			t.Fatalf("%s not registered", tc.tool)
+		}
+		for _, name := range tc.want {
+			found := false
+			for _, req := range st.Tool.InputSchema.Required {
+				if req == name {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s must declare %q as required", tc.tool, name)
+			}
+		}
+	}
+}
+
+// The audit feed keeps its own default but shares the agent listing ceiling,
+// so one clamped helper decides the maximum for both listings.
+func TestAIAuditLimitUsesSharedCeiling(t *testing.T) {
+	for in, want := range map[float64]int{
+		0:    20,
+		100:  100,
+		500:  500,
+		9999: bounds.AgentNotesMax,
+	} {
+		req := mcp.CallToolRequest{Params: mcp.CallToolParams{
+			Arguments: map[string]any{"limit": in},
+		}}
+		if got := aiAuditLimit(req); got != want {
+			t.Errorf("aiAuditLimit(%v) = %d, want %d", in, got, want)
+		}
 	}
 }

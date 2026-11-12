@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"repotory/internal/errcode"
 	"repotory/internal/service"
 	"repotory/internal/version"
 )
@@ -19,22 +22,70 @@ func makeTextResult(text string) *mcp.CallToolResult {
 	return mcp.NewToolResultText(text)
 }
 
+// toolError is the machine-readable half of a failed tool call. It travels in
+// StructuredContent, so Content[0] keeps its exact previous wording and every
+// existing client keeps parsing the same text. ADR-0055 D1: the success face
+// is frozen; only the failure face becomes machine-readable.
+type toolError struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+	RequestID string `json:"request_id"`
+}
+
+func newRequestID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("rid-%d", os.Getpid())
+	}
+	return hex.EncodeToString(b[:])
+}
+
+func errorResult(e toolError) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content:           []mcp.Content{mcp.TextContent{Type: "text", Text: "error: " + e.Message}},
+		StructuredContent: e,
+		IsError:           true,
+	}
+}
+
+// makeErrorResult is the single failure exit for every MCP tool.
+func makeErrorResult(err error) *mcp.CallToolResult {
+	if err == nil {
+		err = errors.New("unknown error")
+	}
+	code, retryable := errcode.Classify(err)
+	return errorResult(toolError{
+		Code: code, Message: err.Error(), Retryable: retryable, RequestID: newRequestID(),
+	})
+}
+
+// makeInvalidResult is for argument validation, where the caller has a human
+// message but no error value.
+func makeInvalidResult(message string) *mcp.CallToolResult {
+	return errorResult(toolError{Code: "invalid_argument", Message: message, RequestID: newRequestID()})
+}
+
 // notFoundOrError is the not-found answer for lookup tools. The driver's
 // "sql: no rows in result set" is an implementation detail that agents have
 // quoted back to users as if it were the diagnosis; a real storage failure
 // must stay distinguishable from absence (a failure must not masquerade as
-// "nothing there"), so only the sentinel is replaced.
+// "nothing there"), so only the sentinel is replaced — and absence itself is
+// still a successful answer, not a tool failure.
 func notFoundOrError(err error, what string) *mcp.CallToolResult {
 	if errors.Is(err, sql.ErrNoRows) {
 		return makeTextResult(what + " not found")
 	}
-	return makeTextResult(what + " lookup failed: " + err.Error())
+	return makeErrorResult(fmt.Errorf("%s lookup failed: %w", what, err))
 }
 
-func makeJSONResult(name string, data any) (*mcp.CallToolResult, error) {
+// name was a dead parameter: 20 call sites passed an envelope name that never
+// reached the wire. ADR-0055 freezes the success face as bare JSON, so the
+// parameter is simply removed.
+func makeJSONResult(data any) (*mcp.CallToolResult, error) {
 	bytes, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
-		return makeTextResult(fmt.Sprintf("marshal error: %v", err)), nil
+		return makeErrorResult(fmt.Errorf("marshal result: %w", err)), nil
 	}
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -84,18 +135,15 @@ func runAgentScore(svc *service.Service) string {
 	}
 
 	// 3. Search works. `hits != nil` looks like it should be `len(hits) > 0`
-	// and is worth a note, because the two are NOT equivalent here:
-	// internal/db/search.go returns a nil slice for a successful zero-hit
-	// query, but internal/service/search.go normalises that to an empty
-	// non-nil slice, and returns nil *only* when the query actually errored.
-	// So nil means "the search path is broken" and empty means "searched
-	// fine, nothing matched" — which is the healthy state for a fresh install.
-	hits := svc.SearchAll("test")
-	if hits != nil {
+	// ADR-0055 D2: a successful zero-hit query returns an explicit empty
+	// slice, and a broken FTS5 path returns an error. The old code encoded
+	// that distinction as nil-vs-non-nil, which was lost at every JSON exit.
+	hits, searchErr := svc.SearchAll("test")
+	if searchErr == nil {
 		parts = append(parts, fmt.Sprintf("  ✅ Search (FTS5) operational (%d hit(s) for probe)", len(hits)))
 		record(true)
 	} else {
-		parts = append(parts, "  ⚠️  Search not available — the FTS5 query path returned an error")
+		parts = append(parts, fmt.Sprintf("  ⚠️  Search not available — %v", searchErr))
 		record(false)
 	}
 

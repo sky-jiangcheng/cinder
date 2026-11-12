@@ -88,7 +88,7 @@ func TestLabeledCaseShapeMatchesAbevalCase(t *testing.T) {
 }
 
 func TestIdsPreservesRankedOrder(t *testing.T) {
-	hits := ids(nil)
+	hits := ids(nil, nil)
 	if len(hits) != 0 {
 		t.Errorf("empty input should give empty output, got %v", hits)
 	}

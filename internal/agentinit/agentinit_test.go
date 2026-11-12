@@ -404,6 +404,17 @@ func TestContractFixture(t *testing.T) {
 	}
 }
 
+// The SessionEnd hook must not discard repotory-capture output, and must
+// still guard it with || true so a failed capture cannot break session exit.
+func TestHookScriptDoesNotSilenceCapture(t *testing.T) {
+	if strings.Contains(hookScript, "\n  repotory-capture >/dev/null") {
+		t.Errorf("capture output must stay visible:\n%s", hookScript)
+	}
+	if !strings.Contains(hookScript, "\n  repotory-capture 2>&1 || true") {
+		t.Errorf("capture must keep || true:\n%s", hookScript)
+	}
+}
+
 // canonicalize turns a registration output directory into the comparable
 // shape: JSON files by meaning, the hook script by its exact text.
 func canonicalize(t *testing.T, dir, bin string) map[string]any {

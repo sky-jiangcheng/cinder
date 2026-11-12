@@ -4,7 +4,27 @@ import (
 	"testing"
 
 	"repotory/internal/db"
+	"repotory/internal/domain"
 )
+
+// ADR-0055 D2: SearchAll / SearchNotes now return an error. These helpers keep
+// the old single-value shape for assertion-heavy retrieval tests, but a storage
+// fault fails loudly instead of being read as "zero hits".
+func (s *Service) mustSearchAll(q string) []domain.SearchHit {
+	hits, err := s.SearchAll(q)
+	if err != nil {
+		panic(err)
+	}
+	return hits
+}
+
+func (s *Service) mustSearchNotes(q string) []domain.SearchHit {
+	hits, err := s.SearchNotes(q)
+	if err != nil {
+		panic(err)
+	}
+	return hits
+}
 
 // TestSearchAllAppliesSemanticRecall pins the fix for the "evaluation gate
 // measures a path the product does not use" defect.
@@ -44,7 +64,7 @@ func TestSearchAllAppliesSemanticRecall(t *testing.T) {
 	// BEFORE the rebuild because the vector index does not exist yet: with
 	// semantic enabled but no index, the fusion is a graceful no-op.
 	query := "totally unrelated zzz"
-	if hits := svc.SearchAll(query); len(hits) != 0 {
+	if hits := svc.mustSearchAll(query); len(hits) != 0 {
 		t.Fatalf("before fusion, expected lexical-only empty, got %d", len(hits))
 	}
 
@@ -54,7 +74,7 @@ func TestSearchAllAppliesSemanticRecall(t *testing.T) {
 		t.Fatalf("embedded %d, want 2", n)
 	}
 
-	hits := svc.SearchAll(query)
+	hits := svc.mustSearchAll(query)
 	if len(hits) == 0 {
 		t.Fatal("expected semantic recall of alpha through SearchAll, got 0 hits")
 	}
@@ -66,7 +86,7 @@ func TestSearchAllAppliesSemanticRecall(t *testing.T) {
 	if err := svc.UpdateConfig("semantic_search", "0"); err != nil {
 		t.Fatal(err)
 	}
-	if hits := svc.SearchAll(query); len(hits) != 0 {
+	if hits := svc.mustSearchAll(query); len(hits) != 0 {
 		t.Errorf("with semantic off, expected 0 hits, got %d", len(hits))
 	}
 }
@@ -118,7 +138,7 @@ func TestSearchAllKeepsNoteAndTodoIDSpacesApart(t *testing.T) {
 
 	// "zebra" matches the note body lexically and the todo title lexically,
 	// so both are in the base list and both must survive the fusion.
-	hits := svc.SearchAll("zebra")
+	hits := svc.mustSearchAll("zebra")
 	var sawNote, sawTodo bool
 	for _, h := range hits {
 		switch h.Type {

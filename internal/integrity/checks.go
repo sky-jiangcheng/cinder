@@ -64,7 +64,15 @@ const schemaVersionKey = "schema_version"
 // ADR-0053): two new tables, no foreign keys, and a UNIQUE(run_date, scope) that
 // makes "one report per day per scope" a schema fact rather than a convention.
 // Purely additive — no existing table is touched.
-const ExpectedSchemaVersion = 30
+// v31 added the note write contract (internal/db's EnsureNoteWriteContract,
+// ADR-0057): project_notes.idempotency_key with a partial unique index,
+// project_notes.version for optimistic locking, note_versions.version, and a
+// snapshot trigger that stores the state BEFORE an edit instead of after it.
+// This is the one migration in the list that rewrites existing behaviour:
+// note_versions rows written before it hold post-edit content and keep
+// version = 0, which is why the check's shape expectations below still accept
+// rows it never backfilled.
+const ExpectedSchemaVersion = 31
 
 // StaleAfterDays is the age at which the repo_meta knowledge cache is reported
 // as stale. The cache feeds generated knowledge (tech stack, readme excerpt,
@@ -144,6 +152,9 @@ var requiredShape = []struct {
 	{"chat_messages", "source"},
 	{"chat_messages", "reply_to"},
 	{"chat_messages", "created_at"},
+	{"project_notes", "version"},         // v31
+	{"project_notes", "idempotency_key"}, // v31
+	{"note_versions", "version"},         // v31
 }
 
 // substantiveMetaSQL is the predicate for a repo_meta row that carries actual

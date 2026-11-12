@@ -64,6 +64,35 @@ export interface DialogueMessage {
   localFallback?: boolean
 }
 
+// ADR-0056: this is a lazy route, so every top-level tab switch unmounts the
+// console. Keep a settled-message snapshot in localStorage instead of lifting
+// state or writing chat_threads (that table is the cross-client text contract,
+// which cannot carry evidence / search cards). Streaming drafts are excluded.
+const HISTORY_KEY = 'repotory.home.dialogue.v1'
+const HISTORY_LIMIT = 50
+
+export function serializeDialogue(messages: DialogueMessage[]): string {
+  // A remount has no stream to resume, so drafts never enter the snapshot.
+  return JSON.stringify(messages.filter(m => !m.isStreaming).slice(-HISTORY_LIMIT))
+}
+
+export function loadDialogue(): DialogueMessage[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (m): m is DialogueMessage =>
+        !!m &&
+        typeof m.id === 'string' &&
+        (m.role === 'user' || m.role === 'assistant') &&
+        typeof m.content === 'string' &&
+        !m.isStreaming,
+    )
+  } catch {
+    return []
+  }
+}
+
 interface Props {
   projects: Project[]
   onToast: PushToast
@@ -237,8 +266,21 @@ export default function HomeKnowledgeAssistant({
   // Only the latest search may clear the shared spinner.
   const searchSeqRef = useRef(0)
   const [configured, setConfigured] = useState<boolean | null>(null)
-  const [messages, setMessages] = useState<DialogueMessage[]>([])
+  const [messages, setMessages] = useState<DialogueMessage[]>(loadDialogue)
   const [tags, setTags] = useState<string[]>([])
+
+  // Debounced: an active stream updates messages once per delta, and writing
+  // the full snapshot on every token would dominate the stream.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(HISTORY_KEY, serializeDialogue(messages))
+      } catch {
+        // Quota / private mode: the in-memory conversation still works.
+      }
+    }, 200)
+    return () => window.clearTimeout(timer)
+  }, [messages])
 
   const streamRef = useRef<HTMLDivElement>(null)
   const cancelStreamRef = useRef<(() => void) | null>(null)
@@ -440,6 +482,7 @@ export default function HomeKnowledgeAssistant({
   const handleClear = () => {
     handleStop()
     setMessages([])
+    try { localStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
   }
 
   // Find relevant projects based on text matches and evidence item project IDs

@@ -288,3 +288,82 @@ func TestSourceStatusesProbePanicRecovered(t *testing.T) {
 		t.Errorf("panicking probe should surface a failure detail, got %q", st[0].Detail)
 	}
 }
+
+// An unchanged import must not refresh updated_at: the 4-hour sync would
+// otherwise push kind=log notes ahead of curated knowledge in recency order.
+func TestUpsertDocSkipsUnchangedContent(t *testing.T) {
+	database := setupDB(t)
+	pid := newProject(t, database, "hash")
+	rt := New(database)
+	rt.RegisterSource("claude", staticImporter{source: "claude", docs: []plugin.ImportDoc{
+		{ProjectID: pid, Title: "curated", Content: "stable body", Kind: "knowledge"},
+	}})
+	if _, err := rt.TriggerImport("claude"); err != nil {
+		t.Fatal(err)
+	}
+	// Pin updated_at to a value any rewrite would visibly refresh, so the
+	// assertion cannot pass merely because two writes landed in one second.
+	const frozen = "2000-01-01 00:00:00"
+	if _, err := database.Exec("UPDATE project_notes SET updated_at = ? WHERE title = ?", frozen, "curated"); err != nil {
+		t.Fatal(err)
+	}
+	// Read through the same Scan path the post-import read uses, so a driver
+	// timestamp format change cannot masquerade as a rewrite.
+	var postSet string
+	if err := database.QueryRow("SELECT updated_at FROM project_notes WHERE title = ?", "curated").Scan(&postSet); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.TriggerImport("claude"); err != nil {
+		t.Fatal(err)
+	}
+	var after string
+	if err := database.QueryRow("SELECT updated_at FROM project_notes WHERE title = ?", "curated").Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != postSet {
+		t.Fatalf("unchanged import refreshed updated_at: %q -> %q", postSet, after)
+	}
+}
+
+// A changed body must still be written; the hash guard must not skip real edits.
+func TestUpsertDocWritesChangedContent(t *testing.T) {
+	database := setupDB(t)
+	pid := newProject(t, database, "hash-change")
+	src := &staticImporter{source: "claude", docs: []plugin.ImportDoc{
+		{ProjectID: pid, Title: "curated", Content: "v1", Kind: "knowledge"},
+	}}
+	rt := New(database)
+	rt.RegisterSource("claude", src)
+	if _, err := rt.TriggerImport("claude"); err != nil {
+		t.Fatal(err)
+	}
+	src.docs[0].Content = "v2"
+	if _, err := rt.TriggerImport("claude"); err != nil {
+		t.Fatal(err)
+	}
+	var content string
+	if err := database.QueryRow("SELECT content FROM project_notes WHERE title = ?", "curated").Scan(&content); err != nil {
+		t.Fatal(err)
+	}
+	if content != "v2" {
+		t.Fatalf("changed content was not written: %q", content)
+	}
+}
+
+// A run whose document failed must not be reported as a clean success.
+func TestTriggerImportSurfacesDocFailure(t *testing.T) {
+	database := setupDB(t)
+	pid := newProject(t, database, "bubble")
+	rt := New(database)
+	rt.RegisterSource("claude", staticImporter{source: "claude", docs: []plugin.ImportDoc{
+		{ProjectID: pid, Title: "good", Content: "ok", Kind: "knowledge"},
+		{ProjectID: 999999, Title: "bad", Content: "no project", Kind: "knowledge"},
+	}})
+	run, err := rt.TriggerImport("claude")
+	if err == nil {
+		t.Fatal("a run containing a failed document was reported as success")
+	}
+	if run.Created != 1 || run.Updated != 0 {
+		t.Fatalf("failed doc counted as written: %+v", run)
+	}
+}

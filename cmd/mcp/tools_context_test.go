@@ -136,3 +136,25 @@ func TestHandoffToolMilestoneFlag(t *testing.T) {
 		t.Errorf("context should surface the milestone summary\n%s", text)
 	}
 }
+
+// A non-string item in a handoff section used to be dropped silently; it is
+// now an argument error, because a half-written handoff is worse than a
+// rejected one.
+func TestHandoffRejectsNonStringItems(t *testing.T) {
+	ts := newTestServer(t)
+	pid := ts.seedProject("demo", "/home/me/demo")
+	for _, field := range []string{"changes", "decisions", "gotchas", "next_steps"} {
+		res := ts.call("repotory_handoff", map[string]any{
+			"project_id": float64(pid),
+			"summary":    "a session",
+			field:        []any{"ok", 42},
+		})
+		if !res.IsError {
+			t.Errorf("%s with a non-string item should be a tool error", field)
+			continue
+		}
+		if got := ts.text(res); !strings.Contains(got, "must be a string") {
+			t.Errorf("%s: message = %q, want the string refusal", field, got)
+		}
+	}
+}

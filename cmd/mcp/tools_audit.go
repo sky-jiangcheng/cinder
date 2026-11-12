@@ -6,6 +6,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"repotory/internal/bounds"
 	"repotory/internal/service"
 )
 
@@ -39,21 +40,15 @@ func registerAuditTools(mcpServer *server.MCPServer, svc *service.Service) {
 			},
 		},
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args := req.GetArguments()
-		limit := 20
-		if n, ok := args["limit"].(float64); ok && int(n) > 0 {
-			limit = int(n)
-		}
-
 		status, err := svc.GetAIAuditStatus()
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
-		rows, err := svc.ListAICallAudit(limit)
+		rows, err := svc.ListAICallAudit(aiAuditLimit(req))
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("ai_audit", map[string]any{
+		return makeJSONResult(map[string]any{
 			"status": status,
 			"calls":  rows,
 		})
@@ -71,9 +66,9 @@ func registerAuditTools(mcpServer *server.MCPServer, svc *service.Service) {
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		status, err := svc.GetAIAuditStatus()
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("ai_review_rules", map[string]any{
+		return makeJSONResult(map[string]any{
 			"audit_enabled": status.AuditEnabled,
 			"review_input":  status.ReviewInput,
 			"review_output": status.ReviewOutput,
@@ -81,4 +76,15 @@ func registerAuditTools(mcpServer *server.MCPServer, svc *service.Service) {
 			"retention":     status.Retention,
 		})
 	})
+}
+
+// aiAuditLimit clamps the optional limit at the agent surface, using the
+// same shared ceiling as repotory_notes_list. The default stays 20 (the audit
+// feed is shorter than the note feed), but the maximum cannot drift from the
+// other MCP listings.
+func aiAuditLimit(req mcp.CallToolRequest) int {
+	if n, ok := req.GetArguments()["limit"].(float64); ok && int(n) > 0 {
+		return bounds.ClampNotesLimit(int(n))
+	}
+	return 20
 }

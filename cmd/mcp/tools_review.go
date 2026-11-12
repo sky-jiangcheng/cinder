@@ -53,16 +53,16 @@ func registerReviewTools(mcpServer *server.MCPServer, svc *service.Service) {
 
 		run, findings, err := svc.LatestReview(severities, nil)
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		if run == nil {
 			return makeTextResult("no completed review yet — run repotory_review_run first, or enable the daily review in settings"), nil
 		}
 		runs, err := svc.ReviewRunsSince(days)
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("review_latest", map[string]any{
+		return makeJSONResult(map[string]any{
 			"run":      run,
 			"findings": findings,
 			"runs":     runs,
@@ -107,22 +107,26 @@ func registerReviewTools(mcpServer *server.MCPServer, svc *service.Service) {
 		if s := argString(args["date"]); s != "" {
 			parsed, err := time.ParseInLocation("2006-01-02", s, time.Local)
 			if err != nil {
-				return makeTextResult("error: date must be YYYY-MM-DD"), nil
+				return makeInvalidResult("date must be YYYY-MM-DD"), nil
 			}
 			day = parsed
+		}
+		flags, msg := boolArgs(args, "dry_run", "no_ai", "force")
+		if msg != "" {
+			return makeInvalidResult(msg), nil
 		}
 		result, err := svc.RunReview(ctx, service.ReviewOptions{
 			Date:   day,
 			Scope:  argString(args["scope"]),
-			DryRun: argBool(args["dry_run"]),
-			NoAI:   argBool(args["no_ai"]),
-			Force:  argBool(args["force"]),
+			DryRun: flags["dry_run"],
+			NoAI:   flags["no_ai"],
+			Force:  flags["force"],
 		})
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		if result.AlreadyDone {
-			return makeJSONResult("review_run", map[string]any{
+			return makeJSONResult(map[string]any{
 				"already_done": true,
 				"run":          result.Run,
 				"hint":         "this day and scope was already reviewed; pass force=true to redo it",
@@ -136,7 +140,7 @@ func registerReviewTools(mcpServer *server.MCPServer, svc *service.Service) {
 		if result.DryRun {
 			findings = service.StoredPreview(result.Findings)
 		}
-		return makeJSONResult("review_run", map[string]any{
+		return makeJSONResult(map[string]any{
 			"run":      result.Run,
 			"findings": findings,
 			"dry_run":  result.DryRun,
@@ -150,17 +154,24 @@ func argString(v any) string {
 	return s
 }
 
-// argBool reads an optional boolean argument. MCP clients send real booleans,
-// but a string "true" shows up from hand-written configs often enough that
-// refusing it would be pedantic.
-func argBool(v any) bool {
-	switch t := v.(type) {
-	case bool:
-		return t
-	case string:
-		return t == "true" || t == "1"
+// boolArgs reads optional boolean arguments. Only real booleans are accepted
+// (matching repotory_notes_update's pinned): a string "true" is a malformed
+// argument, not a value to coerce, so silently reading it as false would hide
+// the caller's mistake. The second return value is a validation message.
+func boolArgs(args map[string]any, names ...string) (map[string]bool, string) {
+	out := make(map[string]bool, len(names))
+	for _, name := range names {
+		raw, present := args[name]
+		if !present || raw == nil {
+			continue
+		}
+		b, ok := raw.(bool)
+		if !ok {
+			return nil, name + " must be a boolean"
+		}
+		out[name] = b
 	}
-	return false
+	return out, ""
 }
 
 // splitCSV splits a comma-separated argument, dropping empty parts.

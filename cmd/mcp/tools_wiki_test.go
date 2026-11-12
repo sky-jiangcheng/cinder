@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"repotory/internal/bounds"
 	"repotory/internal/db"
 )
 
@@ -98,5 +99,21 @@ func TestWikiReadReturnsThePageBody(t *testing.T) {
 	payload := ts.jsonPayload(res)
 	if content, _ := payload["content"].(string); content != "the compiled body" {
 		t.Errorf("content = %q, want the page body", content)
+	}
+}
+
+// The wiki search shares resolveProjectID with repotory_ask, so an oversized
+// path must be refused here too instead of becoming a cross-project list.
+func TestWikiSearchRejectsOversizedPath(t *testing.T) {
+	ts := newTestServer(t)
+	res := ts.call("repotory_wiki_search", map[string]any{
+		"query": "retry",
+		"path":  strings.Repeat("p", bounds.MaxPathLen+1),
+	})
+	if !res.IsError {
+		t.Fatalf("oversized path must be a tool error, got a cross-project list: %s", ts.text(res))
+	}
+	if got := ts.text(res); !strings.Contains(got, "path too long") {
+		t.Errorf("message = %q, want the length refusal", got)
 	}
 }

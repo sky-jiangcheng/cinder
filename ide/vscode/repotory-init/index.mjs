@@ -203,7 +203,8 @@ cd "\${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
 # Primary path (ADR-0054): repotory-capture reads the transcript directly
 # and writes a handoff note. Zero credit — survives credit exhaustion.
 if command -v repotory-capture >/dev/null 2>&1; then
-  repotory-capture >/dev/null 2>&1 || true
+  # Keep stdout/stderr visible: a failed capture must stay diagnosable.
+  repotory-capture 2>&1 || true
   exit 0
 fi
 

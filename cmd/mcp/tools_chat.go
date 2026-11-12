@@ -33,7 +33,7 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 		args := req.GetArguments()
 		op, err := toolString(args, "operation", true)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		required, ok := map[string][]string{
 			"list":   {},
@@ -43,13 +43,13 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 			"rename": {"thread_id", "title"},
 		}[op]
 		if !ok {
-			return mcp.NewToolResultError("operation must be list, create, read, append or rename"), nil
+			return makeInvalidResult("operation must be list, create, read, append or rename"), nil
 		}
 		values := map[string]string{}
 		for _, key := range required {
 			value, err := toolString(args, key, true)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return makeErrorResult(err), nil
 			}
 			values[key] = value
 		}
@@ -58,7 +58,7 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 		case "list":
 			path, e := toolString(args, "path", false)
 			if e != nil {
-				return mcp.NewToolResultError(e.Error()), nil
+				return makeErrorResult(e), nil
 			}
 			threads, e := svc.ListChatThreads(ctx, path)
 			err, payload = e, struct {
@@ -69,7 +69,7 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 			// numeric/null path must not silently expand to the whole library.
 			path, e := toolString(args, "path", false)
 			if e != nil {
-				return mcp.NewToolResultError(e.Error()), nil
+				return makeErrorResult(e), nil
 			}
 			thread, e := svc.CreateChatThread(ctx, values["id"], values["title"], path)
 			err, payload = e, struct {
@@ -82,7 +82,7 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 			if _, supplied := args["reply_to"]; supplied {
 				value, e := toolString(args, "reply_to", true)
 				if e != nil {
-					return mcp.NewToolResultError(e.Error()), nil
+					return makeErrorResult(e), nil
 				}
 				reply = &value
 			}
@@ -100,10 +100,10 @@ func registerChatTool(s *server.MCPServer, svc *service.Service) {
 			}{thread}
 		}
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		// makeJSONResult serializes payload directly: no name/data wrapper.
-		return makeJSONResult("chat", payload)
+		return makeJSONResult(payload)
 	})
 }
 

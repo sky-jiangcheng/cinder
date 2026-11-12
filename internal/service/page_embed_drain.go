@@ -133,18 +133,39 @@ const pageDrainInterval = 5 * time.Second
 // the two queues on one cadence and one cost profile.
 func (s *Service) startPageEmbedDrainer() {
 	s.bgGo("page-embed-drainer", func(ctx context.Context) {
-		t := time.NewTicker(pageDrainInterval)
-		defer t.Stop()
+		failures, escalated := 0, false
 		for {
+			wait := pageDrainInterval
+			if failures > 0 {
+				wait = drainerBackoff(failures)
+			}
+			t := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
+				t.Stop()
 				return
 			case <-t.C:
-				if n, err := s.drainDirtyPages(embedDrainBatch); err != nil {
+			}
+			pending := false
+			if w, e := db.NextDirtyPageEmbedWork(s.db, 1); e == nil {
+				pending = len(w.ToEmbed) > 0 || len(w.Gone) > 0
+			}
+			n, err := s.drainDirtyPages(embedDrainBatch)
+			switch {
+			case drainRoundFailed(err, pending, n):
+				failures++
+				if err != nil {
 					log.Printf("page semantic incremental [deferred]: %v", err)
-				} else if n > 0 {
-					log.Printf("page semantic incremental: %d page(s) indexed", n)
 				}
+				if !escalated && failures >= embedDrainEscalateAfter {
+					log.Printf("WARN page semantic incremental: %d consecutive rounds made no progress; backing off", failures)
+					escalated = true
+				}
+			case n > 0:
+				failures, escalated = 0, false
+				log.Printf("page semantic incremental: %d page(s) indexed", n)
+			default:
+				failures, escalated = 0, false
 			}
 		}
 	})

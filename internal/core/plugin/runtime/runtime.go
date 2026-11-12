@@ -11,6 +11,7 @@
 package runtime
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"log"
@@ -373,7 +374,9 @@ func (r *Runtime) TriggerImport(name string) (ImportRun, error) {
 
 	log.Printf("plugin runtime: import %q -> created %d, updated %d, skipped %d, failed %d",
 		name, run.Created, run.Updated, run.Skipped, run.Failed)
-	return run, nil
+	// Surface the first landing/upsert failure so a run where every document
+	// failed is not reported as a clean success.
+	return run, firstErr
 }
 
 // ImportPreviewItem is one document a preview run WOULD write, classified by
@@ -483,11 +486,19 @@ func (r *Runtime) upsertDoc(doc plugin.ImportDoc, source string) (bool, error) {
 	}
 	existing, err := db.GetNoteBySourceTitle(r.db, doc.ProjectID, source, doc.Title)
 	if err == nil {
+		// A 4h sync re-imports the same files. Rewriting an unchanged doc
+		// refreshes updated_at, which pushes kind=log notes ahead of curated
+		// knowledge in recency-ordered context. Skip the write entirely.
+		if doc.Content != "" && sha256.Sum256([]byte(doc.Content)) == sha256.Sum256([]byte(existing.Content)) {
+			return false, nil
+		}
 		if doc.Content != "" {
 			// UpdateNoteFull runs content + metadata in a single transaction, so
 			// the note_versions snapshot fires once with consistent data and a
 			// metadata failure can never leave content updated but meta stale.
-			if uerr := db.UpdateNoteFull(r.db, existing.ID, doc.Content, doc.Title, doc.Tags, kind, existing.Pinned); uerr != nil {
+			// Version 0: an importer writes what it just read from a source
+			// file, with no user-held copy that could be stale.
+			if uerr := db.UpdateNoteFull(r.db, existing.ID, doc.Content, doc.Title, doc.Tags, kind, existing.Pinned, 0); uerr != nil {
 				log.Printf("plugin runtime: upsertDoc UpdateNoteFull failed (note %d): %v", existing.ID, uerr)
 				return false, uerr
 			}
@@ -500,11 +511,28 @@ func (r *Runtime) upsertDoc(doc plugin.ImportDoc, source string) (bool, error) {
 	if err != sql.ErrNoRows {
 		return false, err
 	}
-	_, err = db.CreateNoteEx(r.db, doc.ProjectID, doc.Title, doc.Content, doc.Tags, kind, source)
-	if err != nil {
+	// The create path carries an idempotency key too (ADR-0057 D1). The
+	// (project, source, title) lookup above is the normal upsert key, but it is
+	// a read-then-write: a 4h sync and a manual import running at once both
+	// find nothing and both insert. The key names the same identity plus the
+	// content, so the loser of that race is absorbed instead of producing a
+	// second note with the same title.
+	if _, _, err = db.CreateNoteIdempotent(r.db, doc.ProjectID, doc.Title, doc.Content, doc.Tags, kind, source, importIdempotencyKey(doc, source)); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// importIdempotencyKey is the stable identity of one imported document:
+// project + source + title + content digest. Title is hashed only to keep the
+// key short and free of separators; the content digest means an edited
+// document is a NEW key, which complements (rather than fights) the
+// content-hash skip above: the skip covers the update path, the key covers the
+// create path.
+func importIdempotencyKey(doc plugin.ImportDoc, source string) string {
+	title := sha256.Sum256([]byte(doc.Title))
+	content := sha256.Sum256([]byte(doc.Content))
+	return fmt.Sprintf("import:%d:%s:%x:%x", doc.ProjectID, source, title[:8], content[:8])
 }
 
 // safeImport runs an importer, recovering any panic.

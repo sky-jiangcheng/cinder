@@ -49,6 +49,8 @@ const note: Note = {
   pinned: false,
   source: 'manual',
   topic_id: 0,
+  // The optimistic-lock counter the editor must post back on save (ADR-0057).
+  version: 7,
   sort_order: 0,
   created_at: '2026-10-20T00:00:00Z',
   updated_at: '2026-10-20T00:00:00Z',
@@ -89,7 +91,7 @@ describe('NoteSection AI tidy', () => {
     // full-update path, with kind/pinned carried from the stored note.
     fireEvent.click(screen.getByText('project.save'))
     await waitFor(() =>
-      expect(mockUpdate).toHaveBeenCalledWith(345, expect.stringContaining('## 目录'), '支付网关：重试与幂等', 'gateway,retry,idempotency', 'knowledge', false),
+      expect(mockUpdate).toHaveBeenCalledWith(345, expect.stringContaining('## 目录'), '支付网关：重试与幂等', 'gateway,retry,idempotency', 'knowledge', false, 7),
     )
   })
 

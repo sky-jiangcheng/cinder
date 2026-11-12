@@ -69,7 +69,7 @@ func TestSemanticSearchEndToEnd(t *testing.T) {
 
 	// Index not built yet -> fuse is a graceful no-op (vector index missing).
 	query := "totally unrelated zzz"
-	if hits := svc.SearchNotes(query); len(hits) != 0 {
+	if hits := svc.mustSearchNotes(query); len(hits) != 0 {
 		t.Fatalf("before rebuild, expected lexical-only empty, got %d", len(hits))
 	}
 
@@ -82,7 +82,7 @@ func TestSemanticSearchEndToEnd(t *testing.T) {
 	}
 
 	// Now the query (lexically matching nothing) recalls "alpha" via vectors.
-	hits := svc.SearchNotes(query)
+	hits := svc.mustSearchNotes(query)
 	if len(hits) == 0 {
 		t.Fatal("expected semantic recall of alpha, got 0 hits")
 	}
@@ -94,7 +94,7 @@ func TestSemanticSearchEndToEnd(t *testing.T) {
 	if err := svc.UpdateConfig("semantic_search", "0"); err != nil {
 		t.Fatal(err)
 	}
-	if hits := svc.SearchNotes(query); len(hits) != 0 {
+	if hits := svc.mustSearchNotes(query); len(hits) != 0 {
 		t.Errorf("with semantic off, expected 0 hits, got %d", len(hits))
 	}
 }

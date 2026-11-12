@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"repotory/internal/bounds"
+	"repotory/internal/domain"
 	"repotory/internal/service"
 )
 
@@ -55,7 +56,9 @@ func New(svc *service.Service, bound any) http.Handler {
 	mux.HandleFunc("/api/search", h.search)
 	mux.HandleFunc("/api/project/", h.project)
 	mux.HandleFunc("/api/rpc", h.rpc)
-	return loopbackGuard(mux)
+	// loopbackGuard stays outermost: a request rejected at the trust boundary
+	// (foreign Host/Origin) must not reach withRequestLog or get a request id.
+	return loopbackGuard(withRequestLog(mux))
 }
 
 type handler struct {
@@ -190,11 +193,18 @@ func (h *handler) search(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	var hits any
+	// ADR-0055 D2: a broken search path is a 500, never `200 {"hits": null}`.
+	var hits []domain.SearchHit
+	var err error
 	if r.URL.Query().Get("all") == "1" {
-		hits = h.svc.SearchAll(q)
+		hits, err = h.svc.SearchAll(q)
 	} else {
-		hits = h.svc.SearchNotes(q)
+		hits, err = h.svc.SearchNotes(q)
+	}
+	if err != nil {
+		log.Printf("search failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "search failed"})
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"query": q, "hits": hits})
 }

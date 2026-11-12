@@ -18,13 +18,22 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^project not found/i, 'errors.projectNotFound'],
   [/^title is required/i, 'errors.titleRequired'],
   [/merge up requires explicit confirmation/i, 'errors.mergeNeedsConfirmation'],
+  // The optimistic-lock miss (ADR-0057 D2). It arrives as
+  // "note 42: expected version 3: modified by another writer", whose raw text
+  // tells the user nothing about what to do next — and retrying, which is what
+  // "请重试" would suggest, fails forever.
+  [/modified by another writer/i, 'errors.noteConflict'],
   [/UNIQUE constraint failed: projects\.root_path/i, 'errors.pathTaken'],
   [/FOREIGN KEY constraint failed/i, 'errors.projectNotFound'],
   [/no rows in result set/i, 'errors.recordGone'],
 ]
 
-/** Turn an unknown error into text the user can act on; unknown errors pass
- *  through unchanged rather than being swallowed. */
+/** Turn a storage/domain error into text the user can act on. An error the
+ *  rules do not recognise gets an actionable sentence first, then the original
+ *  message in parentheses: the sentence tells the user what to do, the detail
+ *  keeps a bug report diagnosable. Dropping the detail entirely (one earlier
+ *  version did) turned every unknown failure into the same sentence, which is
+ *  unactionable in the opposite direction. */
 export function describeApiError(t: Translate, err: unknown): string {
   const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : ''
   const message = raw.trim()
@@ -32,5 +41,5 @@ export function describeApiError(t: Translate, err: unknown): string {
   for (const [pattern, key] of RULES) {
     if (pattern.test(message)) return t(key)
   }
-  return message
+  return `${t('errors.unknownActionable')} (${message})`
 }

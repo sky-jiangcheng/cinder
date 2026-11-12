@@ -66,21 +66,28 @@ func registerAskTool(mcpServer *server.MCPServer, svc *service.Service) {
 		args := req.GetArguments()
 		query, _ := args["query"].(string)
 		if strings.TrimSpace(query) == "" {
-			return makeTextResult("query is required"), nil
+			return makeInvalidResult("query is required"), nil
 		}
 		if len(query) > maxArgQueryLen {
-			return makeTextResult(fmt.Sprintf("query too long: %d bytes (max %d)", len(query), maxArgQueryLen)), nil
+			return makeInvalidResult(fmt.Sprintf("query too long: %d bytes (max %d)", len(query), maxArgQueryLen)), nil
 		}
-		projectID := resolveProjectID(svc, args)
+		projectID, msg := resolveProjectID(svc, args)
+		if msg != "" {
+			return makeInvalidResult(msg), nil
+		}
 
 		answer, err := svc.AskAIWithEvidence(projectID, query, service.DefaultEvidenceBudget)
 		if err != nil {
 			if errors.Is(err, service.ErrAIChatNotConfigured) {
-				return makeTextResult(keywordFallback(svc, query)), nil
+				fallback, fbErr := keywordFallback(svc, query)
+				if fbErr != nil {
+					return makeErrorResult(fbErr), nil
+				}
+				return makeTextResult(fallback), nil
 			}
 			// A configured endpoint that fails is an error, not a fallback: the
 			// caller must be able to tell "retry later" from "there is no answer".
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		return makeTextResult(formatEvidenceAnswer(answer)), nil
 	})
@@ -91,13 +98,16 @@ func registerAskTool(mcpServer *server.MCPServer, svc *service.Service) {
 //
 // The label is the point. The old tool returned this text unqualified and an
 // agent read it as an answer; the wording has to say what it is.
-func keywordFallback(svc *service.Service, query string) string {
-	hits := svc.SearchAll(query)
+func keywordFallback(svc *service.Service, query string) (string, error) {
+	hits, err := svc.SearchAll(query)
+	if err != nil {
+		return "", err
+	}
 	if len(hits) == 0 {
-		return "No results found for: " + query
+		return "No results found for: " + query, nil
 	}
 	return "No AI endpoint is configured, so this is a keyword match list, NOT an answer:\n\n" +
-		strings.Join(service.FormatSearchAnswer(hits, 5), "\n---\n")
+		strings.Join(service.FormatSearchAnswer(hits, 5), "\n---\n"), nil
 }
 
 // formatEvidenceAnswer renders the answer and the sources it was built from.

@@ -942,7 +942,8 @@
     "noProjectsToCapture": "没有可选的项目",
     "pickProject": "选择要捕捉的项目",
     "handoffOk": "已创建：{{title}}",
-    "handoffFail": "捕捉失败：{{msg}}"
+    "handoffFail": "捕捉失败：{{msg}}",
+    "handoffDeduped": "已存在：{{title}}（同一会话，未重复写入）"
   },
   "handoff": {
     "title": "写一条交接记录",
@@ -1211,7 +1212,9 @@
     "titleRequired": "标题不能为空",
     "recordGone": "这条记录已不存在，请刷新后重试",
     "pathTaken": "该目录已被其他项目占用",
-    "mergeNeedsConfirmation": "该操作会合并并删除同级项目，需要明确确认"
+    "mergeNeedsConfirmation": "该操作会合并并删除同级项目，需要明确确认",
+    "unknownActionable": "操作未完成，请重试；若反复失败，请查看应用日志或重启 Cinder。",
+    "noteConflict": "这条笔记在你编辑期间已被另一处修改（可能是 AI 或其他窗口），本次保存没有写入。你的内容仍在编辑器里：请复制后关闭并重新打开这条笔记，再粘贴保存。"
   },
   "agent": {
     "title": "Cinder 助手",

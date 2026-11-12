@@ -49,6 +49,16 @@ describe('endpoint routing contract', () => {
     })
   })
 
+  it('searchAll propagates a backend failure instead of degrading to []', async () => {
+    callMock.mockRejectedValueOnce(new Error('fts index unavailable'))
+    await expect(searchAll('q')).rejects.toThrow('fts index unavailable')
+  })
+
+  it('searchNotes propagates a backend failure instead of degrading to []', async () => {
+    callMock.mockRejectedValueOnce(new Error('fts index unavailable'))
+    await expect(searchNotes('q')).rejects.toThrow('fts index unavailable')
+  })
+
   it('getProjects encodes date and starred params into the query string', async () => {
     await getProjects('2026-08-01', true)
     expect(callMock).toHaveBeenCalledWith({

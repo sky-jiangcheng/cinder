@@ -32,7 +32,7 @@ func registerScanTool(mcpServer *server.MCPServer, svc *service.Service) {
 		// nobody.
 		res, err := svc.ScanNow(ctx)
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		payload := map[string]any{
 			"success":     res.Success,
@@ -46,6 +46,6 @@ func registerScanTool(mcpServer *server.MCPServer, svc *service.Service) {
 			payload["sync_errors"] = res.SyncErrors
 			payload["warning"] = fmt.Sprintf("%d project group(s) failed to sync; counts are partial — run repotory_integrity before trusting results", res.SyncErrors)
 		}
-		return makeJSONResult("scan", payload)
+		return makeJSONResult(payload)
 	})
 }

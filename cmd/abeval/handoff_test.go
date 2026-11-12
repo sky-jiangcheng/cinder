@@ -211,9 +211,15 @@ func TestHandoffGatePassesOnAHealthyCorpus(t *testing.T) {
 }
 
 // The failure path: a handoff that the production search path cannot find
-// must fail the gate. The distractors below are byte-identical to the
-// handoff, so bm25 ties and the ordering falls to updated_at — the handoff is
-// pushed to the oldest, so it lands outside the search limit.
+// must fail the gate.
+//
+// Ranking can no longer be used to build this case. search.go boosts a
+// handoff-tagged hit over the LIMIT window (12.12), so the older trick of
+// flooding the corpus with byte-identical distractors and ageing the handoff
+// no longer pushes it out — by design. The honest failure mode left is index
+// drift: the note row exists (so the gate has something to measure) but the
+// FTS entry is gone, which is what a broken rebuild or a partially applied
+// migration looks like.
 func TestHandoffGateFailsWhenARecordedHandoffIsUnreachable(t *testing.T) {
 	dbPath := seedGateCorpus(t)
 
@@ -223,11 +229,11 @@ func TestHandoffGateFailsWhenARecordedHandoffIsUnreachable(t *testing.T) {
 	}
 	defer func() { _ = database.Close() }()
 
+	var id, pid int64
 	var title, content string
-	var pid int64
 	if err := database.QueryRow(
-		"SELECT project_id, title, content FROM project_notes WHERE tags LIKE '%handoff%' LIMIT 1").
-		Scan(&pid, &title, &content); err != nil {
+		"SELECT id, project_id, title, content FROM project_notes WHERE tags LIKE '%handoff%' LIMIT 1").
+		Scan(&id, &pid, &title, &content); err != nil {
 		t.Fatal(err)
 	}
 
@@ -237,12 +243,11 @@ func TestHandoffGateFailsWhenARecordedHandoffIsUnreachable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The distractor notes were written in the same millisecond as the
-	// handoff, so recency alone would not separate them. Age the handoff
-	// explicitly: identical documents score identically under bm25, and the
-	// tiebreak is the newest first.
+	// Drop the handoff's index entry only. project_notes_fts is an external
+	// content table, so this is the same 'delete' command the triggers issue.
 	if _, err := database.Exec(
-		"UPDATE project_notes SET updated_at = '2020-01-01 00:00:00.000' WHERE tags LIKE '%handoff%'"); err != nil {
+		"INSERT INTO project_notes_fts(project_notes_fts, rowid, title, content) VALUES('delete', ?, ?, ?)",
+		id, title, content); err != nil {
 		t.Fatal(err)
 	}
 

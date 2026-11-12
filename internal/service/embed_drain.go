@@ -34,26 +34,74 @@ const (
 	// is at most one request per batch. Without a cap, importing a 5k-note memory
 	// directory would hand the endpoint everything at once.
 	embedDrainBatch = 64
+	// embedDrainMaxBackoff caps the retry delay for a persistently dead endpoint.
+	embedDrainMaxBackoff = 5 * time.Minute
+	// embedDrainEscalateAfter is the consecutive-failure count that earns one WARN.
+	embedDrainEscalateAfter = 6
 )
+
+// drainerBackoff doubles the wait per consecutive failed round, capped at
+// embedDrainMaxBackoff, so a dead endpoint is not hit every 5 seconds forever.
+func drainerBackoff(failures int) time.Duration {
+	if failures <= 0 {
+		return embedDrainInterval
+	}
+	d := embedDrainInterval
+	for i := 0; i < failures; i++ {
+		if d >= embedDrainMaxBackoff {
+			return embedDrainMaxBackoff
+		}
+		d *= 2
+	}
+	if d > embedDrainMaxBackoff {
+		return embedDrainMaxBackoff
+	}
+	return d
+}
+
+// drainRoundFailed reports a round that made no progress while work was still
+// queued — the endpoint/store-down case, which keeps its queue untouched.
+func drainRoundFailed(err error, pending bool, resolved int) bool {
+	return err != nil || (pending && resolved == 0)
+}
 
 // startEmbedDrainer launches the drain loop as tracked background work, so
 // Shutdown waits for it and never leaves it writing into a closed database.
 func (s *Service) startEmbedDrainer() {
 	s.bgGo("embed-drainer", func(ctx context.Context) {
-		t := time.NewTicker(embedDrainInterval)
-		defer t.Stop()
+		failures, escalated := 0, false
 		for {
+			wait := embedDrainInterval
+			if failures > 0 {
+				wait = drainerBackoff(failures)
+			}
+			t := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
+				t.Stop()
 				return
 			case <-t.C:
-				// Errors are logged, not fatal: the queue keeps the work, so a
-				// laptop that slept through an outage resumes on the next tick.
-				if n, err := s.drainDirtyNotes(embedDrainBatch); err != nil {
+			}
+			pending := false
+			if w, e := db.NextDirtyEmbedWork(s.db, 1); e == nil {
+				pending = len(w.ToEmbed) > 0 || len(w.Gone) > 0
+			}
+			n, err := s.drainDirtyNotes(embedDrainBatch)
+			switch {
+			case drainRoundFailed(err, pending, n):
+				failures++
+				if err != nil {
 					s.logEmbedDrain("deferred", err)
-				} else if n > 0 {
-					log.Printf("semantic incremental: %d note(s) indexed", n)
 				}
+				if !escalated && failures >= embedDrainEscalateAfter {
+					log.Printf("WARN semantic incremental: %d consecutive rounds made no progress; backing off", failures)
+					escalated = true
+				}
+			case n > 0:
+				failures, escalated = 0, false
+				log.Printf("semantic incremental: %d note(s) indexed", n)
+			default:
+				failures, escalated = 0, false
 			}
 		}
 	})

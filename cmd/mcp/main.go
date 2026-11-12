@@ -8,7 +8,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -23,8 +25,11 @@ import (
 
 func main() {
 	platform.SetPrivateUmask() // owner-only files: DB sidecars, logs, exports
+	// MCP speaks JSON-RPC on stdout: logs go to their own file (or stderr on
+	// failure), never to stdout, so the protocol stream stays clean.
+	platform.SetupLogging("mcp", true)
 
-	d, err := db.InitDB(platform.GetDbPath())
+	d, err := db.OpenWithRetry(platform.GetDbPath())
 	if err != nil {
 		log.Fatalf("database error: %v", err)
 	}
@@ -45,7 +50,10 @@ func main() {
 	// release version. A client asking "what may I rely on" wants the answer
 	// to survive a UI-only release; the release version is still one log line
 	// away and rides along on /health as "version".
-	mcpServer := server.NewMCPServer("repotory-mcp", version.CoreVersion)
+	// One middleware covers every tool registered by any register* function;
+	// the 22 AddTool sites stay untouched and tools keep their behaviour.
+	mcpServer := server.NewMCPServer("repotory-mcp", version.CoreVersion,
+		server.WithToolHandlerMiddleware(instrumentTools))
 	registerTools(mcpServer, svc)
 	registerAskTool(mcpServer, svc)
 	registerWikiTools(mcpServer, svc)
@@ -72,6 +80,49 @@ func main() {
 	if err := server.ServeStdio(mcpServer); err != nil {
 		log.Printf("MCP server error: %v", err)
 	}
+}
+
+// instrumentTools times every MCP tool call and logs tool name, duration,
+// success/failure, and an error summary. Registered once via
+// WithToolHandlerMiddleware, so all tools are covered without editing their
+// registration sites or behaviour. It logs through the shared slog sink, which
+// for MCP is a file or stderr — never stdout.
+func instrumentTools(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		start := time.Now()
+		res, err := next(ctx, req)
+		attrs := []any{
+			slog.String("tool", req.Params.Name),
+			slog.Int64("duration_ms", time.Since(start).Milliseconds()),
+		}
+		switch {
+		case err != nil:
+			slog.Warn("mcp tool error", append(attrs,
+				slog.Bool("ok", false), slog.String("error", err.Error()))...)
+		case res != nil && res.IsError:
+			slog.Warn("mcp tool error", append(attrs,
+				slog.Bool("ok", false), slog.String("error", toolErrorSummary(res)))...)
+		default:
+			slog.Info("mcp tool", append(attrs, slog.Bool("ok", true))...)
+		}
+		return res, err
+	}
+}
+
+// toolErrorSummary returns a short human-readable error from a tool result.
+func toolErrorSummary(res *mcp.CallToolResult) string {
+	if res == nil || len(res.Content) == 0 {
+		return ""
+	}
+	tc, ok := res.Content[0].(mcp.TextContent)
+	if !ok {
+		return ""
+	}
+	const max = 256
+	if len(tc.Text) > max {
+		return tc.Text[:max]
+	}
+	return tc.Text
 }
 
 // maxArgQueryLen bounds the query argument of repotory_notes_search and
@@ -126,14 +177,15 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		// notes on a 10k-note knowledge base used to receive all 10k over
 		// the wire first.
 		notes := svc.ListAllNotesLimited(notesListLimit(req))
-		return makeJSONResult("notes_list", notes)
+		return makeJSONResult(notes)
 	})
 
 	mcpServer.AddTool(mcp.Tool{
 		Name:        "repotory_notes_search",
 		Description: "Search notes and todos by query using FTS5 full-text search",
 		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
+			Type:     "object",
+			Required: []string{"query"},
 			Properties: map[string]any{
 				"query": map[string]any{
 					"type":        "string",
@@ -148,23 +200,31 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		query, _ := req.GetArguments()["query"].(string)
 		if query == "" {
-			return makeTextResult("query is required"), nil
+			return makeInvalidResult("query is required"), nil
 		}
 		if len(query) > maxArgQueryLen {
-			return makeTextResult(fmt.Sprintf("query too long: %d bytes (max %d)", len(query), maxArgQueryLen)), nil
+			return makeInvalidResult(fmt.Sprintf("query too long: %d bytes (max %d)", len(query), maxArgQueryLen)), nil
 		}
-		hits := svc.SearchAll(query)
-		if path, _ := req.GetArguments()["path"].(string); strings.TrimSpace(path) != "" {
+		path, _ := req.GetArguments()["path"].(string)
+		if msg := bounds.Check("path", path, bounds.MaxPathLen); msg != "" {
+			return makeInvalidResult(msg), nil
+		}
+		hits, err := svc.SearchAll(query)
+		if err != nil {
+			return makeErrorResult(err), nil
+		}
+		if strings.TrimSpace(path) != "" {
 			hits = svc.RankHitsByWorkspace(hits, path)
 		}
-		return makeJSONResult("notes_search", hits)
+		return makeJSONResult(hits)
 	})
 
 	mcpServer.AddTool(mcp.Tool{
 		Name:        "repotory_notes_read",
 		Description: "Read a single note by ID",
 		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
+			Type:     "object",
+			Required: []string{"id"},
 			Properties: map[string]any{
 				"id": map[string]any{
 					"type":        "number",
@@ -174,11 +234,14 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		},
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, _ := req.GetArguments()["id"].(float64)
+		if int64(id) <= 0 {
+			return makeInvalidResult("a positive note id is required"), nil
+		}
 		note, err := svc.GetNote(int64(id))
 		if err != nil {
 			return notFoundOrError(err, "note"), nil
 		}
-		return makeJSONResult("note_read", note)
+		return makeJSONResult(note)
 	})
 
 	mcpServer.AddTool(mcp.Tool{
@@ -197,14 +260,15 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		if projects == nil {
 			projects = []domain.Project{}
 		}
-		return makeJSONResult("projects_list", projects)
+		return makeJSONResult(projects)
 	})
 
 	mcpServer.AddTool(mcp.Tool{
 		Name:        "repotory_projects_stats",
 		Description: "Get statistics for a specific project (repos, stats)",
 		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
+			Type:     "object",
+			Required: []string{"id"},
 			Properties: map[string]any{
 				"id": map[string]any{
 					"type":        "number",
@@ -214,11 +278,14 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		},
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, _ := req.GetArguments()["id"].(float64)
+		if int64(id) <= 0 {
+			return makeInvalidResult("a positive project id is required"), nil
+		}
 		summary, err := svc.GetProjectSummary(int64(id))
 		if err != nil {
 			return notFoundOrError(err, "project"), nil
 		}
-		return makeJSONResult("project_stats", summary)
+		return makeJSONResult(summary)
 	})
 
 	mcpServer.AddTool(mcp.Tool{
@@ -263,9 +330,9 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 
 		note, err := svc.CreateNoteWithMeta(int64(projectID), title, content, tags, category, "mcp")
 		if err != nil {
-			return makeTextResult(fmt.Sprintf("error: %v", err)), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("note_created", note)
+		return makeJSONResult(note)
 	})
 
 	mcpServer.AddTool(mcp.Tool{
@@ -304,6 +371,9 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := req.GetArguments()
 		id, _ := args["id"].(float64)
+		if int64(id) <= 0 {
+			return makeInvalidResult("a positive note id is required"), nil
+		}
 		content, _ := args["content"].(string)
 		title, _ := args["title"].(string)
 		tags, _ := args["tags"].(string)
@@ -322,14 +392,14 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 			if !ok {
 				// A client that sends "pinned": "true" meant to set it. Saying
 				// so beats dropping the argument and reporting success.
-				return makeTextResult(fmt.Sprintf("pinned must be a boolean, got %T", raw)), nil
+				return makeInvalidResult(fmt.Sprintf("pinned must be a boolean, got %T", raw)), nil
 			}
 			pinnedValue = pinned
 			hasPinned = true
 		}
 
 		if content == "" && title == "" && tags == "" && category == "" && !hasPinned {
-			return makeTextResult("nothing to update: provide at least one of content, title, tags, category, pinned"), nil
+			return makeInvalidResult("nothing to update: provide at least one of content, title, tags, category, pinned"), nil
 		}
 
 		// Load the stored note first: this is a partial-update tool, so every
@@ -350,7 +420,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		// supported flow; fixing the record itself stays a desktop-UI
 		// operation.
 		if service.IsHandoffNote(*note) {
-			return makeTextResult(fmt.Sprintf("refusing to update note %d: it is a session handoff record (tagged 'handoff') — the persisted protocol record between sessions, protected from plain overwrites. Write a new handoff with repotory_handoff; if this record itself is wrong, edit it from the desktop app.", note.ID)), nil
+			return makeInvalidResult(fmt.Sprintf("refusing to update note %d: it is a session handoff record (tagged 'handoff') — the persisted protocol record between sessions, protected from plain overwrites. Write a new handoff with repotory_handoff; if this record itself is wrong, edit it from the desktop app.", note.ID)), nil
 		}
 
 		// Merge omitted fields from the stored note and write everything back
@@ -376,14 +446,19 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		if hasPinned {
 			mergedPinned = pinnedValue
 		}
-		if err := svc.UpdateNoteFull(note.ID, mergedContent, mergedTitle, mergedTags, mergedKind, mergedPinned); err != nil {
-			return makeTextResult(fmt.Sprintf("error: %v", err)), nil
+		// The tool surface deliberately does not take an expected version
+		// (ADR-0057: the tool schema is frozen at CoreVersion 2.0.0), and an
+		// agent has no editor buffer whose staleness would matter — it just
+		// wrote what it read a moment ago. 0 = "no check"; the human-facing
+		// conflict story is the desktop editor's, which does pass a version.
+		if err := svc.UpdateNoteFull(note.ID, mergedContent, mergedTitle, mergedTags, mergedKind, mergedPinned, 0); err != nil {
+			return makeErrorResult(err), nil
 		}
 		updated, err := svc.GetNote(note.ID)
 		if err != nil {
 			return notFoundOrError(err, "note"), nil
 		}
-		return makeJSONResult("note_updated", updated)
+		return makeJSONResult(updated)
 	})
 
 	// The tidying draft. Deliberately a PROPOSAL tool: it returns the model's
@@ -409,13 +484,13 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service) {
 		args := req.GetArguments()
 		id, _ := args["id"].(float64)
 		if id <= 0 {
-			return makeTextResult("a positive note id is required"), nil
+			return makeInvalidResult("a positive note id is required"), nil
 		}
 		res, err := svc.OrganizeNote(int64(id))
 		if err != nil {
-			return makeTextResult(fmt.Sprintf("error: %v", err)), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("note_organized", res)
+		return makeJSONResult(res)
 	})
 
 	mcpServer.AddTool(mcp.Tool{

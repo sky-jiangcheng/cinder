@@ -28,6 +28,11 @@ var assets embed.FS
 
 func main() {
 	platform.SetPrivateUmask() // owner-only files: DB sidecars, logs, exports
+	// Subcommands that must not start the desktop shell (restore is the last
+	// resort after a corruption, so it cannot depend on the app booting).
+	if runCLI(os.Args[1:]) {
+		return
+	}
 	log.Printf("Cinder %s starting... (memory-layer contract %s)", version.Version, version.CoreVersion)
 
 	// Check storage safety before opening database
@@ -227,13 +232,8 @@ func ensurePath() {
 }
 
 func setupLogging() {
-	logFile := platform.GetLogPath()
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
-	if err == nil {
-		log.SetOutput(f)
-	}
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Printf("=== Cinder log started ===")
-	log.Printf("log file: %s", logFile)
-	log.Printf("PATH=%s", os.Getenv("PATH"))
+	// One JSON sink for slog and the standard log package, with size rotation.
+	// stdout stays clean; the desktop runtime has no protocol on stdout.
+	platform.SetupLogging("desktop", true)
+	log.Printf("Cinder desktop logging started")
 }

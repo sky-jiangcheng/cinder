@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"repotory/internal/bounds"
 )
 
 // repotory_ask is the question-answering tool (TODO Sprint 1.5).
@@ -46,5 +48,22 @@ func TestAskStillRequiresAQuery(t *testing.T) {
 	res := ts.call("repotory_ask", nil)
 	if got := ts.text(res); !strings.Contains(got, "query is required") {
 		t.Errorf("message = %q, want it to mention query is required", got)
+	}
+}
+
+// An oversized path used to degrade silently to a cross-project answer
+// (resolveProjectID returned 0). It must now be an explicit argument error —
+// this assertion fails against the old behaviour.
+func TestAskRejectsOversizedPath(t *testing.T) {
+	ts := newTestServer(t)
+	res := ts.call("repotory_ask", map[string]any{
+		"query": "retry",
+		"path":  strings.Repeat("p", bounds.MaxPathLen+1),
+	})
+	if !res.IsError {
+		t.Fatalf("oversized path must be a tool error, got a cross-project answer: %s", ts.text(res))
+	}
+	if got := ts.text(res); !strings.Contains(got, "path too long") {
+		t.Errorf("message = %q, want the length refusal", got)
 	}
 }

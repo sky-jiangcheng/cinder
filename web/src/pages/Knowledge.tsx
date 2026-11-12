@@ -383,7 +383,7 @@ function NotesBody({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const {
-    notes, tags, loading, error, hits, kindFilter, activeTag,
+    notes, tags, loading, error, hits, searchError, kindFilter, activeTag,
     activeTopic, pinnedOnly, importing, message, newNotePicker, exportingId,
     filtered, projectNames, recentNotes, topicCounts,
     setKindFilter, setActiveTag, setActiveTopic, setPinnedOnly, setNewNotePicker,
@@ -469,7 +469,9 @@ function NotesBody({
 
               {message && <div className="message-banner">{message}</div>}
 
-              {hits !== null ? (
+              {searchError ? (
+                <p className="empty-hint">{t('common.loadFailed')}</p>
+              ) : hits !== null ? (
                 <div className="knowledge-section">
                   <div className="section-header">
                     <h2>{t('knowledge.searchResults')} ({hits.length})</h2>

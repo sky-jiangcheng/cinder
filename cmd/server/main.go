@@ -18,9 +18,7 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -64,6 +62,8 @@ const (
 
 func main() {
 	platform.SetPrivateUmask() // owner-only files: DB sidecars, logs, exports
+	// Headless logs go to their own rotating file; stdout/stderr stay clean.
+	platform.SetupLogging("server", true)
 
 	port := flag.String("port", envOr("REPOTORY_HTTP_PORT", "18765"), "HTTP port for the headless API (loopback only)")
 	// webDist serves the built frontend (web/dist) from this process so a
@@ -77,7 +77,7 @@ func main() {
 	log.Printf("Cinder headless server %s starting on 127.0.0.1:%s (memory-layer contract %s)",
 		version.Version, *port, version.CoreVersion)
 
-	database, err := openDatabase(platform.GetDbPath())
+	database, err := db.OpenWithRetry(platform.GetDbPath())
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
@@ -165,53 +165,6 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
-}
-
-// openDatabase opens the knowledge base, retrying while another Cinder
-// process holds the write lock.
-//
-// The desktop app and this server share one SQLite file, and OPENING it
-// writes: the WAL pragma, the schema re-assertions (EnsureCompileJobs /
-// EnsureWikiSchema / EnsureFTSIndex) and the migration step all take the
-// write lock. With busy_timeout=5000 (internal/db/db.go) that is five
-// seconds — and a desktop app in the middle of an import or of the daily
-// snapshot holds the lock for longer than that. The server then died at
-// startup with "database is locked", and the IDE plugins read that as
-// "cannot reach the service": the service was never up, and nothing said
-// why.
-//
-// So lock contention is retried with a growing wait, and the wait is
-// logged. Every other failure stays fatal on the first try — a missing file
-// or a broken schema must not be retried into a timeout.
-func openDatabase(path string) (*sql.DB, error) {
-	const attempts = 6
-	var err error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		handle, initErr := db.InitDB(path)
-		if initErr == nil {
-			return handle, nil
-		}
-		err = initErr
-		if !isLockContention(initErr) {
-			return nil, err
-		}
-		if attempt == attempts {
-			break
-		}
-		wait := time.Duration(attempt) * time.Second
-		log.Printf("database is locked by another Cinder process (attempt %d/%d); retrying in %s", attempt, attempts, wait)
-		time.Sleep(wait)
-	}
-	return nil, fmt.Errorf("database stayed locked after %d attempts: %w", attempts, err)
-}
-
-// isLockContention reports whether the failure is "another process holds the
-// write lock" rather than a genuine defect.
-func isLockContention(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "database is locked") ||
-		strings.Contains(msg, "database table is locked") ||
-		strings.Contains(msg, "sqlite_busy")
 }
 
 // isAPIPath reports whether a request must reach the RPC mux even when static

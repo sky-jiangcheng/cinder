@@ -235,7 +235,11 @@ func loadCases(path string) ([]abeval.Case[int64], error) {
 }
 
 // ids extracts hit ids from search hits, preserving ranked order.
-func ids(hits []domain.SearchHit) []int64 {
+func ids(hits []domain.SearchHit, err error) []int64 {
+	if err != nil {
+		log.Printf("eval search: %v", err)
+		return nil
+	}
 	out := make([]int64, len(hits))
 	for i, h := range hits {
 		out[i] = h.ID
@@ -249,7 +253,11 @@ func ids(hits []domain.SearchHit) []int64 {
 // labeled cases carry project_notes ids, but a todo's id comes from
 // project_todos — id 1 exists in both tables. Without the type filter a todo
 // hit would be counted as a note hit and inflate recall with false positives.
-func noteIDs(hits []domain.SearchHit) []int64 {
+func noteIDs(hits []domain.SearchHit, err error) []int64 {
+	if err != nil {
+		log.Printf("eval search: %v", err)
+		return nil
+	}
 	out := make([]int64, 0, len(hits))
 	for _, h := range hits {
 		if h.Type == "todo" {

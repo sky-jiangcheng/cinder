@@ -111,7 +111,15 @@ export default function CommandPalette({ open, onClose }: Props) {
   const runCapture = (projectID: number) => {
     captureClaudeHandoff(projectID)
       .then(r => {
-        setHandoffMsg({ ok: true, text: t('commandPalette.handoffOk', { defaultValue: '已创建：{{title}}', title: r?.title ?? '' }) })
+        // A second capture of the same session is absorbed by the existing
+        // handoff (ADR-0057 D1). Saying "created" there would be a lie the user
+        // can check by opening the note.
+        setHandoffMsg({
+          ok: true,
+          text: r?.deduped
+            ? t('commandPalette.handoffDeduped', { defaultValue: '已存在：{{title}}（同一会话，未重复写入）', title: r?.title ?? '' })
+            : t('commandPalette.handoffOk', { defaultValue: '已创建：{{title}}', title: r?.title ?? '' }),
+        })
         setTimeout(onClose, 1600)
       })
       .catch((e: unknown) => {

@@ -248,10 +248,14 @@ func (a *App) GetNoteCounts() []domain.NoteCount { return a.svc.GetNoteCounts() 
 // --- Search -----------------------------------------------------------------
 
 // SearchNotes searches note content/title/tags across all projects.
-func (a *App) SearchNotes(query string) []domain.SearchHit { return a.svc.SearchNotes(query) }
+func (a *App) SearchNotes(query string) ([]domain.SearchHit, error) {
+	return a.svc.SearchNotes(query)
+}
 
 // SearchAll searches notes and todos together.
-func (a *App) SearchAll(query string) []domain.SearchHit { return a.svc.SearchAll(query) }
+func (a *App) SearchAll(query string) ([]domain.SearchHit, error) {
+	return a.svc.SearchAll(query)
+}
 
 // --- Notes ------------------------------------------------------------------
 
@@ -291,8 +295,14 @@ func (a *App) UpdateNote(noteID int64, content string) error {
 }
 
 // UpdateNoteFull updates both content and metadata in a single transaction.
-func (a *App) UpdateNoteFull(noteID int64, content, title, tags, kind string, pinned bool) error {
-	return a.svc.UpdateNoteFull(noteID, content, title, tags, kind, pinned)
+//
+// expectedVersion is the version the editor read when it opened the note
+// (ADR-0057 D2); the write is refused with a conflict if another writer has
+// moved past it. 0 means "no check" and is only for callers with no copy to be
+// stale — the desktop editor always passes the real number, because it is the
+// surface where a human is looking at one version while an agent rewrites it.
+func (a *App) UpdateNoteFull(noteID int64, content, title, tags, kind string, pinned bool, expectedVersion int) error {
+	return a.svc.UpdateNoteFull(noteID, content, title, tags, kind, pinned, expectedVersion)
 }
 
 // DeleteNote removes a note.

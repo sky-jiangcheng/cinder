@@ -278,7 +278,11 @@ func docIDs(ev *service.Evidence) []abeval.DocID {
 	return out
 }
 
-func noteIDs(hits []domain.SearchHit) []int64 {
+func noteIDs(hits []domain.SearchHit, err error) []int64 {
+	if err != nil {
+		log.Printf("eval search: %v", err)
+		return nil
+	}
 	out := make([]int64, len(hits))
 	for i, h := range hits {
 		out[i] = h.ID

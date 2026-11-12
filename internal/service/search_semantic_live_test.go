@@ -68,7 +68,7 @@ func TestSemanticLiveEndToEnd(t *testing.T) {
 		t.Fatalf("expected lexical to miss, got %d (bad fixture)", len(lex))
 	}
 
-	hits := svc.SearchNotes(query) // vector recall via real Qdrant
+	hits := svc.mustSearchNotes(query) // vector recall via real Qdrant
 	if len(hits) == 0 {
 		t.Fatal("semantic search via Qdrant returned nothing")
 	}

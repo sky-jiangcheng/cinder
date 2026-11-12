@@ -46,10 +46,10 @@ const BOT_SIZE = 52
 const DRAG_THRESHOLD = 4
 
 /** The panel's width; the placement maths needs it. */
-const PANEL_WIDTH = 420
+const PANEL_WIDTH = 480
 
-/** The panel's height; the placement maths needs it. */
-const PANEL_HEIGHT = 560
+/** The panel's height; the placement maths needs it. Clamped to the viewport. */
+const PANEL_HEIGHT = 640
 
 interface Point {
   x: number
@@ -315,11 +315,12 @@ export default function AgentBot({ onToast }: Props) {
     let left = pos.x + BOT_SIZE + 10
     if (left + PANEL_WIDTH > window.innerWidth - 12) left = pos.x - PANEL_WIDTH - 10
     left = Math.min(Math.max(left, 12), Math.max(12, window.innerWidth - PANEL_WIDTH - 12))
-    const top = Math.min(
-      Math.max(pos.y - 40, 12),
-      Math.max(12, window.innerHeight - PANEL_HEIGHT - 12)
-    )
-    return { left, top, width: PANEL_WIDTH, maxHeight: PANEL_HEIGHT }
+    // The desktop window can be as short as 600px (main.go MinHeight). Use the
+    // same effective height for the clamp and for maxHeight, or the panel is
+    // pinned near y=12 while still overflowing the bottom edge.
+    const height = Math.min(PANEL_HEIGHT, window.innerHeight - 24)
+    const top = Math.min(Math.max(pos.y - 40, 12), Math.max(12, window.innerHeight - height - 12))
+    return { left, top, width: PANEL_WIDTH, maxHeight: height }
   }, [pos])
 
   const hasAnswer = answer.trim().length > 0

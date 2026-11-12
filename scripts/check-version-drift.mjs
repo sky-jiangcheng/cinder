@@ -11,19 +11,23 @@
 // 抄写不掉的就不抄（改成指向事实源的链接，见 AGENTS.md 与 SECURITY.md 的改法），
 // 剩下的由 CI 兜住——手改绕不过这道门，bump-version.sh 漏掉的也会被这里抓出来。
 //
-// 八道检查：
+// 十道检查：
 //   ① 版本一致 —— wails.json 的 info.productVersion 是 SSOT，各产物清单必须与它相等
 //      （打包清单按命名空间层发现，新增项目不必改本文件）
 //   ② TODO 现状速查 —— TODO.md 顶部那行的版本必须与 SSOT 相等（由 bump-version.sh 同步）
 //   ③ ADR 集合 —— docs/adr/ 的文件集合 = 中英两份索引列出的集合，且两份索引逐条对应
 //   ④ 扫描频率 —— SECURITY.md 承诺的扫描频率必须与 .github/dependabot.yml 一致
-//   ⑤ 工具数量 —— skill 参考文档与文档站里每一处工具数声称 = cmd/mcp 测试钉死的工具数
+//   ⑤ 工具数量与 fixture —— scripts/mcp-tools.fixture.json 与 cmd/mcp 测试的 want 清单
+//      逐项相等；skill 参考文档、README 与文档站里每一处「N 个工具」声称 = fixture 长度
 //   ⑥ Node 版本 —— .nvmrc 是 SSOT，Dockerfile 的 ARG 默认值必须与它相等，
 //      且所有 setup-node 步骤必须读 .nvmrc 而不是各写一份字面量
 //   ⑦ Go 版本 —— 每个工作流的 go-version 必须钉到同一个确切补丁版，
 //      go.mod 的 toolchain 与 Dockerfile 的 ARG 必须与它相等
 //   ⑧ 核心契约版本 —— internal/version/core.go 的 CoreVersion 必须与
 //      cmd/mcp 测试里钉死的那一份相等（两者一起描述同一个工具面）
+//   ⑨ 契约版本语义 —— 声明的变更类型（major/minor/patch）必须与版本号实际走了多远一致
+//   ⑩ 文档工具名集合 —— 文档里出现的 repotory_* 名字 ⊆ fixture（兑现 ADR-0051 D1：
+//      两张面的对齐关系写进断言，允许只列子集，但列出来的必须是真工具）
 //
 // 运行：node scripts/check-version-drift.mjs
 // 结果：全过 → exit 0；发现漂移 → 打印清单并 exit 1。
@@ -228,10 +232,13 @@ if (intervals.length === 0) {
   }
 }
 
-// ------------------------------------------------------------ ⑤ 工具数量 ----
+// --------------------------------------------- ⑤ 工具数量与 fixture ----
 
 // 工具清单的事实源是 cmd/mcp 的注册表，而注册表由 TestToolsRegistered 钉死。
-// 随包分发的 skill 参考文档与文档站的每一处计数声称都必须等于它，
+// 它有两份机器可读副本：want 数组（Go 测试里的事实源）与
+// scripts/mcp-tools.fixture.json（给文档门禁用的 fixture）。两者必须逐项相等，
+// 否则「改了工具清单却没更新 fixture」会让下面所有计数/名字检查建立在旧清单上。
+// 随包分发的 skill 参考文档与文档站的每一处计数声称都必须等于 fixture 的长度，
 // 否则装到用户机器上的文档、用户打开的文档站就在说谎。
 // 为什么逐个文件写正则而不是全文搜数字：历史上「13 → 18」那次漂移正是散落在
 // 七份手册里的计数各改各的，全文匹配会把 ADR 与过程记录里**当时的实测值**也算成
@@ -245,8 +252,51 @@ const toolNames = wantBlock
   : []
 if (toolNames.length === 0) {
   issues.push('cmd/mcp/main_test.go: 读不到 TestToolsRegistered 的工具清单')
-} else {
+}
+
+// ① fixture 与 want 逐项相等（顺序也算：fixture 是清单的镜像，不是集合）。
+// 只解析 want 清单，不去 grep 工具注册代码反推实现 —— 那样会把注释和字符串里的
+// 名字也算进去。fixture 是唯一的、纳入 git 的机器可读副本。
+const fixtureRel = 'scripts/mcp-tools.fixture.json'
+let fixtureTools = []
+try {
+  const parsed = JSON.parse(read(fixtureRel))
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((n) => typeof n !== 'string' || !/^repotory_[a-z_]+$/.test(n))
+  ) {
+    issues.push(`${fixtureRel}: 必须是「repotory_* 工具名」字符串数组`)
+  } else {
+    fixtureTools = parsed
+  }
+} catch (err) {
+  issues.push(`${fixtureRel}: 读不到或不是合法 JSON（${err.message}）`)
+}
+if (fixtureTools.length > 0 && toolNames.length > 0) {
+  const sameOrder =
+    fixtureTools.length === toolNames.length &&
+    fixtureTools.every((n, i) => n === toolNames[i])
+  if (!sameOrder) {
+    const fixtureSet = new Set(fixtureTools)
+    const wantSet = new Set(toolNames)
+    const onlyFixture = fixtureTools.filter((n) => !wantSet.has(n))
+    const onlyWant = toolNames.filter((n) => !fixtureSet.has(n))
+    const hint =
+      onlyFixture.length || onlyWant.length
+        ? `fixture 独有：${onlyFixture.join('、') || '无'}；want 独有：${onlyWant.join('、') || '无'}`
+        : '集合相同但顺序不同（fixture 必须与 want 同序）'
+    issues.push(
+      `${fixtureRel}: 与 cmd/mcp/main_test.go 的 want 清单不一致 —— ` +
+        `fixture ${fixtureTools.length} 项 / want ${toolNames.length} 项；${hint}`
+    )
+  }
+}
+
+// ② 计数声称指向 fixture 的长度，而不是再抄一遍数字。
+if (fixtureTools.length > 0) {
   const toolCountClaims = [
+    ['README.md', /(\d+)\s*MCP tools/],
+    ['README.zh-CN.md', /(\d+)\s*个\s*MCP\s*工具/],
     ['skill/repotory/references/mcp-tools.md', /(\d+)\s*个工具/],
     ['skill/repotory/SKILL.md', /(\d+)\s*个工具，按意图选/],
     ['docs/index.md', /(?:cinder|repotory)-mcp<br\/>(\d+)\s*个工具/],
@@ -270,8 +320,8 @@ if (toolNames.length === 0) {
       continue
     }
     for (const c of claimed) {
-      if (Number(c) !== toolNames.length) {
-        report(`${file} · 声称的 MCP 工具数`, toolNames.length, c)
+      if (Number(c) !== fixtureTools.length) {
+        report(`${file} · 声称的 MCP 工具数`, fixtureTools.length, c)
       }
     }
   }
@@ -415,6 +465,66 @@ if (!pinnedCoreVersion) {
   report('cmd/mcp/main_test.go · 钉死的契约版本', coreVersion, pinnedCoreVersion)
 }
 
+// ------------------------------------- ⑨ 契约版本语义（ADR-0055 D1） ----
+
+// 第⑧门只比两份字面量相等，查不出「删了工具却只涨 minor」。core.go 现在把
+// 上一版与本次变更类型一起写成常量，这里校验「声明的类型」与「版本号实际
+// 走了多远」一致。工具清单 diff 的自动判定仍属 TODO 12.4，不在本门范围。
+const declaredPrev = coreSrc.match(/const CoreVersionPrevious\s*=\s*"([^"]+)"/)?.[1]
+const declaredKind = coreSrc.match(/const CoreVersionChange\s*=\s*"([^"]+)"/)?.[1]
+const parseVer = v => {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v || '')
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+}
+const prevVer = parseVer(declaredPrev)
+const currVer = parseVer(coreVersion)
+if (!prevVer || !currVer || !declaredKind) {
+  issues.push('internal/version/core.go: 契约版本语义三件套（CoreVersion / CoreVersionPrevious / CoreVersionChange）缺失或不是 X.Y.Z')
+} else {
+  const [pMaj, pMin, pPat] = prevVer
+  const expectedByKind = {
+    major: `${pMaj + 1}.0.0`,
+    minor: `${pMaj}.${pMin + 1}.0`,
+    patch: `${pMaj}.${pMin}.${pPat + 1}`,
+  }
+  if (!(declaredKind in expectedByKind)) {
+    issues.push(`internal/version/core.go: CoreVersionChange = "${declaredKind}"，只允许 major / minor / patch`)
+  } else if (coreVersion !== expectedByKind[declaredKind]) {
+    report('internal/version/core.go · 契约版本语义', expectedByKind[declaredKind], coreVersion)
+  }
+}
+
+// ----------------------------------- ⑩ 文档工具名集合（ADR-0051 D1） ----
+
+// ADR-0051 决策 D1 承诺「两张面的对齐关系写进 check-version-drift 的断言」，
+// 代价一节又写「靠 check-version-drift 的断言兜底」。这里兑现它：文档是绑定面 /
+// 工具面的**声称面**，凡是写出一个 repotory_* 名字，就必须在 fixture 里存在。
+// 允许只列子集（根 SKILL.md 的速查表只列 13 个是有意的），但列出来的每一个都得是
+// 真工具 —— 拼错、改名漏改、旧名残留都会在这里报红。docs/api/reference.md
+// （及英文镜像）记录的是 Wails 绑定面与 MCP 孪生关系，一并纳入，正是「两张面对齐」
+// 被断言的那一面。
+if (fixtureTools.length > 0) {
+  const fixtureSet = new Set(fixtureTools)
+  const toolNameDocs = [
+    'README.md',
+    'README.zh-CN.md',
+    'SKILL.md',
+    'skill/repotory/SKILL.md',
+    'skill/repotory/references/mcp-tools.md',
+    'docs/api/reference.md',
+    'docs/en/api/reference.md',
+  ]
+  for (const file of toolNameDocs) {
+    const names = [
+      ...new Set([...read(file).matchAll(/\brepotory_[a-z_]+\b/g)].map((m) => m[0])),
+    ].sort()
+    const unknown = names.filter((n) => !fixtureSet.has(n))
+    if (unknown.length > 0) {
+      issues.push(`${file}: 列出了 fixture 里不存在的工具名 ${unknown.join('、')}`)
+    }
+  }
+}
+
 // ------------------------------------------------------------------ 结论 ----
 
 if (issues.length > 0) {
@@ -422,7 +532,8 @@ if (issues.length > 0) {
   for (const line of issues) console.error(`  - ${line}`)
   console.error(
     '\n修法：版本类跑 ./scripts/bump-version.sh <X.Y.Z>（它会同步 TODO.md 的现状速查），' +
-      '\n     ADR 集合在改完 docs/adr/ 后补进两份 index.md。'
+      '\n     ADR 集合在改完 docs/adr/ 后补进两份 index.md；' +
+      '\n     改了 MCP 工具清单就同步 scripts/mcp-tools.fixture.json 与各文档的「N 个工具」声称。'
   )
   process.exit(1)
 }
@@ -430,6 +541,6 @@ if (issues.length > 0) {
 console.log(
   `version drift OK: SSOT ${ssot}（${versionSites.length} 处产物清单一致）、TODO 现状速查一致、` +
     `ADR ${adrFiles.length} 份中英索引对齐、扫描频率与 dependabot.yml 一致、` +
-    `MCP ${toolNames.length} 个工具与 skill 文档一致、契约版本 ${coreVersion} 与测试钉死的一致、` +
+    `MCP ${fixtureTools.length} 个工具（fixture 与 want 逐项相等、文档计数与工具名一致）、契约版本 ${coreVersion} 与测试钉死的一致、` +
     `Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致、Go ${goList[0]} 各工作流一致。`
 )

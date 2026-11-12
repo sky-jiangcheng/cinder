@@ -52,6 +52,7 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
   const [error, setError] = useState('')
   const [query, setQueryState] = useState('')
   const [hits, setHits] = useState<SearchHit[] | null>(null)
+  const [searchError, setSearchError] = useState(false)
   const [kindFilter, setKindFilter] = useState<KindFilter>('all')
   const [activeTag, setActiveTag] = useState<string | null>(null)
   // The topic filter (schema v27). Topics belong to a project, but this page
@@ -123,11 +124,17 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
   }, [fetchAll])
 
   const runSearch = useDebouncedCallback((q: string, ask: boolean) => {
-    if (!q.trim()) { setHits(null); return }
+    if (!q.trim()) { setHits(null); setSearchError(false); return }
     const seq = ++searchSeq.current
     searchAll(q.trim())
-      .then(h => { if (seq === searchSeq.current) { setHits(h); if (ask) setAskMode(true) } })
-      .catch(() => { if (seq === searchSeq.current) { setHits([]); if (ask) setAskMode(true) } })
+      .then(h => { if (seq === searchSeq.current) { setHits(h); setSearchError(false); if (ask) setAskMode(true) } })
+      .catch((e: unknown) => {
+        if (seq !== searchSeq.current) return
+        console.error('[useKnowledgePage] search failed', e)
+        setHits(null)
+        setSearchError(true)
+        if (ask) setAskMode(true)
+      })
   }, 300)
 
   // setQuery IS the search entry point. The knowledge tab's skeleton owns the
@@ -260,7 +267,7 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
 
   return {
     // State
-    notes, tags: scopedTags, loading, error, query, hits: scopedHits, kindFilter, activeTag,
+    notes, tags: scopedTags, loading, error, query, hits: scopedHits, searchError, kindFilter, activeTag,
     activeTopic, pinnedOnly, importing, message, newNotePicker, askMode, exportingId,
     // Derived
     filtered, projectNames, pinnedCount, recentNotes, topicCounts,

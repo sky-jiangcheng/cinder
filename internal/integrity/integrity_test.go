@@ -758,7 +758,7 @@ func TestNoteVersionOrphans(t *testing.T) {
 			t.Fatalf("CreateNoteEx: %v", err)
 		}
 		// Migration v11's trigger snapshots the old content on a real edit.
-		if err := db.UpdateNoteFull(database, note.ID, "second revision", "Versioned", "", "other", false); err != nil {
+		if err := db.UpdateNoteFull(database, note.ID, "second revision", "Versioned", "", "other", false, 0); err != nil {
 			t.Fatalf("UpdateNoteFull: %v", err)
 		}
 

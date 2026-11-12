@@ -24,20 +24,20 @@ func registerMetricsTool(s *server.MCPServer, svc *service.Service) {
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		path, err := toolString(req.GetArguments(), "path", false)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		since, err := toolString(req.GetArguments(), "since", false)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		until, err := toolString(req.GetArguments(), "until", false)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		metrics, err := svc.GetMetricsRange(ctx, path, since, until)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("metrics", metrics)
+		return makeJSONResult(metrics)
 	})
 }

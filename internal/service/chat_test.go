@@ -125,7 +125,7 @@ func TestChatSharedPersistenceAndIsolation(t *testing.T) {
 			t.Fatalf("chat polluted %s: %d rows", table, count)
 		}
 	}
-	if hits := a.SearchAll("isolatedChatNeedle"); len(hits) != 0 {
+	if hits := a.mustSearchAll("isolatedChatNeedle"); len(hits) != 0 {
 		t.Fatalf("chat leaked into search: %v", hits)
 	}
 	// Close BOTH handles, then reopen: this is persisted data, not Service state.

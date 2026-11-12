@@ -943,7 +943,8 @@
     "noProjectsToCapture": "No project to pick",
     "pickProject": "Pick the project to capture",
     "handoffOk": "Created: {{title}}",
-    "handoffFail": "Capture failed: {{msg}}"
+    "handoffFail": "Capture failed: {{msg}}",
+    "handoffDeduped": "Already recorded: {{title}} (same session, nothing written again)"
   },
   "handoff": {
     "title": "Write a handoff record",
@@ -1212,7 +1213,9 @@
     "titleRequired": "Title is required",
     "recordGone": "That record no longer exists — refresh and try again",
     "pathTaken": "That directory is already owned by another project",
-    "mergeNeedsConfirmation": "This merges and deletes sibling projects and needs an explicit confirmation"
+    "mergeNeedsConfirmation": "This merges and deletes sibling projects and needs an explicit confirmation",
+    "unknownActionable": "The operation did not complete. Please try again; if it keeps failing, check the app logs or restart Cinder.",
+    "noteConflict": "This note changed elsewhere while you were editing (an agent or another window), so this save was not written. Your text is still in the editor: copy it, reopen the note, then paste and save."
   },
   "agent": {
     "title": "Cinder Assistant",

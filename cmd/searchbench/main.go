@@ -247,8 +247,8 @@ func buildStages(database *sql.DB, svc *service.Service, projectID int64) []stag
 	stages = append(stages, stage{
 		name: "notes",
 		fn: func(q string) error {
-			svc.SearchNotes(q)
-			return nil
+			_, err := svc.SearchNotes(q)
+			return err
 		},
 	})
 

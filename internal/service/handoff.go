@@ -1,6 +1,7 @@
 package service
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"log"
@@ -74,6 +75,12 @@ type HandoffInput struct {
 	// "Session Handoff", tag unchanged, Next Steps means "what the next session
 	// should do" — the full plan.
 	Milestone bool
+	// SessionID identifies the session this record describes, when the writer
+	// knows it (the capture path always does; an agent over MCP may). It is
+	// not stored on the note — it only seeds the idempotency key, so a retry of
+	// the same session collapses onto the same note instead of appending a
+	// second near-identical handoff (ADR-0057 D1).
+	SessionID string
 }
 
 // CreateHandoffNote persists a session handoff as a knowledge note rendered
@@ -106,11 +113,19 @@ func (s *Service) CreateHandoffNote(in HandoffInput) (*HandoffResult, error) {
 	if source == "" {
 		source = "mcp"
 	}
-	note, err := s.CreateNoteWithMeta(in.ProjectID, title, renderHandoffMarkdown(in, summary), tags, "knowledge", source)
+	body := renderHandoffMarkdown(in, summary)
+	note, deduped, err := s.createNoteWithKey(in.ProjectID, title, body, tags, "knowledge", source, handoffIdempotencyKey(in, body))
 	if err != nil {
 		return nil, err
 	}
-	res := &HandoffResult{NoteID: note.ID, Title: note.Title, Tags: tags, Milestone: in.Milestone}
+	res := &HandoffResult{NoteID: note.ID, Title: note.Title, Tags: tags, Milestone: in.Milestone, Deduped: deduped}
+
+	// A deduped write already carries its repository attribution (the first
+	// write did it), and re-running the attribution would be pure overhead on
+	// the exact path this exists to make cheap: the retry.
+	if deduped {
+		return res, nil
+	}
 
 	// Attribute the note to the repository the session was standing in. This is the
 	// writer note_repositories never had; without it the repository scope in
@@ -132,6 +147,41 @@ func (s *Service) CreateHandoffNote(in HandoffInput) (*HandoffResult, error) {
 		}
 	}
 	return res, nil
+}
+
+// handoffIdempotencyKey names what a record is ABOUT, which is what makes a
+// repeat write collapse instead of appending a second near-identical handoff
+// (ADR-0057 D1). Three shapes, because "the same session" and "the same
+// checkpoint" are different things:
+//
+//   - session-scoped (a session-end record): handoff:<project>:<session>. The
+//     SessionEnd hook, a retried repotory_handoff and the auto-capture of one
+//     session all land on one row.
+//   - milestone: handoff:<project>[:<session>]:milestone:<digest>. ADR-0054
+//     writes several checkpoints INTO one session, so a session-scoped key
+//     would collapse every checkpoint after the first into the first and
+//     silently lose the work it recorded. The digest of the rendered record
+//     is the identity of a checkpoint: the same one re-sent dedupes, a new one
+//     lands.
+//   - no session id (the MCP tool does not carry one): the digest of the
+//     rendered record. The retry that matters there is the same agent sending
+//     the same payload twice, and that digest survives it.
+//
+// Project-scoped in every shape: the same summary text in two projects is two
+// records, not a duplicate.
+func handoffIdempotencyKey(in HandoffInput, body string) string {
+	session := strings.TrimSpace(in.SessionID)
+	digest := sha256.Sum256([]byte(body))
+	switch {
+	case in.Milestone && session != "":
+		return fmt.Sprintf("handoff:%d:%s:milestone:%x", in.ProjectID, session, digest[:16])
+	case in.Milestone:
+		return fmt.Sprintf("handoff:%d:milestone:%x", in.ProjectID, digest[:16])
+	case session != "":
+		return fmt.Sprintf("handoff:%d:%s", in.ProjectID, session)
+	default:
+		return fmt.Sprintf("handoff:%d:sha256:%x", in.ProjectID, digest[:16])
+	}
 }
 
 // validateHandoffBounds caps the structured sections before rendering, so
@@ -175,6 +225,11 @@ type HandoffResult struct {
 	// RepositoryNote carries why attribution did NOT happen. It is a note, not an
 	// error, precisely because the handoff itself succeeded.
 	RepositoryNote string `json:"repository_note,omitempty"`
+	// Deduped reports that this write described a session that already has a
+	// handoff, so nothing new was written and NoteID points at the existing
+	// note (ADR-0057 D1). It is a success, and the caller should treat the
+	// record as updated-in-place rather than assume a second handoff exists.
+	Deduped bool `json:"deduped,omitempty"`
 }
 
 // HandoffStatus is the minimal status surface for UI chrome (currently the VS

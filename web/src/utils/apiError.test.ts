@@ -33,9 +33,21 @@ describe('describeApiError', () => {
       .toBe('errors.projectNotFound')
   })
 
-  it('passes anything unknown through rather than swallowing it', () => {
-    expect(describeApiError(t, new Error('disk on fire'))).toBe('disk on fire')
-    expect(describeApiError(t, 'plain string error')).toBe('plain string error')
+  // The optimistic lock's failure (ADR-0057 D2) is the one case where the
+  // generic "please try again" sentence would be actively wrong: retrying the
+  // same stale write fails forever, so it has to be routed to its own text.
+  it('routes the version conflict away from the retry wording', () => {
+    expect(describeApiError(t, new Error('note 42: expected version 3: modified by another writer')))
+      .toBe('errors.noteConflict')
+  })
+
+  it('uses an actionable fallback for unknown errors, keeping the detail', () => {
+    // The sentence is the actionable half; the raw text stays attached so a bug
+    // report still carries the actual failure.
+    expect(describeApiError(t, new Error('disk on fire')))
+      .toBe('errors.unknownActionable (disk on fire)')
+    expect(describeApiError(t, 'plain string error'))
+      .toBe('errors.unknownActionable (plain string error)')
   })
 
   it('returns empty text for an empty or unusable error', () => {

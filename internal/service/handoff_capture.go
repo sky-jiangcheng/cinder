@@ -5,7 +5,7 @@ import (
 
 	"repotory/internal/db"
 	"repotory/internal/importers/claude"
-	"repotory/internal/importers/memsrc"
+	"repotory/internal/service/wikipage"
 )
 
 // claudeCaptureConfigKey gates M1 session auto-capture. Default OFF: capture
@@ -49,20 +49,18 @@ func (s *Service) CaptureClaudeHandoff(projectID int64) (*HandoffResult, error) 
 	return s.CreateHandoffNote(in)
 }
 
-// CaptureClaudeSessionByCwd resolves the project for a working directory (its
-// last path segment matched against Cinder projects/repos via the shared
-// matcher) and runs the same gated on-demand capture. It exists for the B-end
-// SessionEnd hook: Claude Code runs `repotory-capture` with the closing
-// session's cwd; this turns that into a handoff without the caller needing the
-// numeric project id. Still honours the `claude_session_capture` default-off gate.
+// CaptureClaudeSessionByCwd resolves the project for a working directory
+// through the same path tiers every other caller uses, then runs the same
+// gated on-demand capture. It exists for the B-end SessionEnd hook: Claude
+// Code runs `repotory-capture` with the closing session's cwd. A short final
+// path segment used to substring-match unrelated projects; an ambiguous or
+// unknown path now writes nothing rather than guessing.
 func (s *Service) CaptureClaudeSessionByCwd(cwd string) (*HandoffResult, error) {
-	projects, _ := db.GetAllProjects(s.db)
-	repos, _ := db.GetAllRepositories(s.db)
-	pid := memsrc.MatchProject(memsrc.LastPathSegment(cwd), projects, repos)
-	if pid == 0 {
-		return nil, fmt.Errorf("no Cinder project matches cwd %q", cwd)
+	res := s.ResolveProjectByPath(cwd)
+	if res == nil || res.Project == nil || len(res.Candidates) > 0 {
+		return nil, fmt.Errorf("no unambiguous Cinder project matches cwd %q", cwd)
 	}
-	return s.CaptureClaudeHandoff(pid)
+	return s.CaptureClaudeHandoff(res.Project.ID)
 }
 
 // handoffFromSession maps a parsed Claude session onto a HandoffInput,
@@ -103,6 +101,12 @@ func handoffFromSession(sess claude.Session) HandoffInput {
 		Summary: summary,
 		Changes: changes,
 		Tags:    "auto-captured",
+		// The session id is the whole point of the capture path being
+		// idempotent: the SessionEnd hook can fire twice for one session (a
+		// crash, a retry, a manual run after the hook), and a second
+		// "auto-captured" handoff next to the first is noise the reader has to
+		// disambiguate (ADR-0057 D1).
+		SessionID: sess.SessionID,
 	}
 }
 
@@ -116,16 +120,10 @@ func shortID(id string) string {
 	return id
 }
 
-// truncateBytes cuts s to at most max bytes on a UTF-8 rune boundary (never
-// mid-rune), so the byte-length validation in CreateHandoffNote stays honest
-// for CJK summaries.
+// truncateBytes is the service-side alias for the one definition, now owned by
+// wikipage (ADR-0060 step four's third caller was wikilint, which triggered the
+// extraction). Kept as a wrapper so the call sites in this package read
+// unchanged.
 func truncateBytes(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	cut := max
-	for cut > 0 && s[cut]&0xC0 == 0x80 { // skip continuation bytes
-		cut--
-	}
-	return s[:cut]
+	return wikipage.TruncateBytes(s, max)
 }

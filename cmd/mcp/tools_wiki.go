@@ -62,10 +62,13 @@ func registerWikiTools(mcpServer *server.MCPServer, svc *service.Service) {
 		args := req.GetArguments()
 		query, _ := args["query"].(string)
 		if len(query) > maxArgQueryLen {
-			return makeTextResult(fmt.Sprintf("query too long: %d bytes (max %d)", len(query), maxArgQueryLen)), nil
+			return makeInvalidResult(fmt.Sprintf("query too long: %d bytes (max %d)", len(query), maxArgQueryLen)), nil
 		}
 		limit := wikiSearchLimit(req)
-		projectID := resolveProjectID(svc, args)
+		projectID, msg := resolveProjectID(svc, args)
+		if msg != "" {
+			return makeInvalidResult(msg), nil
+		}
 
 		var (
 			pages []service.WikiPageSummary
@@ -79,12 +82,12 @@ func registerWikiTools(mcpServer *server.MCPServer, svc *service.Service) {
 			pages, err = svc.SearchWikiPages(projectID, query, limit)
 		}
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
 		if pages == nil {
 			pages = []service.WikiPageSummary{}
 		}
-		return makeJSONResult("wiki_search", pages)
+		return makeJSONResult(pages)
 	})
 
 	mcpServer.AddTool(mcp.Tool{
@@ -103,13 +106,13 @@ func registerWikiTools(mcpServer *server.MCPServer, svc *service.Service) {
 	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, _ := req.GetArguments()["id"].(float64)
 		if int64(id) <= 0 {
-			return makeTextResult("a positive page id is required"), nil
+			return makeInvalidResult("a positive page id is required"), nil
 		}
 		page, err := svc.GetWikiPage(int64(id))
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("wiki_read", page)
+		return makeJSONResult(page)
 	})
 }
 

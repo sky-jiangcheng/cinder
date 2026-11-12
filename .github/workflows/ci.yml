@@ -107,13 +107,29 @@ jobs:
       # TODO.md 3.1 tracks. The suite is "all of them" — there is no subset
       # to keep in sync.
       #
+      # `./...` covers everything this module owns, with one exception that is
+      # not ours: `web/node_modules` sits inside the module root, so Go walks
+      # into it and finds `flatted/golang/pkg/flatted` — the Go port that npm
+      # dependency ships. It was being compiled on every run (51 packages
+      # listed instead of 50), and the day that dependency (or a newer Go
+      # toolchain) stops compiling it, this gate goes red for a reason that has
+      # nothing to do with this repository. A nested go.mod under web/ would be
+      # the tidy fix but it breaks `//go:embed all:web/dist` in main.go ("cannot
+      # embed directory web/dist: in different module"), so the exclusion has
+      # to be on the package LIST. That is deliberately a filter and not a
+      # hand-written `./internal/... ./cmd/... .`: deriving the list from
+      # `go list ./...` keeps `./...` as the definition of the suite, so a new
+      # top-level package is picked up without editing this file.
+      #
       # `-race` is on because the service layer fans out goroutines during scans
       # and knowledge indexing; without it a data race that only shows up under CI
       # parallelism ships silently. The caveat: the race detector needs cgo and a
       # C toolchain. On the Unix rows that is the stock image's compiler; the
       # Windows row runs without it (see the matrix comment above).
       - name: Run Go tests
-        run: go test ${{ matrix.race }} -timeout 15m ./...
+        run: |
+          PKGS=$(go list ./... | grep -v '/node_modules/')
+          go test ${{ matrix.race }} -timeout 15m $PKGS
 
   # ---------------------------------------------------------------- Vet ----
   # `go test` runs a subset of `go vet`'s checks (the ones that affect
@@ -140,8 +156,10 @@ jobs:
       - name: Stub web/dist for the embed directive
         run: mkdir -p web/dist && printf '<!doctype html>\n' > web/dist/index.html
 
+      # Same package list as go-test, for the same reason: `web/node_modules`
+      # contains a third-party Go package that is not ours to vet.
       - name: Run go vet
-        run: go vet ./...
+        run: go vet $(go list ./... | grep -v '/node_modules/')
 
   # ------------------------------------------------------- Vulnerabilities ----
   # A dependency can be safe the day it is added and vulnerable a year later

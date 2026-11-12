@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { cardFromSearchHit, knowledgeHref } from './HomeKnowledgeAssistant'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  cardFromSearchHit,
+  knowledgeHref,
+  serializeDialogue,
+  loadDialogue,
+  type DialogueMessage,
+} from './HomeKnowledgeAssistant'
 import type { EvidenceItem, SearchHit } from '../../api/client'
 
 function hit(over: Partial<SearchHit>): SearchHit {
@@ -37,6 +43,59 @@ describe('cardFromSearchHit', () => {
   it('keeps a todo hit as a todo card instead of flattening it to a note', () => {
     const card = cardFromSearchHit(hit({ type: 'todo', id: 12 }), 0)
     expect(card).toMatchObject({ ref: 'T1', type: 'todo', kind: 'todo', id: 12 })
+  })
+})
+
+// ADR-0056: the console is a lazy route, so a top-level tab switch unmounts it.
+// Pinned literal on purpose — renaming the key without a migration silently
+// abandons every existing user's saved conversation.
+const HISTORY_KEY = 'repotory.home.dialogue.v1'
+
+function msg(over: Partial<DialogueMessage> = {}): DialogueMessage {
+  return { id: 'm1', role: 'user', content: 'hello', timestamp: '10:00', ...over }
+}
+
+describe('dialogue snapshot (ADR-0056)', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('survives a remount: what was serialized is what comes back', () => {
+    const messages = [
+      msg(),
+      msg({ id: 'm2', role: 'assistant', content: 'answer', knowledgeCards: [], kind: 'ask' }),
+    ]
+    localStorage.setItem(HISTORY_KEY, serializeDialogue(messages))
+    expect(loadDialogue()).toEqual(messages)
+  })
+
+  it('never persists a streaming draft', () => {
+    const json = serializeDialogue([
+      msg(),
+      msg({ id: 'm2', role: 'assistant', content: 'partial', isStreaming: true }),
+    ])
+    const saved = JSON.parse(json)
+    expect(saved).toHaveLength(1)
+    localStorage.setItem(HISTORY_KEY, json)
+    expect(loadDialogue()).toEqual([msg()])
+    // A snapshot written by an older build may still contain a draft.
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([msg({ id: 'm2', role: 'assistant', isStreaming: true })]))
+    expect(loadDialogue()).toEqual([])
+  })
+
+  it('caps the snapshot so evidence cards cannot grow it without bound', () => {
+    const many = Array.from({ length: 80 }, (_, i) => msg({ id: `m${i}` }))
+    const saved = JSON.parse(serializeDialogue(many))
+    expect(saved).toHaveLength(50)
+    expect(saved[0].id).toBe('m30')
+    expect(saved[49].id).toBe('m79')
+  })
+
+  it('ignores corrupt, non-array and malformed snapshots', () => {
+    localStorage.setItem(HISTORY_KEY, '{not json')
+    expect(loadDialogue()).toEqual([])
+    localStorage.setItem(HISTORY_KEY, JSON.stringify({ nope: true }))
+    expect(loadDialogue()).toEqual([])
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([{ id: 1 }, null, msg(), { id: 'x', role: 'bot' }]))
+    expect(loadDialogue()).toEqual([msg()])
   })
 })
 

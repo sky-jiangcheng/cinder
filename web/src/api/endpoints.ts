@@ -496,13 +496,20 @@ export function updateNoteFull(
   title: string,
   tags: string,
   kind: string,
-  pinned: boolean
+  pinned: boolean,
+  /**
+   * The version the editor was opened with (ADR-0057 D2). The write is
+   * refused with a conflict if the note moved past it, so a concurrent agent
+   * cannot be silently overwritten. 0 means "no check" and is only for
+   * callers with no user-held copy.
+   */
+  expectedVersion = 0
 ): Promise<void> {
   return call<void>({
     method: 'UpdateNoteFull',
-    args: [noteId, content, title, tags, kind, pinned],
+    args: [noteId, content, title, tags, kind, pinned, expectedVersion],
     path: `/notes/${noteId}`,
-    init: jsonInit('PUT', { content, title, tags, kind, pinned }),
+    init: jsonInit('PUT', { content, title, tags, kind, pinned, expected_version: expectedVersion }),
   })
 }
 

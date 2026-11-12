@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"repotory/internal/db"
@@ -11,20 +10,25 @@ import (
 
 // SearchNotes searches note content/title/tags across all projects,
 // returning ranked hits with context snippets.
-func (s *Service) SearchNotes(query string) []domain.SearchHit {
+//
+// ADR-0055 D2: a storage fault is an error, never a nil slice. Returning nil
+// used to serialize as "null" (MCP) and {"hits": null} (HTTP), which clients
+// read as "nothing matched" — a failure must not masquerade as zero hits.
+// An empty query is a legitimate zero-hit answer, so it returns an explicit
+// empty slice with a nil error.
+func (s *Service) SearchNotes(query string) ([]domain.SearchHit, error) {
 	if strings.TrimSpace(query) == "" {
-		return nil
+		return []domain.SearchHit{}, nil
 	}
 	results, err := db.SearchNotes(s.db, query)
 	if err != nil {
-		log.Printf("search notes error: %v", err)
-		return nil
+		return nil, fmt.Errorf("search notes: %w", err)
 	}
 	if results == nil {
 		results = []domain.SearchHit{}
 	}
 	// M3-A: optionally fuse vector recall (default off; a no-op bypass when off).
-	return s.fuseSemantic(results, query)
+	return s.fuseSemantic(results, query), nil
 }
 
 // SearchAll searches notes and todos together, returning ranked unified hits.
@@ -42,14 +46,13 @@ func (s *Service) SearchNotes(query string) []domain.SearchHit {
 // let a todo and a note collide and silently overwrite each other. Splitting
 // first keeps the two ID spaces apart; the vector index only ever holds note
 // embeddings, so notes are the only subset it can extend.
-func (s *Service) SearchAll(query string) []domain.SearchHit {
+func (s *Service) SearchAll(query string) ([]domain.SearchHit, error) {
 	if strings.TrimSpace(query) == "" {
-		return nil
+		return []domain.SearchHit{}, nil
 	}
 	results, err := db.SearchAll(s.db, query)
 	if err != nil {
-		log.Printf("search all error: %v", err)
-		return nil
+		return nil, fmt.Errorf("search all: %w", err)
 	}
 	if results == nil {
 		results = []domain.SearchHit{}
@@ -66,7 +69,7 @@ func (s *Service) SearchAll(query string) []domain.SearchHit {
 	// Notes first (fused), then todos — the same shape db.SearchAll returns,
 	// so a lexical-only run keeps byte-identical ordering.
 	fused := s.fuseSemantic(notes, query)
-	return append(fused, todos...)
+	return append(fused, todos...), nil
 }
 
 // FormatSearchAnswer renders up to limit search hits in the shared

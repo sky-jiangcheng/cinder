@@ -56,6 +56,12 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
+  // The version the editor was seeded from (ADR-0057 D2). Posted back
+  // with the save so a concurrent writer (an agent over MCP, another
+  // window) is reported as a conflict instead of being overwritten.
+  // Deliberately NOT persisted with the draft: the number must come from
+  // the note as loaded, never from a stale localStorage copy.
+  const [editingVersion, setEditingVersion] = useState(0)
   const [filter, setFilter] = useState<KindFilter>('all')
   const [saving, setSaving] = useState(false)
   // The note id whose AI tidying call is in flight (null = none).
@@ -203,6 +209,7 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   const startEdit = (note: Note) => {
     const saved = loadEditDraft(note.id)
     setEditingId(note.id)
+    setEditingVersion(note.version ?? 0)
     setEditDraft(saved ?? {
       content: note.content,
       title: note.title,
@@ -226,7 +233,8 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
         editDraft.title.trim(),
         editDraft.tags.trim(),
         editDraft.kind,
-        !!editDraft.pinned
+        !!editDraft.pinned,
+        editingVersion
       )
       try { localStorage.removeItem(editDraftKey(editingId)) } catch { /* ignore */ }
       setEditingId(null)
@@ -251,6 +259,7 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
     try {
       const res = await organizeNote(note.id)
       setEditingId(note.id)
+      setEditingVersion(note.version ?? 0)
       setEditDraft({
         content: res.content,
         title: res.title || note.title,

@@ -112,7 +112,7 @@ func TestCaptureClaudeSessionByCwd(t *testing.T) {
 	}
 
 	// Disabled by default -> capture refuses (privacy gate).
-	if _, err := svc.CaptureClaudeSessionByCwd("/anywhere/ProjX"); err == nil {
+	if _, err := svc.CaptureClaudeSessionByCwd(root); err == nil {
 		t.Fatal("expected error when claude_session_capture is off")
 	}
 	// No matching project -> error, independent of the gate.
@@ -122,8 +122,17 @@ func TestCaptureClaudeSessionByCwd(t *testing.T) {
 	if _, err := svc.CaptureClaudeSessionByCwd("/no/where/NoSuchProject"); err == nil {
 		t.Error("expected error for unmatched cwd")
 	}
-	// Enabled + matching project -> handoff written.
-	res, err := svc.CaptureClaudeSessionByCwd("/whatever/ProjX")
+	// A cwd that merely ends in the project's short name must NOT resolve:
+	// ResolveProjectByPath matches real paths, not last-segment substrings.
+	if _, err := svc.CaptureClaudeSessionByCwd("/whatever/ProjX"); err == nil {
+		t.Error("short-segment cwd must not resolve to the project")
+	}
+	// A shared ancestor is ambiguous: refuse rather than guess a project.
+	if _, err := svc.CaptureClaudeSessionByCwd("/Users/tester"); err == nil {
+		t.Error("ambiguous cwd must not guess a project")
+	}
+	// Enabled + exact project path -> handoff written.
+	res, err := svc.CaptureClaudeSessionByCwd(root)
 	if err != nil {
 		t.Fatalf("capture by cwd: %v", err)
 	}

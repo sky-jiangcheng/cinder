@@ -219,6 +219,12 @@ export interface Note {
   topic_id: number
   // The topic's display name, filled by the server alongside topic_id.
   topic_name?: string
+  // Optimistic-lock counter (schema v31, ADR-0057). The editor posts it back
+  // on save so a concurrent write is reported as a conflict instead of being
+  // overwritten. Optional because a browser tab can be talking to a headless
+  // server that predates the column; the editor sends 0 ("no check") in that
+  // case rather than blocking the save.
+  version?: number
   sort_order: number
   created_at: string
   updated_at: string
@@ -248,6 +254,10 @@ export interface NoteWithProject extends Note {
 export interface NoteVersion {
   id: number
   note_id: number
+  // The note version this snapshot is the state of. 0 means it was recorded
+  // before schema v31, whose rows hold post-edit content and cannot be mapped
+  // back to a version number.
+  version?: number
   title: string
   content: string
   tags: string
@@ -447,6 +457,10 @@ export interface HandoffResult {
   note_id: number
   title: string
   tags: string
+  // True when this write described a session that already has a handoff and
+  // was absorbed by it (ADR-0057 D1): note_id is the existing note, nothing new
+  // was written.
+  deduped?: boolean
 }
 export interface ImportCompletedEvent {
   source: string

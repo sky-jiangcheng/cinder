@@ -38,6 +38,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"repotory/internal/errcode"
 )
 
 // Status is the outcome of a single check.
@@ -281,22 +283,16 @@ func drift(db *sql.DB, from, to string) (int64, []int64, error) {
 
 // isMissingTable recognises the driver's "no such table" error so a check can
 // report "the index was never created" as a finding about the database instead
-// of an opaque error about a query.
+// of an opaque error about a query. The shared predicate lives in errcode.
 func isMissingTable(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "no such table")
+	return errcode.IsMissingTable(err)
 }
 
 // isMissingColumn recognises the driver's "no such column" error. The schema
 // shape probe uses it to turn a missing column into a finding about the
 // database rather than into a check that could not run.
 func isMissingColumn(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "no such column")
+	return errcode.IsMissingColumn(err)
 }
 
 // formatIDs renders a sample for the human-readable Detail line.

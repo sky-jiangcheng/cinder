@@ -55,14 +55,14 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 			query = formatFloatID(id)
 		}
 		if msg := bounds.Check("project_name", query, maxProjectNameLen); msg != "" {
-			return makeTextResult(msg), nil
+			return makeInvalidResult(msg), nil
 		}
 		path, _ := args["path"].(string)
 		// The path gets its OWN limit. Reusing the project-name cap (200) would
 		// reject a legitimate deep absolute path — the failure would look like
 		// "unresolved" to the caller and be indistinguishable from "not scanned".
 		if msg := bounds.Check("path", path, bounds.MaxPathLen); msg != "" {
-			return makeTextResult(msg), nil
+			return makeInvalidResult(msg), nil
 		}
 		// An explicit project_id still wins (ResolveWorkspace consults the path when
 		// the id/name did not decide); the path is the fallback that used to be
@@ -149,43 +149,58 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service) {
 			}
 		}
 		if int64(projectID) <= 0 {
-			return makeTextResult("project_id is required unless `path` resolves to a collected project " +
+			return makeInvalidResult("project_id is required unless `path` resolves to a collected project " +
 				"(call repotory_projects_list, or repotory_scan to discover repositories)"), nil
+		}
+
+		sections := map[string][]string{}
+		for _, name := range []string{"changes", "decisions", "gotchas", "next_steps"} {
+			items, msg := stringSlice(args[name])
+			if msg != "" {
+				return makeInvalidResult(name + ": " + msg), nil
+			}
+			sections[name] = items
 		}
 
 		result, err := svc.CreateHandoffNote(service.HandoffInput{
 			ProjectID:     int64(projectID),
 			Agent:         agent,
 			Summary:       summary,
-			Changes:       stringSlice(args["changes"]),
-			Decisions:     stringSlice(args["decisions"]),
-			Gotchas:       stringSlice(args["gotchas"]),
-			NextSteps:     stringSlice(args["next_steps"]),
+			Changes:       sections["changes"],
+			Decisions:     sections["decisions"],
+			Gotchas:       sections["gotchas"],
+			NextSteps:     sections["next_steps"],
 			Tags:          tags,
 			WorkspacePath: path,
 			Milestone:     milestone,
 		})
 		if err != nil {
-			return makeTextResult("error: " + err.Error()), nil
+			return makeErrorResult(err), nil
 		}
-		return makeJSONResult("handoff_created", result)
+		return makeJSONResult(result)
 	})
 }
 
-// stringSlice coerces a JSON array argument into a string slice, ignoring
-// non-string entries so a malformed argument degrades instead of erroring.
-func stringSlice(v any) []string {
+// stringSlice coerces a JSON array argument into a string slice. Every item
+// must be a string: dropping a malformed item silently would write a handoff
+// missing part of what the caller intended, so it is an error instead.
+func stringSlice(v any) ([]string, string) {
+	if v == nil {
+		return nil, ""
+	}
 	items, ok := v.([]any)
 	if !ok {
-		return nil
+		return nil, "expected an array of strings"
 	}
 	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if s, ok := item.(string); ok {
-			out = append(out, s)
+	for i, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			return nil, "item " + strconv.Itoa(i) + " must be a string"
 		}
+		out = append(out, s)
 	}
-	return out
+	return out, ""
 }
 
 // formatFloatID renders a numeric project ID argument as the decimal string

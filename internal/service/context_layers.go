@@ -2,11 +2,13 @@ package service
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
 	"repotory/internal/db"
 	"repotory/internal/domain"
+	"repotory/internal/service/wikipage"
 )
 
 // Layered memory (ADR-0014 决策 6 / TODO M6-W5).
@@ -237,7 +239,7 @@ func (s *Service) layerGlobalProfile(charCap int) LayerBlock {
 		if p.ProjectID != 0 || p.Status != db.WikiStatusApproved {
 			continue
 		}
-		line := fmt.Sprintf("- %s（%s）：%s\n", p.Title, p.Kind, firstLine(p.Content))
+		line := fmt.Sprintf("- %s（%s）：%s\n", p.Title, p.Kind, wikipage.FirstLine(p.Content))
 		c := len([]rune(line))
 		// A cap smaller than one entry trims it rather than muting the whole
 		// layer. Evidence gathering had the identical bug (a 40-char budget
@@ -385,7 +387,11 @@ func (s *Service) layerTranscripts(projectID int64, query string, b LayerBudget)
 // project-scoped search means the two layers compete on the same ranking rather
 // than each having its own (worse) query.
 func (s *Service) layerFacts(projectID int64, query string, limit int, want MemoryLayer) ([]EvidenceItem, int) {
-	hits := s.SearchNotes(query)
+	hits, err := s.SearchNotes(query)
+	if err != nil {
+		log.Printf("layerFacts: %v", err)
+		return nil, 0
+	}
 	var keep []EvidenceItem
 	skipped := 0
 	for _, h := range hits {
@@ -404,7 +410,7 @@ func (s *Service) layerFacts(projectID int64, query string, limit int, want Memo
 			continue
 		}
 		keep = append(keep, EvidenceItem{
-			Type: "note", ID: h.ID, ProjectID: h.ProjectID, Title: firstNonEmpty(h.Title, firstLine(n.Content)),
+			Type: "note", ID: h.ID, ProjectID: h.ProjectID, Title: firstNonEmpty(h.Title, wikipage.FirstLine(n.Content)),
 			Kind: string(want), Snippet: clipRunes(h.Snippet, 400), Rank: len(keep) + 1, SourcePath: "fact",
 		})
 	}

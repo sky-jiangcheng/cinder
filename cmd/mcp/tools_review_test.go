@@ -69,3 +69,19 @@ func TestSplitCSV(t *testing.T) {
 		}
 	}
 }
+
+// A string "true" is a malformed boolean, not a value to coerce. The review
+// flags now reject it exactly like repotory_notes_update's pinned does.
+func TestReviewRunRejectsNonBooleanFlags(t *testing.T) {
+	ts := newTestServer(t)
+	for _, flag := range []string{"dry_run", "no_ai", "force"} {
+		res := ts.call("repotory_review_run", map[string]any{flag: "true"})
+		if !res.IsError {
+			t.Errorf("%s=%q should be a tool error", flag, "true")
+			continue
+		}
+		if got := ts.text(res); !strings.Contains(got, "must be a boolean") {
+			t.Errorf("%s: message = %q, want the boolean refusal", flag, got)
+		}
+	}
+}
