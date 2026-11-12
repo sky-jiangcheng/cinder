@@ -51,7 +51,7 @@ installation readiness, not whether the data is true.
 
 **Typical scenario**: "What do I know about topic Y?"
 1. `repotory_notes_search({ query: "Y" })` — full-text search across all notes
-2. `repotory_ask({ query: "Y" })` — semantic search with top-5 results
+2. `repotory_ask({ query: "Y" })` — an answer with a numbered `Sources:` list (`AskAIWithEvidence`); labelled keyword matches when no AI endpoint is configured
 3. `repotory_notes_read({ id })` — read the most relevant note in detail
 
 ## What Cinder Does
@@ -86,20 +86,20 @@ go build -o /usr/local/bin/cinder-mcp ./cmd/mcp/
 
 ### MCP Tools
 
-> **Usage patterns**: `repotory_ask` is the primary entry point for most queries (returns top-5 ranked results). Use `repotory_notes_search` for precise FTS5 search. For write operations, always read the existing note first to avoid overwriting.
+> **Usage patterns**: `repotory_ask` returns an answer plus a numbered `Sources:` list (built by `AskAIWithEvidence`), not ranked search hits; with no AI endpoint configured it returns clearly-labelled keyword matches instead. Use `repotory_notes_search` for precise FTS5 search. For write operations, always read the existing note first to avoid overwriting.
 
 | Tool | Description | Key Parameters | Example |
 |------|-------------|----------------|--------|
 | `repotory_scan` | Discover local Git repos and populate the knowledge base (first run; headless) | none (seeds default scan roots, then scans synchronously) | `{}` |
 | `repotory_context` | Load full project context in one call (session start) | `project_id?`, `project_name?` (fuzzy); none = auto-resolve when only one project | `{ project_name: "auth" }` |
 | `repotory_handoff` | Record a structured session handoff (session end) | `project_id`, `summary`, `changes?`, `decisions?`, `gotchas?`, `next_steps?`, `agent?`, `tags?` | `{ project_id: 1, summary: "...", gotchas: ["..."], next_steps: ["..."] }` |
-| `repotory_ask` | Ask a question, get top-5 ranked results | `query` (string, supports CJK) | `{ query: "数据库迁移方案" }` |
+| `repotory_ask` | Ask a question, get an answer with its sources | `query` (required, supports CJK), `project_id?`, `path?` | `{ query: "数据库迁移方案" }` |
 | `repotory_notes_search` | FTS5 full-text search across notes | `query` (string, trigram + bm25) | `{ query: "react hooks" }` |
 | `repotory_notes_read` | Read one note by ID | `id` (number) | `{ id: 42 }` |
 | `repotory_notes_create` | Create a new note | `project_id`, `title`, `content`, `category?`, `tags?` | `{ project_id: 1, title: "API Design", content: "...", category: "knowledge" }` |
 | `repotory_notes_update` | Update note content/metadata (refuses notes tagged `handoff`) | `id`, `content?`, `title?`, `tags?`, `category?`, `pinned?` | `{ id: 42, content: "updated text" }` |
-| `repotory_notes_list` | List all notes (paginated) | `limit?`, `offset?` | `{ limit: 20 }` |
-| `repotory_projects_list` | List all projects with stats | `starred_only?` | `{ starred_only: true }` |
+| `repotory_notes_list` | List all notes (bounded) | `limit?` (default 50, max 500) | `{ limit: 20 }` |
+| `repotory_projects_list` | List all projects with stats | none | `{}` |
 | `repotory_projects_stats` | Get stats for one project | `id` (number) | `{ id: 1 }` |
 | `repotory_agent_score` | Check AI-readiness score (0-100) | none | `{}` |
 | `repotory_integrity` | Audit data trustworthiness (index drift, orphans, staleness) | none | `{}` |

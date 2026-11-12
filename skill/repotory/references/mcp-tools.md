@@ -11,8 +11,8 @@ repotory_chat(content: string, id: string, operation*: string, path: string,
               reply_to: string, role: string, source: string, thread_id: string, title: string)
 repotory_context(path: string, project_id: number, project_name: string)
 repotory_handoff(agent: string, changes: array, decisions: array, gotchas: array,
-                 next_steps: array, path: string, project_id: number, summary*: string,
-                 tags: string)
+                 milestone: boolean, next_steps: array, path: string, project_id: number,
+                 summary*: string, tags: string)
 repotory_integrity()
 repotory_metrics(path: string, since: string, until: string)
 repotory_notes_create(category: string, content*: string, project_id*: number,
@@ -25,6 +25,8 @@ repotory_notes_update(category: string, content: string, id*: number, pinned: bo
                        tags: string, title: string)
 repotory_projects_list()
 repotory_projects_stats(id: number)
+repotory_review_latest(days: number, severity: string)
+repotory_review_run(date: string, scope: string, dry_run: boolean, no_ai: boolean, force: boolean)
 repotory_scan()
 repotory_wiki_read(id*: number)
 repotory_wiki_search(query: string, project_id: number, path: string, limit: number)
@@ -294,24 +296,27 @@ AI 就绪度评分（0-100）：数据库、笔记、搜索、MCP、llms.txt、S
 
 ## 通道 B：HTTP RPC 的方法名
 
-MCP 工具在 HTTP 桥上的对应关系不是同名 —— RPC 走的是桌面 `*App` 的绑定方法：
+MCP 工具在 HTTP 桥上的对应关系不是同名 —— RPC 走的是桌面 `*App` 的绑定方法。
+下表**只列确实有绑定孪生的映射**；标「无 HTTP RPC 孪生」的工具要么在 `cmd/mcp`
+内独立实现，要么只落在 `internal/service`、没登记进 `internal/app`，`/api/rpc` 反射
+不到它们 —— 别按推测的方法名去试：
 
 | MCP 工具 | HTTP RPC method（实参按位置） |
 |----------|-----------------|
-| `repotory_context` | `GetProjectOverview(projectID)` |
+| `repotory_context` | **无 HTTP RPC 孪生** —— 走 `svc.BuildProjectContext`（service 层方法，未登记为 `*App` 绑定）；`GetProjectOverview(projectID)` 是知识挖掘结果，与它无关 |
 | `repotory_projects_list` | `GetProjects()` |
 | `repotory_projects_stats` | `GetProjectStats(id)` |
 | `repotory_ask` | `AskAIWithEvidence(projectID, question)` —— 与桌面端问答面板**同一个绑定**；`LayeredProjectContext(...)` 是分层上下文 |
 | `repotory_wiki_search` | `SearchWikiPages(projectID, query, limit)` |
 | `repotory_wiki_read` | `GetWikiPage(pageID)` |
-| `repotory_notes_create` | `CreateNoteWithMeta(projectID, title, content, tags, kind, source)` —— 带元数据用这个；`CreateNote(projectID, title, content)` 是精简版 |
-| `repotory_notes_update` | `UpdateNoteFull(noteID, content, title, tags, kind, pinned)` |
+| `repotory_notes_create` | `CreateNoteWithMeta(projectID, title, content, tags, kind, source)` —— 带元数据用这个；`CreateNote(projectID, content)` 是两参精简版 |
+| `repotory_notes_update` | `UpdateNoteFull(noteID, content, title, tags, kind, pinned, expectedVersion)` —— 工具本身**不暴露** `expected_version`，绑定侧传 0（不校验）；版本冲突只发生在桌面编辑器（它提交打开时读到的 `version`） |
 | `repotory_notes_read` | `GetNote(noteID)` |
 | `repotory_notes_search` | `SearchNotes(query)`（全库用 `SearchAll(query)`） |
 | `repotory_notes_list` | `ListAllNotes()` |
-| `repotory_integrity` | `Health()` |
-| `repotory_agent_score` | `GetSummary(date, starredOnly)` |
-| `repotory_handoff` | `CreateNoteWithMeta(projectID, title, content, tags, kind="handoff", source)` |
+| `repotory_integrity` | **无 HTTP RPC 孪生** —— `cmd/mcp` 内 `runIntegrityReport` 独立实现（`Health()` 返回的是健康状态，不是完整性报告） |
+| `repotory_agent_score` | **无 HTTP RPC 孪生** —— `cmd/mcp` 内 `runAgentScore` 独立实现（`GetSummary(...)` 是日摘要，不是就绪度评分） |
+| `repotory_handoff` | **无同名 HTTP RPC 方法** —— 走 `service.CreateHandoffNote`（cmd/mcp 与桌面各自的绑定共用这一个 service 方法，不是 `CreateNoteWithMeta` 的变体） |
 | `repotory_review_latest` | `LatestReviewReport(severities)` |
 | `repotory_review_run` | `RunReviewNow(date, scope, force, noAI, dryRun)` |
 

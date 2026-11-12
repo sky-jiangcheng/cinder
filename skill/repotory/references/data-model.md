@@ -40,6 +40,8 @@ project ──1:N──▶ topic ──1:N──▶ note
 | `source` | 来源：`manual` / `mcp` / … |
 | `sort_order` | 手工排序 |
 | `topic_id` | **可空**，FK → `note_topics(id)` **ON DELETE SET NULL** |
+| `version` | 乐观锁计数器（schema v31）。新建为 1，凡改动 `title` / `content` / `tags` / `kind` 的写入都 +1；`UpdateNoteFull` 收 `expectedVersion`，不匹配返回 `conflict`（**不可重试**，必须先重读） |
+| `idempotency_key` | 服务端生成的写入幂等键（schema v31），只给 handoff / 自动捕获 / 插件导入用；`(project_id, idempotency_key)` 上有**部分**唯一索引（空串不参与） |
 
 ## 关键不变量
 
@@ -71,6 +73,20 @@ project ──1:N──▶ topic ──1:N──▶ note
 
 合并时目标已有同名主题 → 笔记重指向目标主题、重复行删除。与 `(project_id, name)`
 唯一索引一致，否则迁移会撞唯一约束。
+
+### 版本历史存的是**改前态**
+
+`note_versions` 的每一行是「某一版当时的内容」，由 `AFTER UPDATE` 触发器写入，
+存的是 `old.*`（schema v31 之前存 `new.*`，是改后态，语义相反）：
+
+| 时刻 | `project_notes` | `note_versions` |
+|---|---|---|
+| 新建 | v1 正文 | 空 |
+| 第一次编辑 | v2 正文 | (version=1, v1 正文) |
+| 第二次编辑 | v3 正文 | (version=1, v1)、(version=2, v2) |
+
+所以「恢复某一版」= 把那一行写回，恢复本身也是一次写入（版本号继续 +1，不回退）。
+v31 之前的历史行 `version = 0`：它们存的是改后态，无法回溯成改前态，也不假装知道版本号。
 
 ---
 

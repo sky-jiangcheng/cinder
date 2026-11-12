@@ -22,7 +22,7 @@ A JSON API for external runtimes such as the DeepSeek Harness dsh-plugin. It sha
 
 | Endpoint | Method | Description |
 |------|------|------|
-| `/health` | GET | service and database health (`version` = release version, `core_version` = memory-layer contract version, see [ADR-0048](../adr/0048-core-contract-version.md)) |
+| `/health` | GET | service and database health: `status` / `version` (release version) / `core_version` (memory-layer contract version, see [ADR-0048](../adr/0048-core-contract-version.md)), plus three runtime metrics `db_size_bytes` / `compile_jobs_failed_24h` / `last_backup_at` |
 | `/api/ai_context` | GET/POST | the entire knowledge base as Markdown (llms.txt style) |
 | `/api/search?q=...&all=1` | GET | FTS5 full-text search (notes only by default; `all=1` includes todos) |
 | `/api/project/{id}/detail` | GET | project + repos with historical stats |
@@ -220,7 +220,7 @@ Desktop-only: headless and MCP users update through their own deployment channel
 | `GetKnowledgeSources()` | knowledge source list (built-in claude + plugin-registered) |
 | `TriggerKnowledgeImport(name)` / `TriggerAllKnowledgeImports()` | trigger imports (emits the `import.completed` frontend event) |
 | `ImportClaudeMemory()` | one-click Claude memory import |
-| `Health()` | `{status, version}` |
+| `Health()` | `{status, version, core_version, db_size_bytes, compile_jobs_failed_24h, last_backup_at}` — `/health` and this binding share `service.Health()`; the first three fields are frozen, the last three are runtime metrics |
 
 ## AI client wiring (desktop-only)
 

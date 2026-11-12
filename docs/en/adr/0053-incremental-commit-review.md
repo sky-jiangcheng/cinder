@@ -146,12 +146,12 @@ Nothing is added to the home screen or the dashboard — the panel trim in the A
 **Phase 1 — skeleton, no UI**
 - `internal/review/`: `diff.go` (hunk extraction), `rules_java.go`, `rule.go` (Finding shape and severity)
 - `internal/db/review.go` plus migration v30
-- `internal/service/review.go`: collect → rules → persist (AI off)
+- `internal/service/review.go`: collect → rules → persist (AI off) (since 2026-11-12 implemented in `internal/service/reviewrun/`; this file is only the facade — see ADR-0060)
 - a `review` subcommand
 - gates: one fixture test per rule, idempotence test, skip-counting test
 
 **Phase 2 — model confirmation**
-- `service/review_ai.go`: per-file grouping, structured output, `ai_calls` counting; routed through the ADR-0030 audit
+- `service/review_ai.go`: per-file grouping, structured output, `ai_calls` counting; routed through the ADR-0030 audit (since 2026-11-12 the grouping and JSON handling live in `internal/service/reviewrun/refine.go`; this file only holds the model call and the audit)
 - gates: with zero candidates, the fake server's call count is 0
 
 **Phase 3 — delivery**

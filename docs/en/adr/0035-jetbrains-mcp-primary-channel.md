@@ -64,7 +64,7 @@ MCP tools and HTTP bindings call the **same service layer**, so for most capabil
 | `SearchAll` (notes + todos) | `repotory_notes_search` | ✅ |
 | `SearchWikiPages` (scope 0, across projects) | `repotory_wiki_search` (omit `project_id` / `path` to search across projects) | ✅ |
 | `GetNote` | `repotory_notes_read` | ✅ |
-| `GetWikiPage` | `repotory_wiki_read` | ✅ **the same `service.WikiPageDetail`** — `out_links` / `in_links` / `source_note_ids` are all present ([wiki_browse.go:61-64](file:///workspace/internal/service/wiki_browse.go#L61-L64), [tools_wiki.go:112](file:///workspace/cmd/mcp/tools_wiki.go#L112)) — so the plugin detail pane's "Links / Backlinks / source notes" sections do not lose anything |
+| `GetWikiPage` | `repotory_wiki_read` | ✅ **the same `service.WikiPageDetail`** — `out_links` / `in_links` / `source_note_ids` are all present ([wikipage/page.go](file:///workspace/internal/service/wikipage/page.go), [tools_wiki.go:112](file:///workspace/cmd/mcp/tools_wiki.go#L112)) — so the plugin detail pane's "Links / Backlinks / source notes" sections do not lose anything |
 | `ListProjects` | `repotory_projects_list` | ✅ |
 | `OrganizeNote` | `repotory_notes_organize` | ✅ |
 | `UpdateNoteFull` (has `pinned`) | `repotory_notes_update` (**no `pinned`**) | ⚠️ **difference one** |

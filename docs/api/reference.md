@@ -22,7 +22,7 @@ Cinder 的对外接口是 **Wails 绑定面**：Go 方法经 Wails Bind 暴露�
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/health` | GET | 服务与数据库健康状态（`version` = 发布版本，`core_version` = 记忆层契约版本，见 [ADR-0048](../adr/0048-core-contract-version.md)） |
+| `/health` | GET | 服务与数据库健康状态：`status` / `version`（发布版本）/ `core_version`（记忆层契约版本，见 [ADR-0048](../adr/0048-core-contract-version.md)），以及三个运行指标 `db_size_bytes` / `compile_jobs_failed_24h` / `last_backup_at` |
 | `/api/ai_context` | GET/POST | 全知识库 Markdown（llms.txt 风格） |
 | `/api/search?q=...&all=1` | GET | FTS5 全文搜索（默认仅笔记，`all=1` 含待办） |
 | `/api/project/{id}/detail` | GET | 项目 + 仓库及历史统计 |
@@ -220,7 +220,7 @@ cd .. && go build -o cinder-server ./cmd/server
 | `GetKnowledgeSources()` | 知识源列表（内置 claude + 插件注册） |
 | `TriggerKnowledgeImport(name)` / `TriggerAllKnowledgeImports()` | 触发导入（发出 `import.completed` 前端事件） |
 | `ImportClaudeMemory()` | Claude 记忆一键导入 |
-| `Health()` | `{status, version}` |
+| `Health()` | `{status, version, core_version, db_size_bytes, compile_jobs_failed_24h, last_backup_at}` —— `/health` 与本绑定共用 `service.Health()`；前三项冻结，后三项是运行指标 |
 
 ## AI 客户端接入（desktop-only）
 

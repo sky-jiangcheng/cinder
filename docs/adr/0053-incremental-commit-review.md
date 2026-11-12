@@ -146,12 +146,12 @@ CREATE TABLE review_findings (
 **P1 骨架（无 UI）**
 - `internal/review/`：`diff.go`（取 hunk）、`rules_java.go`、`rule.go`（Finding 结构 + 级别判定）
 - `internal/db/review.go` + migrate v30
-- `internal/service/review.go`：collect → rules → 落库（`ai` 关）
+- `internal/service/review.go`：collect → rules → 落库（`ai` 关）（2026-11-12 起实现在 `internal/service/reviewrun/`，本文件只剩门面；见 ADR-0060）
 - `cmd/` 增加 `review` 子命令
 - 门禁：规则 fixture 单测、幂等测试、跳过计数测试
 
 **P2 模型复核**
-- `service/review_ai.go`：按文件分组、结构化输出、`ai_calls` 计数；过 ADR-0030 审计
+- `service/review_ai.go`：按文件分组、结构化输出、`ai_calls` 计数；过 ADR-0030 审计（2026-11-12 起分组与 JSON 在 `internal/service/reviewrun/refine.go`，本文件只剩模型调用与审计）
 - 门禁：候选 0 时 fake server 调用数 = 0
 
 **P3 交付面**

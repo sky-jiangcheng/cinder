@@ -68,19 +68,41 @@ The FTS5 trigram index matches a minimum of 3 characters; shorter queries automa
 
 ---
 
+### Broke something or deleted it by accident — how do I go back?
+
+1. **Look at the built-in snapshots first.** `backups/` in the data directory holds two sets: one daily file `repotory-<YYYY-MM-DD>.db` (14 kept) and intraday rolling snapshots `repotory-<YYYYMMDD-HHMM>.db` (written only when the last one is 30+ minutes old AND something was written since; 6 kept). The first is "before the app first opened today", the second is "the last few hours".
+2. **A restore never replaces the live database** — that is deliberate:
+   ```bash
+   cinder restore --from <snapshot file> --to <new path>
+   ```
+   It verifies the source, writes the target atomically, fails if the target already exists, and **refuses** the live database path. Quit Cinder afterwards and move the new file into place yourself. The desktop binary lives at `/Applications/Cinder.app/Contents/MacOS/Cinder`.
+3. **One bad note is not a reason to restore the whole database**: every edit leaves the pre-edit state in the note's version history. Try that first; it costs far less.
+
+---
+
 ## Log file locations
 
-| Platform | Log path |
+| Platform | Log directory |
 |------|---------|
-| macOS | `~/Library/Logs/repotory.log` |
-| Linux | `$XDG_STATE_HOME/repotory/repotory.log` (default `~/.local/state/repotory/repotory.log`) |
-| Windows | `%APPDATA%\repotory\logs\repotory.log` |
+| macOS | `~/Library/Logs/` |
+| Linux | `$XDG_STATE_HOME/repotory/` (default `~/.local/state/repotory/`) |
+| Windows | `%APPDATA%\repotory\logs\` |
 
-Logs also record the PATH environment and plugin runtime state; attach them when reporting an issue.
+**Each of the three processes writes its own file** (ADR-0055 D4: `slog` JSON lines, 5 MiB rotation, one `.1` backup):
+
+| Process | File |
+|------|------|
+| Cinder Desktop (Wails) | `repotory.log` |
+| `cinder-mcp` (stdio service used by IDEs) | `repotory-mcp.log` |
+| `cinder-server` (headless HTTP) | `repotory-server.log` |
+
+The MCP process keeps **stdout for JSON-RPC only**; logs go to the file or stderr. When a client does not capture stderr, `repotory-mcp.log` is the source of truth. Entries carry `time` / `level` / `msg` and `request_id`; HTTP responses echo `X-Request-ID`, and one id ties together "tool call → service → external LLM / vector store". PATH and plugin runtime state are logged too — attach the relevant file when reporting an issue.
+
+**Quick self-check**: in headless mode open `http://127.0.0.1:18765/health` (`status` / `version` / `core_version` plus `db_size_bytes` / `compile_jobs_failed_24h` / `last_backup_at`); on the MCP side run `repotory_integrity` for the six data-consistency checks and `repotory_agent_score` for install readiness. Tool failures now set `IsError=true` with `code` and `request_id` in `structuredContent` — include them in a bug report.
 
 ## Data safety notes
 
-- Cinder is a **local-first** desktop app: it listens on no network ports and uploads no data; statistics are read through the local `git` CLI
+- Cinder is **local-first**: the desktop app itself listens on no network ports; in headless mode `cinder-server` serves a local HTTP API on `127.0.0.1:18765` only and is never exposed to the LAN. Data stays on the machine unless remote backup (S3 and friends) or an external AI endpoint is explicitly configured; statistics are read through the local `git` CLI
 - The database and configuration live in the user application data directory (see [Getting Started](getting-started.md) for the location); uninstalling does not remove them automatically. For backup, migration, and full removal, see [Data and Backup](data-management.md)
 - Desktop WebView responses carry security headers such as CSP (`default-src 'self'` and others)
 

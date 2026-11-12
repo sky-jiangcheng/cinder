@@ -64,7 +64,7 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 | `SearchAll`（notes + todos） | `repotory_notes_search` | ✅ |
 | `SearchWikiPages`（scope 0，跨项目） | `repotory_wiki_search`（省略 `project_id` / `path` 即跨项目） | ✅ |
 | `GetNote` | `repotory_notes_read` | ✅ |
-| `GetWikiPage` | `repotory_wiki_read` | ✅ **同一个 `service.WikiPageDetail`**，`out_links` / `in_links` / `source_note_ids` 全在（[wiki_browse.go:61-64](file:///workspace/internal/service/wiki_browse.go#L61-L64)、[tools_wiki.go:112](file:///workspace/cmd/mcp/tools_wiki.go#L112)）——插件详情面板的「链接 / 反向链接 / 来源笔记」不会丢 |
+| `GetWikiPage` | `repotory_wiki_read` | ✅ **同一个 `service.WikiPageDetail`**，`out_links` / `in_links` / `source_note_ids` 全在（[wikipage/page.go](file:///workspace/internal/service/wikipage/page.go)、[tools_wiki.go:112](file:///workspace/cmd/mcp/tools_wiki.go#L112)）——插件详情面板的「链接 / 反向链接 / 来源笔记」不会丢 |
 | `ListProjects` | `repotory_projects_list` | ✅ |
 | `OrganizeNote` | `repotory_notes_organize` | ✅ |
 | `UpdateNoteFull`（含 `pinned`） | `repotory_notes_update`（**无 `pinned`**） | ⚠️ **差异一** |

@@ -31,7 +31,7 @@ ADR-0014 的第一条决策是"先补结构，再让 LLM 写"，理由是"没有
 
 **3. 编译器产出边时从枚举里选词。** 改 `wiki_compile.go:227-228` 的 JSON 契约 literal，把 `"relation":"…"` 写成封闭枚举 + 附定义与示例；默认串 `:377` 从 `"compiled-from"` 改 `"ref"`；`LinkWikiPages`（`wiki.go:488`）对未知 relation **降级为 `ref` 并记日志而非报错**（脏值不得打断写入）。既有守卫全不动：`add_link` 至少一端为本轮产物（`ownedByCompile :403`）、预算、只写 pending、永不改批准页。
 
-**4. 正文 `[[wikilink]]` 在 approve 时抽取为 `mentions` 边。** 导出已在解析正文链接并统计 `dangling`（`wiki_export.go:50,243`）。反向补一刀：对**能解析到已存在页**的正文链接，`LinkWikiPages(…, 'mentions')`——`UNIQUE(from,to,relation)` + `ON CONFLICT DO NOTHING` 天然幂等。解析不到的维持"只报不建"（dangling 语义不变）。**触发点在 approve**（人批准的页才进图），复用 `ApproveWikiPage` 路径，不单开 job、不进编译器的自动写面。
+**4. 正文 `[[wikilink]]` 在 approve 时抽取为 `mentions` 边。** 导出已在解析正文链接并统计 `dangling`（现 `internal/service/wikipage/export.go`；行号随 ADR-0060 搬包失效）。反向补一刀：对**能解析到已存在页**的正文链接，`LinkWikiPages(…, 'mentions')`——`UNIQUE(from,to,relation)` + `ON CONFLICT DO NOTHING` 天然幂等。解析不到的维持"只报不建"（dangling 语义不变）。**触发点在 approve**（人批准的页才进图），复用 `ApproveWikiPage` 路径，不单开 job、不进编译器的自动写面。
 
 **5. 关系词表的结构体检进 lint。** `wiki_lint.go` `RunWikiLint`（:125）加 `lintRelationShape`，**照 `lintMissingRefs` 的"预取边集避免 O(n²) 查询"写法**（:192-202），并按被审项目作用域过滤边。检查项（落地时定稿的三条，均无歧义可判）：**`supersedes` 时间倒挂**（取代方 `updated_at` 早于被取代方）、**`part-of`/`depends` 成环**（组成与依赖应无环，着色 DFS 找回边）、**`contradicts` 单向**（冲突本应对称，缺反向即提示）。**产出仍只进 `project_todos`**（`fileFindings :389`），不破"lint 不改页"红线。
 

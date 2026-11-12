@@ -182,7 +182,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 
 | 工具 | 用途 |
 |------|------|
-| `repotory_projects_list` | 列出所有项目及统计；`starred_only: true` 只看收藏 |
+| `repotory_projects_list` | 列出所有项目及统计（无参数） |
 | `repotory_projects_stats` | 单个项目的统计 |
 | `repotory_scan` | 首次运行：发现并导入本地 Git 仓库。桌面不开也能跑 |
 | `repotory_notes_organize` | 让已配置的 AI 把一条笔记重构成清晰 Markdown。**返回提案，不落库** —— 要人工 `notes_update` 才生效 |
