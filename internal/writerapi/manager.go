@@ -25,6 +25,12 @@ import (
 // operations would blur the boundary the catalogue exists to draw.
 const MethodYield = "writer.yield"
 
+// MethodPing is the liveness probe. It exists so "is this writer alive" can be
+// asked WITHOUT the side effect the yield carries — answering a yield makes the
+// writer drop the role, which is the last thing a client deciding whether to
+// re-elect should cause.
+const MethodPing = "writer.ping"
+
 // Roles this process can hold with respect to the write path.
 const (
 	roleClient   = iota // another process writes; we forward to it
@@ -345,6 +351,11 @@ func (m *Manager) handle(w http.ResponseWriter, r *http.Request) {
 // surfaces could each believe they own the write path in turn, which is the
 // thing this whole package is preventing.
 func (m *Manager) handleControl(w http.ResponseWriter, req writer.Request) {
+	if req.Method == MethodPing {
+		// Liveness only: no database, no role change.
+		writeResponse(w, &writer.Response{OK: true})
+		return
+	}
 	if req.Method != MethodYield {
 		writeResponse(w, &writer.Response{Error: &writer.ResponseError{
 			Code: errcode.NotFound, Message: "unknown control method " + req.Method}})
@@ -444,7 +455,13 @@ func (m *Manager) Execute(ctx context.Context, method string, args any) (any, er
 		}
 		return out, nil
 	}
-	return m.forward(ctx, method, raw)
+	out, err := m.forward(ctx, method, raw)
+	if errors.Is(err, errBusyWriter) {
+		// The contract's own classification, not the generic one: "busy, retry"
+		// is actionable, where a bare `internal` is not.
+		return nil, &errcode.Remote{Code: errcode.Retryable, Message: err.Error(), Retryable: true}
+	}
+	return out, err
 }
 
 // ExecuteInto is Execute plus the decode into a typed result, so a tool handler
@@ -560,6 +577,12 @@ func (m *Manager) forwardOnce(ctx context.Context, method string, args json.RawM
 	return json.RawMessage(parsed.Result), nil
 }
 
+// errBusyWriter is the internal signal "the writer is alive and serving, but
+// it could not take this write right now" (a long backup, a batch compile).
+// Deliberately distinct from errWriterUnavailable: one says "wait", the other
+// says "somebody else must do this".
+var errBusyWriter = errors.New("the write path is busy")
+
 // errWriterGone is the internal signal "the writer we targeted is not there any
 // more", which is the only condition that justifies re-election.
 var errWriterGone = errors.New("cinder writer is gone")
@@ -605,6 +628,28 @@ func (m *Manager) reelect(failedAddr string) error {
 	}
 	if !errors.Is(err, writer.ErrLockedByAnotherProcess) {
 		return fmt.Errorf("writer: re-election failed: %w", err)
+	}
+	// The lock is STILL held by another process, and that holder may be the very
+	// writer we just failed against — which is what a writer busy inside a long
+	// write looks like from here. Waiting for a DIFFERENT endpoint is only
+	// right when the old one is actually gone; waiting three seconds because the
+	// address did not change turned a slow backup into "no Cinder writer is
+	// reachable" (measured: 1108 such false reports in one 30-minute soak,
+	// every one of them ~3s, i.e. this loop timing out).
+	if ep, rerr := writer.ReadEndpoint(dir); rerr == nil && ep.Addr == failedAddr && writer.Probe(ep) {
+		// Same writer, still published, AND still answering: it is alive but
+		// could not take this write. The liveness probe matters — an endpoint
+		// file outlives the process that wrote it, so "the address did not
+		// change" alone would report a dead writer as busy. Report that, not
+		// "writer_unavailable" — that code means "no process is holding the
+		// lock", and claiming it while the holder is serving is a lie the agent
+		// acts on by starting a second writer.
+		//
+		// It is retryable in the CONTENTION sense (a long backup, a batch
+		// compile), which is exactly what errcode.Retryable says: wait and try
+		// the same write again.
+		return fmt.Errorf("%w: the write path is held by %s, which is busy on a long write — retry",
+			errBusyWriter, ep.Addr)
 	}
 	// Someone else holds it and may not have published yet (it is starting up).
 	// A short bounded wait is the difference between "retry works" and "the

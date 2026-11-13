@@ -317,6 +317,51 @@ const HeaderToken = "X-Cinder-Writer-Token"
 // port and a fast error rather than a hung agent tool call.
 const dialTimeout = 2 * time.Second
 
+// ProbeTimeout bounds Probe. It is short on purpose: the only question is
+// "does something answer on this loopback port right now", and a writer busy
+// inside a long SQLite write still accepts the TCP connection and answers the
+// control path — the busy-ness shows up in the WRITE, not in the socket.
+const ProbeTimeout = 1500 * time.Millisecond
+
+// Probe reports whether the published writer is still there.
+//
+// It exists to keep two failures apart that look identical from an endpoint
+// file: "the writer is alive but could not take this write" (a long backup, a
+// batch compile — retry and it works) and "the writer is gone, its endpoint
+// file outlived it" (re-elect). The endpoint file cannot answer that: it is
+// written by the writer and survives a SIGKILL, which is exactly why the lock
+// is released by process death but this file is not.
+//
+// The probe asks the control path, which answers without touching the
+// database: a writer stuck on SQLite still answers it.
+func Probe(ep Endpoint) bool {
+	payload, err := MarshalRequest(Request{Method: "writer.ping"})
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), ProbeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+ep.Addr+"/control", strings.NewReader(string(payload)))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(HeaderToken, ep.Token)
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: (&net.Dialer{Timeout: dialTimeout}).DialContext,
+	}}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	// Any HTTP answer proves the process is there. A 404 means the token no
+	// longer matches (a different writer took the directory), which is "not
+	// this writer" for our purposes, so only 2xx counts.
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
+}
+
 // maxChannelBody caps the response. The largest legitimate payload is a review
 // result; the 1 MiB ceiling the RPC bridge uses would truncate it, so the
 // channel allows more while still refusing an unbounded read.

@@ -3,12 +3,14 @@ package writerapi
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"repotory/internal/errcode"
+	"repotory/internal/writer"
 )
 
 // TestLongWriteQueuesInsteadOfFailingLocked is ADR-0058's acceptance gate #1:
@@ -134,5 +136,68 @@ func TestConcurrentForwardedWritesAllLandOnce(t *testing.T) {
 	}
 	if count != n {
 		t.Fatalf("stored %d rows, want %d: the queue silently dropped writes", count, n)
+	}
+}
+
+// TestBusyWriterIsNotReportedAsAbsent pins the defect the 30-minute soak found
+// (TODO 13.1 residual ①, 2026-11-13).
+//
+// What happened: with the writer inside a long VACUUM INTO backup, a forwarded
+// write failed, the client re-elected, found the lock still held and the
+// endpoint ADDRESS unchanged, and then spun its 15×200ms wait for a DIFFERENT
+// address — timing out into "no Cinder writer is reachable ... start Cinder
+// Desktop". Measured: 1108 such reports in one soak, every one ~3s, while the
+// writer was alive the whole time.
+//
+// The distinction the contract needs:
+//   - writer gone        → writer_unavailable (start one, or let someone take over)
+//   - writer alive, busy → retryable          (wait; the write did not execute)
+//
+// This test holds the lock in a second manager, makes the first one reachable,
+// and asserts the ABSENT claim is not made.
+func TestBusyWriterIsNotReportedAsAbsent(t *testing.T) {
+	dir := t.TempDir()
+	dw := openTestDB(t, dir)
+	seedProject(t, dw, "busy")
+
+	// The desktop holds the role and SERVES a channel: it is alive and answers
+	// the ping, so the client must not claim nobody is serving.
+	writerM := newManager(t, dw, dir, "cinder-desktop", true, false)
+	if !writerM.IsWriter() {
+		t.Fatal("expected the desktop to be the writer")
+	}
+
+	// A second manager that may NOT elect itself: it can only forward, which is
+	// the cinder-mcp shape on a machine where the desktop already holds the
+	// role. With SelfElectAllowed=false, tryElect always reports "locked by
+	// another process", so re-election cannot rescue it.
+	clientM := newManager(t, dw, dir, "cinder-mcp", false, false)
+	if clientM.IsWriter() {
+		t.Fatal("a client-only manager must not hold the role")
+	}
+
+	// Simulate "the writer refused this particular write": ask the manager to
+	// re-elect against the CURRENT writer's address, which is the exact call the
+	// forward path makes after a StaleError.
+	ep, err := writer.ReadEndpoint(writer.DirOf(filepath.Join(dir, "repotory.db")))
+	if err != nil {
+		t.Fatalf("read the published endpoint: %v", err)
+	}
+	rerr := clientM.reelect(ep.Addr)
+	if rerr == nil {
+		t.Fatal("re-election against a live-but-locked writer must not report success")
+	}
+	// THE ASSERTION: the message must not claim the writer is absent. It may say
+	// the path is busy (retryable), which is what the caller can act on.
+	msg := strings.ToLower(rerr.Error())
+	if strings.Contains(msg, "no cinder writer is reachable") && !strings.Contains(msg, "busy") {
+		t.Fatalf("a live-but-busy writer was reported as absent: %v", rerr)
+	}
+	if !errors.Is(rerr, errBusyWriter) {
+		t.Fatalf("re-election should classify this as busy, got: %v", rerr)
+	}
+	// And the writer is indeed alive: the probe says so.
+	if !writer.Probe(ep) {
+		t.Fatal("the probe should have found the live writer")
 	}
 }

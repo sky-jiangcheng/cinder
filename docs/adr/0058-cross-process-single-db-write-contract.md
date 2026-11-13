@@ -90,6 +90,22 @@
 **代价与残留，照实记**：
 - 每个进程的本地读仍要过 SQLite 自己的锁——契约管写，不管读；`busy_timeout` 保留为读路径的兜底。
 - **13.6 收口（2026-11-13）：`cmd/server` 接入 + 桌面绑定面经 RPC 桥门控**——server 选举语义与 agent 面一致（`SelfElectAllowed=true, AssertWriter=false`）：独自跑时当写者（tickers 照常，headless 现状零损失），桌面在时转客户端（不抢占）。**写分类表** `bindingWrites`（`internal/app/surface.go`，56 条，与 131 条 surface 注册表同邻同 review）+ 完整性门 `TestBindingWritesAreComplete`（双向：漏分类的写绑定 / 指向不存在的方法，负例注入验证）。**RPC 桥三分流**（`DecideWrite`）：写者本地执行；目录覆盖的 8 类绑定（notes / handoff / scan / review）经 `App` 层转发给写者——转发走与写者**同一个 Executor**，`CreateHandoff` 的 `Source="desktop"` 随跳保留（出处记录写者而非执行进程）；**human-gate 写**（approve / merge / config 等 48 条）客户端角色拒绝并返回可行动错误（指向桌面）——ADR-0015 的边界在 headless 面重申。**tickers 是写者私产**：client 角色 server 只注册 importer 不跑 Startup（与 MCP 的既定 non-Startup 同构），决策函数 = `IsWriter()`。验收门：`cmd/server/write_contract_test.go` 三例（写者角色全功能 / 客户端转发落库 + human-gate 403 可行动 / ticker 降级判定），负例（拆掉桥上拒绝→ApproveWikiPage 变 422 直写）验证过。
+- **30 分钟 soak：已跑三次，部分完成（2026-11-13）**——`scripts/soak-writer-contract.sh` + `scripts/soak/worker.mjs` + `scripts/soak/seed.mjs`：真二进制（`cinder-server` 当写者跑 tickers，N 个 `cinder-mcp` 并发写）、隔离 HOME（**绝不碰用户真实库**——第一版门就栽在这里）、阶段 A 反复 `RunBackupNow` 造真实长持锁、阶段 B 写入中途 `SIGKILL` 验接管。**写者用 server 而非 GUI**：契约绑文件锁不绑进程（本篇改判），两者走同一条 `writerapi` 路径。
+
+  **核心判据三次全部成立**：每次 1.6–1.8 万次写，**`database is locked` 到达调用方 0 次**。
+
+  **soak 抓到并已修的真缺陷**：
+
+  | | 现象 | 根因 | 修法 |
+  |---|---|---|---|
+  | 缺陷 | 一次 30 分钟里 **1108 次** `writer_unavailable`（每次恰好 ~3.0s），写者**全程活着**；锁冒泡仍为 0 | 备份 `VACUUM INTO` 持锁时转发写失败 → `reelect(failedAddr)` 发现锁仍被持、**endpoint 地址没变**，于是空转 15×200ms 等一个「不同的地址」，超时报「没有 Cinder writer 可达」——把「忙」说成「不在」 | 地址仍是失败地址时**探一次活**（`writer.Probe`，走新增的无副作用 `writer.ping` 控制方法，不碰数据库、不触发让位）：活着 → 返回 `errBusyWriter`（分类 `retryable`）；探不通 → 才报 `writer_unavailable` |
+
+  **为什么两者必须分开**：`writer_unavailable` 的语义是「没有进程持锁，得叫一个来」，agent 收到会去起第二个写者；「写者活着但忙」只是要重试。混为一谈会让 agent 在每次备份期间制造新写者。`writer.Probe` 也解释了 endpoint 文件为何不能当活证明——它由写者写入、`SIGKILL` 后残留（锁则是进程死亡即释放）。回归门 `TestBusyWriterIsNotReportedAsAbsent`（负例：撤掉修复 → 3.04s 红，与 soak 观测吻合）。
+
+  **脚本自身修了五处**：① 判定接管时探 `/health`，但接管者是 `cinder-mcp`（**没有 HTTP 服务器**），527 次写全成功的运行被判红 → 改判「`SIGKILL` 前后写是否全部落地」（接管对调用方透明，没有延迟可测；<10s 要件仍由 `TestWriterDeathTriggersTakeover` 钉住）；② `set -u` 下 `wait "${PIDS[$i]}"` 空数组崩在判据之前；③ 每轮新建 note 让库涨到 9MB、`VACUUM INTO` 变成分钟级（单次写 861s），测的成了 SQLite 真空吞吐 → 改为固定行原地 UPDATE + 固定线程；④ `printf` 管道 seed 让 stdin 提前 EOF，MCP 关停时取消未返回的工具调用（形似并发 bug）；⑤ 线程种子缺失。
+
+  **未解决，如实记**：三次 soak 都还有 200–1100 次 `writer_unavailable` 误报（每次恰好 ~3.0s），写者全程活着。**已证伪的假设**：长写期间 `writer.Probe` 实测 **1.2ms** 就能应答（写者没被 SQLite 卡住），所以 busy 分支本应命中却只有 1/40 命中——失败发生在**更早的连接层**（`writer.ReadEndpoint` 或 `Post` 的拨号），`Probe` 帮不上。**影响有界**：误报只让 agent 多起一个写者，文件锁保证同一时刻仍只有一个写者，**不是数据损坏**。**下一步**：给 `forwardOnce` 的各失败出口加计数（地址读失败 / 拨号失败 / 写者返回错误各多少次），一次 instrumented soak 即可定位。**这条不阻塞本契约的成立**，但也不能声称「soak 通过」。
+
 - **开库路径不变**：`db.OpenWithRetry` 仍在每个进程里跑（WAL pragma、`Ensure*` 重放、迁移盖章都是文件级写）。它本来就在多进程间靠 busy_timeout 串行，且是「读到迁移后的库」的前提——非写者不能不开库只读。本轮不动它；若 13.6 把 server 接进来时再评估「非写者只读开库 + 写者负责迁移」。
 - `repotory_scan` 这类分钟级写现在在写者进程里排队，**转发端的取消会传导**（ctx 过 HTTP），但两个 agent 同时 scan 时后者等前者，这是契约的本意，不是回归。
 - 桌面从「唯一写者」变为「优先写者」：agent 自举期间桌面没在跑 backup ticker，快照密度短暂下降；桌面一启动即接管，窗口有界。
