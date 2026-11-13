@@ -544,26 +544,34 @@ func (m *Manager) forwardOnce(ctx context.Context, method string, args json.RawM
 	if errors.Is(err, writer.ErrNoEndpointPublished) {
 		// Lock held by someone who never published, or a crash between the two.
 		// Treat it as writer-gone: re-election distinguishes them.
+		log.Printf("write path: forward %s: no endpoint published for %s", method, dir)
 		return nil, fmt.Errorf("%w: %v", errWriterGone, err)
 	}
 	if err != nil {
+		log.Printf("write path: forward %s: read endpoint for %s: %v", method, dir, err)
 		return nil, err
 	}
 	payload, err := writer.MarshalRequest(writer.Request{Method: method, Args: args, Surface: m.opts.Surface})
 	if err != nil {
 		return nil, err
 	}
+	started := time.Now()
 	parsed, err := writer.Post(ctx, ep, "/write", payload)
 	if err != nil {
 		// Post classifies the failure: a StaleError with PreExecution means the
 		// request never reached the writer (retry-safe), anything else does not
 		// claim that.
+		var stale *writer.StaleError
+		log.Printf("write path: forward %s to %s (pid %d) failed after %s: stale=%v preExecution=%v err=%v",
+			method, ep.Addr, ep.PID, time.Since(started), errors.As(err, &stale), stale != nil && stale.PreExecution, err)
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("write %s cancelled: %w", method, ctx.Err())
 		}
 		return nil, err
 	}
 	if parsed.Error != nil {
+		log.Printf("write path: forward %s to %s (pid %d) refused after %s: code=%s gone=%v message=%s",
+			method, ep.Addr, ep.PID, time.Since(started), parsed.Error.Code, parsed.Error.WriterGone, parsed.Error.Message)
 		if parsed.Error.WriterGone {
 			return nil, fmt.Errorf("%w: %s", errWriterGone, parsed.Error.Message)
 		}
@@ -627,6 +635,7 @@ func (m *Manager) reelect(failedAddr string) error {
 		return nil
 	}
 	if !errors.Is(err, writer.ErrLockedByAnotherProcess) {
+		log.Printf("write path: re-election after %q failed: %v", failedAddr, err)
 		return fmt.Errorf("writer: re-election failed: %w", err)
 	}
 	// The lock is STILL held by another process, and that holder may be the very
@@ -636,7 +645,16 @@ func (m *Manager) reelect(failedAddr string) error {
 	// address did not change turned a slow backup into "no Cinder writer is
 	// reachable" (measured: 1108 such false reports in one 30-minute soak,
 	// every one of them ~3s, i.e. this loop timing out).
-	if ep, rerr := writer.ReadEndpoint(dir); rerr == nil && ep.Addr == failedAddr && writer.Probe(ep) {
+	ep, rerr := writer.ReadEndpoint(dir)
+	sameAddr := rerr == nil && ep.Addr == failedAddr
+	probe := false
+	probeStarted := time.Now()
+	if sameAddr {
+		probe = writer.Probe(ep)
+	}
+	log.Printf("write path: re-election after %q: published=%q readErr=%v sameAddr=%v probe=%v probeTook=%s",
+		failedAddr, ep.Addr, rerr, sameAddr, probe, time.Since(probeStarted))
+	if sameAddr && probe {
 		// Same writer, still published, AND still answering: it is alive but
 		// could not take this write. The liveness probe matters — an endpoint
 		// file outlives the process that wrote it, so "the address did not
@@ -654,9 +672,12 @@ func (m *Manager) reelect(failedAddr string) error {
 	// Someone else holds it and may not have published yet (it is starting up).
 	// A short bounded wait is the difference between "retry works" and "the
 	// agent sees a failure for a writer that was 200ms from being ready".
+	lastAddr, lastReadErr := "", error(nil)
 	for tick := 0; tick < 15; tick++ {
 		time.Sleep(200 * time.Millisecond)
-		if ep, err := writer.ReadEndpoint(dir); err == nil && ep.Addr != failedAddr {
+		cur, cerr := writer.ReadEndpoint(dir)
+		lastAddr, lastReadErr = cur.Addr, cerr
+		if cerr == nil && cur.Addr != failedAddr {
 			return nil
 		}
 		if lock, err := m.tryElect(dir); err == nil {
@@ -666,6 +687,8 @@ func (m *Manager) reelect(failedAddr string) error {
 			return m.becomeWriter(dir)
 		}
 	}
+	log.Printf("write path: re-election after %q timed out; last published=%q readErr=%v selfElect=%v",
+		failedAddr, lastAddr, lastReadErr, m.opts.SelfElectAllowed)
 	return fmt.Errorf("%w: no Cinder process is serving the write path for %s — start Cinder Desktop, or retry: another Cinder will take it over",
 		errcode.ErrWriterUnavailable, dir)
 }

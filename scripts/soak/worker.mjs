@@ -82,8 +82,12 @@ class McpClient {
       this.proc.stdout.on("data", chunk => this.onData(chunk.toString("utf8")));
       // Anything the server prints for humans must go to stderr; keep it so a
       // failure report can say WHY, and so a panic is not silently swallowed.
+      // Ring buffer, not the first 50 lines: the diagnostic lines that explain a
+      // failure arrive at the END of a long run, which is exactly what a
+      // keep-the-first-50 cap would drop.
       createInterface({ input: this.proc.stderr }).on("line", line => {
-        if (this.stderr.length < 50) this.stderr.push(line);
+        if (this.stderr.length >= 500) this.stderr.shift();
+        this.stderr.push(line);
       });
       this.proc.on("exit", code => {
         for (const { reject: r } of this.pending.values()) {
@@ -305,6 +309,10 @@ client.stop();
 
 stats.finishedAt = new Date().toISOString();
 stats.exitClean = stats.lockBubbles === 0;
+// The child's own diagnostics travel with the report: the gate keeps a failing
+// run's work dir, and a failure that cannot be explained without re-running is
+// a failure the harness failed to report.
+stats.mcpStderr = client.stderr;
 writeFileSync(args.out, JSON.stringify(stats, null, 2));
 
 if (stats.lockBubbles > 0) {

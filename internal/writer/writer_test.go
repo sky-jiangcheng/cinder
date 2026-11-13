@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -325,6 +328,64 @@ func TestReadEndpointRejectsGarbage(t *testing.T) {
 	}
 	if _, err := ReadEndpoint(dir); err == nil || errors.Is(err, ErrNoEndpointPublished) {
 		t.Fatalf("garbage endpoint file = %v, want an unreadable-file error (not \"no writer\")", err)
+	}
+}
+
+// TestPostAndProbeReleaseTheirConnections pins "one call, one socket, closed
+// with the response". Post and Probe used to build a fresh http.Client (and
+// therefore a fresh Transport) per call; a zero-value Transport never expires
+// idle connections and nothing ever calls CloseIdleConnections, so every
+// forwarded write left one ESTABLISHED socket — one fd and one ephemeral port —
+// behind for the life of the process. Measured in a soak: roughly one per
+// write. At a few writes per second that exhausts a normal fd limit (or the
+// ephemeral port range) inside a 30-minute run, and the NEXT write fails at the
+// DIAL, not at the writer: the re-election probe dials the same way, the probe
+// answer is "dead", and the caller gets writer_unavailable against a perfectly
+// healthy writer. That is the false report the soak kept showing.
+func TestPostAndProbeReleaseTheirConnections(t *testing.T) {
+	var mu sync.Mutex
+	open := 0
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch state {
+		case http.StateNew:
+			open++
+		case http.StateClosed, http.StateHijacked:
+			open--
+		}
+	}
+	srv.Start()
+	defer srv.Close()
+
+	ep := Endpoint{Addr: strings.TrimPrefix(srv.URL, "http://"), Token: "t"}
+	for i := 0; i < 10; i++ {
+		if _, err := Post(context.Background(), ep, "/write", []byte(`{"method":"x"}`)); err != nil {
+			t.Fatalf("Post %d: %v", i, err)
+		}
+		if !Probe(ep) {
+			t.Fatalf("Probe %d: want a live answer", i)
+		}
+	}
+
+	// The close is asynchronous, so give it a moment before declaring a leak.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := open
+		mu.Unlock()
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connection(s) still open after 10 Posts + 10 Probes — each writer call leaks its socket", n)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

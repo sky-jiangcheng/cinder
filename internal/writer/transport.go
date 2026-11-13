@@ -317,6 +317,24 @@ const HeaderToken = "X-Cinder-Writer-Token"
 // port and a fast error rather than a hung agent tool call.
 const dialTimeout = 2 * time.Second
 
+// channelClient is shared by every channel call on purpose. Building an
+// http.Client (and therefore a Transport) per call is not free: a zero-value
+// Transport never expires idle connections and nothing ever closes them, so
+// each call left its keep-alive socket open for the life of the process — one
+// fd and one ephemeral port per forwarded write, measured 1:1 in a soak. At a
+// few writes per second that runs a normal fd limit (or the ephemeral port
+// range) out inside a 30-minute run; the next write then fails at the DIAL
+// while the writer is perfectly healthy, the re-election probe dials the same
+// way and also fails, and the caller gets writer_unavailable. Keep-alive is
+// off rather than pooled: this is loopback with a handful of writes per
+// second, and "exactly one socket per call, closed with the response" is the
+// invariant that cannot silently regress. No Timeout either: a forwarded scan
+// or review legitimately runs for minutes, so cancellation rides on ctx.
+var channelClient = &http.Client{Transport: &http.Transport{
+	DialContext:       (&net.Dialer{Timeout: dialTimeout}).DialContext,
+	DisableKeepAlives: true,
+}}
+
 // ProbeTimeout bounds Probe. It is short on purpose: the only question is
 // "does something answer on this loopback port right now", and a writer busy
 // inside a long SQLite write still accepts the TCP connection and answers the
@@ -347,10 +365,7 @@ func Probe(ep Endpoint) bool {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(HeaderToken, ep.Token)
-	client := &http.Client{Transport: &http.Transport{
-		DialContext: (&net.Dialer{Timeout: dialTimeout}).DialContext,
-	}}
-	resp, err := client.Do(req)
+	resp, err := channelClient.Do(req)
 	if err != nil {
 		return false
 	}
@@ -384,10 +399,7 @@ func Post(ctx context.Context, ep Endpoint, path string, body []byte) (*Response
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(HeaderToken, ep.Token)
-	client := &http.Client{Transport: &http.Transport{
-		DialContext: (&net.Dialer{Timeout: dialTimeout}).DialContext,
-	}}
-	resp, err := client.Do(req)
+	resp, err := channelClient.Do(req)
 	if err != nil {
 		return nil, &StaleError{Addr: ep.Addr, PreExecution: isDialFailure(err), Err: err}
 	}

@@ -179,6 +179,16 @@ BACKUPS=0
 BACKUP_FAILS=0
 phase_a_end=$(( $(date +%s) + PHASE_A_SECONDS ))
 while [[ $(date +%s) -lt $phase_a_end ]]; do
+  # CreateBackup is idempotent per DAY: once today's snapshot exists, every
+  # later RunBackupNow returns before VACUUM INTO ever runs. Without this, the
+  # "repeated long holds" above are one long hold plus N no-ops — measured:
+  # 14 calls, 14 counted, exactly one VACUUM. FORCE_BACKUPS=1 drops today's
+  # snapshot so each call really takes the write lock (the isolated HOME makes
+  # that safe); it also makes each VACUUM write a fresh snapshot to disk, so
+  # the default stays off to keep the run small and the write rate high.
+  if [[ "${FORCE_BACKUPS:-0}" == "1" ]]; then
+    find "$HOME_DIR" -name "repotory-$(date +%F).db" -delete 2>/dev/null
+  fi
   if out=$(rpc RunBackupNow '[]' 2>&1); then
     BACKUPS=$(( BACKUPS + 1 ))
   else
