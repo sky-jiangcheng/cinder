@@ -7,6 +7,15 @@ import { spawn, type ChildProcess } from "node:child_process";
 export interface McpOptions {
   command: string;
   args?: string[];
+  /**
+   * Extra environment for the child.
+   *
+   * Production leaves this unset: the MCP server must inherit the user's
+   * environment so it finds the same Cinder data directory the app does.
+   * The end-to-end gate (scripts/e2e-gate-c.sh) sets a temp HOME instead,
+   * because a gate that writes into the user's real database is not a gate.
+   */
+  env?: Record<string, string>;
 }
 
 interface Pending {
@@ -32,6 +41,7 @@ export class McpStdioClient {
   async start(): Promise<void> {
     const proc = spawn(this.opts.command, this.opts.args ?? [], {
       stdio: ["pipe", "pipe", "pipe"],
+      env: this.opts.env ? { ...process.env, ...this.opts.env } : process.env,
     });
     this.proc = proc;
     proc.stdout?.on("data", (chunk: Buffer) => this.onData(chunk.toString("utf8")));

@@ -61,9 +61,9 @@ B 的 fixture 是**目标契约**，不是「当前两端的行为快照」—�
 - **C**：新增一个 CI job，起 headless 服务，驱动 VS Code / JetBrains 面板各完成一次「检索 + 深链 + 发问」，任一端失败即红；**必须能在无显示环境下跑**（headless IDE 或 webview 的 DOM harness），否则它就是一条会长期飘红然后被忽略的门。
 - 文档里写清「权威在哪、规则版本是多少」，且该描述与 fixture 同源（沿用 `check-version-drift.mjs` 的做法：数字从 fixture 派生，不写死）。
 
-## 落地记录（2026-11-13，门 B）
+## 落地记录（一）（2026-11-13，门 B）
 
-**门 B（conformance fixture）已落码**；门 C（headless E2E 冒烟）**未做**，仍记 TODO。验收判据逐条对账：
+**门 B（conformance fixture）已落码**；门 C 于同日随后落地，见下文「落地记录（二）」。验收判据逐条对账：
 
 - **「`scripts/` 下有一份 conformance fixture（请求 → 期望作用域 / 轮次 / 兜底标记）」——已落**：[`scripts/shared-chat-conformance.fixture.json`](../../scripts/shared-chat-conformance.fixture.json)，结构守卫在 [`internal/conformance`](../../internal/conformance/fixture.go)（settled 必带 expect、skipped 必带 `assert_forbidden` 与 TODO 编号、规则数 = `contract_version.rules`）。**settled 5 条**（只收已拍板的规则）：`pairing.attach` / `pairing.order` / `fallback.not_persisted` / `fallback.not_persisted.zero_hit` / `fallback.local_render`；**skipped 3 条**：`scope.path`（等 TODO 11.1）、`pairing.orphan_reply` 与 `pairing.multiple_replies`（等 TODO 11.3 的产品决定）。**fixture 与 `CoreVersion` 的关系写进文档并落进门**：工具面不变 CoreVersion 不动（2.0.0）；规则数变化涨 `contract_version.rules`（`check-version-drift.mjs` 第⑪门核对），删规则视为行为破坏须另走 ADR。
 - **「三端各有一个 runner 读它」——已落，三端 = JetBrains / VS Code / Go**：Kotlin `SharedChatConformanceTest`（真实 `sharedMessageGroups` + `SharedChatSession`）、TS `ide/vscode/src/__tests__/conformance.test.ts`（真实 `sharedTurns` + `SharedChat.send`）、Go `cmd/mcp/conformance_test.go`（fixture 引用的兜底文案 = 服务端 `keywordFallback` 实际产出——fixture 引文与服务端互相钉住）。三个 runner 各自接进既有 CI job（`gradle test` / `npm test` / `go test`），未新增 job；fixture 文件三处同读，不复制。
@@ -75,4 +75,23 @@ B 的 fixture 是**目标契约**，不是「当前两端的行为快照」—�
 1. **KT `sharedMessageGroups` 按 createdAt 重排**——三个客户端三台钟，跨钟字典序不保时序；真机探针证实时钟偏斜下轮次顺序**倒转**（q1 先问被排到 q3 后面）。已改为保留服务端读序（seq ASC），配对仍按 `replyTo`；旧测试「tolerates interleaving reversed order」测的是被模拟出来的服务端乱序，已改为钉契约。
 2. **两个 IDE 面板都把关键词兜底文案当答案落库**（TODO 11.2 的两端半边）——VS Code `SharedChat.send` 与 KT `SharedChatSession.transportAsk` 拿到 `No AI endpoint is configured…` 匹配列表后照常 `append` 成 assistant 消息，另一端把它渲染成知识。均改为拒绝存储（抛错走本地失败标记；**零命中分支 `No results found for: …` 无该前缀，单独匹配**——这正是 fixture 把它单列为一条规则的原因）。
 
-**诚实边界**：门 B 只证明「规则对等」，**门 C 未做**——「面板还打得开」（含 JetBrains「首次打开即构建中断」那类存量崩溃）仍只有 CI 编译门与既有单测兜着；`fallback.local_render` 在 TS 侧是结构性安全（DOM `textContent`）+ 不落库断言，未做逐字节转义比对；`scope.path` / 孤儿 / 多回复仍等产品决定。
+**诚实边界**：门 B 只证明「规则对等」；「面板还打得开」由门 C 接住（见下）。`fallback.local_render` 在 TS 侧是结构性安全（DOM `textContent`）+ 不落库断言，未做逐字节转义比对；`scope.path` / 孤儿 / 多回复仍等产品决定。
+
+## 落地记录（二）（2026-11-13，门 C）
+
+**门 C（headless E2E 冒烟）已落码**。验收判据：**「起 headless 服务，驱动 VS Code / JetBrains 面板各完成一次『检索 + 深链 + 发问』，任一端失败即红；必须能在无显示环境下跑」——已落**。
+
+- **驱动的是面板自己的模型，不是复制一份逻辑**：两侧都用各自产品代码里的会话模型（TS `ChatSession` / Kotlin `ChatSession`）经各自 `Transport`/`ChatTransport` 端口驱动。ADR-0036 当初把模型放在端口后面就是为了这一天——所以门里没有 IDE、没有 webview、没有显示，跑在 `ubuntu-latest` 上。
+- **`ChatSession` 驱动真的二进制**：`cinder-mcp`（stdio JSON-RPC）+ `cinder-server`（回环 HTTP，含 `--web-dist` 与 API-only 两种形态）。门自己构建二进制（[`scripts/e2e-gate-c.sh`](../../scripts/e2e-gate-c.sh)），不吃 artifact——陈旧产物会测昨天的代码。
+- **三程各自的断言**：① 检索——真实 MCP 返回可渲染的命中（标题与摘要都要有）；② 深链——命中产出 SPA 路由**且指向检索真正返回的那一行**；UI 服务被识别为可打开，**API-only 服务必须被识别为不可打开**（ADR-0035 决策 6 的静默 404 防线）；③ 发问——答案来自模型桩（本地假 OpenAI 端点，走完整个工具调用环）**且带来源清单**。
+- **发问用的假端点**：`/chat/completions` 返回一条固定回答，因此这一程不需要模型、不需要网络、不花钱，但仍走真实的取证 + 提示装配 + 工具环代码路径。
+- **注入式负例（逐条验证过，全部恢复后全绿）**：KT 侧把 `servesWebUi` 改成恒 true → 深链拒绝分支红；TS 侧让 `parseSearchHits` 返回空 → 第 1、2 程红（第 3 程仍绿，说明各程断言独立）；TS 侧裁掉来源清单 → 第 3 程红。
+- **CI**：新增独立 job `e2e-gate-c`（唯一同时需要 Go + Node + JDK 21 的任务；塞进任一 IDE job 都会把工具链拖进一个刻意保持精简的 job）。本地一条命令：`bash scripts/e2e-gate-c.sh [vscode|jetbrains|both]`。
+
+**门 C 落地当天抓到并修掉的三个真实缺陷（都是门自己先红）**：
+
+1. **MCP 子进程继承真实 HOME** —— 两个 MCP 客户端都无法指定子进程环境，门跑起来读到的是**用户真实的 Cinder 库与配置**，于是「发问」拿真实库去答，答案与种子数据无关。两个客户端补 `env`（生产不设，保持继承语义），门显式传隔离 HOME。**这条最值得记**：一道会污染用户真实数据目录的门，比没有门更糟。
+2. **Gradle 门被缓存成假绿** —— 第二次运行报 `Task :test UP-TO-DATE`，929ms「通过」，实际一个进程都没起。配置了门变量时强制 `outputs.upToDateWhen { false }`。**「缓存绿」与「没跑」不可区分**，这道门必须每次真跑。
+3. **门依赖纯净数据库** —— 种子笔记 id 被硬编码成 1，同一 HOME 复跑时 id 变了就红（错因指向产品，实际是门写得脆）。改为从写入结果读回真实 id。另有一条：Gradle **守护进程**持有启动时的环境，`export` 对构建不可见（第一次「通过」其实是静默跳过），因此门变量走 **Gradle 属性**而非环境变量。
+
+**诚实边界**：门 C 证明三程在无显示环境走通，**不等于** webview 渲染像素正确（那仍归 `preview-console.mjs` 目视 + 三端 DOM 断言）；JetBrains「首次打开即构建中断」那类**只在真实 IDE 里复现**的崩溃不在本门覆盖范围（本门连 IDE 都不启动）；深链只验证「URL 正确 + 服务端是否服务 UI」，不验证打开后的页面内容。

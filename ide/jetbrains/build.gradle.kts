@@ -173,6 +173,41 @@ tasks {
         // tests want no IDE at all, so both are removed: the provider, and
         // the system property that asks for the IDE class loader.
         jvmArgumentProviders.clear()
+        // Gate C (ADR-0059) drives REAL cinder-mcp / cinder-server binaries.
+        //
+        // Read from GRADLE PROPERTIES, not System.getenv: the Gradle daemon
+        // keeps the environment it was started with, so an `export` in the
+        // calling shell is invisible here (proven: the gate silently skipped
+        // itself while the script believed it had exported everything). The
+        // script passes `-Pcinder.e2e.mcp=…` instead, which is configuration,
+        // not ambient state — and it invalidates the configuration cache when
+        // it changes.
+        //
+        // Unset → the gate test skips itself, so a plain `gradle test` on a
+        // machine without the Go toolchain stays a unit run.
+        val gateProps = mapOf(
+            "CINDER_E2E_MCP" to "cinder.e2e.mcp",
+            "CINDER_E2E_SERVER" to "cinder.e2e.server",
+            "CINDER_E2E_HOME" to "cinder.e2e.home",
+            "CINDER_E2E_WEB_DIST" to "cinder.e2e.webDist",
+        )
+        var gateConfigured = false
+        for ((envKey, prop) in gateProps) {
+            (providers.gradleProperty(prop).orNull ?: System.getenv(envKey))
+                ?.takeIf { it.isNotBlank() }
+                ?.let {
+                    environment(envKey, it)
+                    gateConfigured = true
+                }
+        }
+        // With the gate configured, NEVER let Gradle answer from cache: the
+        // test spawns real binaries and asserts on their live behaviour, and a
+        // cached "green" is indistinguishable from "did not run" (observed:
+        // the second script run reported success in 929ms with :test
+        // UP-TO-DATE, i.e. it proved nothing).
+        if (gateConfigured) {
+            outputs.upToDateWhen { false }
+        }
         doFirst {
             systemProperties.remove("java.system.class.loader")
             systemProperties.remove("idea.force.use.core.classloader")

@@ -45,6 +45,15 @@ class McpStdioClient(
     private val args: List<String> = emptyList(),
     private val clientVersion: String = "0.1.0",
     private val onStderr: (String) -> Unit = {},
+    /**
+     * Extra environment for the child process.
+     *
+     * Production leaves this empty: the MCP server must inherit the user's
+     * environment so it finds the same Cinder data directory the app does.
+     * The end-to-end gate (scripts/e2e-gate-c.sh) sets a temp HOME instead,
+     * because a gate that writes into the user's real database is not a gate.
+     */
+    private val env: Map<String, String> = emptyMap(),
 ) {
     companion object {
         // Tool calls are second-scale against the local service; 60s is
@@ -75,7 +84,9 @@ class McpStdioClient(
     fun start() {
         if (isRunning) return
         val proc = try {
-            ProcessBuilder(listOf(command) + args).start()
+            val builder = ProcessBuilder(listOf(command) + args)
+            if (env.isNotEmpty()) builder.environment().putAll(env)
+            builder.start()
         } catch (e: Exception) {
             throw McpException("Cannot start $command: ${e.message ?: e.javaClass.simpleName}", e)
         }
