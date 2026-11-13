@@ -89,6 +89,12 @@ func (s *Service) backupRetain() int {
 // returns its path. Refuses with an explicit message when the user turned
 // backups off — a queued job that silently no-ops is harder to reason about
 // than a refused one (the same rule StartLintJob follows).
+// SetBackupDirForTest points local snapshots at a sandbox directory. Tests
+// outside internal/service (internal/app's surface contract tests) need this
+// to keep RunBackupNow off the real user data directory — the same reason
+// backup_test.go sets the field directly.
+func (s *Service) SetBackupDirForTest(dir string) { s.backupDir = dir }
+
 func (s *Service) RunBackupNow() (string, error) {
 	if !s.backupEnabled() {
 		return "", fmt.Errorf("backup is off: set backup_enabled=1 to snapshot the database daily")
@@ -166,4 +172,14 @@ func (s *Service) startBackupTicker() {
 			s.rollingBackupOnce()
 		}
 	})
+}
+
+// FireImportEventForTest drives the import-event forwarder the way
+// TriggerKnowledgeImport does, so App-layer tests can assert the wiring
+// without running a real importer.
+func (s *Service) FireImportEventForTest(name string, payload ImportEventPayload) {
+	if s.onImportEvent != nil {
+		s.onImportEvent(payload)
+	}
+	_ = name
 }

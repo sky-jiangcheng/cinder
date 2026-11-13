@@ -99,6 +99,29 @@ func TestBindingWritesAreComplete(t *testing.T) {
 // TestBindingWritesRouteDecidesCorrectly pins the DecideWrite behaviour the
 // RPC bridge relies on, against the fixture's contract.
 func TestBindingWritesRouteDecidesCorrectly(t *testing.T) {
+	// The MCP-twin cross-check map stays in sync with the registry itself:
+	// every entry names a tool, none is empty (the same invariant cmd/mcp's
+	// registry test asserts from the other side).
+	for binding, tool := range mcpBackedBindings() {
+		if tool == "" {
+			t.Errorf("mcpBackedBindings[%q] has an empty tool name", binding)
+		}
+	}
+	if len(mcpBackedBindings()) == 0 {
+		t.Fatal("mcpBackedBindings is empty: the MCP twin cross-check lost its data source")
+	}
+
+	// The exported lookup the bridge calls: a write, a read, a lifecycle name.
+	if !BindingIsWrite("ApproveWikiPage") {
+		t.Fatal("ApproveWikiPage must classify as a write")
+	}
+	if BindingIsWrite("GetProjects") {
+		t.Fatal("GetProjects must not classify as a write")
+	}
+	if BindingIsWrite("Startup") {
+		t.Fatal("lifecycle names are not in the write registry")
+	}
+
 	dir := t.TempDir()
 	// Build a manager in client role against a ghost writer, exactly like the
 	// headless server that starts while a desktop runs but is unreachable
