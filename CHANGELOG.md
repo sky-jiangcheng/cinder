@@ -4,7 +4,7 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
-## [Unreleased]
+## [2.37.0] - 2026-11-13
 
 ### 新增
 - **30 分钟写契约 soak 落地：抓到并修复一个真实缺陷（ADR-0058 / TODO 13.1 残留①，2026-11-13）**：`scripts/soak-writer-contract.sh`（+ `worker.mjs` / `seed.mjs`）把「双进程并发写 + 反复备份长持锁 + `SIGKILL` 验接管」做成可重复运行的脚本（真二进制、隔离 HOME、阶段 A 造长持锁、阶段 B 中途杀写者）。**核心判据三次全部成立：1.6–1.8 万次写里 `database is locked` 到达调用方 0 次**。**soak 当天抓到的真缺陷**：备份持锁时转发写失败，`reelect` 发现 endpoint 地址没变，空转 15×200ms 等「不同的地址」，把「写者忙」报成「写者不在」——一次 soak 里 1108 次（每次恰好 ~3.0s，写者全程活着）。修法：地址仍是失败地址时探一次活（新增无副作用 `writer.ping` 控制方法 + `writer.Probe`，不碰库、不触发让位），活着返回 `errBusyWriter`（`retryable`），探不通才报 `writer_unavailable`；两者必须分开，否则 agent 会在每次备份期间起第二个写者。回归门 `TestBusyWriterIsNotReportedAsAbsent`（负例撤掉修复 → 3.04s 红）。**脚本自身另修五处**（`/health` 判接管、`set -u` 空数组崩溃、数据无限增长把测面变成 SQLite 真空吞吐、`printf` 管道 EOF 取消工具调用、线程种子缺失）。**未解决（如实记）**：三次 soak 仍有 200–1100 次 `writer_unavailable` 误报，已证伪「`Probe` 被 SQLite 卡住」的假设（实测 1.2ms 应答），失败在更早的连接层；影响有界（只多起一个写者，文件锁仍保证单写者，非数据损坏），下一步是给 `forwardOnce` 各失败出口加计数做一次 instrumented soak。
