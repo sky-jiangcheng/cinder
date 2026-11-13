@@ -722,6 +722,56 @@ func (m *Manager) Status() Status {
 	return st
 }
 
+// WriteDecision is what the RPC bridge does with a write classified by
+// bindingWrites (internal/app). The single-writer contract has three answers,
+// because three situations exist:
+type WriteDecision int
+
+const (
+	// WriteLocal: this process is the writer (or in direct mode) — execute as
+	// today, on the local handle.
+	WriteLocal WriteDecision = iota
+	// WriteForward: the op is catalogue-covered — send it to the elected
+	// writer over the channel (the same Executor the writer runs, so both
+	// modes share one code path).
+	WriteForward
+	// WriteRefuse: the op is a human-gate write with no catalogue method —
+	// the desktop owns these, and a headless process that is not the writer
+	// must not hit the shared file behind it. The error names the remedy.
+	WriteRefuse
+)
+
+// DecideWrite maps an App binding name to its contract behaviour. bindingName
+// is the exact method name from internal/app's bindingWrites registry.
+func (m *Manager) DecideWrite(bindingName string) WriteDecision {
+	m.mu.Lock()
+	role := m.role
+	m.mu.Unlock()
+	if role == roleWriter || role == roleDirect {
+		return WriteLocal
+	}
+	if CatalogueMethodForBinding(bindingName) != "" {
+		return WriteForward
+	}
+	return WriteRefuse
+}
+
+// GuardedLocal runs a NON-catalogue write after confirming this process holds
+// the write path. The RPC bridge calls it for the human-gate bindings
+// (approve / merge / compile / config …): those have no catalogue method
+// because they are desktop acts, and executing one from a client process
+// would hit the shared SQLite file behind the elected writer's back.
+func (m *Manager) GuardedLocal(bindingName string) error {
+	m.mu.Lock()
+	role := m.role
+	m.mu.Unlock()
+	if role == roleWriter || role == roleDirect {
+		return nil
+	}
+	return fmt.Errorf("%w: %s writes only from the Cinder writer — start Cinder Desktop (it owns the human gate), or retry once no other Cinder holds the write path",
+		errcode.ErrWriterUnavailable, bindingName)
+}
+
 // RecordAudit forwards an AI-call audit row. It is a write like any other: on a
 // non-writer process the direct insert would hit the same lock contention the
 // contract exists to remove, and silently dropping the row would leave the
@@ -773,3 +823,8 @@ const (
 	// preempt already tolerates a refusal.
 	yieldAskTimeout = 3 * time.Second
 )
+
+// TryLockForTest re-exports the election lock so another package's tests can
+// simulate "some other process holds the write path" against the same file.
+// Production code goes through New / Manager methods only.
+func TryLockForTest(dir string) (*writer.Lock, error) { return writer.TryLock(dir) }

@@ -266,6 +266,64 @@ var bindingSurfaces = map[string]BindingSurface{
 	"DeleteLandingProject": {SurfaceDesktopOnly, "", "deletes a landing placeholder and may delete its notes; deletion is human-only and is a confirmed action, never an agent-callable cascade"},
 }
 
+// bindingWrites names every App binding whose call executes a database write
+// (or drives one: a scan, an import, an update-download state change). It is
+// the single-writer contract's routing table for the RPC bridge (ADR-0058 /
+// TODO 13.6): a headless server that is NOT the elected writer routes
+// catalogue-covered operations through the writer channel and refuses the
+// human-gate writes with an actionable error, instead of hitting the shared
+// SQLite file behind the writer's back.
+//
+// Deliberately NOT derivable from the surface categories above: MCP-backed is
+// about agent reachability, and several writes are desktop-only; the split
+// here is "does this call write", which is a different question answered by
+// the same review discipline. Kept adjacent to bindingSurfaces so one review
+// pass covers both.
+//
+// Excluded on purpose (checked, not forgotten):
+//   - OrganizeNote (returns a proposal, writes nothing — documented above),
+//     GenerateLLMsTxt (assembles a string), CheckBackupCopyTarget (inspects a
+//     directory), CheckUpdate (one GET, persists nothing),
+//     StartAskStream (Wails events only, blocked on the bridge anyway), and
+//     the OS affordances (OpenBrowserURL / OpenDownloadedUpdate /
+//     RevealDownloadedUpdate / EjectInstallerVolume) — no DB write.
+//   - GetKnowledgeSources / AgentInstructionsStatusFor / MissingAgentInstructionsCount /
+//     PreviewKnowledgeImport / FindMergeCandidates / SuggestWikiLinks /
+//     GetReviewConfig / ListRecentHandoffs / LatestHandoff — reads.
+var bindingWrites = map[string]bool{
+	// projects / scan / history
+	"TriggerScan": true, "RefreshProjectHistory": true, "UpdateProjectLevel": true, "ToggleStar": true,
+	// notes / topics / versions
+	"CreateNote": true, "CreateNoteWithMeta": true, "UpdateNote": true, "UpdateNoteFull": true,
+	"UpdateNoteMeta": true, "DeleteNote": true, "PinNote": true, "MoveNote": true,
+	"CreateTopic": true, "UpdateTopic": true, "DeleteTopic": true, "SetNoteTopic": true,
+	"RestoreNoteVersion": true,
+	// todos
+	"CreateTodo": true, "ToggleTodo": true, "DeleteTodo": true, "ReorderTodos": true,
+	// config / scan roots
+	"UpdateConfig": true, "UpdateScanRoots": true,
+	// backups
+	"RunBackupNow": true,
+	// agent wiring (writes into the user's project directories)
+	"SetupAgentClients": true, "InstallAgentInstructions": true,
+	// knowledge imports / handoff
+	"TriggerKnowledgeImport": true, "TriggerAllKnowledgeImports": true,
+	"ImportClaudeMemory": true, "CaptureClaudeHandoff": true, "CreateHandoff": true,
+	// embeddings
+	"RebuildEmbeddings": true, "RebuildPageEmbeddings": true,
+	// review
+	"UpdateReviewConfig": true, "RunReviewNow": true,
+	// wiki pipeline (the human gate)
+	"FileAnswerAsPage": true, "RunWikiLint": true, "CompileNote": true,
+	"CompileProjectNotes": true, "StartCompileJob": true, "StartLintJob": true,
+	"CancelCompileJob": true, "ApproveWikiPage": true, "RejectWikiPage": true,
+	"DeleteCompiledPage": true, "PromoteWikiPageToGlobal": true,
+	"AssignWikiPageProject": true, "MergeWikiPages": true, "RunCommunitySummary": true,
+	"BindWorkspaceToProject": true, "ReassignLandingNotes": true, "DeleteLandingProject": true,
+	// update download lifecycle
+	"StartUpdateDownload": true, "CancelUpdateDownload": true, "UpdateDownloadState": true,
+}
+
 // mcpBackedBindings returns the bindings that claim an MCP twin, for the
 // cross-check in cmd/mcp (which can import this package without a cycle).
 func mcpBackedBindings() map[string]string {
@@ -277,3 +335,7 @@ func mcpBackedBindings() map[string]string {
 	}
 	return out
 }
+
+// BindingIsWrite reports whether the named App binding executes a database
+// write (see bindingWrites). Exported for the RPC bridge's contract gate.
+func BindingIsWrite(name string) bool { return bindingWrites[name] }

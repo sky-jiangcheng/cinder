@@ -28,7 +28,7 @@ func newGuardTestHandler(t *testing.T) http.Handler {
 		t.Fatalf("init db: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
-	return New(service.New(database, "me"), nil)
+	return New(service.New(database, "me"), nil, nil)
 }
 
 func TestLoopbackGuardRejectsForeignHost(t *testing.T) {

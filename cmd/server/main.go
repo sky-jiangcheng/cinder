@@ -34,6 +34,7 @@ import (
 	"repotory/internal/platform"
 	"repotory/internal/service"
 	"repotory/internal/version"
+	"repotory/internal/writerapi"
 )
 
 // Server timeouts. ReadHeaderTimeout bounds how long a local process can hold
@@ -87,12 +88,25 @@ func main() {
 	// This process IS the HTTP surface (ADR-0030): every model call it makes
 	// arrives over the HTTP / JSON-RPC API, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceHTTP)
-
-	// Seed default scan roots like the desktop App and MCP entry points do
-	// (idempotent via the scan_roots_seeded flag): without it a fresh headless
-	// install has no roots and TriggerScan fails until the user configures
-	// one by hand.
-	svc.EnsureDefaultScanRoots()
+	// The single-writer contract (ADR-0058 / TODO 13.6). The server elects
+	// when no other Cinder writes (a standalone headless install keeps every
+	// capability it has today, tickers included) and forwards when a desktop
+	// or an MCP holds the role — it never displaces a writer that is already
+	// serving (AssertWriter stays false). Write-classified bindings route
+	// through the contract via App; the human-gate writes refuse from a
+	// client role with an error naming the desktop.
+	writers, err := writerapi.New(svc, writerapi.Options{
+		DBPath:           platform.GetDbPath(),
+		Process:          "cinder-server",
+		Surface:          service.AISurfaceHTTP,
+		CoreVersion:      version.CoreVersion,
+		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
+		SelfElectAllowed: true,
+	})
+	if err != nil {
+		log.Fatalf("write contract: %v", err)
+	}
+	svc.SetAuditForwarder(writers.RecordAudit)
 
 	// Run the same startup sequence the desktop App runs. Without it the
 	// knowledge-source importers are never registered, so GetKnowledgeSources
@@ -100,11 +114,26 @@ func main() {
 	// `unknown knowledge source`. Startup is sync.Once-guarded and also honours
 	// the auto_import config key, so headless clients get the same import
 	// behaviour as the desktop app instead of a silently reduced feature set.
-	svc.Startup()
+	//
+	// The maintenance half (tickers: backup, sync, compile worker, review,
+	// lint, embedding drains) is writer-owned work: a client-role server skips
+	// it, exactly like cmd/mcp's deliberate non-Startup, because the elected
+	// writer is already running the same schedules against the same file.
+	// Importer REGISTRATION still runs — it fills the registry the reads and
+	// the consent-gated import triggers report from.
+	if writers.IsWriter() {
+		svc.Startup()
+		svc.EnsureDefaultScanRoots()
+	} else {
+		svc.RegisterKnowledgeSources()
+		log.Printf("write contract: client role — tickers stay with the elected writer (ADR-0058)")
+	}
 
 	// Bind the same App object the desktop Wails layer exposes, so the browser
 	// frontend can reach every capability via /api/rpc (see httpapi/rpc.go).
-	mux := httpapi.New(svc, app.New(svc))
+	// The writer contract rides along: write-classified bindings route by
+	// role, human-gate writes refuse from a client role.
+	mux := httpapi.New(svc, app.New(svc, app.WithWriter(writers)), writers)
 
 	// When webDist is supplied, serve the built SPA from the same origin as the
 	// API so the browser talks to /api/rpc directly (no node proxy, which this
@@ -153,6 +182,7 @@ func main() {
 		}
 	}
 
+	writers.Shutdown()
 	svc.Shutdown()
 	if err := svc.Close(); err != nil {
 		log.Printf("close database: %v", err)

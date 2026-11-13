@@ -109,7 +109,7 @@ func TestLoopbackGuardStaysOutsideRequestLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
-	h := New(service.New(database, "me"), nil)
+	h := New(service.New(database, "me"), nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)

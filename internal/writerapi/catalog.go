@@ -141,6 +141,32 @@ type AuditRecordArgs struct {
 	Row db.AICallLog `json:"row"`
 }
 
+// bindingCatalogueMethods maps the App bindings (internal/app's
+// bindingWrites registry) onto the catalogue method that executes their write.
+// Several bindings share one catalogue method (the tool face is narrower than
+// the UI face by design); a binding absent from this map is a human-gate write
+// with no agent twin, and DecideWrite refuses it from a client process.
+var bindingCatalogueMethods = map[string]string{
+	"TriggerScan":        MethodScanRun,
+	"CreateNote":         MethodNotesCreate, // the binding takes content only; the executor's Kind defaults inside CreateNoteWithMeta
+	"CreateNoteWithMeta": MethodNotesCreate,
+	"UpdateNote":         MethodNotesUpdate,
+	"UpdateNoteFull":     MethodNotesUpdate,
+	"UpdateNoteMeta":     MethodNotesUpdate,
+	"CreateHandoff":      MethodHandoffCreate,
+	"RunReviewNow":       MethodReviewRun,
+	// CaptureClaudeHandoff and the import triggers are NOT here: they read
+	// other tools' files off disk (ADR-0011 privacy gate) — the desktop is
+	// the surface where that consent lives, so a client process refuses them
+	// rather than forwarding.
+}
+
+// CatalogueMethodForBinding returns the catalogue method that runs this
+// binding's write, or "" when the binding has none (human-gate write).
+func CatalogueMethodForBinding(binding string) string {
+	return bindingCatalogueMethods[binding]
+}
+
 // Methods is the catalogue's membership list, for the coverage test and for
 // the log line at startup ("serving N write methods"). Order is fixed so two
 // processes print the same thing.

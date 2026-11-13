@@ -20,6 +20,7 @@ import (
 	"log"
 
 	"repotory/internal/service"
+	"repotory/internal/writerapi"
 )
 
 // Emitter delivers a UI event (name plus payload) to the runtime that asked
@@ -50,6 +51,13 @@ type App struct {
 	svc  *service.Service
 	emit Emitter
 	open Opener
+	// writers carries the single-writer contract (ADR-0058). Nil on the
+	// desktop binary — it IS the writer by construction and every binding
+	// executes locally. The headless server installs one, and the
+	// write-classified bindings then route by DecideWrite: forward the
+	// catalogue-covered ops, refuse the human-gate writes it must not run
+	// behind the elected writer.
+	writers *writerapi.Manager
 }
 
 // New creates a new App backed by the given service.
@@ -59,6 +67,21 @@ func New(svc *service.Service, opts ...Option) *App {
 		opt(a)
 	}
 	return a
+}
+
+// WithWriter installs the single-writer contract. Called by the headless
+// server after its Manager is elected; the desktop never calls it.
+func WithWriter(m *writerapi.Manager) Option {
+	return func(a *App) { a.writers = m }
+}
+
+// context returns the runtime context when one exists, else background: the
+// forwarded writes must cancel with the request lifecycle that started them.
+func (a *App) context() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
 }
 
 // Service exposes the underlying service (used by main for lifecycle calls).

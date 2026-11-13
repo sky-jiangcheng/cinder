@@ -8,6 +8,9 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"repotory/internal/app"
+	"repotory/internal/writerapi"
 )
 
 // /api/rpc is a generic JSON-RPC bridge to the SAME bound object the desktop
@@ -82,6 +85,32 @@ func (h *handler) rpc(w http.ResponseWriter, r *http.Request) {
 	if !h.bound.IsValid() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rpc not available"})
 		return
+	}
+	// The single-writer contract (ADR-0058 / TODO 13.6): write-classified
+	// bindings (internal/app's bindingWrites) never hit the database directly
+	// from a process that is not the elected writer. Three answers exist:
+	//   - no contract installed (the desktop binary): local, as always;
+	//   - catalogue-covered op: forwarded to the writer over the channel —
+	//     but the reflect bridge cannot marshal arbitrary Go args into the
+	//     catalogue's typed structs, so forwarding happens at the App layer
+	//     instead (see internal/app's write-bound App methods); here the
+	//     decision is only gatekeeper: forward-classified bindings are ALLOWED
+	//     through (App handles the routing), refuse-classified ones are NOT.
+	//   - human-gate write (no catalogue method): refused with an actionable
+	//     error unless this process holds the write path. The desktop owns
+	//     these acts; a headless process behind a writer must not execute
+	//     them on the shared file (ADR-0015 restated for the headless face).
+	if h.writer != nil && app.BindingIsWrite(req.Method) {
+		switch h.writer.DecideWrite(req.Method) {
+		case writerapi.WriteRefuse:
+			if err := h.writer.GuardedLocal(req.Method); err != nil {
+				log.Printf("rpc: %s refused by the write contract: %v", req.Method, err)
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
+				return
+			}
+		case writerapi.WriteForward, writerapi.WriteLocal:
+			// proceed to the binding; App routes the write itself.
+		}
 	}
 	m := h.bound.MethodByName(req.Method)
 	if !m.IsValid() {

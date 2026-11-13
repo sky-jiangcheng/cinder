@@ -33,12 +33,12 @@ type Fixture struct {
 
 // Rule is one behaviour the three surfaces must (eventually) agree on.
 type Rule struct {
-	ID       string          `json:"id"`
-	Status   string          `json:"status"` // settled | skipped
-	Statement string         `json:"statement"`
-	Input    json.RawMessage `json:"input"`
-	Expect   json.RawMessage `json:"expect"`
-	SkipReason string        `json:"skip_reason"`
+	ID         string          `json:"id"`
+	Status     string          `json:"status"` // settled | skipped
+	Statement  string          `json:"statement"`
+	Input      json.RawMessage `json:"input"`
+	Expect     json.RawMessage `json:"expect"`
+	SkipReason string          `json:"skip_reason"`
 	// AssertForbidden marks a skipped rule a runner must NOT assert: writing
 	// the assertion before the product decision exists would pin today's
 	// divergence as the standard (ADR-0059: the fixture is the target, not a

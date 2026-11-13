@@ -34,6 +34,7 @@ import (
 	"repotory/internal/bounds"
 	"repotory/internal/domain"
 	"repotory/internal/service"
+	"repotory/internal/writerapi"
 )
 
 // New returns an http.Handler (ServeMux) that serves Cinder's capabilities
@@ -43,9 +44,16 @@ import (
 // exported methods are reachable via /api/rpc for the browser/standalone
 // frontend); pass nil to disable RPC. The handler is wrapped in loopbackGuard —
 // see the package trust boundary comment.
-func New(svc *service.Service, bound any) http.Handler {
+// Writer routes write-classified bindings through the single-writer contract
+// (ADR-0058 / TODO 13.6). Nil means "this process has no contract" — the
+// desktop binary, which IS the writer by construction and never forwards.
+// The headless server installs one; a nil Writer with a bound object is how
+// the desktop serves its own SPA.
+type Writer = writerapi.Manager
+
+func New(svc *service.Service, bound any, writer *Writer) http.Handler {
 	mux := http.NewServeMux()
-	h := &handler{svc: svc, bound: reflect.ValueOf(bound)}
+	h := &handler{svc: svc, bound: reflect.ValueOf(bound), writer: writer}
 
 	// NOTE: every pattern here must be claimed by cmd/server's isAPIPath, or a
 	// --web-dist run swallows it into the SPA index.html fallback. A test in
@@ -62,8 +70,9 @@ func New(svc *service.Service, bound any) http.Handler {
 }
 
 type handler struct {
-	svc   *service.Service
-	bound reflect.Value
+	svc    *service.Service
+	bound  reflect.Value
+	writer *Writer
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

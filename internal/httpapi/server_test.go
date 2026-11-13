@@ -23,7 +23,7 @@ func TestSearchHitsNotEmptyNull(t *testing.T) {
 	t.Cleanup(func() { _ = database.Close() })
 
 	svc := service.New(database, "me")
-	h := New(svc, nil)
+	h := New(svc, nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q=anything", nil)
@@ -56,7 +56,7 @@ func TestSearchQueryTooLong(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	h := New(service.New(database, "me"), nil)
+	h := New(service.New(database, "me"), nil, nil)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/search?q="+strings.Repeat("a", maxSearchQueryLen+1), nil)
@@ -86,7 +86,7 @@ func TestEndpoints(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	h := New(service.New(database, "me"), nil)
+	h := New(service.New(database, "me"), nil, nil)
 
 	tests := []struct {
 		name       string

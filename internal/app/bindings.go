@@ -13,6 +13,7 @@ import (
 	"repotory/internal/domain"
 	"repotory/internal/service"
 	"repotory/internal/stats"
+	"repotory/internal/writerapi"
 )
 
 // --- Wails binding ↔ MCP tool audit (P32, 2026-10-02) -----------------------
@@ -216,7 +217,22 @@ func (a *App) GetProjectOverview(projectID int64) (*service.ProjectOverview, err
 // --- Scan -------------------------------------------------------------------
 
 // TriggerScan starts an async full repository scan and returns immediately.
-func (a *App) TriggerScan() (*service.ScanResult, error) { return a.svc.TriggerScan() }
+func (a *App) TriggerScan() (*service.ScanResult, error) {
+	// Write-classified (bindingWrites): under the single-writer contract a
+	// client-role process forwards to the elected writer (ADR-0058). The
+	// catalogue's scan.run is the synchronous twin of this binding's async
+	// scan, so the forwarded form returns the finished result instead of a
+	// progress handle — same data, one call, and GetScanStatus stays meaningful
+	// for the local path.
+	if a.writers != nil && a.writers.DecideWrite("TriggerScan") == writerapi.WriteForward {
+		var res service.ScanResult
+		if err := a.writers.ExecuteInto(a.context(), writerapi.MethodScanRun, struct{}{}, &res); err != nil {
+			return nil, err
+		}
+		return &res, nil
+	}
+	return a.svc.TriggerScan()
+}
 
 // GetScanStatus returns the current scan progress.
 func (a *App) GetScanStatus() *service.ScanStatus { return a.svc.GetScanStatus() }
@@ -281,16 +297,51 @@ func (a *App) OrganizeNote(noteID int64) (*service.NoteOrganizeResult, error) {
 
 // CreateNote creates a new note for a project.
 func (a *App) CreateNote(projectID int64, content string) (*domain.Note, error) {
+	// Write-classified: client-role forwards via the catalogue (ADR-0058).
+	if a.writers != nil && a.writers.DecideWrite("CreateNote") == writerapi.WriteForward {
+		var note domain.Note
+		// The binding's contract is CreateNote (no kind); the executor's
+		// CreateNoteWithMeta with an empty kind lands as "knowledge", which is
+		// what CreateNote stores.
+		if err := a.writers.ExecuteInto(a.context(), writerapi.MethodNotesCreate, writerapi.NotesCreateArgs{
+			ProjectID: projectID, Content: content, Kind: "log", Source: "desktop",
+		}, &note); err != nil {
+			return nil, err
+		}
+		return &note, nil
+	}
 	return a.svc.CreateNote(projectID, content)
 }
 
 // CreateNoteWithMeta creates a note with explicit title, tags, kind and source.
 func (a *App) CreateNoteWithMeta(projectID int64, title, content, tags, kind, source string) (*domain.Note, error) {
+	if a.writers != nil && a.writers.DecideWrite("CreateNoteWithMeta") == writerapi.WriteForward {
+		var note domain.Note
+		if err := a.writers.ExecuteInto(a.context(), writerapi.MethodNotesCreate, writerapi.NotesCreateArgs{
+			ProjectID: projectID, Title: title, Content: content, Tags: tags, Kind: kind, Source: source,
+		}, &note); err != nil {
+			return nil, err
+		}
+		return &note, nil
+	}
 	return a.svc.CreateNoteWithMeta(projectID, title, content, tags, kind, source)
 }
 
 // UpdateNote updates the content of a note.
 func (a *App) UpdateNote(noteID int64, content string) error {
+	if a.writers != nil && a.writers.DecideWrite("UpdateNote") == writerapi.WriteForward {
+		// UpdateNote keeps its stored metadata: read here (the read path is
+		// not gated), then one catalogue update with the merged values — the
+		// same merge the MCP tool does, one write path.
+		note, err := a.svc.GetNote(noteID)
+		if err != nil {
+			return err
+		}
+		return a.writers.ExecuteInto(a.context(), writerapi.MethodNotesUpdate, writerapi.NotesUpdateArgs{
+			NoteID: noteID, Content: content, Title: note.Title, Tags: note.Tags,
+			Kind: note.Kind, Pinned: note.Pinned, ExpectedVersion: 0,
+		}, nil)
+	}
 	return a.svc.UpdateNote(noteID, content)
 }
 
@@ -302,6 +353,15 @@ func (a *App) UpdateNote(noteID int64, content string) error {
 // stale — the desktop editor always passes the real number, because it is the
 // surface where a human is looking at one version while an agent rewrites it.
 func (a *App) UpdateNoteFull(noteID int64, content, title, tags, kind string, pinned bool, expectedVersion int) error {
+	if a.writers != nil && a.writers.DecideWrite("UpdateNoteFull") == writerapi.WriteForward {
+		// expectedVersion rides along: the editor's optimistic lock (ADR-0057
+		// D2) must survive the hop, and the executor passes it to the same
+		// UpdateNoteFull the writer runs locally.
+		return a.writers.ExecuteInto(a.context(), writerapi.MethodNotesUpdate, writerapi.NotesUpdateArgs{
+			NoteID: noteID, Content: content, Title: title, Tags: tags,
+			Kind: kind, Pinned: pinned, ExpectedVersion: expectedVersion,
+		}, nil)
+	}
 	return a.svc.UpdateNoteFull(noteID, content, title, tags, kind, pinned, expectedVersion)
 }
 
@@ -310,6 +370,20 @@ func (a *App) DeleteNote(noteID int64) error { return a.svc.DeleteNote(noteID) }
 
 // UpdateNoteMeta updates a note's editable metadata.
 func (a *App) UpdateNoteMeta(noteID int64, title, tags, kind string, pinned bool) error {
+	if a.writers != nil && a.writers.DecideWrite("UpdateNoteMeta") == writerapi.WriteForward {
+		// Metadata-only: read for the current content (the executor's catalogue
+		// method is whole-row UpdateNoteFull) and write the row back unchanged
+		// in content. The extra read is the client's own handle; the WRITE still
+		// has exactly one path.
+		note, err := a.svc.GetNote(noteID)
+		if err != nil {
+			return err
+		}
+		return a.writers.ExecuteInto(a.context(), writerapi.MethodNotesUpdate, writerapi.NotesUpdateArgs{
+			NoteID: noteID, Content: note.Content, Title: title, Tags: tags,
+			Kind: kind, Pinned: pinned, ExpectedVersion: 0,
+		}, nil)
+	}
 	return a.svc.UpdateNoteMeta(noteID, title, tags, kind, pinned)
 }
 
@@ -540,6 +614,20 @@ func (a *App) ImportClaudeMemory() (*service.ImportResult, error) {
 // service. Summary is required, and so is at least one of the four sections
 // (the same contract the MCP tool enforces).
 func (a *App) CreateHandoff(projectID int64, summary string, changes, decisions, gotchas, nextSteps []string) (*service.HandoffResult, error) {
+	if a.writers != nil && a.writers.DecideWrite("CreateHandoff") == writerapi.WriteForward {
+		// Source stays "desktop": the composer IS the desktop composer, even
+		// when the write executes on the elected writer — provenance records
+		// who wrote, not which process inserted the row.
+		var res service.HandoffResult
+		if err := a.writers.ExecuteInto(a.context(), writerapi.MethodHandoffCreate, writerapi.HandoffCreateArgs{
+			ProjectID: projectID, Summary: summary, Changes: changes,
+			Decisions: decisions, Gotchas: gotchas, NextSteps: nextSteps,
+			Source: "desktop",
+		}, &res); err != nil {
+			return nil, err
+		}
+		return &res, nil
+	}
 	return a.svc.CreateHandoffNote(service.HandoffInput{
 		ProjectID: projectID,
 		Summary:   summary,
@@ -642,9 +730,19 @@ func (a *App) RunReviewNow(date, scope string, force, noAI, dryRun bool) (*servi
 		}
 		opts.Date = parsed
 	}
-	ctx := a.ctx
-	if ctx == nil {
-		ctx = context.Background()
+	ctx := a.context()
+	// Write-classified: a client-role process forwards via the catalogue (the
+	// dry-run flag rides along; a preview is computed on the writer too, one
+	// path for both).
+	if a.writers != nil && a.writers.DecideWrite("RunReviewNow") == writerapi.WriteForward {
+		var res service.ReviewResult
+		if err := a.writers.ExecuteInto(ctx, writerapi.MethodReviewRun, writerapi.ReviewRunArgs{
+			Date: opts.Date, Scope: opts.Scope, DryRun: opts.DryRun,
+			Force: opts.Force, NoAI: opts.NoAI,
+		}, &res); err != nil {
+			return nil, err
+		}
+		return &res, nil
 	}
 	return a.svc.RunReview(ctx, opts)
 }

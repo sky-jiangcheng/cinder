@@ -89,6 +89,7 @@
 
 **代价与残留，照实记**：
 - 每个进程的本地读仍要过 SQLite 自己的锁——契约管写，不管读；`busy_timeout` 保留为读路径的兜底。
+- **13.6 收口（2026-11-13）：`cmd/server` 接入 + 桌面绑定面经 RPC 桥门控**——server 选举语义与 agent 面一致（`SelfElectAllowed=true, AssertWriter=false`）：独自跑时当写者（tickers 照常，headless 现状零损失），桌面在时转客户端（不抢占）。**写分类表** `bindingWrites`（`internal/app/surface.go`，56 条，与 131 条 surface 注册表同邻同 review）+ 完整性门 `TestBindingWritesAreComplete`（双向：漏分类的写绑定 / 指向不存在的方法，负例注入验证）。**RPC 桥三分流**（`DecideWrite`）：写者本地执行；目录覆盖的 8 类绑定（notes / handoff / scan / review）经 `App` 层转发给写者——转发走与写者**同一个 Executor**，`CreateHandoff` 的 `Source="desktop"` 随跳保留（出处记录写者而非执行进程）；**human-gate 写**（approve / merge / config 等 48 条）客户端角色拒绝并返回可行动错误（指向桌面）——ADR-0015 的边界在 headless 面重申。**tickers 是写者私产**：client 角色 server 只注册 importer 不跑 Startup（与 MCP 的既定 non-Startup 同构），决策函数 = `IsWriter()`。验收门：`cmd/server/write_contract_test.go` 三例（写者角色全功能 / 客户端转发落库 + human-gate 403 可行动 / ticker 降级判定），负例（拆掉桥上拒绝→ApproveWikiPage 变 422 直写）验证过。
 - **开库路径不变**：`db.OpenWithRetry` 仍在每个进程里跑（WAL pragma、`Ensure*` 重放、迁移盖章都是文件级写）。它本来就在多进程间靠 busy_timeout 串行，且是「读到迁移后的库」的前提——非写者不能不开库只读。本轮不动它；若 13.6 把 server 接进来时再评估「非写者只读开库 + 写者负责迁移」。
 - `repotory_scan` 这类分钟级写现在在写者进程里排队，**转发端的取消会传导**（ctx 过 HTTP），但两个 agent 同时 scan 时后者等前者，这是契约的本意，不是回归。
 - 桌面从「唯一写者」变为「优先写者」：agent 自举期间桌面没在跑 backup ticker，快照密度短暂下降；桌面一启动即接管，窗口有界。
