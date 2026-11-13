@@ -2,6 +2,22 @@ import { randomUUID } from "node:crypto";
 import { parseAskAnswer } from "./headless.js";
 import type { Turn } from "./chatTypes.js";
 
+/**
+ * The two refusal shapes `repotory_ask` returns as SUCCESSFUL tool text
+ * (ADR-0033: a fallback must be labelled, so the label is the refusal's
+ * signature). Storing either as an assistant message would file a match list
+ * into the shared history as knowledge — and the OTHER panel would then read
+ * it back as a real answer (TODO 11.2). The zero-hit branch deliberately has
+ * NO "No AI endpoint" prefix, which is why it is matched separately: a prefix
+ * check alone stores it.
+ */
+const ASK_FALLBACK_PREFIXES = ["No AI endpoint is configured", "No results found for: "];
+
+/** True when the ask tool answered with the labelled keyword fallback. */
+function isAskFallback(text: string): boolean {
+  return ASK_FALLBACK_PREFIXES.some((prefix) => text.startsWith(prefix));
+}
+
 export interface SharedThread {
   id: string;
   title: string;
@@ -215,6 +231,14 @@ export class SharedChat {
       await this.syncAfterWrite();
       const content = request.answer ?? await answer(text);
       if (!content.trim()) throw new Error("The service returned an empty answer");
+      // The keyword fallback is a labelled refusal, not an answer (ADR-0033):
+      // it must stay local, exactly like a transport failure. Appending it
+      // would put a match list into the shared history as an assistant message
+      // and the other panel would render it as knowledge (conformance rule
+      // fallback.not_persisted, gate B of ADR-0059).
+      if (isAskFallback(content)) {
+        throw new Error(content);
+      }
       request.answer = content;
       await this.call("append", { thread_id: threadId, id: `${id}-reply`, role: "assistant", content, source: "vscode", reply_to: id });
       this.pending.delete(key);

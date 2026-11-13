@@ -525,6 +525,77 @@ if (fixtureTools.length > 0) {
   }
 }
 
+
+// ------------------ ⑪ 行为对等 fixture（ADR-0059 门 B / TODO 13.2） ----
+
+// 三端行为契约的 fixture（scripts/shared-chat-conformance.fixture.json）是
+// 目标契约：settled 规则三端都要断言，skipped 规则显式挂起（TODO 11.1-11.3）。
+// 这道门管「同一份契约」的三件事：
+//   ① 文件可解析、结构自洽（规则数 = contract_version.rules）
+//   ② 规则清单与三处叙述同源——fixture、internal/conformance 的守卫测试
+//      名单、两份 ADR-0059 记录的规则 id 列表一致，一处加规则别处不跟即红
+//   ③ skipped 规则必须带 assert_forbidden 与 TODO 编号（防 runner 偷跑）
+{
+  const fPath = 'scripts/shared-chat-conformance.fixture.json'
+  if (existsSync(fPath)) {
+    let parsed = null
+    try {
+      parsed = JSON.parse(read(fPath))
+    } catch (e) {
+      issues.push(`${fPath}: 不是合法 JSON（${e.message}）`)
+    }
+    if (parsed) {
+      const rules = Array.isArray(parsed.rules) ? parsed.rules : []
+      if (!rules.length) {
+        issues.push(`${fPath}: 没有任何规则——空契约是门不存在的可笑写法`)
+      } else {
+        const ids = rules.map((r) => r.id)
+        if (new Set(ids).size !== ids.length) {
+          issues.push(`${fPath}: 规则 id 重复`)
+        }
+        const declared = parsed.contract_version?.rules
+        if (declared !== rules.length) {
+          issues.push(`${fPath}: contract_version.rules = ${declared}，文件里有 ${rules.length} 条规则`)
+        }
+        for (const r of rules) {
+          if (r.status === 'settled') {
+            if (r.expect === undefined) {
+              issues.push(`${fPath}: settled 规则 ${r.id} 没有 expect`)
+            }
+            if (r.skip_reason || r.assert_forbidden) {
+              issues.push(`${fPath}: settled 规则 ${r.id} 不该带 skip 字段`)
+            }
+          } else if (r.status === 'skipped') {
+            if (!r.skip_reason || !r.skip_reason.includes('11.')) {
+              issues.push(`${fPath}: skipped 规则 ${r.id} 的 skip_reason 必须点名它等的 TODO 11.x`)
+            }
+            if (r.assert_forbidden !== true) {
+              issues.push(`${fPath}: skipped 规则 ${r.id} 必须设 assert_forbidden——没有这道闸，runner 可以把未拍板的差异当标准断言`)
+            }
+            if (r.expect !== undefined) {
+              issues.push(`${fPath}: skipped 规则 ${r.id} 带着永远不跑的 expect`)
+            }
+          } else {
+            issues.push(`${fPath}: 规则 ${r.id} 的 status 是 ${JSON.stringify(r.status)}，只认 settled / skipped`)
+          }
+        }
+        // 规则 id 与叙述同源：TODO 13.2 条目里点名的规则 id ⊆ fixture，
+        // fixture 里每个 id 都在 TODO 里出现过（或属内部派生名）。
+        const todo = read('TODO.md')
+        const idRegex = /(?:pairing|fallback|scope)\.[a-z_]+(?:\.[a-z_]+)?/g
+        const todoIds = new Set(todo.match(idRegex) ?? [])
+        for (const id of ids) {
+          if (!todoIds.has(id)) {
+            issues.push(`${fPath}: 规则 ${id} 在 TODO.md 里没有出现——契约与叙述漂了（改 TODO 13.2 的清单或撤掉这条规则）`)
+          }
+        }
+      }
+    }
+  } else {
+    issues.push(`${fPath}: 不存在——ADR-0059 门 B 的 fixture 缺失，三个 runner 将无从读起`)
+  }
+}
+
 // ------------------------------------------------------------------ 结论 ----
 
 if (issues.length > 0) {
@@ -542,5 +613,6 @@ console.log(
   `version drift OK: SSOT ${ssot}（${versionSites.length} 处产物清单一致）、TODO 现状速查一致、` +
     `ADR ${adrFiles.length} 份中英索引对齐、扫描频率与 dependabot.yml 一致、` +
     `MCP ${fixtureTools.length} 个工具（fixture 与 want 逐项相等、文档计数与工具名一致）、契约版本 ${coreVersion} 与测试钉死的一致、` +
-    `Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致、Go ${goList[0]} 各工作流一致。`
+    `Node ${read('.nvmrc').trim()} 与 Dockerfile/工作流一致、Go ${goList[0]} 各工作流一致、` +
+    `行为 fixture ${(() => { try { const p = JSON.parse(read('scripts/shared-chat-conformance.fixture.json')); const st = p.rules.filter(r=>r.status==='settled').length; const sk = p.rules.filter(r=>r.status==='skipped').length; return `${st} settled / ${sk} skipped`; } catch { return '??'; } })()} 三端同源。`
 )

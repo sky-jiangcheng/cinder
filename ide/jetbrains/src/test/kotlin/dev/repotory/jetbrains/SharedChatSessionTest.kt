@@ -187,11 +187,17 @@ class SharedChatSessionTest {
         } finally { release.countDown(); pool.shutdownNow() }
     }
 
-    @Test fun `replyTo pairing tolerates interleaving reversed order and orphan replies`() {
+    @Test fun `replyTo pairing keeps the server read order and shows orphan replies`() {
         fun msg(id: String, role: String, reply: String?, time: String) = SharedMessage(id, role, id, "warden", reply, time)
-        val messages = listOf(msg("a2", "assistant", "u2", "0"), msg("u1", "user", null, "1"),
-            msg("u2", "user", null, "2"), msg("a1", "assistant", "u1", "3"),
-            msg("orphan", "assistant", "missing", "4"), msg("no-parent", "assistant", null, "5"))
+        // The input IS the server's read order (ReadChatThread: seq ASC); a
+        // panel must not re-sort it — created_at belongs to three different
+        // writer clocks, and lexical order across machines is not chronological
+        // (conformance rule pairing.order, ADR-0059 gate B; the clock-skew
+        // inversion this replaces was probed and real). Pairs still resolve by
+        // replyTo, never by adjacency; orphans stay visible.
+        val messages = listOf(msg("u1", "user", null, "1"), msg("a1", "assistant", "u1", "2"),
+            msg("u2", "user", null, "3"), msg("a2", "assistant", "u2", "4"),
+            msg("orphan", "assistant", "missing", "5"), msg("no-parent", "assistant", null, "6"))
         assertEquals(listOf(listOf("u1", "a1"), listOf("u2", "a2"), listOf("orphan"), listOf("no-parent")),
             sharedMessageGroups(messages).map { group -> group.map { it.id } })
     }

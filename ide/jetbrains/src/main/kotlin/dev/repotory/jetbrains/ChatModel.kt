@@ -229,12 +229,23 @@ data class SharedChatState(
     val selected: SharedThread? get() = threads.firstOrNull { it.id == selectedId }
 }
 
-/** Pair by replyTo, never by adjacency; orphan replies remain visible. */
+/**
+ * Pair by replyTo, never by adjacency; orphan replies remain visible.
+ *
+ * The INPUT order is the server's read order (ReadChatThread: seq ASC) and it
+ * is preserved as-is — an earlier version re-sorted by createdAt "for
+ * stability", but created_at is written by whichever process wrote the message
+ * (three clients, three clocks), so lexical order across machines is not
+ * chronological and a clock-skewed panel rendered the conversation with the
+ * turns inverted (probed against the ADR-0059 fixture's pairing.order rule).
+ * The server's seq is the only order two processes reading the same file agree
+ * on; within one message a reply follows its user because the group starts at
+ * the user and appends the keyed replies.
+ */
 internal fun sharedMessageGroups(messages: List<SharedMessage>): List<List<SharedMessage>> {
-    val ordered = messages.sortedWith(compareBy<SharedMessage> { it.createdAt }.thenBy { it.id })
-    val users = ordered.filter { it.role == "user" }.map { it.id }.toSet()
-    val replies = ordered.filter { it.role == "assistant" && it.replyTo in users }.groupBy { it.replyTo }
-    return ordered.filterNot { it.role == "assistant" && it.replyTo in users }
+    val users = messages.filter { it.role == "user" }.map { it.id }.toSet()
+    val replies = messages.filter { it.role == "assistant" && it.replyTo in users }.groupBy { it.replyTo }
+    return messages.filterNot { it.role == "assistant" && it.replyTo in users }
         .map { listOf(it) + replies[it.id].orEmpty() }
 }
 

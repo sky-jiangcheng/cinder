@@ -560,10 +560,16 @@ private fun parseCandidates(res: Map<String, Any?>?): List<ProjectOption> {
 }
 
 /** The prefix the ask tool uses when no AI endpoint is configured at all. */
-private const val ASK_NO_ENDPOINT_PREFIX = "No AI endpoint is configured"
+internal const val ASK_NO_ENDPOINT_PREFIX = "No AI endpoint is configured"
 
 /** What the panel says when the service answered with nothing at all. */
 internal const val EMPTY_ANSWER = "The service returned an empty answer."
+
+/** The zero-hit branch of the ask keyword fallback: no "No AI endpoint" prefix. */
+internal const val ASK_ZERO_HIT_PREFIX = "No results found for: "
+
+/** The ask answered with the labelled keyword fallback: a refusal, not an answer. */
+internal class SharedAskFallback(val text: String) : IllegalStateException(text)
 
 private const val TOOL_NOTES_READ = "repotory_notes_read"
 private const val TOOL_WIKI_READ = "repotory_wiki_read"

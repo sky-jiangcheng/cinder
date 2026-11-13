@@ -60,3 +60,19 @@ B 的 fixture 是**目标契约**，不是「当前两端的行为快照」—�
 - **B**：`scripts/` 下有一份 conformance fixture（请求 → 期望作用域 / 轮次 / 兜底标记），三端各有一个 runner 读它；注入式负例——改一端的参数或配对规则，门必须红**并指出是哪一端、哪条规则**。fixture 与 `CoreVersion` 的关系写进文档：规则变了要涨 minor，删规则涨 major。
 - **C**：新增一个 CI job，起 headless 服务，驱动 VS Code / JetBrains 面板各完成一次「检索 + 深链 + 发问」，任一端失败即红；**必须能在无显示环境下跑**（headless IDE 或 webview 的 DOM harness），否则它就是一条会长期飘红然后被忽略的门。
 - 文档里写清「权威在哪、规则版本是多少」，且该描述与 fixture 同源（沿用 `check-version-drift.mjs` 的做法：数字从 fixture 派生，不写死）。
+
+## 落地记录（2026-11-13，门 B）
+
+**门 B（conformance fixture）已落码**；门 C（headless E2E 冒烟）**未做**，仍记 TODO。验收判据逐条对账：
+
+- **「`scripts/` 下有一份 conformance fixture（请求 → 期望作用域 / 轮次 / 兜底标记）」——已落**：[`scripts/shared-chat-conformance.fixture.json`](../../scripts/shared-chat-conformance.fixture.json)，结构守卫在 [`internal/conformance`](../../internal/conformance/fixture.go)（settled 必带 expect、skipped 必带 `assert_forbidden` 与 TODO 编号、规则数 = `contract_version.rules`）。**settled 5 条**（只收已拍板的规则）：`pairing.attach` / `pairing.order` / `fallback.not_persisted` / `fallback.not_persisted.zero_hit` / `fallback.local_render`；**skipped 3 条**：`scope.path`（等 TODO 11.1）、`pairing.orphan_reply` 与 `pairing.multiple_replies`（等 TODO 11.3 的产品决定）。**fixture 与 `CoreVersion` 的关系写进文档并落进门**：工具面不变 CoreVersion 不动（2.0.0）；规则数变化涨 `contract_version.rules`（`check-version-drift.mjs` 第⑪门核对），删规则视为行为破坏须另走 ADR。
+- **「三端各有一个 runner 读它」——已落，三端 = JetBrains / VS Code / Go**：Kotlin `SharedChatConformanceTest`（真实 `sharedMessageGroups` + `SharedChatSession`）、TS `ide/vscode/src/__tests__/conformance.test.ts`（真实 `sharedTurns` + `SharedChat.send`）、Go `cmd/mcp/conformance_test.go`（fixture 引用的兜底文案 = 服务端 `keywordFallback` 实际产出——fixture 引文与服务端互相钉住）。三个 runner 各自接进既有 CI job（`gradle test` / `npm test` / `go test`），未新增 job；fixture 文件三处同读，不复制。
+- **「注入式负例——改一端的参数或配对规则，门必须红并指出是哪一端、哪条规则」——已验证**：TS 侧翻转 `pairing.order` 的期望顺序 → 红（点名 VS Code 面板 diverged）；删除 `sharedChat.ts` 的兜底拒绝 → `fallback.not_persisted` / `.zero_hit` 双红；KT 侧把 `sharedMessageGroups` 退回旧 createdAt 排序 → `pairing.order` 红；fixture 重复规则 id → 第⑪门红。全部恢复后全绿。
+- **「文档里写清权威在哪、规则版本是多少，且与 fixture 同源」——已落**：权威 = Cinder 服务端契约（本文件「决策」节），规则版本 = `contract_version.rules`（现 8），第⑪门保证 fixture ↔ TODO 叙述的规则 id 一致。
+
+**先有红的真实发现（fixture 落地当天抓到并修掉，正是本 ADR 预言的差距）**：
+
+1. **KT `sharedMessageGroups` 按 createdAt 重排**——三个客户端三台钟，跨钟字典序不保时序；真机探针证实时钟偏斜下轮次顺序**倒转**（q1 先问被排到 q3 后面）。已改为保留服务端读序（seq ASC），配对仍按 `replyTo`；旧测试「tolerates interleaving reversed order」测的是被模拟出来的服务端乱序，已改为钉契约。
+2. **两个 IDE 面板都把关键词兜底文案当答案落库**（TODO 11.2 的两端半边）——VS Code `SharedChat.send` 与 KT `SharedChatSession.transportAsk` 拿到 `No AI endpoint is configured…` 匹配列表后照常 `append` 成 assistant 消息，另一端把它渲染成知识。均改为拒绝存储（抛错走本地失败标记；**零命中分支 `No results found for: …` 无该前缀，单独匹配**——这正是 fixture 把它单列为一条规则的原因）。
+
+**诚实边界**：门 B 只证明「规则对等」，**门 C 未做**——「面板还打得开」（含 JetBrains「首次打开即构建中断」那类存量崩溃）仍只有 CI 编译门与既有单测兜着；`fallback.local_render` 在 TS 侧是结构性安全（DOM `textContent`）+ 不落库断言，未做逐字节转义比对；`scope.path` / 孤儿 / 多回复仍等产品决定。

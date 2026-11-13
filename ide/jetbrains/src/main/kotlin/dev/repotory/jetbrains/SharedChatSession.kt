@@ -219,7 +219,19 @@ internal class SharedChatSession(
         val answer = transport.callTool(ChatMode.ASK.tool, args)
         checkAskResponse(answer)
         check(answer.isNotBlank()) { EMPTY_ANSWER }
-        return answer // Preserve sources and keyword-fallback wording across clients.
+        // The keyword fallback is a LABELLED refusal, not an answer (ADR-0033).
+        // Storing it would file a match list into the shared history as an
+        // assistant message and the other panel would render it as knowledge —
+        // the exact TODO 11.2 shape. Refused here means the send fails with the
+        // fallback wording in the error: the thread keeps the user message,
+        // nothing is stored, and the local error line names the missing AI
+        // endpoint (conformance rules fallback.not_persisted / .zero_hit, gate
+        // B of ADR-0059). The zero-hit branch deliberately has no "No AI
+        // endpoint" prefix, which is why it is matched separately.
+        if (answer.startsWith(ASK_NO_ENDPOINT_PREFIX) || answer.startsWith(ASK_ZERO_HIT_PREFIX)) {
+            throw SharedAskFallback(answer)
+        }
+        return answer // Preserve sources and wording across clients.
     }
 
     private fun append(job: SharedPending, id: String, role: String, content: String, replyTo: String?) {

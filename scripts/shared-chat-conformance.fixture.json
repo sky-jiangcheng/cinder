@@ -1,0 +1,217 @@
+{
+  "$comment": "ADR-0059 gate B: three-surface behaviour conformance fixture. This file is the TARGET CONTRACT, not a snapshot of what both IDE panels do today — pinning the current behaviour would freeze the drift as the standard and the gate would be green forever (ADR-0059: fixture collects only settled rules). Rules carry a status: 'settled' rules are enforced by every runner; 'skipped' rules name the product decision that is still open (TODO 11.1-11.3) and MUST fail a runner that asserts them. Conformance is one JSON answer per rule: which turns pair, in which order, and whether a keyword-fallback text may be stored as an answer.",
+  "contract_version": {
+    "core": "2.0.0",
+    "rules": 8,
+    "source": "the settled rules below; a new rule bumps this count (scripts/check-version-drift.mjs gate 11 compares it to the file)",
+    "note": "CoreVersion itself does NOT move: the MCP tool face is unchanged (ADR-0059 明确不决：不动 CoreVersion、不加工具)"
+  },
+  "input": {
+    "$comment": "One shared thread, four messages, exactly the shape repotory_chat returns (field names = chatMessageColumns). created_at uses the server's chatTimestamp format; seq is the storage order and the server's read order (ReadChatThread returns seq ASC). The user message below arrives BEFORE the assistant message in every case unless the rule says otherwise.",
+    "message_fields": [
+      "id",
+      "role",
+      "content",
+      "source",
+      "reply_to",
+      "created_at"
+    ],
+    "server_read_order": "seq ascending — the panel receives messages in storage order and MUST NOT re-sort them",
+    "reply_guard": "the server refuses reply_to that does not reference a user message in the SAME thread (chat_messages_reply_guard); a reply id has no reserved shape — the 'UUID-reply' suffix is a client convention, not a server rule"
+  },
+  "rules": [
+    {
+      "id": "pairing.attach",
+      "status": "settled",
+      "statement": "A turn is a user message plus the assistant reply whose reply_to equals that user's id (TODO 11.3: pairing has ONE authority, the Cinder contract; a reply references a user message IN THE SAME THREAD by the server's own guard).",
+      "input": {
+        "messages": [
+          {
+            "id": "q1",
+            "role": "user",
+            "content": "Why this design?",
+            "source": "vscode",
+            "reply_to": null,
+            "created_at": "2026-11-13T01:00:00.000000000Z"
+          },
+          {
+            "id": "a1",
+            "role": "assistant",
+            "content": "A shared store avoids divergent histories.",
+            "source": "jetbrains",
+            "reply_to": "q1",
+            "created_at": "2026-11-13T01:00:01.000000000Z"
+          },
+          {
+            "id": "q2",
+            "role": "user",
+            "content": "Second question",
+            "source": "warden",
+            "reply_to": null,
+            "created_at": "2026-11-13T01:00:02.000000000Z"
+          },
+          {
+            "id": "a2",
+            "role": "assistant",
+            "content": "Because the reply guard makes reply_to the only pairing key that cannot lie.",
+            "source": "vscode",
+            "reply_to": "q2",
+            "created_at": "2026-11-13T01:00:03.000000000Z"
+          }
+        ]
+      },
+      "expect": {
+        "turns": [
+          {
+            "user_id": "q1",
+            "reply_id": "a1"
+          },
+          {
+            "user_id": "q2",
+            "reply_id": "a2"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pairing.order",
+      "status": "settled",
+      "statement": "Turns render in the SERVER's read order (seq ASC): the newest question is LAST. The panel must not re-sort by created_at: created_at is written by whichever process wrote the message (three processes, three clocks); lexical timestamp order across machines is NOT chronological, and a same-millisecond tie broken by id inverts real pairs. The server's seq is the only order that cannot disagree between two processes reading the same file.",
+      "input": {
+        "$comment": "Storage order q1,a1,q3,a3 (server seq). Clock skew: q1's writer clock runs AHEAD (01:10) while q3's runs behind (01:00) — the exact inversion probed when this rule landed: a createdAt sort renders q3 first, inverting the conversation. A reply-to pairing that preserves the input order cannot be inverted by any skew.",
+        "messages": [
+          {
+            "id": "q1",
+            "role": "user",
+            "content": "first",
+            "source": "vscode",
+            "reply_to": null,
+            "created_at": "2026-11-13T01:10:00.000000000Z"
+          },
+          {
+            "id": "a1",
+            "role": "assistant",
+            "content": "r1",
+            "source": "vscode",
+            "reply_to": "q1",
+            "created_at": "2026-11-13T01:10:01.000000000Z"
+          },
+          {
+            "id": "q3",
+            "role": "user",
+            "content": "second",
+            "source": "jetbrains",
+            "reply_to": null,
+            "created_at": "2026-11-13T01:00:05.000000000Z"
+          },
+          {
+            "id": "a3",
+            "role": "assistant",
+            "content": "r3",
+            "source": "vscode",
+            "reply_to": "q3",
+            "created_at": "2026-11-13T01:00:01.000000000Z"
+          }
+        ]
+      },
+      "expect": {
+        "turns": [
+          {
+            "user_id": "q1",
+            "reply_id": "a1"
+          },
+          {
+            "user_id": "q3",
+            "reply_id": "a3"
+          }
+        ],
+        "note": "storage order q1,a1,q3,a3 — NOT chronological order"
+      }
+    },
+    {
+      "id": "fallback.not_persisted",
+      "status": "settled",
+      "statement": "The keyword-fallback text (repotory_ask with no AI endpoint configured — the 'No AI endpoint is configured...' match list, including its zero-hit branch 'No results found for: <query>') is a REFUSAL SHAPE, not an answer (ADR-0033: a fallback must be labelled). A client that receives it for a SHARED question must NOT append it to the thread as an assistant message: the thread keeps the user message, no reply is stored, and the panel renders the failure locally as a problem, never as knowledge (TODO 11.2 direction; ADR-0036 decision 8 requires escaping on render).",
+      "input": {
+        "scenario": "shared-thread ask returns the fallback text",
+        "ask_tool_result": "No AI endpoint is configured, so this is a keyword match list, NOT an answer:\n\n[P1] note \"decided on X\" (id 12)",
+        "zero_hit_result": "No results found for: <query echoed verbatim>"
+      },
+      "expect": {
+        "thread_messages_after": [
+          {
+            "role": "user",
+            "content": "Why this design?",
+            "source": "vscode"
+          }
+        ],
+        "assistant_messages_appended": 0,
+        "panel_shows": "a local problem/error marker naming the missing AI endpoint, not a stored reply",
+        "note": "the user message STAYS (it is a real session event); only the fallback-as-answer write is forbidden"
+      }
+    },
+    {
+      "id": "fallback.not_persisted.zero_hit",
+      "status": "settled",
+      "statement": "The zero-hit branch of the keyword fallback obeys the same rule as the match-list branch: nothing is appended to the shared thread; the user message remains; the panel shows a local failure. (Spelled out separately because the zero-hit text has no 'No AI endpoint' prefix and previously would NOT have been caught by a prefix check.)",
+      "input": {
+        "scenario": "shared-thread ask returns the zero-hit fallback",
+        "$comment": "the text is the prefix + the query echoed verbatim; the runner substitutes its own query and compares against the prefix",
+        "ask_tool_result": "No results found for: nothing matches this"
+      },
+      "expect": {
+        "thread_messages_after": [
+          {
+            "role": "user",
+            "content": "Why this design?",
+            "source": "vscode"
+          }
+        ],
+        "assistant_messages_appended": 0
+      }
+    },
+    {
+      "id": "fallback.local_render",
+      "status": "settled",
+      "statement": "When a shared question fails, the panel's LOCAL failure marker must be escaped on render (ADR-0036 decision 8: the panel never raw-concatenates service text into HTML). The failure text includes the server's own words (e.g. the fallback wording); the panel renders it as a problem line, escaped, and the escaped text must not create elements.",
+      "input": {
+        "scenario": "the ask failure text carries HTML metacharacters",
+        "ask_tool_result": "No results found for: <img src=x onerror=alert(1)>"
+      },
+      "expect": {
+        "thread_messages_after": [
+          {
+            "role": "user",
+            "content": "Why this design?",
+            "source": "vscode"
+          }
+        ],
+        "assistant_messages_appended": 0,
+        "rendered_escaped": true,
+        "note": "asserted by the Kotlin runner through ChatConsoleHtml; the TS panel renders via DOM textContent (structurally safe — runner asserts the failure text is NOT stored and the panel text equals the raw text)"
+      }
+    },
+    {
+      "id": "scope.path",
+      "status": "skipped",
+      "statement": "Whether a shared ask carries the workspace path (TODO 11.1: JetBrains sends it, VS Code does not) is an OPEN product decision — the shared topic belongs to the workspace or to the person; not decidable in this fixture (ADR-0059).",
+      "skip_reason": "TODO 11.1 pending product decision (ADR-0040 LayerProjectCatalog semantics)",
+      "assert_forbidden": true
+    },
+    {
+      "id": "pairing.orphan_reply",
+      "status": "skipped",
+      "statement": "An assistant message whose user message is outside the read window (500 latest by seq) or written by a third party: which panel renders it as an orphan ('Unpaired reply' vs silently dropped) is an OPEN product decision (TODO 11.3 leftover).",
+      "skip_reason": "TODO 11.3 leftover: unreachable via the three shipped clients (deterministic reply ids), reachable via a third-party writer; needs the product decision first",
+      "assert_forbidden": true
+    },
+    {
+      "pairing_note": "multiple_replies is the third open edge (one user id answered twice): both panels diverge (first-wins in the TS map, last-wins in the Kotlin group) and the product decision is missing. Recorded here so the NEXT person knows it is a known open edge, not an oversight.",
+      "id": "pairing.multiple_replies",
+      "status": "skipped",
+      "$comment": "reached only by a third-party writer appending a second reply to the same user id; the three shipped clients always send the deterministic '<user>-reply' id, so the guard makes a second reply under a NEW id legal and both panels then disagree",
+      "skip_reason": "TODO 11.3 leftover; needs the product decision on who may reply twice",
+      "assert_forbidden": true
+    }
+  ]
+}
