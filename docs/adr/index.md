@@ -72,6 +72,7 @@ order: 27
 | [0058](0058-cross-process-single-db-write-contract.md) | 跨进程单库写契约——桌面 / MCP / server 共用一个 SQLite 时的写权归属：单写者代理 / 写租约 / 退避拆小 / 读写分离四选一 | **Accepted + 已落码（2026-11-12 用户选定 A 单写者代理；同日落地时改判为「选举式」——写权绑文件锁不绑桌面进程，无写者时 agent 就地接管，桌面启动即收回）**：同一时刻只有一个进程写库，其余经回环 HTTP + token 把写转发给持锁者；行级冲突仍由 ADR-0057 的乐观锁表达。README「无需桌面」的写能力因此保住。代价照记：本地读仍过 SQLite 自己的锁；`cmd/server` 本轮未接入 |
 | [0059](0059-three-surface-behavior-parity.md) | 三端行为契约——权威放服务端还是各端实现，以及「对等」如何被 CI 证明；11.1–11.3 的产品决定不在本篇 | **Accepted + 门 B 已落码（2026-11-12 选定 B + C 双门；2026-11-13 B 落码——conformance fixture 5 settled / 3 skipped + 三端 runner + 第⑪同源门，抓到并修掉 KT createdAt 重排倒转轮次、两端兜底文案落库两个真缺陷；C 未做仍记 TODO）**：工具名/版本已有 fixture 门，行为对等现在两条都要——B 的 conformance fixture 定位「哪一端漂移」，C 的 headless 冒烟证明「面板还打得开」；11.1 未拍板前在 fixture 里显式 skip |
 | [0060](0060-service-domain-split.md) | `internal/service` 按域拆分——绞杀者抽 review/importers、只抽纯函数域、仓储重写、维持现状四选一 | **Accepted（2026-11-12 用户选定 A 绞杀者按域抽包；`review` → `internal/service/reviewrun`、wiki 读侧 → `internal/service/wikipage` 均已落码）**：顺序固定 review → wiki → ai，子包不吃 `*Service`，防环靠 `go list -deps` 门；行数累计降 1,546，导出方法数因保留门面未降 |
+| [0061](0061-shared-thread-scope-ownership.md) | 共享主题的作用域归属——主题属于人还是属于工作区 | **Accepted（2026-11-13 用户选定 A：主题属于人）**：发问不带作用域（全库目录层，ADR-0040），`path` 降为创建时的出处标签、不参与取证；作用域要收缩时走显式请求级参数，不由「此刻开着哪个工作区」隐式决定。落码同批把 fixture 的 `scope.path` 由 skipped 升 settled |
 
 ## 约定
 

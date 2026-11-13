@@ -48,9 +48,41 @@ interface SharedTransport {
   workspacePath(): string | undefined;
 }
 
+/**
+ * Fold the shared history into turns.
+ *
+ * Three rules, all pinned by the ADR-0059 fixture (gate B) and both panels:
+ *   - pairing is by `replyTo`, never by adjacency;
+ *   - SEVERAL replies to one question: the LAST one wins (ADR-0061 / TODO
+ *     11.3). A stale duplicate is a race's loser, not extra information, and
+ *     rendering it turned one question into two visible turns here while the
+ *     JetBrains panel showed one — the same history read as different
+ *     conversations;
+ *   - an ORPHAN reply (an assistant message whose `replyTo` names no user
+ *     message in this thread) is still SHOWN, as its own turn (ADR-0061 / TODO
+ *     11.3). It used to be dropped here while JetBrains kept it; a third-party
+ *     writer, or a user message deleted out from under its answer, produced
+ *     knowledge that silently vanished on this side. It is marked
+ *     `orphan: true` so the panel can label it rather than pass it off as an
+ *     answer to something the user can see.
+ *
+ * Read order is the server's `seq ASC`, preserved as-is: `createdAt` is written
+ * by whichever process wrote the message, so across machines it is not
+ * chronological (probed — a clock-skewed panel rendered turns inverted).
+ */
 export function sharedTurns(messages: SharedMessage[]): Turn[] {
-  const replies = new Map(messages.filter(m => m.role === "assistant" && m.replyTo).map(m => [m.replyTo, m]));
-  return messages.filter(m => m.role === "user").map(message => {
+  const userIds = new Set(messages.filter(m => m.role === "user").map(m => m.id));
+  // Last reply wins: assignment in read order keeps the last one written.
+  const replies = new Map<string, SharedMessage>();
+  for (const m of messages) {
+    if (m.role === "assistant" && m.replyTo) replies.set(m.replyTo, m);
+  }
+  // Orphans are keyed replies whose target is not in this thread. They are
+  // NOT folded into any user turn; they become their own turn below.
+  const orphans = messages.filter(
+    m => m.role === "assistant" && m.replyTo && !userIds.has(m.replyTo),
+  );
+  const turns: Turn[] = messages.filter(m => m.role === "user").map(message => {
     const reply = replies.get(message.id);
     const parsed = reply ? parseAskAnswer(reply.content) : null;
     return {
@@ -64,6 +96,24 @@ export function sharedTurns(messages: SharedMessage[]): Turn[] {
       scopeNote: `${message.source}${reply ? ` → ${reply.source}` : " · awaiting a reply"}`,
     };
   });
+  for (const orphan of orphans) {
+    const parsed = parseAskAnswer(orphan.content);
+    turns.push({
+      id: orphan.id,
+      // No question exists in this thread; the panel labels the turn instead
+      // of inventing one, so the answer is never mistaken for a reply to
+      // something the user can see.
+      query: "",
+      mode: "ask",
+      state: "done",
+      answer: parsed.parsed ? parsed.answer : parsed.raw,
+      sources: parsed.parsed ? parsed.sources : [],
+      verbatim: !parsed.parsed,
+      orphan: true,
+      scopeNote: `${orphan.source} · reply without a question in this thread`,
+    });
+  }
+  return turns;
 }
 
 function record(value: unknown): Record<string, unknown> {

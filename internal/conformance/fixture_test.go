@@ -48,8 +48,19 @@ func TestFixtureIsSelfConsistent(t *testing.T) {
 	if len(f.SettledRules()) == 0 {
 		t.Fatal("a fixture with no settled rules gates nothing")
 	}
-	if len(f.SkippedRules()) == 0 {
-		t.Fatal("the open decisions (11.1-11.3) must stay recorded as skips, not deleted")
+	// Skips are allowed to reach zero: an open decision that gets DECIDED is
+	// promoted to settled (11.1-11.3 were closed on 2026-11-13 that way), and
+	// demanding a permanent skip would make the fixture un-improvable. What
+	// must never happen is a rule DISAPPEARING — a deleted rule is a silent
+	// behaviour break, and ContractVersion.Rules (checked below by the drift
+	// gate) is what makes a deletion visible.
+	for _, rule := range f.Rules {
+		if rule.Status != "settled" && rule.Status != "skipped" {
+			t.Fatalf("rule %q has unknown status %q", rule.ID, rule.Status)
+		}
+		if rule.Status == "skipped" && rule.SkipReason == "" {
+			t.Fatalf("rule %q is skipped without a reason", rule.ID)
+		}
 	}
 	if f.ContractVersion.Core != "2.0.0" {
 		t.Fatalf("fixture pins core %q; if the tool face changed, that change goes through the fixture/CoreVersion gates first", f.ContractVersion.Core)

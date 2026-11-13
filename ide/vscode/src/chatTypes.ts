@@ -145,6 +145,14 @@ export interface Turn {
   scopeNote?: string;
   /** The failure text, when the turn failed. */
   error?: string;
+  /**
+   * True when this turn IS an answer with no question in the thread: an
+   * assistant message whose `replyTo` names a user message that is not in
+   * this history (a third-party writer, or a question deleted out from under
+   * its answer). The panel labels it instead of inventing a question for it
+   * (ADR-0061 / TODO 11.3, conformance rule pairing.orphan_reply).
+   */
+  orphan?: boolean;
 }
 
 /** The editable fields of a note. */

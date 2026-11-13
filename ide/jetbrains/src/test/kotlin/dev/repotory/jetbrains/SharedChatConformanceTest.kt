@@ -103,7 +103,13 @@ class SharedChatConformanceTest {
         assertEquals("2.0.0", fixture.coreVersion, "the fixture pins the tool-face contract; a change there goes through the CoreVersion gates first")
         assertEquals(fixture.ruleCount, fixture.settled.size + fixture.skipped.size, "contract_version.rules must equal the file's rule count")
         assertTrue(fixture.settled.isNotEmpty(), "a fixture with no settled rules gates nothing")
-        assertTrue(fixture.skipped.isNotEmpty(), "the open decisions (11.1-11.3) must stay recorded as skips, not deleted")
+        // Skips may legitimately reach zero: a decided open question is promoted
+        // to settled (11.1-11.3 were closed on 2026-11-13). What must never
+        // happen is a rule DISAPPEARING — the rule count above and byId()'s
+        // error are what make a deletion visible.
+        (fixture.settled + fixture.skipped).forEach { rule ->
+            assertTrue(rule.status == "settled" || rule.status == "skipped", "unknown status ${rule.status}")
+        }
         // A skipped rule MUST carry the guard: asserting an open decision pins
         // today's divergence as the standard (ADR-0059).
         fixture.skipped.forEach { rule ->
@@ -182,19 +188,21 @@ class SharedChatConformanceTest {
     }
 
     @Test
-    fun `skipped rules stay out of the assertions`() {
+    fun `formerly open rules are settled and carry their expectations`() {
+        // These three were the open decisions (TODO 11.1 / 11.3). They were
+        // promoted to settled on 2026-11-13 when the user decided: the thread
+        // belongs to the person (ADR-0061), an orphan reply is shown, and the
+        // last of several replies wins. The guards below are the inverse of the
+        // ones that used to live here: a settled rule MUST carry an expectation,
+        // because a settled rule without one gates nothing — and a "skip"
+        // regression would silently stop asserting behaviour three panels ship.
         val fixture = loadFixture()
-        // scope.path (TODO 11.1): asserting WHERE the path goes would decide
-        // the product question inside a test. Guarded by the fixture itself;
-        // this test just keeps the skip honest in the runner.
-        val scope = fixture.byId("scope.path")
-        assertEquals("skipped", scope.status)
-        assertTrue(scope.assertForbidden)
-        if (scope.expect != null) fail("rule scope.path gained an expect without a product decision (TODO 11.1)")
-        val orphan = fixture.byId("pairing.orphan_reply")
-        if (orphan.expect != null) fail("rule pairing.orphan_reply gained an expect without a product decision")
-        val multi = fixture.byId("pairing.multiple_replies")
-        if (multi.expect != null) fail("rule pairing.multiple_replies gained an expect without a product decision")
+        for (id in listOf("scope.path", "pairing.orphan_reply", "pairing.multiple_replies")) {
+            val rule = fixture.byId(id)
+            assertEquals("settled", rule.status, "rule $id went back to skipped after the 2026-11-13 decision")
+            assertFalse(rule.assertForbidden, "a settled rule must not keep assert_forbidden")
+            assertNotNull(rule.expect, "settled rule $id carries no expectation: it would gate nothing")
+        }
     }
 
     /** Self-contained fake store: same protocol surface as the session talks to. */
@@ -241,6 +249,85 @@ class SharedChatConformanceTest {
     }
 
     /** Self-contained fake transport: ask answers with the fixture's text. */
+    @Test
+    fun `rule scope path - a shared ask carries no scope`() {
+        val fixture = loadFixture()
+        val rule = fixture.byId("scope.path")
+        assertEquals("settled", rule.status)
+        @Suppress("UNCHECKED_CAST")
+        val forbidden = rule.expect?.get("ask_args_keys_exclude") as List<String>
+        assertEquals(listOf("path", "project_id"), forbidden)
+
+        val store = Store()
+        val client = Client(store)
+        val session = SharedChatSession(client) {}
+        session.setVisible(true)
+        session.create("Scoped?")
+        val job = assertNotNull(session.prepareSend("why?"))
+        session.send(job)
+
+        // The ASK ARGUMENTS, recorded by the fake transport, are what this rule
+        // is about. A thread created from a workspace used to send that path,
+        // which made the service resolve it to a project and answer from there
+        // only — while VS Code answered from the whole library. Same thread,
+        // same question, two answers.
+        val askCall = client.calls.lastOrNull { it.first == "repotory_ask" }
+        assertNotNull(askCall, "the ask must have run")
+        for (key in forbidden) {
+            assertFalse(
+                askCall.second.containsKey(key),
+                "the ask sent \"$key\": a shared thread belongs to the person, so the workspace must not scope the answer (ADR-0061)",
+            )
+        }
+        session.close()
+    }
+
+    @Test
+    fun `rule orphan reply - a reply with no question is shown as its own turn`() {
+        val fixture = loadFixture()
+        val rule = fixture.byId("pairing.orphan_reply")
+        assertEquals("settled", rule.status)
+        assertEquals(true, rule.expect?.get("orphan_rendered"))
+        assertEquals(true, rule.expect?.get("orphan_not_dropped"))
+
+        val messages = listOf(
+            SharedMessage(id = "u1", role = "user", content = "paired question", source = "jetbrains", replyTo = null, createdAt = "2026-11-13T00:00:01Z"),
+            SharedMessage(id = "u1-reply", role = "assistant", content = "paired answer", source = "jetbrains", replyTo = "u1", createdAt = "2026-11-13T00:00:02Z"),
+            // replyTo names a user message that is NOT in this history.
+            SharedMessage(id = "ghost-reply", role = "assistant", content = "answer with no question", source = "warden", replyTo = "u-gone", createdAt = "2026-11-13T00:00:03Z"),
+        )
+        val groups = sharedMessageGroups(messages)
+        // The orphan is its own group (it has no user to attach to), so it is
+        // never dropped. Its body is rendered the same way a paired reply is.
+        val orphanGroup = groups.firstOrNull { it.any { message -> message.id == "ghost-reply" } }
+        assertNotNull(orphanGroup, "the orphan reply was dropped: VS Code keeps it, so the same history would differ")
+        assertEquals("ghost-reply", orphanGroup.first().id, "the orphan group is the reply itself")
+        assertFalse(
+            orphanGroup.size > 1,
+            "an orphan must not be folded into some other question's group",
+        )
+    }
+
+    @Test
+    fun `rule multiple replies - one question, one answer, the last reply wins`() {
+        val fixture = loadFixture()
+        val rule = fixture.byId("pairing.multiple_replies")
+        assertEquals("settled", rule.status)
+        assertEquals("last_in_read_order", rule.expect?.get("reply_winner"))
+        assertEquals(false, rule.expect?.get("earlier_replies_rendered"))
+
+        val messages = listOf(
+            SharedMessage(id = "u1", role = "user", content = "q", source = "jetbrains", replyTo = null, createdAt = "2026-11-13T00:00:01Z"),
+            SharedMessage(id = "u1-reply", role = "assistant", content = "stale answer", source = "jetbrains", replyTo = "u1", createdAt = "2026-11-13T00:00:02Z"),
+            SharedMessage(id = "u1-reply-2", role = "assistant", content = "final answer", source = "warden", replyTo = "u1", createdAt = "2026-11-13T00:00:03Z"),
+        )
+        val groups = sharedMessageGroups(messages)
+        assertEquals(1, groups.size, "one question must stay one group")
+        val replies = groups.first().filter { it.role == "assistant" }
+        assertEquals(1, replies.size, "the stale duplicate must not be rendered: ${replies.map { it.id }}")
+        assertEquals("u1-reply-2", replies.first().id, "the LAST reply in read order must win")
+    }
+
     private class Client(private val store: Store) : ChatTransport {
         var answer: String = "Knowledge answer."
         val calls = mutableListOf<Pair<String, Map<String, Any?>>>()

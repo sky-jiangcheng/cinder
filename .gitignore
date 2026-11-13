@@ -115,3 +115,8 @@ outputs/skill-repotory/
 # 本地插件布局预览图（一次性截图，非巡检归档）
 outputs/jetbrains-tlayout-preview-*.png
 outputs/vscode-reader-preview-*.png
+
+# Go build cache when GOCACHE is pointed inside the checkout (scripts that need
+# a writable cache without touching ~/.cache do this). 2314 object files once
+# landed in a commit because nothing here said "no".
+.gocache/

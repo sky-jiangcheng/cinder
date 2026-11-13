@@ -244,9 +244,25 @@ data class SharedChatState(
  */
 internal fun sharedMessageGroups(messages: List<SharedMessage>): List<List<SharedMessage>> {
     val users = messages.filter { it.role == "user" }.map { it.id }.toSet()
-    val replies = messages.filter { it.role == "assistant" && it.replyTo in users }.groupBy { it.replyTo }
+    // Multiple replies to one question: the LAST one wins (ADR-0061 / TODO
+    // 11.3). This used to group them and render every reply, which meant a
+    // third-party writer producing two answers turned one question into two
+    // visible turns here and one turn (the last) in VS Code — the two panels
+    // read the same history as a different conversation. One question has one
+    // answer; a stale duplicate is not additional information, it is a race
+    // whose loser the user did not ask to see.
+    //
+    // Read order is the server's seq ASC, so "last" is the last one written to
+    // the thread — the same rule the TS side applies with a Map.
+    val replies = mutableMapOf<String, SharedMessage>()
+    for (message in messages) {
+        val target = message.replyTo
+        if (message.role == "assistant" && target != null && target in users) {
+            replies[target] = message
+        }
+    }
     return messages.filterNot { it.role == "assistant" && it.replyTo in users }
-        .map { listOf(it) + replies[it.id].orEmpty() }
+        .map { listOf(it) + listOfNotNull(replies[it.id]) }
 }
 
 /** What the session tells the UI. */

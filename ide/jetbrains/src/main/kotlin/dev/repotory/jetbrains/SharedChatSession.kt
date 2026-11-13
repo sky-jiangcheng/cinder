@@ -213,9 +213,15 @@ internal class SharedChatSession(
 
     private fun transportAsk(job: SharedPending): String {
         checkAlive()
+        // Asking carries NO scope (ADR-0061): a shared thread belongs to the
+        // person, not to the workspace. This used to pass the selected
+        // conversation's path, which made the service resolve it to a project
+        // and answer from that project only — while VS Code passed nothing and
+        // answered from the whole library. Same thread, same question, two
+        // different answers, and the user had no way to explain it. The path
+        // is still recorded at CREATION (a provenance label: "opened in this
+        // project"); it must not feed retrieval.
         val args = mutableMapOf<String, Any?>("query" to job.question)
-        // Ask resolves the selected conversation's path, not whichever IDE project is now open.
-        if (job.path.isNotBlank()) args["path"] = job.path
         val answer = transport.callTool(ChatMode.ASK.tool, args)
         checkAskResponse(answer)
         check(answer.isNotBlank()) { EMPTY_ANSWER }

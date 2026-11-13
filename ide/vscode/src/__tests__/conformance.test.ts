@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { SharedChat, sharedTurns, type SharedMessage } from "../sharedChat.js";
+import { ChatSession } from "../chatSession.js";
 
 // The compiled test lives in out/__tests__/, the repo root three levels up.
 // __filename, not import.meta: this build targets CommonJS.
@@ -47,8 +48,17 @@ function fixtureRule(id: string) {
 
 const settled = fixture.rules.filter((r: { status: string }) => r.status === "settled");
 if (settled.length === 0) throw new Error("fixture has no settled rules: gate B gates nothing");
-const skipped = fixture.rules.filter((r: { status: string }) => r.status === "skipped");
-if (skipped.length === 0) throw new Error("fixture records no open decisions: the 11.1-11.3 skips are the memory that they are still open");
+// Skips may legitimately reach zero: an open decision that gets decided is
+// promoted to settled (11.1-11.3 were closed on 2026-11-13). What must never
+// happen is a rule DISAPPEARING — the rule count in contract_version is what
+// makes a deletion visible, and fixtureRule() above already refuses to run
+// against an id that vanished.
+const statuses = new Set(fixture.rules.map((r: { status: string }) => r.status));
+for (const status of statuses) {
+  if (status !== "settled" && status !== "skipped") {
+    throw new Error(`unknown rule status ${status}`);
+  }
+}
 
 interface FixMsg {
   id: string;
@@ -187,4 +197,90 @@ test("rule fallback.not_persisted.zero_hit: the zero-hit branch obeys the same r
   await chat.send("nothing matches this", async () => zero.input.ask_tool_result as string);
   assert.deepEqual(appended.filter((entry) => entry.startsWith("assistant:")), [], "the zero-hit wording has no 'No AI endpoint' prefix — a prefix check alone would store it");
   chat.dispose();
+});
+
+test("rule scope.path: a shared ask carries no scope (ADR-0061 / TODO 11.1)", async () => {
+  const rule = fixtureRule("scope.path");
+  assert.deepEqual(rule.expect.ask_args_keys_exclude, ["path", "project_id"]);
+
+  // The ASK ARGS are decided in ChatSession, not in SharedChat: SharedChat.send
+  // takes an answer callback and hands the question over, and ChatSession is
+  // what calls `repotory_ask`. Testing the wrong layer would pass while the
+  // panel sent a path, so this drives the real session.
+  const askArgs: Record<string, unknown>[] = [];
+  const transport = {
+    workspacePath: () => "/tmp/some-workspace",
+    async callTool(name: string, args: Record<string, unknown>): Promise<string> {
+      if (name === "repotory_ask") {
+        askArgs.push({ ...args });
+        return "An answer.\n\nSources:\n[N1] note \"n\" (id 1, project P)\n";
+      }
+      if (args.operation === "append") {
+        return JSON.stringify({ message: { id: String(args.id), role: args.role, content: String(args.content), source: String(args.source), replyTo: args.reply_to ?? null, createdAt: "now" } });
+      }
+      if (args.operation === "read") {
+        return JSON.stringify({ thread: { id: "t1", title: "Scoped?", path: "/tmp/some-workspace", createdAt: "c", updatedAt: "u" }, messages: [] });
+      }
+      if (args.operation === "list") return JSON.stringify({ threads: [{ id: "t1", title: "Scoped?", path: "/tmp/some-workspace", createdAt: "c", updatedAt: "u" }] });
+      return JSON.stringify({ thread: { id: String(args.id ?? "t1"), title: "t", path: "/tmp/some-workspace", createdAt: "c", updatedAt: "u" } });
+    },
+    async rpc() { return null; },
+    serverUrl: () => "http://127.0.0.1:18765",
+    openExternal: async () => {},
+  };
+  const session = new ChatSession(transport as never, () => {});
+  await session.run("why?", "ask");
+
+  assert.equal(askArgs.length, 1, "the ask must have run exactly once");
+  for (const forbidden of rule.expect.ask_args_keys_exclude as string[]) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(askArgs[0], forbidden),
+      false,
+      `the ask sent "${forbidden}": a shared thread belongs to the person, so the workspace must not scope the answer (the thread's path is provenance, not scope)`,
+    );
+  }
+  session.dispose();
+});
+
+test("rule pairing.orphan_reply: a reply with no question is shown, marked, never dropped", async () => {
+  const rule = fixtureRule("pairing.orphan_reply");
+  assert.equal(rule.expect.orphan_rendered, true);
+  assert.equal(rule.expect.orphan_marked, true);
+  assert.equal(rule.expect.orphan_not_dropped, true);
+
+  const messages: SharedMessage[] = [
+    { id: "u1", role: "user", content: "paired question", source: "vscode", replyTo: null, createdAt: "2026-11-13T00:00:01Z" },
+    { id: "u1-reply", role: "assistant", content: "paired answer", source: "vscode", replyTo: "u1", createdAt: "2026-11-13T00:00:02Z" },
+    // replyTo names a user message that is NOT in this history.
+    { id: "ghost-reply", role: "assistant", content: "answer with no question", source: "warden", replyTo: "u-gone", createdAt: "2026-11-13T00:00:03Z" },
+  ];
+  const turns = sharedTurns(messages);
+
+  assert.equal(turns.length, 2, "the orphan must be its own turn, not swallowed");
+  const paired = turns.find(t => t.id === "u1");
+  assert.ok(paired && paired.answer === "paired answer");
+  const orphan = turns.find(t => t.id === "ghost-reply");
+  assert.ok(orphan, "the orphan reply was dropped: the other panel keeps it, so the same history would differ");
+  assert.equal(orphan.orphan, true, "the orphan must be MARKED, not passed off as an answer to a visible question");
+  assert.equal(orphan.query, "", "an orphan has no question; the panel labels it instead of inventing one");
+  assert.equal(orphan.answer, "answer with no question");
+});
+
+test("rule pairing.multiple_replies: one question, one answer — the last reply wins", async () => {
+  const rule = fixtureRule("pairing.multiple_replies");
+  assert.equal(rule.expect.reply_winner, "last_in_read_order");
+  assert.equal(rule.expect.earlier_replies_rendered, false);
+
+  const messages: SharedMessage[] = [
+    { id: "u1", role: "user", content: "q", source: "vscode", replyTo: null, createdAt: "2026-11-13T00:00:01Z" },
+    { id: "u1-reply", role: "assistant", content: "stale answer", source: "vscode", replyTo: "u1", createdAt: "2026-11-13T00:00:02Z" },
+    // A third-party writer appended a second answer under a NEW id.
+    { id: "u1-reply-2", role: "assistant", content: "final answer", source: "warden", replyTo: "u1", createdAt: "2026-11-13T00:00:03Z" },
+  ];
+  const turns = sharedTurns(messages);
+
+  assert.equal(turns.length, 1, "one question must stay one turn");
+  const only = turns[0]!;
+  assert.equal(only.answer, "final answer", "the LAST reply in read order must win");
+  assert.notEqual(only.answer, "stale answer", "the stale duplicate must not be rendered");
 });

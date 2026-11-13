@@ -193,25 +193,33 @@
     },
     {
       "id": "scope.path",
-      "status": "skipped",
-      "statement": "Whether a shared ask carries the workspace path (TODO 11.1: JetBrains sends it, VS Code does not) is an OPEN product decision — the shared topic belongs to the workspace or to the person; not decidable in this fixture (ADR-0059).",
-      "skip_reason": "TODO 11.1 pending product decision (ADR-0040 LayerProjectCatalog semantics)",
-      "assert_forbidden": true
+      "status": "settled",
+      "statement": "A shared ask carries NO scope: no path (and no project_id). The shared topic belongs to the PERSON, not to the workspace (ADR-0061 / TODO 11.1), so one thread asked from any surface in any workspace gets the same answer, from the whole-library catalogue layer (ADR-0040). The thread still RECORDS the creating workspace as a provenance label; that label must not feed retrieval.",
+      "expect": {
+        "ask_args_keys_exclude": [
+          "path",
+          "project_id"
+        ]
+      }
     },
     {
       "id": "pairing.orphan_reply",
-      "status": "skipped",
-      "statement": "An assistant message whose user message is outside the read window (500 latest by seq) or written by a third party: which panel renders it as an orphan ('Unpaired reply' vs silently dropped) is an OPEN product decision (TODO 11.3 leftover).",
-      "skip_reason": "TODO 11.3 leftover: unreachable via the three shipped clients (deterministic reply ids), reachable via a third-party writer; needs the product decision first",
-      "assert_forbidden": true
+      "status": "settled",
+      "statement": "An assistant message whose replyTo names no user message in this thread (third-party writer, or a question deleted out from under its answer) is SHOWN by both panels as its own turn, marked orphan, never silently dropped (ADR-0061 / TODO 11.3). Its text goes through the same ask-answer parse as a paired reply.",
+      "expect": {
+        "orphan_rendered": true,
+        "orphan_marked": true,
+        "orphan_not_dropped": true
+      }
     },
     {
-      "pairing_note": "multiple_replies is the third open edge (one user id answered twice): both panels diverge (first-wins in the TS map, last-wins in the Kotlin group) and the product decision is missing. Recorded here so the NEXT person knows it is a known open edge, not an oversight.",
       "id": "pairing.multiple_replies",
-      "status": "skipped",
-      "$comment": "reached only by a third-party writer appending a second reply to the same user id; the three shipped clients always send the deterministic '<user>-reply' id, so the guard makes a second reply under a NEW id legal and both panels then disagree",
-      "skip_reason": "TODO 11.3 leftover; needs the product decision on who may reply twice",
-      "assert_forbidden": true
+      "status": "settled",
+      "statement": "When one question has SEVERAL replies (a third-party writer appending a second answer under a new id), the LAST one in server read order (seq ASC) wins and the earlier ones are not rendered: one question, one answer (ADR-0061 / TODO 11.3). Both panels apply the same rule, so the same history is the same conversation in both.",
+      "expect": {
+        "reply_winner": "last_in_read_order",
+        "earlier_replies_rendered": false
+      }
     }
   ]
 }

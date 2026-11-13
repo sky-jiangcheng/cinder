@@ -126,7 +126,13 @@ class SharedChatSessionTest {
         assertTrue(ide.snapshot().messages.any { it.id == remote && it.source == "warden" })
         val sendCalls = ideClient.calls.filter { it.first == "repotory_ask" || it.second["operation"] == "append" }
         assertEquals(listOf("user", null, "assistant"), sendCalls.map { it.second["role"] })
-        assertEquals("/workspace/a", sendCalls[1].second["path"])
+        // The ask carries NO path (ADR-0061 / TODO 11.1). It used to send the
+        // selected conversation's workspace path, which made the service answer
+        // from that project only — so the same thread asked from VS Code (which
+        // never sent one) came back with a different answer. The path recorded
+        // at creation is a provenance label; it must not scope retrieval.
+        assertNull(sendCalls[1].second["path"], "the ask must not be scoped by the workspace")
+        assertNull(sendCalls[1].second["project_id"], "the ask must not be scoped by a project either")
     }
 
     @Test fun `late answer stays in its captured thread even after switching`() {
