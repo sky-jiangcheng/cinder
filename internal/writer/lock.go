@@ -20,6 +20,7 @@ package writer
 
 import (
 	"errors"
+	"io"
 	"os"
 )
 
@@ -89,6 +90,25 @@ func (l *Lock) Close() error {
 // Held reports whether this handle still owns the lock. Kept as a method so
 // callers can ask after a hand-off without racing on an external flag.
 func (l *Lock) Held() bool { return l != nil && l.held }
+
+// Content returns the lock file's current contents — the holder tag a reader
+// uses to name the process blocking a write.
+//
+// It reads through the held handle rather than opening the file again. That is
+// not stylistic: on Windows an exclusive byte-range lock blocks a SECOND
+// handle's read ("another process has locked a portion of the file"), while
+// the handle that holds the lock can still read its own region. Reading via
+// os.ReadFile would make the content unreadable on Windows precisely while the
+// lock is held — which is the only state worth inspecting.
+func (l *Lock) Content() ([]byte, error) {
+	if l == nil || l.f == nil {
+		return nil, errors.New("lock is not held")
+	}
+	if _, err := l.f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return io.ReadAll(l.f)
+}
 
 // LockPath is the file the election lock lives in. Exported so a test can
 // assert both processes are contending for the same inode rather than for two

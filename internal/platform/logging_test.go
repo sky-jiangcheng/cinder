@@ -29,9 +29,14 @@ func TestLogWriterFileSink(t *testing.T) {
 	dir := t.TempDir()
 	var fallback bytes.Buffer
 	w := newLogWriter("mcp", true, dir, &fallback)
-	if _, ok := w.(*rotatingFile); !ok {
+	rw, ok := w.(*rotatingFile)
+	if !ok {
 		t.Fatalf("expected a rotating file sink, got %T", w)
 	}
+	// Close before the TempDir cleanup runs: on Windows an open file cannot be
+	// unlinked, so leaving the handle open fails cleanup with "being used by
+	// another process".
+	t.Cleanup(func() { _ = rw.Close() })
 	if _, err := w.Write([]byte("hello\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +78,9 @@ func TestRotatingFileKeepsOneBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Close before TempDir cleanup (see TestLogWriterFileSink): an open log file
+	// cannot be unlinked on Windows.
+	t.Cleanup(func() { _ = rw.Close() })
 	line := strings.Repeat("x", 100) + "\n"
 	for i := 0; i < 30; i++ {
 		if _, err := rw.Write([]byte(line)); err != nil {

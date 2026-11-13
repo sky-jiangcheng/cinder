@@ -104,6 +104,25 @@ func (w *rotatingFile) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// Close releases the underlying file handle.
+//
+// This matters on Windows: an open file cannot be unlinked, so a test that
+// leaves the rotating writer open fails its TempDir cleanup with "the process
+// cannot access the file because it is being used by another process" (macOS
+// and Linux unlink open files happily, which is why this only ever surfaced on
+// the Windows runner). Production relies on the process exiting; tests close it
+// explicitly via t.Cleanup.
+func (w *rotatingFile) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file == nil {
+		return nil
+	}
+	err := w.file.Close()
+	w.file = nil
+	return err
+}
+
 // rotate keeps exactly one previous file, overwriting path+".1" each time.
 func (w *rotatingFile) rotate() error {
 	_ = w.file.Close()

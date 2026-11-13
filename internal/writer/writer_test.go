@@ -42,8 +42,10 @@ func TestTryLockExclusiveAcrossHandles(t *testing.T) {
 	}
 
 	// The lock file names its holder, so "database is locked" can be answered
-	// with "pid X holds the write path".
-	raw, err := os.ReadFile(LockPath(dir))
+	// with "pid X holds the write path". Read through the held handle: on
+	// Windows an exclusive byte-range lock blocks a second handle's read, so
+	// os.ReadFile here would fail precisely while the lock is taken.
+	raw, err := first.Content()
 	if err != nil {
 		t.Fatalf("read lock file: %v", err)
 	}
@@ -327,7 +329,11 @@ func TestReadEndpointRejectsGarbage(t *testing.T) {
 }
 
 func TestDirOf(t *testing.T) {
-	if got := DirOf(filepath.Join("/data", "repotory.db")); got != "/data" {
-		t.Fatalf("DirOf = %q", got)
+	// filepath.Join normalises to the platform separator, so the input and the
+	// expectation must be built with FromSlash — a literal "/data" becomes
+	// "\\data" on Windows and the naive comparison fails there.
+	root := filepath.FromSlash("/data")
+	if got := DirOf(filepath.Join(root, "repotory.db")); got != root {
+		t.Fatalf("DirOf = %q, want %q", got, root)
 	}
 }
