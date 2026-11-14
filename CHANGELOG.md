@@ -4,10 +4,20 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
+## [Unreleased]
+
+## [2.38.0] - 2026-11-14
+
+### 修复
+- **写通道的连接泄漏修掉了：soak 里那 200–1100 次 `writer_unavailable` 误报归零（ADR-0058 / TODO 13.1 残留①，2026-11-14）**：真因不在 `Probe`（长写期间实测 1.2ms 应答，2.37.0 已证伪「`Probe` 被 SQLite 卡住」），而在**通道自己泄漏连接**——`writer.Post` / `writer.Probe` 每次调用都新建一个 `http.Client`（即新 `http.Transport`），零值 `Transport` 的 `IdleConnTimeout` 为 0、空闲连接永不过期，net/http 也没有终结器替它关 socket，于是**每次转发写永久留下一条 keep-alive 连接：1 个 fd + 1 个临时端口**（实测 1:1——回归测试修复前报「10 次 Post + 10 次 Probe 结束后仍开着 20 条连接」，soak 里一个 `cinder-mcp` 写 168 次后 194 fd）。长跑把 fd / 临时端口耗尽后就长成 2.37.0 记下的那个形状：`Post` 在 `dial` 就失败（`PreExecution`），`reelect` 里 `tryElect` 仍能打开锁文件（写者活着、锁照旧被占）、地址没变、`Probe` 走同一条拨号路径同样失败，`15×200ms` 走满——**恰好 3.0s**——于是对健康的写者报 `writer_unavailable`；端口偶尔被别的进程释放时会漏过去几次，这就是「busy 分支只有 1/40 命中」的间歇形状。修法：`internal/writer` 收敛成一个包级共享客户端 `channelClient`（`DisableKeepAlives: true`，**一次调用一条 socket、随响应关闭**；回环每秒个位数写不需要连接池，而「每次调用恰好一条 socket、随响应关闭」是唯一不会被悄悄改回去的不变量；仍保留无整体超时、取消走 ctx——转发 scan / review 可以跑几分钟）。回归门 `TestPostAndProbeReleaseTheirConnections`（用 `ConnState` 数连接开关：修复前 20 条挂着必红，修复后 0.00s 绿）。**验证 soak（30 分钟、真二进制、隔离 HOME、4 客户端并发写 + 247 次备份 + 阶段 B 中途 `SIGKILL` 验接管）**：35089 次写**全部成功**、失败 **0** 次、`database is locked` 到调用方 **0** 次、**对活着的写者报 `writer_unavailable` 0 次**（2.37.0 记下的那个 200–1100 次误报）、最慢单写 857ms、跨 SIGKILL 接管 1177/1177 全部落地；`cinder-mcp` 的 fd 在整个 29 分钟里**恒定 10**（修复前约每写 +1）。**诚实边界**：本机 fd 上限 1M、临时端口 2.8 万，短跑复现不出原来那个 200–1100 的绝对计数（macOS 临时端口只有 1.6 万才更容易撞上），因果链由「修复前必红的连接泄漏测试 + 修复后 fd 恒定」钉住，而不是靠重放那个数字。
+
+### 观测
+- **写路径的失败出口与 soak 脚本的观测力补齐，下一轮不必再猜**：① `internal/writerapi` 的 `forwardOnce` / `reelect` 现在在失败时打印出口（地址读失败 / 拨号失败 / 写者拒绝的错误码 / 重选举决策的 published 地址、sameAddr、probe 结果与耗时、15×200ms 超时），正是 TODO 13.1 当年记下的「给 `forwardOnce` 各失败出口加计数」那条下一步；② soak 脚本新增 `FORCE_BACKUPS=1`，可强制每次真 `VACUUM`——`CreateBackup` 是按日幂等的，默认配置下 14 次调用实际只真空一次，「备份长持锁」这个场景此前根本没被造出来；③ worker 子进程 stderr 从「前 50 行即封顶」改为 500 行环形缓冲（原来恰好丢掉运行末尾的诊断），报告 JSON 新增 `stats.mcpStderr`，MCP 侧日志能随失败报告一起留存。
+
 ## [2.37.0] - 2026-11-13
 
 ### 新增
-- **30 分钟写契约 soak 落地：抓到并修复一个真实缺陷（ADR-0058 / TODO 13.1 残留①，2026-11-13）**：`scripts/soak-writer-contract.sh`（+ `worker.mjs` / `seed.mjs`）把「双进程并发写 + 反复备份长持锁 + `SIGKILL` 验接管」做成可重复运行的脚本（真二进制、隔离 HOME、阶段 A 造长持锁、阶段 B 中途杀写者）。**核心判据三次全部成立：1.6–1.8 万次写里 `database is locked` 到达调用方 0 次**。**soak 当天抓到的真缺陷**：备份持锁时转发写失败，`reelect` 发现 endpoint 地址没变，空转 15×200ms 等「不同的地址」，把「写者忙」报成「写者不在」——一次 soak 里 1108 次（每次恰好 ~3.0s，写者全程活着）。修法：地址仍是失败地址时探一次活（新增无副作用 `writer.ping` 控制方法 + `writer.Probe`，不碰库、不触发让位），活着返回 `errBusyWriter`（`retryable`），探不通才报 `writer_unavailable`；两者必须分开，否则 agent 会在每次备份期间起第二个写者。回归门 `TestBusyWriterIsNotReportedAsAbsent`（负例撤掉修复 → 3.04s 红）。**脚本自身另修五处**（`/health` 判接管、`set -u` 空数组崩溃、数据无限增长把测面变成 SQLite 真空吞吐、`printf` 管道 EOF 取消工具调用、线程种子缺失）。**残留的 200–1100 次 `writer_unavailable` 误报已定位并修复（2026-11-13 第二轮观察）**：真因是**通道自己泄漏连接**——`writer.Post` / `writer.Probe` 每次调用新建一个 `http.Client`（即新 `http.Transport`），零值 `Transport` 的空闲连接永不过期、net/http 也没有终结器替它关 socket，于是每次转发写留下一条 keep-alive 连接直到进程退出（1 fd + 1 临时端口；实测 1:1，回归测试修复前报「10 Post + 10 Probe 后仍开 20 条连接」，soak 里一个 `cinder-mcp` 写 168 次后 194 fd）。长跑把 fd / 端口耗尽后 `Post` 在 `dial` 失败（`PreExecution`），`reelect` 里 `tryElect` 仍能开锁文件（写者活着、锁照旧被占）、地址没变、`Probe` 走同一条拨号路径也失败，`15×200ms` 走满——**恰好 3.0s**，对健康写者报 `writer_unavailable`；端口偶被释放时漏过几次，即「busy 只有 1/40」的间歇形状。修法：`internal/writer` 收敛成一个包级 `channelClient`（`DisableKeepAlives: true`，一次调用一条 socket、随响应关闭；仍无整体超时、取消走 ctx）。回归门 `TestPostAndProbeReleaseTheirConnections`（修复前必红）。**验证 soak（5 分钟、4 客户端、真二进制）**：5846 次写全成功、锁错误到调用方 0 次、阶段 A 误报 **0** 次、跨 SIGKILL 1177/1177、最慢 338ms；`cinder-mcp` fd 在 1167 次写里恒定 10（修复前约每写 +1）。**诚实边界**：本机 fd 上限 1M、临时端口 2.8 万，短跑复现不出原来的 200–1100 计数，因果链由「修复前必红的连接泄漏测试 + 修复后 fd 恒定」钉住，而不是靠重放那个数字。**脚本另补三处观测/正确性**：`FORCE_BACKUPS=1` 可强制每次真 `VACUUM`（`CreateBackup` 按日幂等，默认下 14 次调用实际只真空一次）、worker 子进程 stderr 从「前 50 行即封顶」改为 500 行环形缓冲（原来恰好丢掉运行末尾的诊断）、报告 JSON 新增 `stats.mcpStderr` 让 MCP 侧日志能随失败报告一起留存。
+- **30 分钟写契约 soak 落地：抓到并修复一个真实缺陷（ADR-0058 / TODO 13.1 残留①，2026-11-13）**：`scripts/soak-writer-contract.sh`（+ `worker.mjs` / `seed.mjs`）把「双进程并发写 + 反复备份长持锁 + `SIGKILL` 验接管」做成可重复运行的脚本（真二进制、隔离 HOME、阶段 A 造长持锁、阶段 B 中途杀写者）。**核心判据三次全部成立：1.6–1.8 万次写里 `database is locked` 到达调用方 0 次**。**soak 当天抓到的真缺陷**：备份持锁时转发写失败，`reelect` 发现 endpoint 地址没变，空转 15×200ms 等「不同的地址」，把「写者忙」报成「写者不在」——一次 soak 里 1108 次（每次恰好 ~3.0s，写者全程活着）。修法：地址仍是失败地址时探一次活（新增无副作用 `writer.ping` 控制方法 + `writer.Probe`，不碰库、不触发让位），活着返回 `errBusyWriter`（`retryable`），探不通才报 `writer_unavailable`；两者必须分开，否则 agent 会在每次备份期间起第二个写者。回归门 `TestBusyWriterIsNotReportedAsAbsent`（负例撤掉修复 → 3.04s 红）。**脚本自身另修五处**（`/health` 判接管、`set -u` 空数组崩溃、数据无限增长把测面变成 SQLite 真空吞吐、`printf` 管道 EOF 取消工具调用、线程种子缺失）。**未解决（如实记）**：三次 soak 仍有 200–1100 次 `writer_unavailable` 误报，已证伪「`Probe` 被 SQLite 卡住」的假设（实测 1.2ms 应答），失败在更早的连接层；影响有界（只多起一个写者，文件锁仍保证单写者，非数据损坏），下一步是给 `forwardOnce` 各失败出口加计数做一次 instrumented soak。
 
 - **共享会话三条遗留决策落地（ADR-0061 / TODO 11.1–11.3，2026-11-13）**：跨端共享会话最后三个「查实但无法判定对错」的分叉全部拍板并落码，fixture 由此 **8 条规则全 settled、skipped 归零**。**11.1 共享主题属于人，不属于工作区**（ADR-0061）：发问不带作用域（KT 去掉 `path`，TS 本就不带），取证走全库目录层，同一主题在任何一端任何工作区得到同一个答案；创建时的 `thread.path` 降为**出处标签、不参与取证**。旧断言 `assertEquals("/workspace/a", sendCalls[1].second["path"])` 正是被禁止的行为，已改为断言 `path`/`project_id` 均为 null。**11.3 配对两个分叉**：孤儿回复两端都**显示为独立一轮并标记 `orphan`**（TS 原先静默丢弃 → 补 `Turn.orphan` 字段；KT 本就保留）；同一问题有多条回复时**最后一条胜出**（KT 原先 `groupBy` 全保留 → 改为按服务端读序覆盖；TS 本就最后胜出）。三条规则升 settled，两端 runner 各加断言，**注入式负例逐条验过**（KT 加回 `path` → `scope.path` 红；KT 退回 `groupBy` → `multiple_replies` 红；TS 退回丢弃孤儿 → `orphan_reply` 红）。**顺带修掉门自身的问题**：三端 runner 原都硬断言「skipped 不能为空」，把 fixture 变成不可改进的——改成「规则不能消失 + status 取值合法 + skipped 必带理由」。**11.2 无需决策**：门 B 落地时已修（KT 遇兜底前缀抛 `SharedAskFallback` 不落库），本次仅核实收尾并勾掉 TODO。
 
@@ -1093,7 +1103,9 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.36.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.38.0...HEAD
+[2.38.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.37.0...v2.38.0
+[2.37.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.36.0...v2.37.0
 [2.36.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.6...v2.36.0
 [2.35.6]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.5...v2.35.6
 [2.35.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.4...v2.35.5
