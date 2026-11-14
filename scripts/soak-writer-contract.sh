@@ -57,6 +57,22 @@ done
 say()  { printf '\n=== %s ===\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 
+# Milliseconds since the epoch, WITHOUT forking. `date +%s%3N` costs a few
+# milliseconds per call — long enough to matter here: the instant the writer
+# is killed has to be pinned tightly, because the client's EOF arrives within
+# a millisecond or two of the kill and a sloppy timestamp puts the failure
+# before the kill it was caused by.
+now_ms() {
+  if [[ -n "${EPOCHREALTIME:-}" ]]; then
+    # 1794626675.647123 -> 1794626675647
+    local sec="${EPOCHREALTIME%%.*}" frac="${EPOCHREALTIME#*.}"
+    frac="${frac}000000"; frac="${frac:0:6}"
+    echo $(( 10#$sec * 1000 + 10#$frac / 1000 ))
+  else
+    date +%s%3N
+  fi
+}
+
 WORK="$(mktemp -d)"
 HOME_DIR="$WORK/home"
 BIN_DIR="$WORK/bin"
@@ -172,25 +188,46 @@ for i in $(seq 1 "$CLIENTS"); do
   PIDS+=($!)
 done
 
-# Backups take the write lock for the whole VACUUM INTO. Fire them repeatedly
+# Backups take the write path for the whole VACUUM INTO. Fire them repeatedly
 # so the clients are queueing against a held lock for a real fraction of the
 # run, not once at the start.
+#
+# The mechanism is the POOL, not the file lock: the writer's *sql.DB has one
+# connection (db.SetMaxOpenConns(1)), so a VACUUM INTO holds the only
+# connection for its whole duration and every other write queues behind it.
+# That is exactly the "long hold" the contract promises to queue instead of
+# failing.
 BACKUPS=0
 BACKUP_FAILS=0
+REAL_BACKUPS=0
+# FORCE_BACKUPS defaults to ON, because CreateBackup is idempotent per DAY:
+# once today's snapshot exists, every later RunBackupNow returns before
+# VACUUM INTO ever runs, so the default soak never exercised the long hold the
+# contract exists for (measured: 247 calls, 247 counted, exactly ONE real
+# VACUUM). Dropping today's snapshot before each call makes each one a real
+# hold. It is safe because HOME is the isolated soak directory, and
+# FORCE_BACKUPS=0 turns it off for a run that cares more about write rate than
+# about the busy path.
+FORCE_BACKUPS="${FORCE_BACKUPS:-1}"
 phase_a_end=$(( $(date +%s) + PHASE_A_SECONDS ))
 while [[ $(date +%s) -lt $phase_a_end ]]; do
-  # CreateBackup is idempotent per DAY: once today's snapshot exists, every
-  # later RunBackupNow returns before VACUUM INTO ever runs. Without this, the
-  # "repeated long holds" above are one long hold plus N no-ops — measured:
-  # 14 calls, 14 counted, exactly one VACUUM. FORCE_BACKUPS=1 drops today's
-  # snapshot so each call really takes the write lock (the isolated HOME makes
-  # that safe); it also makes each VACUUM write a fresh snapshot to disk, so
-  # the default stays off to keep the run small and the write rate high.
-  if [[ "${FORCE_BACKUPS:-0}" == "1" ]]; then
+  if [[ "$FORCE_BACKUPS" == "1" ]]; then
     find "$HOME_DIR" -name "repotory-$(date +%F).db" -delete 2>/dev/null
   fi
-  if out=$(rpc RunBackupNow '[]' 2>&1); then
+  # A real VACUUM can take seconds; the default RPC timeout is 30s, which is
+  # enough for the bounded soak database but not for a machine in trouble. The
+  # call is a backup, not a write under test: a timeout here does not fail the
+  # soak, and the writer keeps holding the lock until the VACUUM finishes.
+  if out=$(curl -sf -m 180 -X POST "http://127.0.0.1:$PORT/api/rpc" \
+      -H 'Content-Type: application/json' \
+      -d '{"method":"RunBackupNow","args":[]}' 2>&1); then
     BACKUPS=$(( BACKUPS + 1 ))
+    # The snapshot exists after the call => a real VACUUM ran (we deleted it
+    # before the call). Counted so the summary shows whether the busy path was
+    # actually covered instead of assuming it.
+    if [[ "$FORCE_BACKUPS" == "1" ]] && find "$HOME_DIR" -name "repotory-$(date +%F).db" -print -quit | grep -q .; then
+      REAL_BACKUPS=$(( REAL_BACKUPS + 1 ))
+    fi
   else
     # A backup that FAILS is only a problem if it fails for a lock reason; a
     # plain refusal (already taken this hour) is normal.
@@ -200,7 +237,7 @@ while [[ $(date +%s) -lt $phase_a_end ]]; do
   fi
   sleep 7
 done
-note "backups taken: $BACKUPS (lock-failed: $BACKUP_FAILS)"
+note "backups taken: $BACKUPS (real VACUUMs: $REAL_BACKUPS, lock-failed: $BACKUP_FAILS)"
 
 for i in $(seq 1 "$CLIENTS"); do
   pid="${PIDS[$(( i ))]:-}"
@@ -232,8 +269,16 @@ done
 
 # Let the clients get a few writes in, then kill the writer outright.
 sleep 3
+# The kill instant is bracketed, not sampled: the true instant lies between the
+# two reads, and the bracket is what the ambiguity test intersects with.
+KILL_FROM_MS=$(now_ms)
 kill -9 "$WRITER_PID" 2>/dev/null
-note "writer SIGKILLed (pid $WRITER_PID)"
+KILL_UNTIL_MS=$(now_ms)
+# Every write that was in flight across that instant has an UNKNOWN verdict:
+# the writer may have applied it before dying, and ADR-0058 forbids replaying
+# it (a non-idempotent write applied twice is worse than one that was refused).
+# The gate below counts those separately instead of calling them lost writes.
+note "writer SIGKILLed (pid $WRITER_PID) at ${KILL_FROM_MS}..${KILL_UNTIL_MS}ms"
 
 # Wait for the workers to ride through it.
 for i in $(seq 1 "$CLIENTS"); do
@@ -262,17 +307,44 @@ say "verdict"
 # not here.
 PHASE_B_ATTEMPTS=0
 PHASE_B_OK=0
+PHASE_B_AMBIGUOUS=0
 for f in "$REPORTS"/worker-b-*.json; do
   [[ -f "$f" ]] || continue
-  read -r a o < <(node -e '
+  read -r a o amb < <(node -e '
     const s = require(process.argv[1]);
-    console.log([s.attempts, s.ok].join(" "));
-  ' "$f")
+    const from = Number(process.argv[2]);
+    const until = Number(process.argv[3]);
+    // A failure whose window OVERLAPS the kill bracket was in flight when the
+    // writer died. Its verdict is unknown by construction, and ADR-0058 says
+    // such a write is refused, never replayed — so it is NOT a lost write.
+    // Everything else is a real failure.
+    //
+    // The bracket, not a point: the client learns of the death when its
+    // in-flight request comes back as EOF, which is necessarily AFTER the
+    // kill. A point test would put the failure outside the window and call a
+    // correct refusal a lost write.
+    const ambiguous = (s.failureWindows ?? []).filter(
+      w => w.startedAt <= until && w.endedAt >= from).length;
+    console.log([s.attempts, s.ok, ambiguous].join(" "));
+  ' "$f" "$KILL_FROM_MS" "$KILL_UNTIL_MS")
   PHASE_B_ATTEMPTS=$(( PHASE_B_ATTEMPTS + a ))
   PHASE_B_OK=$(( PHASE_B_OK + o ))
+  PHASE_B_AMBIGUOUS=$(( PHASE_B_AMBIGUOUS + amb ))
 done
+# The criterion: every attempt either landed, or was REFUSED with an honest
+# "unknown verdict". Nothing may vanish silently — a write that is neither
+# landed nor refused is a write the contract dropped on the floor.
+# The earlier form of this gate (ok == attempts) turned red on correct
+# behaviour: the one write that was in flight when the writer was SIGKILLed is
+# SUPPOSED to be refused, and counting it as "did not land" made a correct run
+# fail (measured 471/472 on a run where every other write landed).
 TAKEOVER_OK=0
-(( PHASE_B_ATTEMPTS > 0 && PHASE_B_OK == PHASE_B_ATTEMPTS )) && TAKEOVER_OK=1
+(( PHASE_B_ATTEMPTS > 0 && PHASE_B_OK + PHASE_B_AMBIGUOUS == PHASE_B_ATTEMPTS )) && TAKEOVER_OK=1
+# One write per client can be in flight at the kill instant (each worker drives
+# one call at a time). More than that would mean failures are NOT explained by
+# the kill — i.e. something else is broken.
+PHASE_B_AMBIGUOUS_OK=0
+(( PHASE_B_AMBIGUOUS <= CLIENTS )) && PHASE_B_AMBIGUOUS_OK=1
 
 TOTAL_ATTEMPTS=0
 TOTAL_OK=0
@@ -292,14 +364,26 @@ for f in "$REPORTS"/worker-*.json; do
   (( sl > SLOWEST )) && SLOWEST=$sl
 done
 
+# Phase A is the part where the writer never died: EVERY write there must
+# succeed. The lock-bubble and writer_unavailable counters are two specific
+# symptoms; this is the general one, so a failure of any other shape (an
+# internal error, a refused write) is a red flag too — previously it was
+# counted in the totals and never gated.
+PHASE_A_FAILED=0
+for f in "$REPORTS"/worker-a-*.json; do
+  [[ -f "$f" ]] || continue
+  fl=$(node -e 'const s = require(process.argv[1]); console.log(s.failed ?? 0);' "$f")
+  PHASE_A_FAILED=$(( PHASE_A_FAILED + fl ))
+done
+
 note "duration:               $(( TOTAL_SECONDS / 60 ))m (phase A ${PHASE_A_SECONDS}s / phase B ${PHASE_B_SECONDS}s)"
 note "write attempts:         $TOTAL_ATTEMPTS"
 note "succeeded:              $TOTAL_OK"
 note "failed:                 $TOTAL_FAILED"
 note "\"database is locked\" reaching the caller: $LOCK_BUBBLES   <- must be 0"
 note "slowest single write:   ${SLOWEST}ms"
-note "backups taken:          $BACKUPS"
-note "writes across the SIGKILL: ${PHASE_B_OK}/${PHASE_B_ATTEMPTS}   <- all must land (the takeover is transparent)"
+note "backups taken:          $BACKUPS (real VACUUMs: $REAL_BACKUPS)"
+note "writes across the SIGKILL: ${PHASE_B_OK} landed + ${PHASE_B_AMBIGUOUS} refused as ambiguous / ${PHASE_B_ATTEMPTS}   <- every attempt must be accounted for"
 
 FAILED=0
 if (( LOCK_BUBBLES > 0 )); then
@@ -307,7 +391,15 @@ if (( LOCK_BUBBLES > 0 )); then
   FAILED=1
 fi
 if (( TAKEOVER_OK == 0 )); then
-  echo "FAIL: writes did not all land across the SIGKILL (${PHASE_B_OK}/${PHASE_B_ATTEMPTS}) — the takeover did not happen, or it was not transparent" >&2
+  echo "FAIL: writes across the SIGKILL were not all accounted for (${PHASE_B_OK} landed + ${PHASE_B_AMBIGUOUS} ambiguous / ${PHASE_B_ATTEMPTS}) — a write failed for a reason the kill does not explain" >&2
+  FAILED=1
+fi
+if (( PHASE_B_AMBIGUOUS_OK == 0 )); then
+  echo "FAIL: ${PHASE_B_AMBIGUOUS} ambiguous writes around the SIGKILL, but only ${CLIENTS} clients can have one write in flight each — the failures are not explained by the kill" >&2
+  FAILED=1
+fi
+if (( PHASE_A_FAILED > 0 )); then
+  echo "FAIL: ${PHASE_A_FAILED} write(s) failed in phase A, where the writer was alive the whole time" >&2
   FAILED=1
 fi
 if (( TOTAL_ATTEMPTS == 0 )); then

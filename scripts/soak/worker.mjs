@@ -193,6 +193,20 @@ const stats = {
   falseUnavailable: 0,
   /** Slowest single write, so a queue that silently took 4 minutes is visible. */
   slowestMs: 0,
+  /**
+   * Every failure's TIME WINDOW, machine-readable and separate from the human
+   * sample above. The gate needs to tell two failures apart:
+   *
+   *   - the write was in flight when the writer was SIGKILLed: its verdict is
+   *     genuinely unknown (it may have landed), and ADR-0058 says such a write
+   *     is REFUSED, never replayed. Counting it as "a write that did not land"
+   *     is how the phase-B gate used to turn red on correct behaviour.
+   *   - anything else: a real failure.
+   *
+   * The two are told apart by WHEN, not by the error text: an attempt whose
+   * window contains the kill instant was in flight at that instant.
+   */
+  failureWindows: [],
   startedAt: new Date().toISOString(),
 };
 
@@ -221,6 +235,16 @@ try {
 }
 
 const deadline = Date.now() + args.ms;
+// Phase B writes back-to-back on purpose. With the default 200ms interval and
+// a write that takes ~5ms, the client is IDLE 97% of the time, so a kill
+// almost always lands BETWEEN two writes — the takeover then happens in a
+// quiet window and proves nothing, and the write that was genuinely in flight
+// across the kill (the one case with an unknown verdict) never even occurs.
+// Measured: a 3-minute run killed the writer with 0 writes in flight and 688
+// writes "landed" — the interesting case was never exercised. A tight
+// interval makes the client busy when the writer dies, which is the whole
+// point of the phase.
+const interval = args.killPhase ? Math.min(args.interval, 10) : args.interval;
 let index = 0;
 while (Date.now() < deadline) {
   index++;
@@ -285,6 +309,8 @@ while (Date.now() < deadline) {
       // keep a bounded sample so the report explains it without growing.
       if (lock) stats.lockBubbles++;
       if (code === "writer_unavailable") stats.falseUnavailable++;
+      stats.failureWindows.push({ startedAt: started, endedAt: Date.now(), code });
+      if (stats.failureWindows.length > 1000) stats.failureWindows.shift();
       if (stats.failures.length < 40) {
         stats.failures.push({ tool, code, elapsed, message: message.slice(0, 300) });
       }
@@ -294,6 +320,8 @@ while (Date.now() < deadline) {
     // phase B this is expected exactly once per worker (the writer is being
     // killed); outside it, it is a failure.
     stats.failed++;
+    stats.failureWindows.push({ startedAt: started, endedAt: Date.now(), code: "transport" });
+    if (stats.failureWindows.length > 1000) stats.failureWindows.shift();
     if (stats.failures.length < 40) {
       stats.failures.push({ tool, code: "transport", elapsed: Date.now() - started, message: String(e.message).slice(0, 300) });
     }
@@ -302,7 +330,7 @@ while (Date.now() < deadline) {
   // --kill-phase has no branch on purpose: the gate kills the writer, and the
   // only correct behaviour here is to keep writing straight through it, so the
   // takeover happens under load instead of in a quiet window.
-  await tick(args.interval);
+  await tick(interval);
 }
 
 client.stop();
