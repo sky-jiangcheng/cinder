@@ -205,6 +205,57 @@ func NewExecutor(svc *service.Service) *Executor { return &Executor{svc: svc} }
 // store), so the writer never invents or overwrites who wrote a record — it
 // only logs the surface that asked (see Manager.handle).
 func (e *Executor) Execute(ctx context.Context, method string, raw json.RawMessage) (any, error) {
+	// A lock error means the statement never ran: SQLite refused it before
+	// touching the row, so nothing was committed and replaying the whole
+	// method cannot double-apply it. That is the one failure the writer may
+	// absorb on its own — ADR-0058 says `database is locked` must never reach
+	// the caller, and the writer is the only process allowed to write, so a
+	// lock error here is contention with a reader's snapshot or with another
+	// process's startup write, not a lost write.
+	//
+	// The wait itself is the driver's (busy_timeout), so this loop is not a
+	// spin: it only runs when the driver gave up, and it gives the other
+	// process time to finish and release before the next try.
+	var lastErr error
+	deadline := time.Now().Add(lockRetryBudget)
+	for attempt := 1; attempt <= lockRetryAttempts; attempt++ {
+		res, err := e.executeOnce(ctx, method, raw)
+		if err == nil {
+			return res, nil
+		}
+		if !errcode.IsLockContention(err) {
+			return nil, err
+		}
+		lastErr = err
+		if attempt == lockRetryAttempts || time.Now().After(deadline) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(lockRetryBackoff * time.Duration(attempt)):
+		}
+	}
+	return nil, lastErr
+}
+
+// lockRetryAttempts, lockRetryBackoff and lockRetryBudget bound the writer's
+// own retry of a lock-contended write.
+//
+// The budget is what matters: a write that failed FAST (the driver refused it
+// without waiting — the snapshot race ADR-0058's WAL note describes) is cheap
+// to replay and very likely to succeed, while a write that already sat through
+// the driver's busy_timeout was contending with a real writer and would only
+// stall again. The budget stops the second case from being paid three times.
+const (
+	lockRetryAttempts = 3
+	lockRetryBackoff  = 30 * time.Millisecond
+	lockRetryBudget   = time.Second
+)
+
+// executeOnce runs one catalogue method. The switch below is the whole
+// catalogue; Execute wraps it with the lock-contention retry.
+func (e *Executor) executeOnce(ctx context.Context, method string, raw json.RawMessage) (any, error) {
 	switch method {
 	case MethodNotesCreate:
 		var a NotesCreateArgs

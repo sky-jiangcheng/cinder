@@ -194,6 +194,13 @@ const stats = {
   /** Slowest single write, so a queue that silently took 4 minutes is visible. */
   slowestMs: 0,
   /**
+   * Total time spent in write calls, so the harness can derive the NORMAL
+   * write latency (totalMs / attempts). The backup long-hold gate compares
+   * against it: a backup that held the path for less than a few normal writes
+   * is a blip, not a long hold, and must not be counted as one.
+   */
+  totalWriteMs: 0,
+  /**
    * Every failure's TIME WINDOW, machine-readable and separate from the human
    * sample above. The gate needs to tell two failures apart:
    *
@@ -207,10 +214,61 @@ const stats = {
    * window contains the kill instant was in flight at that instant.
    */
   failureWindows: [],
+  /**
+   * Every write that took LONGGER than the normal write latency, with its time
+   * window. This is how the gate proves the BACKUP long-hold scenario was
+   * really exercised: a write that was issued while a VACUUM held the writer's
+   * only connection could not come back until the VACUUM released it, so it
+   * shows up here as a slow write whose window straddles the backup's window.
+   *
+   * Threshold is generous on purpose — a normal write takes ~5ms, so anything
+   * above a hundred milliseconds is either queued behind a backup or a genuine
+   * stall, and both are worth reporting.
+   */
+  slowWrites: [],
+  slowWriteCount: 0,
+  /**
+   * EVERY write's time window, as [startedAt, endedAt]. This is what makes the
+   * backup long-hold gate a proof instead of a guess.
+   *
+   * The snapshot file a backup produces is stamped with the moment its VACUUM
+   * finished writing. A write that was still in flight at that instant and
+   * came back after it could not have been served — the writer has ONE
+   * connection and the VACUUM was holding it. So "started before the snapshot's
+   * timestamp, ended after it" is a write that really queued behind the backup,
+   * no threshold and no window arithmetic involved.
+   *
+   * Only the two timestamps are kept: a full record per write would be an
+   * order of magnitude bigger for the same proof.
+   */
+  writeWindows: [],
   startedAt: new Date().toISOString(),
 };
 
+/**
+ * Writes slower than this are recorded with their window (see slowWrites).
+ *
+ * The floor is low on purpose: a normal write takes a few milliseconds, while
+ * a write queued behind a backup holds for as long as the backup still had
+ * lock left — tens of milliseconds on a small database, much longer on a real
+ * one. A threshold that only caught the long ones would miss exactly the
+ * writes this gate is looking for.
+ */
+const SLOW_WRITE_MS = Number(process.env.SOAK_SLOW_WRITE_MS || 20);
+
 const LOCK_TEXT = /database is locked|database table is locked|sqlite_busy/i;
+
+/**
+ * Records a write's time window. The list is capped so a long run cannot grow
+ * it without bound — the cap is far above what any run produces (the writes
+ * are ~20/s per client), and it is the gate's only input for the backup
+ * long-hold proof.
+ */
+function recordWindow(started, ended) {
+  if (stats.writeWindows.length < 500000) {
+    stats.writeWindows.push([started, ended]);
+  }
+}
 
 function classify(result) {
   const code = result.structured?.code ?? "";
@@ -299,7 +357,15 @@ while (Date.now() < deadline) {
   try {
     const result = await client.callTool(tool, toolArgs);
     const elapsed = Date.now() - started;
+    stats.totalWriteMs += elapsed;
+    recordWindow(started, Date.now());
     if (elapsed > stats.slowestMs) stats.slowestMs = elapsed;
+    if (elapsed >= SLOW_WRITE_MS) {
+      stats.slowWriteCount++;
+      if (stats.slowWrites.length < 5000) {
+        stats.slowWrites.push({ startedAt: started, endedAt: Date.now(), ms: elapsed, tool });
+      }
+    }
     if (result.ok) {
       stats.ok++;
     } else {
@@ -320,6 +386,16 @@ while (Date.now() < deadline) {
     // phase B this is expected exactly once per worker (the writer is being
     // killed); outside it, it is a failure.
     stats.failed++;
+    const elapsed = Date.now() - started;
+    stats.totalWriteMs += elapsed;
+    recordWindow(started, Date.now());
+    if (elapsed > stats.slowestMs) stats.slowestMs = elapsed;
+    if (elapsed >= SLOW_WRITE_MS) {
+      stats.slowWriteCount++;
+      if (stats.slowWrites.length < 5000) {
+        stats.slowWrites.push({ startedAt: started, endedAt: Date.now(), ms: elapsed, tool: "transport" });
+      }
+    }
     stats.failureWindows.push({ startedAt: started, endedAt: Date.now(), code: "transport" });
     if (stats.failureWindows.length > 1000) stats.failureWindows.shift();
     if (stats.failures.length < 40) {

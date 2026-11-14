@@ -73,6 +73,14 @@ now_ms() {
   fi
 }
 
+# A file's last-write time in epoch milliseconds — 0 when the file is gone.
+# Used for the backup snapshots: their timestamp is the moment the VACUUM
+# finished writing, which is the moment the writer's connection came back.
+mtime_ms() {
+  [[ -f "$1" ]] || { echo 0; return; }
+  node -e 'try{console.log(Math.round(require("node:fs").statSync(process.argv[1]).mtimeMs))}catch(e){console.log(0)}' "$1" 2>/dev/null || echo 0
+}
+
 WORK="$(mktemp -d)"
 HOME_DIR="$WORK/home"
 BIN_DIR="$WORK/bin"
@@ -200,6 +208,11 @@ done
 BACKUPS=0
 BACKUP_FAILS=0
 REAL_BACKUPS=0
+# Each backup's TIME WINDOW, so the gate can tell whether a write was actually
+# queued behind it. "A backup ran" is not the claim the contract makes; the
+# claim is "a write queued behind the backup instead of failing" — and that is
+# only proven if some write's window straddles a backup's window.
+BACKUP_WINDOWS=()
 # FORCE_BACKUPS defaults to ON, because CreateBackup is idempotent per DAY:
 # once today's snapshot exists, every later RunBackupNow returns before
 # VACUUM INTO ever runs, so the default soak never exercised the long hold the
@@ -218,6 +231,7 @@ while [[ $(date +%s) -lt $phase_a_end ]]; do
   # enough for the bounded soak database but not for a machine in trouble. The
   # call is a backup, not a write under test: a timeout here does not fail the
   # soak, and the writer keeps holding the lock until the VACUUM finishes.
+  backup_from=$(now_ms)
   if out=$(curl -sf -m 180 -X POST "http://127.0.0.1:$PORT/api/rpc" \
       -H 'Content-Type: application/json' \
       -d '{"method":"RunBackupNow","args":[]}' 2>&1); then
@@ -225,9 +239,23 @@ while [[ $(date +%s) -lt $phase_a_end ]]; do
     # The snapshot exists after the call => a real VACUUM ran (we deleted it
     # before the call). Counted so the summary shows whether the busy path was
     # actually covered instead of assuming it.
+    real=0
     if [[ "$FORCE_BACKUPS" == "1" ]] && find "$HOME_DIR" -name "repotory-$(date +%F).db" -print -quit | grep -q .; then
       REAL_BACKUPS=$(( REAL_BACKUPS + 1 ))
+      real=1
     fi
+    backup_until=$(now_ms)
+    # The snapshot's own timestamp is when its VACUUM finished writing — and
+    # that is the moment the writer's only connection came back. A write that
+    # was still in flight at that instant and came back after it could not
+    # have been served: it waited for the backup to release the connection.
+    # That is the proof the long-hold gate needs, and it needs no threshold.
+    hold_end=0
+    while IFS= read -r snap; do
+      ts=$(mtime_ms "$snap")
+      if (( ts > hold_end )); then hold_end=$ts; fi
+    done < <(find "$HOME_DIR" -name 'repotory-*.db' 2>/dev/null)
+    BACKUP_WINDOWS+=("$backup_from:$backup_until:$hold_end:$real")
   else
     # A backup that FAILS is only a problem if it fails for a lock reason; a
     # plain refusal (already taken this hour) is normal.
@@ -237,6 +265,18 @@ while [[ $(date +%s) -lt $phase_a_end ]]; do
   fi
   sleep 7
 done
+# The backup windows travel with the reports: the gate intersects them with the
+# workers' write windows to decide whether the long hold was really exercised.
+{
+  printf '['
+  sep=""
+  for w in ${BACKUP_WINDOWS[@]+"${BACKUP_WINDOWS[@]}"}; do
+    IFS=: read -r bs be bh br <<<"$w"
+    printf '%s{"start":%s,"end":%s,"holdEnd":%s,"ms":%s,"real":%s}' "$sep" "$bs" "$be" "$bh" "$(( be - bs ))" "$br"
+    sep=","
+  done
+  printf ']'
+} >"$REPORTS/backups.json"
 note "backups taken: $BACKUPS (real VACUUMs: $REAL_BACKUPS, lock-failed: $BACKUP_FAILS)"
 
 for i in $(seq 1 "$CLIENTS"); do
@@ -376,6 +416,76 @@ for f in "$REPORTS"/worker-a-*.json; do
   PHASE_A_FAILED=$(( PHASE_A_FAILED + fl ))
 done
 
+# The backup long-hold scenario, ASSERTED instead of assumed.
+#
+# "A backup ran" is not the claim the contract makes. The claim is "a write
+# QUEUED behind the backup instead of failing".
+#
+# The long-hold gate used to be a threshold argument: a write was "queued
+# behind a backup" if its window overlapped the backup's window and it was slow
+# enough. That was a guess — the window includes the tail (verify, rotate, the
+# HTTP round trip) and the "slow enough" bar was picked from one run's numbers,
+# so it both missed the writes it was looking for and could turn red on a
+# correct run.
+#
+# The proof needs no threshold. The backup's snapshot file is stamped with the
+# moment its VACUUM finished writing, and that is the moment the writer's one
+# connection came back. A write that was still in flight at that instant and
+# came back after it could not have been served — it waited. So:
+#
+#   queued behind a backup  <=>  started before the snapshot's timestamp
+#                                AND ended after it
+#
+# The only number left to calibrate is what counts as a hold worth reporting:
+# a hold that outlasted a normal write of this run. LONG_BACKUP_FLOOR_MS is
+# the floor, and the run's own mean write latency raises it when the machine
+# is slower than that.
+LONG_BACKUP_FLOOR_MS="${LONG_BACKUP_FLOOR_MS:-10}"
+read -r BACKUP_HOLD_MS BACKUP_LONGEST_MS LONG_HOLDS QUEUED_WRITES SLOW_WRITES MEAN_WRITE_MS LONG_BACKUP_MS LONGEST_WAIT_MS <<<"$(node -e '
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const dir = process.argv[1];
+  const floor = Number(process.argv[2]);
+  const backups = JSON.parse(fs.readFileSync(path.join(dir, "backups.json"), "utf8"));
+  const files = fs.readdirSync(dir).filter(f => /^worker-a-.*\.json$/.test(f));
+  const windows = [];
+  let totalMs = 0, attempts = 0, slow = 0;
+  for (const f of files) {
+    const s = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+    for (const w of (s.writeWindows ?? [])) windows.push(w);
+    totalMs += s.totalWriteMs ?? 0;
+    attempts += s.attempts ?? 0;
+    slow += s.slowWriteCount ?? 0;
+  }
+  const mean = attempts > 0 ? totalMs / attempts : 0;
+  const threshold = Math.max(floor, Math.round(mean));
+  let queued = 0, holds = 0, longestWait = 0, totalHold = 0, longestHold = 0;
+  for (const b of backups) {
+    if (!b.holdEnd) continue;
+    // The hold itself: from the request going out to the VACUUM finishing.
+    const hold = b.holdEnd - b.start;
+    totalHold += hold;
+    if (hold > longestHold) longestHold = hold;
+    let caught = 0;
+    for (const w of windows) {
+      if (w[0] <= b.holdEnd && w[1] >= b.holdEnd) {
+        caught++;
+        const wait = b.holdEnd - w[0];
+        if (wait > longestWait) longestWait = wait;
+      }
+    }
+    queued += caught;
+    if (caught > 0) holds++;
+  }
+  console.log([totalHold, longestHold, holds, queued, slow,
+               Math.round(mean), threshold, longestWait].join(" "));
+' "$REPORTS" "$LONG_BACKUP_FLOOR_MS")"
+if [[ -z "${BACKUP_HOLD_MS:-}" ]]; then
+  echo "FAIL: could not read the backup windows back from the reports — the long-hold check did not run" >&2
+  BACKUP_HOLD_MS=0; BACKUP_LONGEST_MS=0; LONG_HOLDS=0; QUEUED_WRITES=0
+  SLOW_WRITES=0; MEAN_WRITE_MS=0; LONG_BACKUP_MS=0; LONGEST_WAIT_MS=0
+fi
+
 note "duration:               $(( TOTAL_SECONDS / 60 ))m (phase A ${PHASE_A_SECONDS}s / phase B ${PHASE_B_SECONDS}s)"
 note "write attempts:         $TOTAL_ATTEMPTS"
 note "succeeded:              $TOTAL_OK"
@@ -383,6 +493,7 @@ note "failed:                 $TOTAL_FAILED"
 note "\"database is locked\" reaching the caller: $LOCK_BUBBLES   <- must be 0"
 note "slowest single write:   ${SLOWEST}ms"
 note "backups taken:          $BACKUPS (real VACUUMs: $REAL_BACKUPS)"
+note "backup long hold:       ${BACKUP_HOLD_MS}ms total, longest ${BACKUP_LONGEST_MS}ms, ${LONG_HOLDS} hold(s) caught a write   <- ${QUEUED_WRITES} write(s) proven queued behind one (longest wait ${LONGEST_WAIT_MS}ms; a hold counts as long at >= ${LONG_BACKUP_MS}ms, a normal write takes ${MEAN_WRITE_MS}ms; ${SLOW_WRITES} slow)"
 note "writes across the SIGKILL: ${PHASE_B_OK} landed + ${PHASE_B_AMBIGUOUS} refused as ambiguous / ${PHASE_B_ATTEMPTS}   <- every attempt must be accounted for"
 
 FAILED=0
@@ -408,6 +519,18 @@ if (( TOTAL_ATTEMPTS == 0 )); then
 fi
 if (( PHASE_A_VIOLATION == 1 )); then
   echo "FAIL: a phase-A worker produced no report" >&2
+  FAILED=1
+fi
+if (( REAL_BACKUPS == 0 )); then
+  echo "FAIL: no real VACUUM ran — the backup long-hold scenario was never created, so the busy path stayed untested" >&2
+  FAILED=1
+fi
+if (( QUEUED_WRITES == 0 )); then
+  echo "FAIL: ${BACKUPS} backup(s) ran (${REAL_BACKUPS} real) but no write was ever proven to have queued behind one — the backup is no longer holding the connection the writes need" >&2
+  FAILED=1
+fi
+if (( QUEUED_WRITES >= 1 && LONGEST_WAIT_MS < LONG_BACKUP_MS )); then
+  echo "FAIL: the longest proven wait behind a backup was ${LONGEST_WAIT_MS}ms, below the ${LONG_BACKUP_MS}ms a hold has to reach to matter — the busy path was touched but not exercised" >&2
   FAILED=1
 fi
 
