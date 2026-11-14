@@ -144,6 +144,28 @@
 
   **修法：判据不动，只改取证次数**——备份节奏 7s → **1s**（`BACKUP_INTERVAL_S`），一轮 ~92 次取证，单次 ~7% 的命中概率不变，但 **19 次的 25% 假红降到 92 次的 4e-7**。复跑那一轮：**9 次持锁窗口抓到写、28 笔写被证明排在备份后面**（最长等待 14ms），门全绿。门里「长持锁」的门槛（10ms 与本轮平均写时取大）与持锁时长（约平均写时的 4 倍）**一起随机器快慢缩放**，慢机器上这条门仍然够得着——本轮改的只是取证次数，不是量纲。
 
+- **补记（2026-11-14，第五轮）：TODO 13.8 落地——文件级只读（`mode=ro`）、接管改为「另开可写句柄」、读者不建库**——13.7 第四轮补记列下的四条残留缺口里，有三条是**同一个病根**：只读是**连接级**的（`_query_only` 是个 pragma），而「谁拥有这个文件」是**文件级**的事。13.8 把只读换成 SQLite URI 的 `mode=ro`（**文件级**），代价是它**不可运行时提升**——SQLite 以只读方式打开文件，连接活着期间不能升级（实测 `PRAGMA query_only=OFF` 对它无效），所以「接管后就地变可写」这个做法**作废**，改为**另开可写句柄**。第四条缺口（`Ensure*` 自愈推迟到写者在场）在 13.8 里被**显式化并钉门**。
+
+  **做法**：
+  - **读者开库不再创建缺失的文件**——读者的 DSN 改成 `file:<绝对路径>?mode=ro&...`：`mode` **只在 `file:` 前缀的 DSN 里生效**（普通路径的查询串会被驱动剥掉，这是 13.7 第三轮补记查证过的驱动行为），而 `mode=ro` 的文件级只读顺带带来「缺文件即 `SQLITE_CANTOPEN`、**不创建**」。桌面 client 角色用 `mode=rw`：**可写但不创建**（它的可写是 human-gate 写逼出来的，不是「它可以建库」）。
+  - **有界等写者建库**——读者开库时若文件还不存在，等写者建库（10s 预算 / 100ms 间隔），超时给**可行动**错误，并把两种情形分开说：「还没有写者建过这个库（起一个写者进程：Cinder Desktop 或 agent）」与「写者还在建 schema 或卡住了」。
+  - **接管改为另开可写句柄**——`internal/db` 改用**按角色切 DSN 的 connector**（`sqlite.NewConnector` → **包级 driver**，注册在它上面的函数 / 排序规则 / connection hook 全部照旧生效，不引入行为分叉）。**`*sql.DB` 的身份不变**：`internal/service`（397 处 `s.db`）、plugin runtime、review runner **零改动**；变的是**连接背后的 DSN**——只读阶段 `mode=ro`，接管后 `mode=rw`。
+  - **旧连接必须作废**——文件级只读的连接在接管后依然写不进去，所以池里的旧连接要丢掉，靠驱动接口的两条正规途径：`driver.Validator.IsValid`（**归还**时判失效 → 连接被关闭、不入池）与 `driver.SessionResetter.ResetSession`（**复用**时返 `driver.ErrBadConn` → `database/sql` 自动重试换新连接）。因此接管后的第一次写要付一次重连，**调用方无感**。
+  - **自愈语义显式化**——`Ensure*`（`createTables` / `upgradeSchema` / 8 个 `Ensure*` 重放 / 迁移盖章 / `RebuildWikiFTS` / `insertDefaults`）**只在写者手里跑**，读者一个都不做；**接管即继承**（`becomeWriter` 在 `!SchemaReady` 时补跑一遍）。
+
+  **三道门（缺一不可）**：
+  - **门① 读者开库不创建缺失的文件**——`internal/db/reader_test.go`：`TestReaderDoesNotCreateTheMissingDatabase`（读者开一个不存在的库 → 失败 → **文件仍不存在** → 错误里说得出「起一个写者」）；`TestClientDoesNotCreateTheMissingDatabase`（桌面 client 同样不创建）。
+  - **门② 文件级只读**——`TestReaderIsReadOnlyAtTheFileLevel`：**把 pragma 关掉之后仍然写不进去**（这正是与 13.7 的区别：13.7 的 `_query_only` 会被 `PRAGMA query_only=OFF` 关掉）；`TestPromoteToWriterMakesTheReaderWritable`（接管后能写，且**写真的落库**）；`TestPromotedReaderStaysWritableAfterAConnectionIsReplaced`（接管后**换连接**仍然可写）。
+  - **门③ 读者不修库**——`TestReaderDoesNotRepairTheSchema`（读者读完，被破坏的派生层**仍然缺**）；写者侧的 `TestEnsureSchemaRestoresTheDerivedLayers` 与客户端侧的 `TestOpenExistingDoesNotTouchTheSchema` 保持不变。
+
+  **代价（如实记）**：接管不再是「就地变可写」，**第一次写要付一次重连**；读者启动时若写者还没建库，要**有界等**（10s）而不是立刻可用；桌面 client 句柄仍是**可写**的（human-gate 写没有可转发的路径）——13.7 第三轮补记里那条「唯一例外」依旧成立。
+
+  **实测（3 分钟 soak，真二进制、隔离 HOME、4 客户端并发写 + 88 次真 `VACUUM` 备份 + 阶段 B 中途 `SIGKILL`）**：11042 次写、11039 成功、失败 **3** 次（正是 kill 瞬间在飞的那三次，被明确拒绝、**没被重放**）；`database is locked` 到调用方 **0** 次；**门③（新进程启动后 1 秒内）锁错误 0 次**（工具错误与子进程自己日志两种形态都算）；子进程日志里的锁错误 **0** 次；**跨 SIGKILL 8377 落地 + 3 明确拒绝 = 8380 全额有账**——这一条正是 13.8 的关键处：接管的客户端原本握着**文件级只读**的句柄，靠「另开可写句柄」真的写下去了；阶段 A 对活着的写者报 `writer_unavailable` **0** 次；「备份长持锁」门：88 次真 `VACUUM`、**13 次持锁窗口抓到写、26 笔写被证明排在备份后面**（最长等待 30ms，门槛 15ms）。
+
+  **另一轮红过一次，如实记**：第一轮 3 分钟 soak 判红「最长等待 14ms 低于门槛 20ms」，而那一轮我**同时**在跑 `go test -race`（`internal/db` 131s、`internal/writerapi` 35s）——`-race` 把本轮平均写延迟从 15ms 抬到 **20ms**，而那道门的门槛正是「10ms 与本轮平均写时取大」，门槛因此高过实测到的最长等待。**判据没动、机制没坏**（那一轮 `database is locked` 到调用方 0 次、跨 SIGKILL 全额有账、门③ 0 次），是**机器被我自己压着**；空载复跑即绿（数字见上）。**记下来是因为它换了教训**：这道门的门槛**随本轮平均写延迟缩放**，所以**soak 必须在空载机器上跑**，否则门槛会被自己的负载抬上去。
+
+  **不动**：schema / MCP 工具面 / `CoreVersion`（2.0.0）/ 标识层（`repotory_*`、二进制名、数据目录）一律不动。
+
 - `repotory_scan` 这类分钟级写现在在写者进程里排队，**转发端的取消会传导**（ctx 过 HTTP），但两个 agent 同时 scan 时后者等前者，这是契约的本意，不是回归。
 - 桌面从「唯一写者」变为「优先写者」：agent 自举期间桌面没在跑 backup ticker，快照密度短暂下降；桌面一启动即接管，窗口有界。
 - **桌面的 UI 写面本轮没有接入目录**：它 normally 就是写者，所以没有区别；只有「桌面启动时 agent 正忙、接管被拒」这个窗口里，桌面的绑定写与 agent 写者会并发——退化成契约前的旧行为（busy_timeout 兜底），不是新增的洞，但也不能声称已闭环。收敛方向与 `cmd/server` 同批：绑定层在 `!IsWriter()` 时把写转给持锁者。

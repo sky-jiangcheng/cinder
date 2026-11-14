@@ -188,7 +188,7 @@ func (m *Manager) becomeWriter(dir string) error {
 	// the role makes this process the writer, so the handle has to be able to
 	// write — the election lock, not the handle, decides who writes.
 	if m.opts.DB != nil {
-		promoted, err := db.PromoteToWriter(m.opts.DB, m.opts.DBPath)
+		promoted, err := db.PromoteToWriter(m.opts.DB)
 		if err != nil {
 			return fmt.Errorf("writer: prepare the database for the writer role: %w", err)
 		}
