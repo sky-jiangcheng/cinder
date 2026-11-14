@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [2.38.1] - 2026-11-14
+
+### 修复
+- **写契约 soak 的阶段 B 判据改回 ADR-0058 自己的措辞：「落地 + 明确拒绝」才算数，不再把正确行为判成红（TODO 13.1 残留②，2026-11-14）**：旧判据要求「跨 `SIGKILL` 的写**全部落地**」，而 ADR-0058 自己写的是「写者重启后排队中的写请求**要么被重放要么被明确拒绝**，不允许静默丢弃」——kill 瞬间**正在飞行中**的那次写，结局按构造就是未知的，而本契约规定它**被拒绝、绝不重放**（非幂等写重放一次比拒绝一次更糟），旧判据因此把**正确行为判成红**（实测 471/472，其余写全部落地）。**改动六处**：① 判据改为「**落地 + 明确拒绝（歧义）= 尝试总数**」，并给歧义数设上限（≤ 客户端数：每个客户端同一时刻只有一次调用在飞，超过就说明失败另有原因）；② 歧义按「**失败的时间窗**」与「**kill 区间**」求交集判定——客户端是靠**在飞请求回 EOF** 才知道写者死了，那个 EOF **必然晚于 kill**，用单点判会把一次正确的拒绝算成丢写（worker 记录每次失败的 `failureWindows`，kill 时刻改用 bash 内建 `${EPOCHREALTIME}` 取前后两读，不再 fork `date` 带来的毫秒误差）；③ 阶段 B 改成 **10ms 连续写**——原来 200ms 间隔下客户端 97% 时间空闲，kill 基本落在两次写之间，**结局未知的那一次根本没发生过**，阶段 B 什么也没证明；④ 阶段 A 补一道**通用失败门**（那一段写者全程活着，**任何**失败都是红；此前只门禁锁冒泡与 `writer_unavailable` 两种症状，别的失败形状被算进总数却从不门禁）；⑤ 备份默认 `FORCE_BACKUPS=1`——`CreateBackup` **按日幂等**，默认配置下 `VACUUM INTO` 一次都没真跑过（实测 247 次调用只真空 1 次），现在每次调用前删掉当天快照，摘要报的是「**真实 VACUUM 次数**」而不是「调用次数」，「备份长持锁」这个场景才算真被造出来；⑥ 摘要行补上「跨 SIGKILL 的写」的三分账（落地 / 明确拒绝 / 总数）。**验证（30 分钟、真二进制、隔离 HOME、4 客户端并发写 + 245 次真 `VACUUM` + 阶段 B 中途 `SIGKILL`）**：49533 次写、49531 成功、失败 **2** 次（正是 kill 瞬间在飞的那两次，被明确拒绝、**没被重放**）、`database is locked` 到调用方 **0** 次、阶段 A（写者全程活着）对活着的写者报 `writer_unavailable` **0** 次、跨 SIGKILL **16056 落地 + 2 明确拒绝 = 16058 全额有账**、最慢单写 1363ms。**旧判据在这一轮会红**（16056 ≠ 16058）——它把两次正确的拒绝算成了丢写。
+
+### 变更
+- **dev 依赖链最后一个漏洞项结清：`npm audit` 归零（TODO 3.3，2026-11-14）**：`eslint@10.15.0` 已把 `dependencies.minimatch` 放到 `^11.0.5`（原 10.14.0 是 `^10.2.6`），TODO 3.3 记的触发条件成立。但**只升 eslint 不够**——`@typescript-eslint/typescript-estree@8.72.x` 仍声明 `minimatch: ^10.2.2`，audit 仍报 **8 项 moderate**。做法：`eslint` 升 `^10.15.0`；`web/package.json` 加**窄口径** `overrides`（只顶住 `@typescript-eslint/typescript-estree` → `minimatch: ^11.0.8`，**不做全局覆盖**——上游 `typescript-estree` 的 alpha 才切到 `^11.0.1`，稳定版尚未跟进）。**结果**：`npm audit` **0 项**（info/low/moderate/high/critical 全 0），依赖树里 minimatch **只剩 11.0.8 一份**；`npm ci`（CI 实际用的命令）复现同一棵树。**代价如实记**：override 是**绕过上游声明范围**的强制版本覆盖——`typescript-estree` 自己没说过它兼容 11；实测兼容（它只用 `minimatch(filePath, pattern, {dot:true})` 这一个签名，v11 保留同名导出且语义兼容），三道门全绿：`npm run lint` 0 告警、`npm test` **50 文件 / 423 用例全过**、`npm run build` 成功。**影响面不变**：只打本地构建 / lint / 测试链，**不随桌面应用与两个 IDE 插件分发**；上游跟进后可删掉这条 override（删了要再跑一次 audit + 三道门）。
+
+### 文档
+- **ADR-0058 中英双份订正：上一条「未解决，如实记」已结清，并把 soak 判据与 ADR 的关系写清（2026-11-14）**：ADR 里那条「三次 soak 都还有 200–1100 次 `writer_unavailable` 误报……下一步：给 `forwardOnce` 的各失败出口加计数」在 2.38.0 之后已经不成立（真因是**通道自己泄漏连接**，修法是包级共享客户端 `channelClient`）。ADR 补记两件事：① 误报已结清及其根因、修法与回归门；② **soak 的判据改成 ADR 自己的措辞**——这条契约对「跨 `SIGKILL` 的写」的要求是「要么被重放要么被明确拒绝」，而旧脚本的「全部落地」比 ADR **更严**，把 ADR 允许的拒绝当成了丢写。中英双份同批改（`docs-mirror` 门覆盖）。
+
 ## [2.38.0] - 2026-11-14
 
 ### 修复
@@ -1103,7 +1114,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.38.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.38.1...HEAD
+[2.38.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.38.0...v2.38.1
 [2.38.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.37.0...v2.38.0
 [2.37.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.36.0...v2.37.0
 [2.36.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.35.6...v2.36.0
