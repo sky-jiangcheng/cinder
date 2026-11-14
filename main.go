@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"log"
 	"net/http"
@@ -42,11 +43,46 @@ func main() {
 		log.Printf("WARNING: 存储安全风险 [%s]: %s (路径: %s)", safety.RiskType, safety.Warning, safety.Path)
 	}
 
-	// Open database
-	database, err := db.InitDB(dbPath)
+	// The single-writer contract (ADR-0058 / TODO 13.1). The desktop claims the
+	// role: it is the surface a human is looking at, it hosts the backup / sync
+	// / compile tickers that write the most, and Wails enforces it as a
+	// single-instance app. If an agent process self-elected as writer while the
+	// app was closed, this startup asks it to yield and takes over — bounded,
+	// and a busy writer is left alone (the desktop then forwards, which is a
+	// supported state, not a failure).
+	//
+	// The election comes BEFORE the database is opened (TODO 13.7): the winner
+	// opens the file for writing and owns the schema; a desktop that stayed a
+	// client opens it without touching the schema.
+	writerOpts := writerapi.Options{
+		DBPath:           dbPath,
+		Process:          "Cinder Desktop",
+		Surface:          service.AISurfaceDesktop,
+		CoreVersion:      version.CoreVersion,
+		SelfElectAllowed: true,
+		AssertWriter:     true,
+	}
+	election, err := writerapi.Elect(writerOpts)
+	if err != nil {
+		log.Fatalf("write contract: %v", err)
+	}
+	var database *sql.DB
+	if election.Won() {
+		database, err = db.InitDB(dbPath)
+	} else {
+		// Client role: the human-gate writes are the desktop's own acts and
+		// have no catalogue method to forward to, so the handle stays writable —
+		// but the schema belongs to the writer, so this path creates nothing.
+		database, err = db.OpenExisting(dbPath)
+	}
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
+	writerOpts.DB = database
+	// The winner's open path did the schema work (InitDB); a client must not
+	// do it, and inherits the duty only if it takes the role (ADR-0058).
+	writerOpts.SchemaReady = election.Won()
+	writerOpts.SchemaVersion = writerapi.CurrentSchemaVersion(database)
 
 	// Detect git user
 	gitUser := platform.GetGitUserName()
@@ -59,22 +95,7 @@ func main() {
 	// This process IS the desktop surface (ADR-0030): every model call it
 	// makes was started by a human in the app, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceDesktop)
-	// The single-writer contract (ADR-0058 / TODO 13.1). The desktop claims the
-	// role: it is the surface a human is looking at, it hosts the backup / sync
-	// / compile tickers that write the most, and Wails enforces it as a
-	// single-instance app. If an agent process self-elected as writer while the
-	// app was closed, this startup asks it to yield and takes over — bounded,
-	// and a busy writer is left alone (the desktop then forwards, which is a
-	// supported state, not a failure).
-	writers, err := writerapi.New(svc, writerapi.Options{
-		DBPath:           dbPath,
-		Process:          "Cinder Desktop",
-		Surface:          service.AISurfaceDesktop,
-		CoreVersion:      version.CoreVersion,
-		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
-		SelfElectAllowed: true,
-		AssertWriter:     true,
-	})
+	writers, err := writerapi.NewWithElection(svc, writerOpts, election)
 	if err != nil {
 		log.Fatalf("write contract: %v", err)
 	}

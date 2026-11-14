@@ -22,6 +22,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -51,28 +52,46 @@ func main() {
 	if path == "" {
 		path = platform.GetDbPath()
 	}
-	database, err := db.InitDB(path)
-	if err != nil {
-		recordPending(cwd, fmt.Sprintf("open db: %v", err))
-		log.Fatalf("repotory-capture: open db: %v", err)
-	}
-	defer database.Close()
-
-	svc := service.New(database, "claude-hook")
 	// The hook writes a handoff note, so it is inside the single-writer
 	// contract (ADR-0058): it usually runs while an IDE holds the role, and a
 	// direct INSERT there would either contend with the writer's lock or — with
 	// the hook's `|| true` — vanish without a trace, which is the failure mode
 	// that let handoffs idle for two weeks. Self-election is allowed so the
 	// hook still captures on a machine where no Cinder is running.
-	writers, err := writerapi.New(svc, writerapi.Options{
+	//
+	// The election comes BEFORE the database is opened (TODO 13.7): a hook that
+	// is not the writer opens the file read-only and writes nothing.
+	writerOpts := writerapi.Options{
 		DBPath:           path,
 		Process:          "repotory-capture",
 		Surface:          service.AISurfaceMCP,
 		CoreVersion:      version.CoreVersion,
-		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
 		SelfElectAllowed: true,
-	})
+	}
+	election, err := writerapi.Elect(writerOpts)
+	if err != nil {
+		recordPending(cwd, fmt.Sprintf("write contract: %v", err))
+		log.Fatalf("repotory-capture: write contract: %v", err)
+	}
+	var database *sql.DB
+	if election.Won() {
+		database, err = db.InitDB(path)
+	} else {
+		database, err = db.OpenReader(path)
+	}
+	if err != nil {
+		recordPending(cwd, fmt.Sprintf("open db: %v", err))
+		log.Fatalf("repotory-capture: open db: %v", err)
+	}
+	defer database.Close()
+	writerOpts.DB = database
+	// The winner's open path did the schema work (InitDB); a client must not
+	// do it, and inherits the duty only if it takes the role (ADR-0058).
+	writerOpts.SchemaReady = election.Won()
+	writerOpts.SchemaVersion = writerapi.CurrentSchemaVersion(database)
+
+	svc := service.New(database, "claude-hook")
+	writers, err := writerapi.NewWithElection(svc, writerOpts, election)
 	if err != nil {
 		recordPending(cwd, fmt.Sprintf("write contract: %v", err))
 		log.Fatalf("repotory-capture: write contract: %v", err)

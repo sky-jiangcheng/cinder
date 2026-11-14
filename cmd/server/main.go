@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"log"
 	"net/http"
@@ -78,31 +79,50 @@ func main() {
 	log.Printf("Cinder headless server %s starting on 127.0.0.1:%s (memory-layer contract %s)",
 		version.Version, *port, version.CoreVersion)
 
-	database, err := db.OpenWithRetry(platform.GetDbPath())
+	// The single-writer contract (ADR-0058 / TODO 13.6, refined by TODO 13.7).
+	// The server elects when no other Cinder writes (a standalone headless
+	// install keeps every capability it has today, tickers included) and
+	// forwards when a desktop or an MCP holds the role — it never displaces a
+	// writer that is already serving (AssertWriter stays false). Write-classified
+	// bindings route through the contract via App; the human-gate writes refuse
+	// from a client role with an error naming the desktop.
+	//
+	// The election comes BEFORE the database is opened: whether this process may
+	// write to the file is decided by the lock, and a client opens the file
+	// read-only and writes nothing at all (TODO 13.7).
+	dbPath := platform.GetDbPath()
+	writerOpts := writerapi.Options{
+		DBPath:           dbPath,
+		Process:          "cinder-server",
+		Surface:          service.AISurfaceHTTP,
+		CoreVersion:      version.CoreVersion,
+		SelfElectAllowed: true,
+	}
+	election, err := writerapi.Elect(writerOpts)
+	if err != nil {
+		log.Fatalf("write contract: %v", err)
+	}
+	var database *sql.DB
+	if election.Won() {
+		database, err = db.OpenWithRetry(dbPath)
+	} else {
+		database, err = db.OpenReader(dbPath)
+	}
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
+	writerOpts.DB = database
+	// The winner's open path did the schema work (InitDB); a client must not
+	// do it, and inherits the duty only if it takes the role (ADR-0058).
+	writerOpts.SchemaReady = election.Won()
+	writerOpts.SchemaVersion = writerapi.CurrentSchemaVersion(database)
 
 	gitUser := platform.GetGitUserName()
 	svc := service.New(database, gitUser)
 	// This process IS the HTTP surface (ADR-0030): every model call it makes
 	// arrives over the HTTP / JSON-RPC API, and the audit row says so.
 	svc.SetAuditSurface(service.AISurfaceHTTP)
-	// The single-writer contract (ADR-0058 / TODO 13.6). The server elects
-	// when no other Cinder writes (a standalone headless install keeps every
-	// capability it has today, tickers included) and forwards when a desktop
-	// or an MCP holds the role — it never displaces a writer that is already
-	// serving (AssertWriter stays false). Write-classified bindings route
-	// through the contract via App; the human-gate writes refuse from a
-	// client role with an error naming the desktop.
-	writers, err := writerapi.New(svc, writerapi.Options{
-		DBPath:           platform.GetDbPath(),
-		Process:          "cinder-server",
-		Surface:          service.AISurfaceHTTP,
-		CoreVersion:      version.CoreVersion,
-		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
-		SelfElectAllowed: true,
-	})
+	writers, err := writerapi.NewWithElection(svc, writerOpts, election)
 	if err != nil {
 		log.Fatalf("write contract: %v", err)
 	}

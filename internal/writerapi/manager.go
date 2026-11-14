@@ -2,6 +2,7 @@ package writerapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +45,15 @@ type Options struct {
 	// DBPath is the knowledge base this process serves. The election files live
 	// beside it, so "same database" and "same writer" are one statement.
 	DBPath string
+	// DB is the open handle, when the entry point opened the database itself.
+	// The writer role needs it: a client opens the database read-only, and
+	// taking the role makes the handle writable again (ADR-0058, TODO 13.7).
+	DB *sql.DB
+	// SchemaReady says the schema work (tables, migrations, the FTS rebuild)
+	// has already been done for this handle. The writer's own open path does
+	// it; a client that takes the role does it then — the schema belongs to
+	// the writer, and a writer that took over inherits that duty.
+	SchemaReady bool
 	// Process is the binary name, recorded in the endpoint file so a stale
 	// publication can be blamed on something ("cinder-mcp" vs "Cinder Desktop").
 	Process string
@@ -110,7 +120,21 @@ const roleDirect = 99
 // New elects, and if this process wins, starts serving the channel. It never
 // blocks for long: a busy machine must not stall an agent's startup, which is
 // why TryLock is non-blocking and the takeover budget is bounded.
+//
+// Entry points that open the database themselves should call Elect first and
+// then NewWithElection: the open path writes to the database, and only the
+// writer may do that (ADR-0058, TODO 13.7).
 func New(svc *service.Service, opts Options) (*Manager, error) {
+	election, err := Elect(opts)
+	if err != nil {
+		return nil, err
+	}
+	return NewWithElection(svc, opts, election)
+}
+
+// NewWithElection adopts an election that was already taken, and starts
+// serving the channel if this process won it.
+func NewWithElection(svc *service.Service, opts Options, election *Election) (*Manager, error) {
 	if svc == nil {
 		return nil, errors.New("writerapi: New needs a Service")
 	}
@@ -121,85 +145,24 @@ func New(svc *service.Service, opts Options) (*Manager, error) {
 		opts.Surface = service.AISurfaceUnknown
 	}
 	m := &Manager{opts: opts, exec: NewExecutor(svc)}
-	if err := m.elect(); err != nil {
-		return nil, err
+	if election != nil && election.Won() {
+		m.mu.Lock()
+		m.lock = election.lock
+		m.mu.Unlock()
+		if err := m.becomeWriter(election.Dir()); err != nil {
+			return nil, err
+		}
+		return m, nil
 	}
+	m.setRole(roleClient)
+	dir := writer.DirOf(m.opts.DBPath)
+	log.Printf("write path: %s forwards its writes to the Cinder writer holding %s (ADR-0058)",
+		m.opts.Process, dir)
 	return m, nil
 }
 
-// elect takes the lock, or records that we are a client. A desktop additionally
-// tries to preempt an agent writer before settling for that.
-func (m *Manager) elect() error {
-	dir := writer.DirOf(m.opts.DBPath)
-	lock, err := m.tryElect(dir)
-	switch {
-	case err == nil:
-		m.mu.Lock()
-		m.lock = lock
-		m.mu.Unlock()
-		return m.becomeWriter(dir)
-	case errors.Is(err, writer.ErrLockedByAnotherProcess):
-		if m.opts.AssertWriter && m.preempt(dir) {
-			return nil
-		}
-		m.setRole(roleClient)
-		log.Printf("write path: %s forwards its writes to the Cinder writer holding %s (ADR-0058)",
-			m.opts.Process, dir)
-		return nil
-	default:
-		// The lock file could not be created: the data directory is unusable,
-		// which is the same diagnosis every later DB write would report.
-		return fmt.Errorf("writer: take election lock in %s: %w", dir, err)
-	}
-}
-
-// preempt asks a self-elected agent writer to yield and then retries the lock.
-//
-// Bounded and best-effort on purpose. If the agent is mid-scan the request is
-// refused and the desktop keeps running as a client: the single-writer contract
-// still holds, and "a human opened the app, so abandon the agent's long job"
-// would be the worse product. A desktop that cannot take over is not a failure
-// to report to the user beyond one log line.
-func (m *Manager) preempt(dir string) bool {
-	for attempt := 0; attempt < 3; attempt++ {
-		ep, err := writer.ReadEndpoint(dir)
-		if err != nil {
-			return false
-		}
-		if err := m.askYield(ep); err != nil {
-			log.Printf("write path: Cinder Desktop asked %s to yield and was refused: %v", ep.Process, err)
-		}
-		// Wait on the lock, not on the endpoint file: the lock is the truth, and
-		// the writer unpublishes before it closes.
-		for tick := 0; tick < 25; tick++ {
-			lock, err := m.tryElect(dir)
-			if err == nil {
-				m.mu.Lock()
-				m.lock = lock
-				m.mu.Unlock()
-				if err := m.becomeWriter(dir); err != nil {
-					log.Printf("write path: took the writer role but could not serve the channel: %v", err)
-					_ = m.lock.Close()
-					m.mu.Lock()
-					m.lock = nil
-					m.mu.Unlock()
-					m.setRole(roleClient)
-					return false
-				}
-				log.Printf("write path: Cinder Desktop took the writer role from %s (pid %d)", ep.Process, ep.PID)
-				return true
-			}
-			if !errors.Is(err, writer.ErrLockedByAnotherProcess) {
-				return false
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
-	}
-	log.Printf("write path: the current writer is busy, so Cinder Desktop keeps forwarding (ADR-0058)")
-	return false
-}
-
-func (m *Manager) askYield(ep writer.Endpoint) error {
+// askYield asks a writer to hand the role over.
+func askYield(ep writer.Endpoint) error {
 	payload, err := writer.MarshalRequest(writer.Request{Method: MethodYield})
 	if err != nil {
 		return err
@@ -221,6 +184,28 @@ func (m *Manager) askYield(ep writer.Endpoint) error {
 
 // becomeWriter starts the channel and flips this process into the writer role.
 func (m *Manager) becomeWriter(dir string) error {
+	// A client opened the database read-only (ADR-0058, TODO 13.7). Taking
+	// the role makes this process the writer, so the handle has to be able to
+	// write — the election lock, not the handle, decides who writes.
+	if m.opts.DB != nil {
+		promoted, err := db.PromoteToWriter(m.opts.DB, m.opts.DBPath)
+		if err != nil {
+			return fmt.Errorf("writer: prepare the database for the writer role: %w", err)
+		}
+		if promoted {
+			log.Printf("write path: %s took the writer role and reopened its database for writing (ADR-0058)",
+				m.opts.Process)
+		}
+		// The schema belongs to the writer. A writer that took over inherits
+		// that duty: the previous writer may have died in the middle of a
+		// migration, and the self-healing layers have to be re-asserted.
+		if !m.opts.SchemaReady {
+			if err := db.EnsureSchema(m.opts.DB); err != nil {
+				return fmt.Errorf("writer: take over the schema: %w", err)
+			}
+			m.opts.SchemaReady = true
+		}
+	}
 	srv, err := writer.Serve(writer.ListenSpec{
 		Dir:       dir,
 		CoreVer:   m.opts.CoreVersion,
@@ -696,13 +681,10 @@ func (m *Manager) reelect(failedAddr string) error {
 // tryElect takes the lock only if this process is allowed to become the
 // writer; otherwise the lock simply stays with whoever holds it.
 func (m *Manager) tryElect(dir string) (*writer.Lock, error) {
-	if !m.opts.SelfElectAllowed {
-		return nil, writer.ErrLockedByAnotherProcess
-	}
 	if m.holdsLock() {
 		return nil, writer.ErrLockedByAnotherProcess
 	}
-	return writer.TryLock(dir)
+	return tryElect(dir, m.opts.SelfElectAllowed)
 }
 
 func (m *Manager) holdsLock() bool {

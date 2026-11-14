@@ -69,11 +69,15 @@ class McpClient {
     this.nextId = 1;
     this.pending = new Map();
     this.buffer = "";
+    /** @type {{t: number, line: string}[]} — timestamped, so the gate can ask WHEN. */
     this.stderr = [];
+    /** The instant the child was spawned: the origin of the startup window. */
+    this.spawnedAtMs = 0;
   }
 
   start() {
     return new Promise((resolve, reject) => {
+      this.spawnedAtMs = Date.now();
       this.proc = spawn(this.command, [], {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, ...this.env },
@@ -85,9 +89,13 @@ class McpClient {
       // Ring buffer, not the first 50 lines: the diagnostic lines that explain a
       // failure arrive at the END of a long run, which is exactly what a
       // keep-the-first-50 cap would drop.
+      //
+      // Each line carries the instant it arrived: gate ③ asks whether a NEW
+      // process hit "database is locked" within a second of starting, and a
+      // line without a timestamp cannot answer that.
       createInterface({ input: this.proc.stderr }).on("line", line => {
         if (this.stderr.length >= 500) this.stderr.shift();
-        this.stderr.push(line);
+        this.stderr.push({ t: Date.now(), line });
       });
       this.proc.on("exit", code => {
         for (const { reject: r } of this.pending.values()) {
@@ -243,6 +251,19 @@ const stats = {
    */
   writeWindows: [],
   startedAt: new Date().toISOString(),
+  /**
+   * The instant the MCP child was spawned, and the startup window around it.
+   *
+   * Gate ③ (TODO 13.7): a NEW process must not hit "database is locked" within
+   * a second of starting. The old open path wrote to the shared database on
+   * every process start (WAL pragma, schema re-assertions, FTS rebuild), so a
+   * fresh cinder-mcp collided with the writer's transaction in exactly that
+   * window — 20-70ms after the spawn, measured.
+   */
+  clientStartedAtMs: 0,
+  startupLockBubbles: 0,
+  startupStderrLocks: 0,
+  startupLockSamples: [],
 };
 
 /**
@@ -257,6 +278,16 @@ const stats = {
 const SLOW_WRITE_MS = Number(process.env.SOAK_SLOW_WRITE_MS || 20);
 
 const LOCK_TEXT = /database is locked|database table is locked|sqlite_busy/i;
+
+/**
+ * How long after a process starts a lock error still counts as a STARTUP
+ * failure (gate ③, TODO 13.7).
+ *
+ * The collision the gate exists for happened 20-70ms after the spawn, so one
+ * second is generous: it covers the whole open path (WAL pragma, schema work,
+ * the first forwarded write) without reaching into the steady state.
+ */
+const STARTUP_LOCK_WINDOW_MS = 1000;
 
 /**
  * Records a write's time window. The list is capped so a long run cannot grow
@@ -291,6 +322,10 @@ try {
   console.error(`worker could not start cinder-mcp: ${e.message}`);
   process.exit(1);
 }
+// The startup window is measured from the SPAWN, not from the handshake: the
+// open path runs before the MCP initialize exchange answers, and that is
+// exactly where the old open path collided with the writer.
+stats.clientStartedAtMs = client.spawnedAtMs;
 
 const deadline = Date.now() + args.ms;
 // Phase B writes back-to-back on purpose. With the default 200ms interval and
@@ -374,6 +409,19 @@ while (Date.now() < deadline) {
       // A lock bubble is the contract failing at its one job. Record it, and
       // keep a bounded sample so the report explains it without growing.
       if (lock) stats.lockBubbles++;
+      if (lock && started - stats.clientStartedAtMs <= STARTUP_LOCK_WINDOW_MS) {
+        // Gate ③: the lock error landed in the STARTUP window, which is where
+        // the old open path's writes collided with the writer's transaction.
+        stats.startupLockBubbles++;
+        if (stats.startupLockSamples.length < 20) {
+          stats.startupLockSamples.push({
+            atMs: started - stats.clientStartedAtMs,
+            tool,
+            code,
+            message: message.slice(0, 300),
+          });
+        }
+      }
       if (code === "writer_unavailable") stats.falseUnavailable++;
       stats.failureWindows.push({ startedAt: started, endedAt: Date.now(), code });
       if (stats.failureWindows.length > 1000) stats.failureWindows.shift();
@@ -416,11 +464,34 @@ stats.exitClean = stats.lockBubbles === 0;
 // The child's own diagnostics travel with the report: the gate keeps a failing
 // run's work dir, and a failure that cannot be explained without re-running is
 // a failure the harness failed to report.
-stats.mcpStderr = client.stderr;
+stats.mcpStderr = client.stderr.map(e => e.line);
+stats.mcpStderrEvents = client.stderr;
+
+// Gate ③, second half: a lock error in the child's OWN output inside the
+// startup window.
+//
+// The open path used to write to the shared database, and a collision there
+// killed the process before it ever answered a tool call — so the caller saw
+// a dead child, not a tool error. The child's log line is the only evidence
+// that path leaves behind, and it is exactly the evidence the gate needs.
+for (const e of client.stderr) {
+  if (!LOCK_TEXT.test(e.line)) continue;
+  const at = e.t - stats.clientStartedAtMs;
+  if (at > STARTUP_LOCK_WINDOW_MS) continue;
+  stats.startupStderrLocks++;
+  if (stats.startupLockSamples.length < 20) {
+    stats.startupLockSamples.push({ atMs: at, tool: "stderr", code: "startup", message: e.line.slice(0, 300) });
+  }
+}
+stats.exitClean = stats.lockBubbles === 0 && stats.startupLockBubbles === 0 && stats.startupStderrLocks === 0;
 writeFileSync(args.out, JSON.stringify(stats, null, 2));
 
 if (stats.lockBubbles > 0) {
   console.error(`worker ${process.pid}: ${stats.lockBubbles} "database is locked" bubble(s) reached the caller — the contract failed at its one job`);
+  process.exit(1);
+}
+if (stats.startupLockBubbles > 0 || stats.startupStderrLocks > 0) {
+  console.error(`worker ${process.pid}: a lock error hit within ${STARTUP_LOCK_WINDOW_MS}ms of the process starting (${stats.startupLockBubbles} tool error(s), ${stats.startupStderrLocks} log line(s)) — the open path still writes to the shared database`);
   process.exit(1);
 }
 process.exit(0);

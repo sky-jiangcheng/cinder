@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"log/slog"
@@ -31,27 +32,46 @@ func main() {
 	platform.SetupLogging("mcp", true)
 
 	dbPath := platform.GetDbPath()
-	d, err := db.OpenWithRetry(dbPath)
-	if err != nil {
-		log.Fatalf("database error: %v", err)
-	}
-	svc := service.New(d, platform.GetGitUserName())
-	// This process IS the MCP surface (ADR-0030): every model call it makes
-	// is an agent call, and the audit row says so.
-	svc.SetAuditSurface(service.AISurfaceMCP)
 	// The single-writer contract (ADR-0058 / TODO 13.1): at most one Cinder
 	// process writes the shared database. This process either holds that role
 	// itself — which is what keeps the README's "no desktop app required"
 	// install working — or forwards every catalogue write to the process that
 	// does. Tool handlers never call svc's write methods directly.
-	writers, err := writerapi.New(svc, writerapi.Options{
+	//
+	// The election comes BEFORE the database is opened (TODO 13.7): whether
+	// this process may write to the file is decided by the lock, and a client
+	// opens the file read-only and writes nothing at all.
+	writerOpts := writerapi.Options{
 		DBPath:           dbPath,
 		Process:          "cinder-mcp",
 		Surface:          service.AISurfaceMCP,
 		CoreVersion:      version.CoreVersion,
-		SchemaVersion:    writerapi.CurrentSchemaVersion(d),
 		SelfElectAllowed: true,
-	})
+	}
+	election, err := writerapi.Elect(writerOpts)
+	if err != nil {
+		log.Fatalf("write contract: %v", err)
+	}
+	var d *sql.DB
+	if election.Won() {
+		d, err = db.OpenWithRetry(dbPath)
+	} else {
+		d, err = db.OpenReader(dbPath)
+	}
+	if err != nil {
+		log.Fatalf("database error: %v", err)
+	}
+	writerOpts.DB = d
+	// The winner's open path did the schema work (InitDB); a client must not
+	// do it, and inherits the duty only if it takes the role (ADR-0058).
+	writerOpts.SchemaReady = election.Won()
+	writerOpts.SchemaVersion = writerapi.CurrentSchemaVersion(d)
+
+	svc := service.New(d, platform.GetGitUserName())
+	// This process IS the MCP surface (ADR-0030): every model call it makes
+	// is an agent call, and the audit row says so.
+	svc.SetAuditSurface(service.AISurfaceMCP)
+	writers, err := writerapi.NewWithElection(svc, writerOpts, election)
 	if err != nil {
 		log.Fatalf("write contract: %v", err)
 	}

@@ -43,9 +43,9 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
-	if err := createTables(db); err != nil {
+	if err := EnsureSchema(db); err != nil {
 		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to create tables: %w", err)
+		return nil, err
 	}
 
 	// The database (and its WAL sidecars) holds the user's whole knowledge
@@ -60,16 +60,31 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		}
 	}
 
+	return db, nil
+}
+
+// EnsureSchema runs the writer's schema work on an open handle: create the
+// tables, apply the migrations, re-assert the derived layers, seed the
+// defaults.
+//
+// It is the writer's job and only the writer's (ADR-0058, TODO 13.7): every
+// other process opens the same file read-only, so the schema is created,
+// migrated and repaired exactly once, by the process that holds the role.
+// InitDB calls it on a fresh handle; PromoteToWriter calls it again when a
+// client that opened the file read-only takes the writer role.
+func EnsureSchema(db *sql.DB) error {
+	if err := createTables(db); err != nil {
+		return fmt.Errorf("failed to create tables: %w", err)
+	}
+
 	if err := upgradeSchema(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to upgrade schema: %w", err)
+		return fmt.Errorf("failed to upgrade schema: %w", err)
 	}
 
 	// Operational job queue (v19) is re-asserted too: a dropped table must not
 	// leave a database stamped with a version whose object is missing.
 	if err := EnsureCompileJobs(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure compile jobs: %w", err)
+		return fmt.Errorf("failed to ensure compile jobs: %w", err)
 	}
 
 	// Re-assert the derived wiki layer on every open, not just at migration time.
@@ -82,21 +97,18 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// re-running the migration repairs it. Same contract as EnsureFTSIndex: safe to
 	// call on any database that already has project_notes.
 	if err := EnsureWikiSchema(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure wiki schema: %w", err)
+		return fmt.Errorf("failed to ensure wiki schema: %w", err)
 	}
 
 	// Same self-healing contract for the page index (v17).
 	if err := EnsureWikiFTS(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure wiki FTS: %w", err)
+		return fmt.Errorf("failed to ensure wiki FTS: %w", err)
 	}
 
 	// ...and for the review columns (v18). A database that predates them must not
 	// stay half-migrated just because CREATE TABLE IF NOT EXISTS is a no-op.
 	if err := EnsureWikiReviewColumns(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure wiki review columns: %w", err)
+		return fmt.Errorf("failed to ensure wiki review columns: %w", err)
 	}
 
 	// ...and for page version snapshots (v22, ADR-0021). It must run AFTER
@@ -105,8 +117,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// column would fail. The call is also what re-applies the backfill, which is
 	// guarded per page and therefore safe on every open.
 	if err := EnsurePageVersions(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure page versions: %w", err)
+		return fmt.Errorf("failed to ensure page versions: %w", err)
 	}
 
 	// Same self-healing contract for the page-embed queue (v23, ADR-0018 lane 2).
@@ -114,8 +125,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// has the table; re-asserting here is what restores the queue after a
 	// DropWikiSchema, exactly as EnsurePageVersions restores the snapshot layer.
 	if err := EnsurePageEmbedDirty(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure page embed dirty: %w", err)
+		return fmt.Errorf("failed to ensure page embed dirty: %w", err)
 	}
 
 	// Same self-healing contract for the project classification column and the
@@ -125,8 +135,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// cleanup exemption both depend on exactly one row existing. EnsureProjectKind
 	// is idempotent on both halves, so re-running every open is safe.
 	if err := EnsureProjectKind(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure project kind and default project: %w", err)
+		return fmt.Errorf("failed to ensure project kind and default project: %w", err)
 	}
 
 	// The AI call audit log (v28, ADR-0030) is created by its own migration and
@@ -134,8 +143,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// manual DROP cannot silently disable auditing. All statements are IF NOT
 	// EXISTS, so this is safe on every open.
 	if err := EnsureAICallLog(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to ensure ai call log: %w", err)
+		return fmt.Errorf("failed to ensure ai call log: %w", err)
 	}
 
 	// Triggers cannot backfill: pages that existed before this index was created
@@ -143,16 +151,13 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// bounded artifact) and idempotent, and doing it here is what stops the v7
 	// "empty index that never got repaired" failure from repeating.
 	if err := RebuildWikiFTS(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, err
+		return err
 	}
 
 	if err := insertDefaults(db); err != nil {
-		db.Close() //nolint:errcheck
-		return nil, fmt.Errorf("failed to insert defaults: %w", err)
+		return fmt.Errorf("failed to insert defaults: %w", err)
 	}
-
-	return db, nil
+	return nil
 }
 
 // enableWAL sets the file-level journal mode, retrying until the lock frees.

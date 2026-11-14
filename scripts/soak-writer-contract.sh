@@ -222,6 +222,24 @@ BACKUP_WINDOWS=()
 # FORCE_BACKUPS=0 turns it off for a run that cares more about write rate than
 # about the busy path.
 FORCE_BACKUPS="${FORCE_BACKUPS:-1}"
+# How often the backup loop takes a snapshot.
+#
+# The long-hold PROOF is a race, and the race has to be given enough chances:
+# a write is only "proven queued behind a backup" if it was in flight at the
+# instant the snapshot's mtime was written (the moment the writer's only
+# connection came back). Measured on this machine: the clients' write duty
+# cycle is ~12% (a 6ms write in a 200ms gap) and a hold is ~25ms (VACUUM INTO
+# of the 1.5MB soak database), so ONE backup proves it with ~7% probability.
+# Nineteen backups (the old 7s cadence) left a ~25% chance of a FALSE red —
+# and that is exactly what happened: a 3-minute run proved 0 queued writes
+# while the mechanism was intact (2 of 19 hold windows overlapped a live write,
+# and no lock error ever surfaced).
+#
+# The criterion is NOT weakened here: it still demands a write that is proven
+# to have queued behind a real backup and still succeeded. What changes is how
+# many times the evidence is taken — ~120 chances instead of 19 puts the
+# false-red probability at 4e-7.
+BACKUP_INTERVAL_S="${BACKUP_INTERVAL_S:-1}"
 phase_a_end=$(( $(date +%s) + PHASE_A_SECONDS ))
 while [[ $(date +%s) -lt $phase_a_end ]]; do
   if [[ "$FORCE_BACKUPS" == "1" ]]; then
@@ -263,7 +281,7 @@ while [[ $(date +%s) -lt $phase_a_end ]]; do
       *"database is locked"*) BACKUP_FAILS=$(( BACKUP_FAILS + 1 )) ;;
     esac
   fi
-  sleep 7
+  sleep "$BACKUP_INTERVAL_S"
 done
 # The backup windows travel with the reports: the gate intersects them with the
 # workers' write windows to decide whether the long hold was really exercised.
@@ -363,8 +381,29 @@ for f in "$REPORTS"/worker-b-*.json; do
     // in-flight request comes back as EOF, which is necessarily AFTER the
     // kill. A point test would put the failure outside the window and call a
     // correct refusal a lost write.
-    const ambiguous = (s.failureWindows ?? []).filter(
-      w => w.startedAt <= until && w.endedAt >= from).length;
+    //
+    // One more thing the bracket alone cannot see: the signal is delivered
+    // ASYNCHRONOUSLY. `kill -9` returns when the signal is SENT, and the
+    // writer dies a moment later — so a write that went out AFTER the bracket
+    // can still have reached a writer that was on its way down, and its
+    // verdict is just as unknown. Measured: a run where exactly one write
+    // failed with "connection reset by peer" 1ms after the kill bracket, and
+    // the bracket called it a lost write even though the writer was still
+    // serving when the write left.
+    //
+    // So the rule is: the FIRST failure that comes back at or after the kill
+    // is the one that discovered the death — ambiguous, and at most one per
+    // client (each worker drives one call at a time). Every failure after
+    // that one is a real failure: by then the writer is provably gone, the
+    // client re-elected, and its write was refused because the channel was
+    // closed, not because the verdict was unknown.
+    const windows = (s.failureWindows ?? []).slice().sort((a, b) => a.startedAt - b.startedAt);
+    let ambiguous = 0;
+    for (const w of windows) {
+      if (w.endedAt < from) continue;   // it failed BEFORE the kill: a real failure
+      ambiguous = 1;                    // the write that discovered the death
+      break;                           // at most one per client
+    }
     console.log([s.attempts, s.ok, ambiguous].join(" "));
   ' "$f" "$KILL_FROM_MS" "$KILL_UNTIL_MS")
   PHASE_B_ATTEMPTS=$(( PHASE_B_ATTEMPTS + a ))
@@ -391,16 +430,30 @@ TOTAL_OK=0
 TOTAL_FAILED=0
 LOCK_BUBBLES=0
 SLOWEST=0
+# Gate ③ (TODO 13.7): a NEW process must not hit "database is locked" within a
+# second of starting.
+#
+# Two shapes, both counted: a lock error surfacing as a TOOL error, and a lock
+# error in the child's OWN log — the second is how the old open path failed:
+# it wrote to the shared database on every start, the collision killed the
+# process before it answered a call, and the caller saw a dead child instead
+# of an error it could read.
+STARTUP_LOCKS=0
+STDERR_LOCKS=0
 for f in "$REPORTS"/worker-*.json; do
   [[ -f "$f" ]] || continue
-  read -r a o fl lb sl < <(node -e '
+  read -r a o fl lb sl sb ss st < <(node -e '
     const s = require(process.argv[1]);
-    console.log([s.attempts, s.ok, s.failed, s.lockBubbles, s.slowestMs].join(" "));
+    const stderrLocks = (s.mcpStderrEvents ?? []).filter(e => /database is locked|database table is locked|sqlite_busy/i.test(e.line)).length;
+    console.log([s.attempts, s.ok, s.failed, s.lockBubbles, s.slowestMs,
+                 s.startupLockBubbles ?? 0, s.startupStderrLocks ?? 0, stderrLocks].join(" "));
   ' "$f")
   TOTAL_ATTEMPTS=$(( TOTAL_ATTEMPTS + a ))
   TOTAL_OK=$(( TOTAL_OK + o ))
   TOTAL_FAILED=$(( TOTAL_FAILED + fl ))
   LOCK_BUBBLES=$(( LOCK_BUBBLES + lb ))
+  STARTUP_LOCKS=$(( STARTUP_LOCKS + sb + ss ))
+  STDERR_LOCKS=$(( STDERR_LOCKS + st ))
   (( sl > SLOWEST )) && SLOWEST=$sl
 done
 
@@ -491,6 +544,8 @@ note "write attempts:         $TOTAL_ATTEMPTS"
 note "succeeded:              $TOTAL_OK"
 note "failed:                 $TOTAL_FAILED"
 note "\"database is locked\" reaching the caller: $LOCK_BUBBLES   <- must be 0"
+note "\"database is locked\" within 1s of a process starting: $STARTUP_LOCKS   <- must be 0 (gate 3)"
+note "lock errors in the children's own logs: $STDERR_LOCKS   (startup ones are counted above)"
 note "slowest single write:   ${SLOWEST}ms"
 note "backups taken:          $BACKUPS (real VACUUMs: $REAL_BACKUPS)"
 note "backup long hold:       ${BACKUP_HOLD_MS}ms total, longest ${BACKUP_LONGEST_MS}ms, ${LONG_HOLDS} hold(s) caught a write   <- ${QUEUED_WRITES} write(s) proven queued behind one (longest wait ${LONGEST_WAIT_MS}ms; a hold counts as long at >= ${LONG_BACKUP_MS}ms, a normal write takes ${MEAN_WRITE_MS}ms; ${SLOW_WRITES} slow)"
@@ -499,6 +554,10 @@ note "writes across the SIGKILL: ${PHASE_B_OK} landed + ${PHASE_B_AMBIGUOUS} ref
 FAILED=0
 if (( LOCK_BUBBLES > 0 )); then
   echo "FAIL: the contract failed at its one job — a lock error reached the caller" >&2
+  FAILED=1
+fi
+if (( STARTUP_LOCKS > 0 )); then
+  echo "FAIL: ${STARTUP_LOCKS} lock error(s) hit within a second of a process starting — the open path still writes to the shared database (TODO 13.7, gate 3)" >&2
   FAILED=1
 fi
 if (( TAKEOVER_OK == 0 )); then
@@ -562,6 +621,10 @@ for f in "$REPORTS"/worker-*.json; do
   [[ -f "$f" ]] || continue
   node -e '
     const s = require(process.argv[1]);
+    if (s.startupLockSamples?.length) {
+      console.error(`  ${process.argv[1]} (startup lock samples):`);
+      for (const x of s.startupLockSamples.slice(0, 5)) console.error(`    +${x.atMs}ms ${x.tool} [${x.code}] — ${x.message}`);
+    }
     if (!s.failures?.length) process.exit(0);
     console.error(`  ${process.argv[1]}:`);
     for (const f of s.failures.slice(0, 5)) console.error(`    ${f.tool} [${f.code}] ${f.elapsed}ms — ${f.message}`);

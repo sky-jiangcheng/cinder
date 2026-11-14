@@ -116,7 +116,34 @@
 
   ④ **仍未闭环的**：根因在**客户端开库时的写**（`Ensure*` 重放 + FTS 重建）。本轮只把「写者被撞」这一侧兜住了，**没有**让非写者进程真正只读开库——「非写者只读开库 + 写者负责迁移」这条评估**已从 13.6 的到期项里提出，单独立为 TODO 13.7**（见下面「开库路径不变」那条）。这条不阻塞契约成立（写不再冒泡），但也**不能声称「非写者不写共享库」已经成立**。
 
-- **开库路径不变**：`db.OpenWithRetry` 仍在每个进程里跑（WAL pragma、`Ensure*` 重放、迁移盖章都是文件级写）。它本来就在多进程间靠 busy_timeout 串行，且是「读到迁移后的库」的前提——非写者不能不开库只读。本轮不动它；原计划「若 13.6 把 server 接进来时再评估」——**13.6 已于 2026-11-13 落码，该评估随之到期未执行**，故于 2026-11-14 单独立为 **TODO 13.7（非写者只读开库 + 写者独占迁移）**：先评估三件事（WAL 下只读连接能不能读 / 写者不在时读到旧 schema 怎么办 / 谁独占迁移与 FTS 重建），再定门（门① 非写者零写、门② 写者缺席时非写者仍不写库、门③ 新进程启动后 1 秒内不得出现 `database is locked`）。
+- **开库路径曾经不变，现已改（2026-11-14）**：`db.OpenWithRetry` 曾经仍在每个进程里跑（WAL pragma、`Ensure*` 重放、迁移盖章都是文件级写）。它本来就在多进程间靠 busy_timeout 串行，且是「读到迁移后的库」的前提——非写者不能不开库只读。原计划「若 13.6 把 server 接进来时再评估」——13.6 已于 2026-11-13 落码，该评估随之到期未执行，故于 2026-11-14 单独立为 **TODO 13.7（非写者只读开库 + 写者独占迁移）**，当日落地（见下面第三轮补记）：先评估三件事（WAL 下只读连接能不能读 / 写者不在时读到旧 schema 怎么办 / 谁独占迁移与 FTS 重建），再定门（门① 非写者零写、门② 写者缺席时非写者仍不写库、门③ 新进程启动后 1 秒内不得出现 `database is locked`）。
+- **补记（2026-11-14，第三轮）：TODO 13.7 落地——「选举先于开库」，非写者只读开库、写者独占迁移**——把「谁能写」这件事从「开库时才知道」前移成「开库前由锁决定」：**选举（flock）先落定角色，角色决定怎么开库**。胜者开可写库并独占 schema 工作，败者开只读库（agent 面）或开「不碰 schema 的可写库」（桌面 client 角色）。开库路径因此拆成两半：`internal/db/db.go` 的 `InitDB` 保留（= 开可写库 + `EnsureSchema`），新增 `internal/db/reader.go` 的 `OpenReader`（只读，零写）、`OpenExisting`（可写但零 schema 工作）、`PromoteToWriter`（接管时把只读句柄变可写）。四个入口点（`cmd/mcp`、`cmd/server`、`cmd/repotory-capture`、`main.go`）统一改成 elect → open → `NewWithElection`；`internal/writerapi` 拆出 `Election`（`Elect` 只决定角色，`NewWithElection` 才带着角色接管）。**「schema 归写者」这条职责因此落在角色上，不落在句柄上**：`Options.SchemaReady` 说明「这个句柄的 schema 工作做过了没有」（入口点按「本次是否赢得选举」给），`becomeWriter` 在**没做过**时补跑一遍 `EnsureSchema`——句柄可写不代表 schema 工作做过了（桌面 client 角色的句柄本来就是可写的），所以这两件事必须分开记账。
+
+  **三个问题的答案**（13.7 正文要求先实测再谈方案）：
+
+  1. **非写者能不能只读开库？——能，但用 `_query_only=1` 而不是 `mode=ro`。** 实测 `modernc.org/sqlite` v1.61.0 的驱动行为（源码级查证）：`newConn` 只在 DSN 以 `file:` 开头时才把整串交给 `sqlite3_open_v2`（带 `SQLITE_OPEN_URI`），**普通路径的查询串会被剥离**——所以 `mode=ro` 对普通路径**不生效**；而 `_query_only=1` 走 `applyQueryParams`，且**最后**应用（`query_only is applied last: it makes the connection read-only, so it must not precede the write-capable pragmas above`），不会被 `_pragma` / `foreign_keys` 覆盖，对普通路径照样生效。**代价照实记**：`_query_only` 是**连接级**弱只读——缺文件时它仍会创建文件，且它是个 pragma，后续语句可以 `PRAGMA query_only=OFF` 关掉它；`mode=ro` 才是文件级只读（`SQLITE_READONLY`、缺文件即 `SQLITE_CANTOPEN`），但**不可运行时提升**（文件级只读没法用一条 pragma 解开），与「接管后就地变可写」的要求冲突。选弱只读 + 门①兜底。
+  2. **写者不在时非写者读到旧 schema 怎么办？——有界等待，超时给可行动错误。** `OpenReader` 在返回前轮询 `app_config` 是否存在（10s 预算 / 100ms 间隔）；拿不到就返回 `database schema still not ready after 10s (the writer is busy or stuck)`。读者**不做**任何 schema 兼容判断：它只读它能读到的表，旧 schema 下读不存在的表自然报「no such table」，这比猜一个兼容层便宜且不会错。
+  3. **谁独占迁移与 FTS 重建？——写者独占。** `EnsureSchema`（`createTables` / `upgradeSchema` / 8 个 `Ensure*` 重放 / 迁移盖章 / `RebuildWikiFTS` / `insertDefaults`）只在**写者**手里跑一次；读者一个都不做。**接管即继承**：新写者接手时补跑一遍 `EnsureSchema`——上一个写者可能死在迁移中途，自愈语义因此不丢。
+
+  **三道门（缺一不可）**：
+  - **门① 非写者进程在共享库上零写**——`internal/db/reader_test.go`：`TestReaderOpenWritesNothing` 断言**连接只读**（`ReadOnly`）+ **主库文件 size/mtime 不变** + **WAL 帧数不增长**（帧数按「WAL 头 32 字节 + 每帧 24 字节头 + 一页」算，且先断言 WAL 非空，免得门成同义反复）；`TestReaderRefusesWrites` 断言句柄在 SQLite 层就拒绝写；`TestEnsureSchemaRestoresTheDerivedLayers` 断言写者的 schema 工作能把自愈层补回来；`TestOpenExistingDoesNotTouchTheSchema` 断言桌面 client 角色的可写句柄**也不碰** schema。
+  - **门② 写者缺席时非写者仍不写库**——`internal/writerapi/election_test.go`：`TestNonWriterWritesNothingToTheSharedDatabase`（选举落败 → 句柄只读 → 直写被拒 → 业务写仍经转发落地）、`TestTheSchemaIsTheWritersWork`（写者在场时读者**不**补 schema）、`TestTheWriterAbsenceMovesTheRoleAndTheSchemaWork`（写者死了 → 客户端接管 → 角色与 schema 工作一起搬过去）、`TestAClientThatCannotTakeOverStillDoesNotWrite`（不许自举的进程连接管都拿不到时，写被**契约**拒绝，而不是它自己写库）。
+  - **门③ 新进程启动后 1 秒内不得出现 `database is locked`**——`scripts/soak/worker.mjs` 记下 MCP 子进程的 **spawn 时刻**，并给子进程的**每一行 stderr 打时间戳**；启动窗口（1s）内的锁错误有两种形态，都被计入：**工具错误**（冒泡到调用方）与**子进程自己的日志**（旧的开库写撞锁会把进程打死在回答第一个调用之前，调用方看到的是「进程没了」而不是一条能读的错误）。`scripts/soak-writer-contract.sh` 汇总后断言为 0。
+
+  **一处必须记的例外：桌面 client 角色保留可写句柄。** 桌面的 human-gate 写（approve / merge / config 等）**没有可转发的方法**（`internal/app/surface.go` 的 `bindingWrites` 只覆盖 8 类），所以客户端角色的桌面拿到的是**可写句柄**（`db.OpenExisting`）——但它**不做任何 schema 工作**（不切 WAL、不建表、不迁移、不重建 FTS、不写 defaults）。这是「非写者零写」的唯一例外，如实记在此。
+
+  **残留缺口，照实记**：
+  - **`Ensure*` 的自愈语义推迟到写者在场时才发生**：读者读到的是「上一个写者留下的」派生层（wiki / FTS / 向量），可能短暂不一致；要等写者再跑一遍才自愈。这是「零写」的直接代价。
+  - **`_query_only` 是弱只读**：文件仍会被创建（缺文件时），pragma 也能被语句关掉。门①因此不只断言「连接只读」，还断言「句柄拒绝写」+「WAL 帧数不增长」。
+  - **提升必须持久**：连接被池替换时（一次被取消的调用会把连接打断，`database/sql` 丢弃它并新建），新连接按 DSN 会**变回只读**——刚接管的写者会突然写不了。因此用驱动的 connection hook（`sqlite.RegisterConnectionHook`）把「已提升的 DSN」记下来，新连接建起来就直接 `PRAGMA query_only=OFF`；回归门 `TestPromotedReaderStaysWritableAfterAConnectionIsReplaced`。
+  - **读者开库仍会创建缺失的文件**（`_query_only` 的固有行为）：读者先于写者起时会先落一个空库文件，写者随后照常建表，不冲突，但「文件是谁创建的」不再等于「谁是写者」。
+
+- **补记（2026-11-14，第四轮）：13.7 的实测——三道门全绿；以及「备份长持锁」那道门的一次假红（判据没错，是取证次数不够）**——13.7 的三道门在 3 分钟 soak（真二进制、隔离 HOME、4 客户端并发写 + 92 次真 `VACUUM` 备份 + 阶段 B 中途 `SIGKILL`）里全绿：12485 次写、12482 成功、失败 **3** 次（正是 kill 瞬间在飞的那三次，被明确拒绝、**没被重放**）；`database is locked` 到调用方 **0** 次；**门③：新进程启动后 1 秒内的锁错误 0 次**（工具错误与子进程自己日志两种形态都算）；子进程日志里的锁错误 **0** 次；跨 SIGKILL **9726 落地 + 3 明确拒绝 = 9729 全额有账**；阶段 A 对活着的写者报 `writer_unavailable` **0** 次。
+
+  同一轮里「备份长持锁」那道门**判红了一次，而机制是好的**——这是**取证次数**的问题，不是判据的问题。那道门（13.1 从阈值改成证明）问的是「有没有写被证明排在备份后面」，判据仍是一句可核对的话：**开始时间 ≤ 快照 mtime ≤ 结束时间**——写必须**正好在快照落盘的那一瞬间**在飞（那正是写者唯一一条连接交还的瞬间），所以它是**一场竞态**：实测客户端写的占空比只有 ~12%（6ms 的写塞在 200ms 的间隔里）、一次 `VACUUM INTO` 持锁 ~25ms（1.5MB 的 soak 库实测 22–31ms），**一次备份只有 ~7% 的概率**能拿到这份证据。旧节奏（7s 一次）一轮 144s 只有 **19 次**取证机会 ⇒ **假红概率 ≈ 25%**：实测那一轮 19 次真 `VACUUM`、门判红「没有写被证明排在备份后面」，而同一轮的日志显示 19 次持锁窗口里有 **2 次**与在飞的写重叠、`database is locked` 一次没冒到调用方——机制是好的，只是没被取到证。
+
+  **修法：判据不动，只改取证次数**——备份节奏 7s → **1s**（`BACKUP_INTERVAL_S`），一轮 ~92 次取证，单次 ~7% 的命中概率不变，但 **19 次的 25% 假红降到 92 次的 4e-7**。复跑那一轮：**9 次持锁窗口抓到写、28 笔写被证明排在备份后面**（最长等待 14ms），门全绿。门里「长持锁」的门槛（10ms 与本轮平均写时取大）与持锁时长（约平均写时的 4 倍）**一起随机器快慢缩放**，慢机器上这条门仍然够得着——本轮改的只是取证次数，不是量纲。
+
 - `repotory_scan` 这类分钟级写现在在写者进程里排队，**转发端的取消会传导**（ctx 过 HTTP），但两个 agent 同时 scan 时后者等前者，这是契约的本意，不是回归。
 - 桌面从「唯一写者」变为「优先写者」：agent 自举期间桌面没在跑 backup ticker，快照密度短暂下降；桌面一启动即接管，窗口有界。
 - **桌面的 UI 写面本轮没有接入目录**：它 normally 就是写者，所以没有区别；只有「桌面启动时 agent 正忙、接管被拒」这个窗口里，桌面的绑定写与 agent 写者会并发——退化成契约前的旧行为（busy_timeout 兜底），不是新增的洞，但也不能声称已闭环。收敛方向与 `cmd/server` 同批：绑定层在 `!IsWriter()` 时把写转给持锁者。
