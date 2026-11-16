@@ -54,7 +54,11 @@
   font-family: var(--font-mono);
 }
 
-.readme {
+/* Doubled, same reason as KnowledgeCard's .snippet: the element carries
+   `markdown-body` too, and the serif prose face must not win here by bundle
+   order — a capped README excerpt inside an overview card is chrome. */
+.readme.readme {
+  font-family: var(--font-sans);
   font-size: 13px;
   max-height: 300px;
   overflow-y: auto;

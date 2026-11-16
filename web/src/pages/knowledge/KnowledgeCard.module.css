@@ -74,7 +74,13 @@
   white-space: nowrap;
 }
 
-.snippet {
+/* Doubled: the card carries `markdown-body` next to this class, and since
+   2.39.1 that global class sets the serif prose face at the same
+   specificity — a single-class rule here would win or lose on bundle order
+   alone. A 120-character excerpt on a card is chrome, not a reading
+   surface: it stays on the compact sans ramp, deterministically. */
+.snippet.snippet {
+  font-family: var(--font-sans);
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;

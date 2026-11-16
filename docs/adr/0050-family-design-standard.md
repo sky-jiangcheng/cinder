@@ -155,6 +155,8 @@ Warden 是独立产品（ADR-0047 决策③、ADR-0049 决策②），**不再�
 - 新增 `--font-display` 与模块化字号刻度（`--text-display`…`--text-micro`）；Cinder 的 h1/h2 与 markdown 标题、Warden 的品牌名/卡标题应用衬线；h3 及以下保持无衬线（小字号衬线读作装饰而非层级）。
 - 实跑：浏览器确认 `document.fonts` 已载 600 且 h1 计算族为 IBM Plex Serif；CJK 经通用 `serif` 回退（宋体系），属预期编辑感。
 
+> **§⑤ 加注（2026-11-16，参考 Warden 的 Claude 桌面质感）**：「正文沿用系统无衬线栈」这条对 **UI chrome** 继续成立，但**阅读面**（markdown 渲染的文档、知识页、笔记正文、聊天回答）改设衬线 prose 档：`--text-prose: 16px` / `--leading-prose: 1.7` / `--font-display`。理由：本产品的正文就是「把知识读回来」，13–14px 无衬线把文档读成了表单；Claude 桌面 App 的质感三要素（字号 16–18、行高 1.6–1.8、暖底深灰字）里，暖底（`#F4F2EE` 纸色系）与深灰墨（`#34322D`）§⑧ 本就有，缺的正是这两档。**字体零新增**——Warden 参考稿用的 IBMPlexSerif 就是本篇已自托管的 IBM Plex Serif（SIL OFL，离线优先不破）。chrome（导航 / 按钮 / 徽标 / 摘录卡 / 审核预览）保持紧凑无衬线档。级联靠 `proseSurface.test.ts` 钉住：与 `.markdown-body` 并挂的模块类一律双写选择器定胜负，阅读面取衬线、chrome 取无衬线，不许随打包顺序漂移。
+
 **批次 4（2026-11-05）· 布局减法**
 
 - 右栏上下文化定案：**默认折叠**为 30px 手柄（首跑不再常驻 288px），仅显式展开才钉宽（存 `0`）；折叠手柄带待审计数徽标，等待中的上下文不靠占位也能到达用户。

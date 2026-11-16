@@ -58,11 +58,17 @@
   100% { background: var(--bg-tertiary); box-shadow: 0 0 0 0 transparent; }
 }
 
-.body {
-  font-size: 13px;
+/* Doubled: the element also carries `markdown-body`, and since 2.39.1 that
+   class sets the serif prose face at the same specificity — without the
+   doubling the outcome would depend on bundle order. A note body IS the
+   knowledge being read: it takes the prose face on purpose (ADR-0050 §⑤
+   加注 2026-11-16). */
+.body.body {
+  font-family: var(--font-display);
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
   margin-bottom: 8px;
   color: var(--text-primary);
-  line-height: 1.6;
 }
 
 .meta {

@@ -372,7 +372,11 @@
   word-break: break-all;
 }
 
-.body {
+/* Doubled, same reason as the other markdown-body carriers: the queue shows
+   a capped preview, not the document itself — the full page is read at
+   /wiki/:id. It stays on the compact sans ramp deterministically. */
+.body.body {
+  font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-primary);

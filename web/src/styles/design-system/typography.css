@@ -44,10 +44,17 @@ h2 {
   letter-spacing: -0.01em;
 }
 
+/* The reading surface (ADR-0050 §⑤ 加注 2026-11-16): rendered documents —
+   knowledge pages, note bodies, previews, release notes — set the serif at
+   the prose size with the loose leading. This is the Claude-desktop
+   reference: a knowledge base is read like a book, and 14px sans made it
+   read like a form. UI chrome keeps the compact sans ramp; excerpt cards
+   (KnowledgeCard, README panel) opt back out explicitly. */
 .markdown-body {
-  line-height: 1.7;
+  font-family: var(--font-display);
+  line-height: var(--leading-prose);
   word-break: break-word;
-  font-size: 14px;
+  font-size: var(--text-prose);
   color: var(--text-primary);
 }
 
@@ -80,7 +87,10 @@ h2 {
   padding: 12px 16px;
   border-radius: var(--radius-md);
   overflow-x: auto;
-  font-size: 12px;
+  /* 13px, not the old 12px: the prose base moved to 16px serif, and code at
+     12px under it read like a footnote. Still mono, still one step below the
+     surrounding prose. */
+  font-size: 13px;
   margin: 0.5em 0;
 }
 .markdown-body pre code {

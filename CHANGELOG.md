@@ -4,6 +4,11 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
+## [Unreleased]
+
+### 变更
+- **阅读面改设衬线 prose 档——聊天与文档获得 Claude 桌面 App 的质感（参考 Warden 的排版，ADR-0050 §⑤ 加注，2026-11-16）**：用户给的参考是 Warden 那套 Claude 质感四要素——字号偏大（16–18px）、行高宽松（1.6–1.8）、暖色背景（非纯白）、文字深灰（非纯黑）。逐项核对 Cinder：**暖底与深灰墨 §⑧ 早就有**（`--bg-primary: #F4F2EE` 纸色系、`--text-primary: #34322D` 品牌墨，纯白/纯黑在本产品从未出现），**字体零新增**——参考稿的 `IBMPlexSerif-Regular.ttf` 正是本篇已自托管的 IBM Plex Serif（latin 400/600 woff2，SIL OFL，离线优先不破，不走 Google Fonts CDN）。**缺的只有字号与行高两档，外加一个真决策**：正文该不该换衬线。落法按「阅读面 / chrome 面」二分——**阅读面**（`.markdown-body` 全局类、知识页正文、笔记正文、聊天回答 `.markdownText`）新增 token `--text-prose: 16px` / `--leading-prose: 1.7` 并取 `--font-display` 衬线（本产品的正文就是「把知识读回来」，13–14px 无衬线把文档读成了表单）；**chrome 面**（导航 / 按钮 / 徽标 / 卡片摘录 / 审核预览 / README 面板 / 输入框）保持紧凑无衬线档不动——小字号衬线读作装饰而非层级，这条 §⑤ 的原判断继续成立。代码块随 prose 从 12px 提到 13px（16px 衬线下 12px 读作脚注）。**级联风险按本仓既有手法钉死**：这些元素同时挂全局 `.markdown-body` 与模块类、同特异性 (0,1,0)，谁赢取决于打包顺序——正是 `semanticInk.test.ts` 为色板守的那类坑（CI 对 CSS 全盲）。所有并挂的模块类一律**双写选择器**（`.body.body` / `.snippet.snippet` / `.markdownText.markdownText`）定胜负，阅读面取衬线、chrome 取无衬线，并新增 `proseSurface.test.ts` 三道断言（全局 prose token / token 落在参考区间 16–18px 与 1.6–1.8 / 每个并挂类都还带双写）——**撤掉双写即红**。中英 ADR-0050 §⑤ 同批加日期加注（订正历史的方式是加注不是改写，原文一字未动）。**已知代价**：正文变高约 14%，长列表与卡片内边距未重排（视觉密度上升，靠既有滚动容器消化）；`.notePreview`（笔记编辑预览）与 `.notesBody`（更新日志）不声明字体属性，直接继承 prose，属预期。
+
 ## [2.39.1] - 2026-11-16
 
 ### 修复

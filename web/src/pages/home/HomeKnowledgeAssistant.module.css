@@ -549,9 +549,13 @@
   color: var(--text-muted);
 }
 
-.markdownText {
-  font-size: 13px;
-  line-height: 1.6;
+/* The answer is read, not scanned: it sets the prose face (ADR-0050 §⑤ 加注
+   2026-11-16 — the Claude-desktop reference: large, loose, serif). Doubled
+   so it beats the single-class rules regardless of bundle order. */
+.markdownText.markdownText {
+  font-family: var(--font-display);
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
   color: var(--text-primary);
   word-break: break-word;
 }
@@ -570,7 +574,8 @@
   border-radius: var(--radius-sm);
   padding: 10px;
   overflow-x: auto;
-  font-size: 12px;
+  /* One step below the 16px prose, same as the global markdown pre. */
+  font-size: 13px;
 }
 
 .markdownText code {

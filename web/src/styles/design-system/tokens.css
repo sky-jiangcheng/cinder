@@ -138,6 +138,16 @@
   --text-small: 13px;
   --text-micro: 12px;
 
+  /* Prose (the Claude-desktop reading surface, ADR-0050 §⑤ 加注 2026-11-16).
+     Rendered documents — markdown bodies, chat answers, note previews — set
+     a LARGER, LOOSER, SERIF face than UI chrome: the app's job is reading
+     knowledge back, and a 13px sans answer reads like a form, not like a
+     document. UI chrome (nav, buttons, chips, meta) keeps the compact sans
+     ramp above. --text-prose sits at the top of the 16–18px band; the
+     line-height 1.7 is the middle of 1.6–1.8. */
+  --text-prose: 16px;
+  --leading-prose: 1.7;
+
   /* Motion */
   --transition-fast: 0.15s ease;
   --transition-base: 0.25s ease;

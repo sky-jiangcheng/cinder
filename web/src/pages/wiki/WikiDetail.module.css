@@ -118,13 +118,16 @@
   color: var(--text-tertiary);
 }
 
-.body {
+/* Doubled: this is the full-page reading surface, and it must win over the
+   single-class .markdown-body regardless of bundle order (same technique as
+   semanticInk's doubled rules). Prose = serif, 16px, 1.7 (ADR-0050 §⑤ 加注). */
+.body.body {
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 28px 32px;
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
   color: var(--text-primary);
 }
 
