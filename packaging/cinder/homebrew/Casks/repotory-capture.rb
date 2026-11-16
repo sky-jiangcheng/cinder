@@ -9,7 +9,7 @@
 # Version is stamped by scripts/update-manifests.sh from wails.json
 # (info.productVersion) — never edit it by hand.
 cask "repotory-capture" do
-  version "2.39.1"
+  version "2.39.2"
   name "Cinder Capture CLI"
   desc "Session-end capture CLI that writes Cinder handoff notes from Claude Code sessions"
   homepage "https://github.com/sky-jiangcheng/cinder"

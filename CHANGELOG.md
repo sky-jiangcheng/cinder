@@ -4,7 +4,7 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
-## [Unreleased]
+## [2.39.2] - 2026-11-16
 
 ### 修复
 - **统计把 merge 带进来的分行数记到按合并的人头上，且 commits 恒为 0——CBiUnion「今天写了 5430 行」的真相（2026-11-16）**：用户质疑「CBiUnion 今天怎么可能提交 6000 多行」，逐层查证属实不是用户写的。live 库里该仓 `2026-11-16` 一行 `files_changed=146 / lines_added=5430 / commits=0`，而**当天 3 个提交全是 merge**（`Merge branch 'feature-union-mosOpenAccount…' into release-sit1` 等），`git show --first-parent` 实测每个 merge 正好报 `146 files changed, 5430 insertions(+)`——逐位吻合：那 5430 行是 merge 把别人（syli / lijun.yao，**10 月底~11 月初**）feature 分支的代码带进 release 分支的 diff，**今天真实非 merge 改动 = 0 行**。两个独立缺陷叠加在单日刷新路径（`internal/stats/query.go`）：① **`--first-parent` 让 git 渲染 merge 相对第一父的整支 diff**，而历史回填路径（`range.go`）不带该 flag、merge 默认无 diff 输出——**两条路径口径不一致**，只有单日刷新虚报；② **计数命令 `rev-list --count --first-parent --since … --until …` 缺 revision 参数**，在 git 2.33 上直接 exit 129（实测），错误被 `if countErr == nil` 吞掉 → commits 永远 0（live 库 4975 行中恰好 69 行 `commits=0`，正是这条路径的足迹）。**修法**：log 查询去掉 `--first-parent`（与回填路径同语义：merge 不捐行数）；计数命令补 `HEAD` 并去掉 `--first-parent`（与 `git log` 的「走全部父、merge 计入」一致），失败改为**记日志**而非静默——那个 129 正是因静默才藏了几个月。**连带修写回守卫**（`refresh.go` 两处）：原判据 `files>0 || added>0 || deleted>0` 在修复后会让「merge-only 日」（0 行 3 提交）**拒绝写入**，脏行永远改不回来；补 `commits>0` 让这类真实数据能覆盖旧行。`UpsertDailyStat` 本就是 `ON CONFLICT DO UPDATE`，故下一次统计刷新即自愈。**回归**：`TestQueryStatsMergeWindow` 用真 git 仓库复刻该形状（feature 分支 50 行提交在 3 天前 + 今日 `--no-ff` 合并），断言 `LinesAdded=2`（只算今日真实提交）与 `Commits=2`（base+merge）；**两个负例分别验过**——加回 `--first-parent` 报 `LinesAdded=52`（2 真实 + 50 被赠），去掉 `HEAD` 报 `Commits=0`，与线上形状完全一致。**修复后实测**：`pay-common` / `pay-boss` 今天均为 `0 行 / 3 提交`。
