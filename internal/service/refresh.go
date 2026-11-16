@@ -42,7 +42,12 @@ func (s *Service) refreshRepoStatsRange(ctx context.Context, repo domain.Reposit
 			continue
 		}
 		for _, e := range entries {
-			if e.FilesChanged > 0 || e.LinesAdded > 0 || e.LinesDeleted > 0 {
+			// commits counts too: a merge-only day legitimately has zero
+			// non-merge lines and a positive commit count (2026-11-16 fix).
+			// Excluding it would keep the guard refusing to write, so the old
+			// inflated row (a merge's whole-branch diff counted as the
+			// merger's work) could never be corrected by a refresh.
+			if e.FilesChanged > 0 || e.LinesAdded > 0 || e.LinesDeleted > 0 || e.Commits > 0 {
 				storeAuthor := author
 				if storeAuthor == "" {
 					storeAuthor = "all"
@@ -170,10 +175,14 @@ func (s *Service) refreshProjectStatsForDate(projectID int64, date string) {
 			if storeAuthor == "" {
 				storeAuthor = "all"
 			}
-			// Mirror the non-zero guard in refreshRepoStatsRange: when QueryStats
-			// fails it returns an all-zero Result, and writing that row would make
-			// the dashboard show "0" instead of "no data", masking the error.
-			if result.FilesChanged > 0 || result.LinesAdded > 0 || result.LinesDeleted > 0 {
+			// Mirror the non-zero guard in refreshRepoStatsRange, commits
+			// included: when QueryStats fails it returns an all-zero Result
+			// (and a failed count now logs rather than silently zeroing), so
+			// writing that row would make the dashboard show "0" instead of
+			// "no data". A merge-only day is NOT that case: 0 lines + 3
+			// commits is real data, and it is exactly the row that must
+			// overwrite the old inflated one (2026-11-16 fix).
+			if result.FilesChanged > 0 || result.LinesAdded > 0 || result.LinesDeleted > 0 || result.Commits > 0 {
 				if err := db.UpsertDailyStat(s.db, r.ID, date, storeAuthor,
 					result.FilesChanged, result.LinesAdded, result.LinesDeleted, result.Commits); err != nil {
 					log.Printf("refresh stats for date upsert error repo=%q date=%s author=%q: %v",

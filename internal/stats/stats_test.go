@@ -1,6 +1,10 @@
 package stats
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -202,5 +206,82 @@ func TestParseTimestamp_Unparseable(t *testing.T) {
 		if got := parseTimestamp(in); got != 0 {
 			t.Errorf("parseTimestamp(%q) = %d, want 0", in, got)
 		}
+	}
+}
+
+// QueryStats against a real repository with a MERGE in the window — the
+// CBiUnion shape (2026-11-16): a release branch merges a feature branch whose
+// commits are days old. Two defects lived here together:
+//   - --first-parent made git render the merge's diff against its first
+//     parent, so the whole merged branch (+5430 lines measured live) was
+//     counted as if the person who pressed merge had written it today;
+//   - the rev-list count omitted HEAD, which exits 129 on git 2.33, the error
+//     was swallowed, and every row this path wrote carried commits = 0.
+//
+// The assertion pins both halves: lines count ONLY what was really committed
+// today (the merge contributes zero), and commits counts the merge like
+// `git log` does.
+func TestQueryStatsMergeWindow(t *testing.T) {
+	root := t.TempDir()
+	today := time.Now().Format("2006-01-02")
+	old := time.Now().AddDate(0, 0, -3).Format("2006-01-02")
+
+	run := func(date string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=tester", "GIT_AUTHOR_EMAIL=tester@example.com",
+			"GIT_COMMITTER_NAME=tester", "GIT_COMMITTER_EMAIL=tester@example.com",
+			"GIT_AUTHOR_DATE="+date+"T12:00:00", "GIT_COMMITTER_DATE="+date+"T12:00:00",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0640); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run(today, "init", "-q", "-b", "main")
+	run(today, "config", "user.name", "tester")
+	run(today, "config", "user.email", "tester@example.com")
+
+	// A real edit TODAY: 2 added lines.
+	write("base.txt", "one\ntwo\n")
+	run(today, "add", ".")
+	run(today, "commit", "-q", "-m", "base")
+
+	// The feature branch: 50 lines, committed THREE DAYS AGO (author and
+	// committer dates both old — what a real feature branch looks like).
+	run(old, "checkout", "-q", "-b", "feature")
+	var sb strings.Builder
+	for i := 0; i < 50; i++ {
+		sb.WriteString("feature line\n")
+	}
+	write("feature.txt", sb.String())
+	run(old, "add", ".")
+	run(old, "commit", "-q", "-m", "feature work")
+
+	// TODAY: merge the branch into main (--no-ff keeps a merge commit).
+	run(today, "checkout", "-q", "main")
+	run(today, "merge", "-q", "--no-ff", "-m", "Merge branch 'feature'", "feature")
+
+	res, err := QueryStats(root, today, "")
+	if err != nil {
+		t.Fatalf("QueryStats: %v", err)
+	}
+	// The 50 feature lines were written days ago; they must NOT be attributed
+	// to today through the merge's diff. Only the base commit's 2 lines count.
+	if res.LinesAdded != 2 {
+		t.Errorf("LinesAdded = %d, want 2 (the merge must not donate the branch's 50 lines)", res.LinesAdded)
+	}
+	// base + merge, counted the way `git log` counts them. The old command
+	// (rev-list without HEAD) failed outright and reported 0.
+	if res.Commits != 2 {
+		t.Errorf("Commits = %d, want 2 (base + merge; a broken count silently reports 0)", res.Commits)
 	}
 }
