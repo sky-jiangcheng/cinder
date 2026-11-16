@@ -354,6 +354,37 @@ jobs:
           fi
           ls -lh build/mcp/
 
+      # cinder-capture is the Claude Code SessionEnd hook target (ADR-0010 /
+      # ADR-0054): the zero-credit path that turns a closing session into a
+      # handoff note without calling any model. It existed only in source, so
+      # the hook's primary path was dead on every installed machine —
+      # `command -v repotory-capture` never succeeded and the hook fell back to
+      # a credit-burning model call (or nothing). Same recipe as the MCP
+      # server: pure Go, zero CGO, version from wails.json.
+      - name: Build capture CLI
+        shell: bash
+        run: |
+          set -e
+          APP_VERSION=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
+          echo "Building cinder-capture version: $APP_VERSION"
+          LDFLAGS="-X repotory/internal/version.Version=$APP_VERSION"
+          mkdir -p build/capture
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -ldflags "$LDFLAGS" -o build/capture/cinder-capture ./cmd/repotory-capture/
+          # `go build -o name` uses the name verbatim, so add the Windows suffix
+          # ourselves — the archive and the manifest expect cinder-capture.exe.
+          if [ "${{ runner.os }}" = "Windows" ] && [ -f build/capture/cinder-capture ]; then
+            mv build/capture/cinder-capture build/capture/cinder-capture.exe
+          fi
+          # Compatibility alias: the installed hook script calls
+          # `command -v repotory-capture`, so that name must resolve. Unix gets
+          # a symlink; Windows gets the alias from install.ps1 and the Scoop
+          # shim, same as the MCP server.
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            ln -sf cinder-capture build/capture/repotory-capture
+          fi
+          ls -lh build/capture/
+
       # The JetBrains plugin can start this server with one click, so end users
       # need it as a release asset (ADR-0027 usability revision). The bundle
       # ships the SPA next to the binary: the plugin passes
@@ -395,6 +426,7 @@ jobs:
           ln -sf cinder build/bin/repotory
           tar -czf "build/bin/release/Cinder-$VER-linux-amd64.tar.gz" -C build/bin cinder repotory
           tar -czf "build/bin/release/cinder-mcp-$VER-linux-amd64.tar.gz" -C build/mcp cinder-mcp repotory-mcp
+          tar -czf "build/bin/release/cinder-capture-$VER-linux-amd64.tar.gz" -C build/capture cinder-capture repotory-capture
           tar -czf "build/bin/release/cinder-server-$VER-linux-amd64.tar.gz" -C build/server cinder-server repotory-server web
           echo "RELEASE_DIR=build/bin/release" >> $GITHUB_ENV
 
@@ -505,6 +537,7 @@ jobs:
           # MCP server: separate archive, same release, no codesign/notary impact
           # on the .dmg above.
           tar -czf "release/cinder-mcp-$VER-${{ matrix.target }}.tar.gz" -C build/mcp cinder-mcp repotory-mcp
+          tar -czf "release/cinder-capture-$VER-${{ matrix.target }}.tar.gz" -C build/capture cinder-capture repotory-capture
           tar -czf "release/cinder-server-$VER-${{ matrix.target }}.tar.gz" -C build/server cinder-server repotory-server web
 
           echo "RELEASE_DIR=release" >> $GITHUB_ENV
@@ -520,15 +553,16 @@ jobs:
           # the artifact upload's if-no-files-found:error does not catch it
           # because the directory is not empty.
                     VER=$(grep -oE '"productVersion"[[:space:]]*:[[:space:]]*"[^"]+"' wails.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
-          for f in build/bin/cinder.exe build/mcp/cinder-mcp.exe build/server/cinder-server.exe; do
+          for f in build/bin/cinder.exe build/mcp/cinder-mcp.exe build/server/cinder-server.exe build/capture/cinder-capture.exe; do
             if [ ! -f "$f" ]; then
               echo "::error::$f was not produced — refusing to publish a release with a missing Windows artifact"
-              ls -la build/bin build/mcp build/server 2>/dev/null || true
+              ls -la build/bin build/mcp build/server build/capture 2>/dev/null || true
               exit 1
             fi
           done
           powershell Compress-Archive -Path "build/bin/cinder.exe" -DestinationPath "release/Cinder-$VER-windows-amd64.zip"
           powershell Compress-Archive -Path "build/mcp/cinder-mcp.exe" -DestinationPath "release/cinder-mcp-$VER-windows-amd64.zip"
+          powershell Compress-Archive -Path "build/capture/cinder-capture.exe" -DestinationPath "release/cinder-capture-$VER-windows-amd64.zip"
           powershell Compress-Archive -Path "build/server/cinder-server.exe","build/server/web" -DestinationPath "release/cinder-server-$VER-windows-amd64.zip"
           echo "RELEASE_DIR=release" >> "$GITHUB_ENV"
 
@@ -775,7 +809,7 @@ jobs:
               windows-*) app="Cinder-${VER}-${t}.zip";    arch="zip" ;;
             esac
             [ -f "$app" ] || missing+=("$app")
-            for f in "cinder-mcp-${VER}-${t}.${arch}" "cinder-server-${VER}-${t}.${arch}"; do
+            for f in "cinder-mcp-${VER}-${t}.${arch}" "cinder-capture-${VER}-${t}.${arch}" "cinder-server-${VER}-${t}.${arch}"; do
               [ -f "$f" ] || missing+=("$f")
             done
           done

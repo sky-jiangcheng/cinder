@@ -166,7 +166,7 @@ flowchart TB
 | **知识库** | 核心 | 跨项目笔记中心：Markdown `/` 块编辑器、标签、置顶、FTS5 全文搜索、版本历史 |
 | **仓库深度挖掘** | 核心 | 自动提取 README 摘要、技术栈识别（20+ 格式）、语言占比、依赖关系、贡献者 |
 | **项目理解与检索** | 核心 | 全局快捷键 `⌘/Ctrl+K`、全局全文搜索、项目上下文直达 |
-| **AI 记忆接口** | 核心 | llms.txt、笔记导出、`cinder-mcp` 22 个 MCP 工具（含 `repotory_context` / `repotory_handoff`） |
+| **AI 记忆接口** | 核心 | llms.txt、笔记导出、`cinder-mcp` 25 个 MCP 工具（含 `repotory_context` / `repotory_handoff`） |
 | **仪表盘与统计** | 支持 | 每日目标进度环、项目卡片、趋势折线图、Git 提交热力图 |
 | **内置记忆导入源** | 内置 | 8 个 Agent 记忆源幂等导入（详见[知识源导入](plugins/overview.md)） |
 

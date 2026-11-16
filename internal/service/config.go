@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -159,6 +160,20 @@ var secretConfigKeys = map[string]bool{
 	"vector_store_api_key":     true,
 	"ai_chat_api_key":          true,
 	"backup_remote_secret_key": true,
+}
+
+// AllowedConfigKeys lists the user-settable configuration keys in a stable
+// (sorted) order. It exists so the MCP config tools can name the allow-list
+// in their description — an agent needs to know which keys exist before it
+// can usefully call the update tool (ADR-0063, decision: config writes are
+// catalogue-covered).
+func AllowedConfigKeys() []string {
+	keys := make([]string, 0, len(allowedConfigKeys))
+	for k := range allowedConfigKeys {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // secretMask replaces a configured secret in responses sent to the frontend.

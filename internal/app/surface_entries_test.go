@@ -463,7 +463,7 @@ func TestSurfaceAgentWiringGroup(t *testing.T) {
 	// Against an absent project the installer answers its blocking report
 	// (Blocking=true, nothing written) rather than an error — the UI drives
 	// on the report.
-	if report, err := a.SetupAgentClients(9999, nil, false, false); err == nil && !report.Blocking {
+	if report, err := a.SetupAgentClients(9999, nil, false, false, false); err == nil && !report.Blocking {
 		t.Fatal("SetupAgentClients on an absent project must block")
 	}
 	if report, err := a.InstallAgentInstructions(9999); err == nil && !report.Blocking {

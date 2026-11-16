@@ -60,7 +60,7 @@ func TestSetupAgentClientsWritesTheClientConfig(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -106,10 +106,10 @@ func TestSetupAgentClientsIsIdempotent(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	if _, err := s.SetupAgentClients(pid, []string{"claude"}, false, false); err != nil {
+	if _, err := s.SetupAgentClients(pid, []string{"claude"}, false, false, false); err != nil {
 		t.Fatalf("first setup: %v", err)
 	}
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false, false)
 	if err != nil {
 		t.Fatalf("second setup: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestSetupAgentClientsInstallsTheHook(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, true, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, true, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -138,6 +138,51 @@ func TestSetupAgentClientsInstallsTheHook(t *testing.T) {
 	}
 }
 
+// The capture opt-in is one decision with the hook: a hook installed with the
+// gate off silently degrades every session end to a credit-burning model call
+// (the "installed but silent" shape the 2.1 timebox measured). The report must
+// carry the gate state AFTER the call — and only when the request asked for
+// it, so the report never claims a decision the user did not make.
+func TestSetupAgentClientsCaptureOptIn(t *testing.T) {
+	s, _ := setupAgentService(t)
+	projectDir := t.TempDir()
+	pid := seedManualProject(t, s, "demo", projectDir)
+
+	// Not requested → the report stays silent about the gate, and the gate
+	// itself is untouched (default off per ADR-0010).
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, true, false, false)
+	if err != nil {
+		t.Fatalf("setup without capture: %v", err)
+	}
+	if report.CaptureEnabled != nil {
+		t.Errorf("CaptureEnabled = %v, want nil (no decision was made)", *report.CaptureEnabled)
+	}
+	if v, err := db.GetConfig(s.db, claudeCaptureConfigKey); err == nil && v == "1" {
+		t.Fatal("capture gate is on without an explicit opt-in")
+	}
+
+	// Requested → the gate is on and the report says so.
+	report, err = s.SetupAgentClients(pid, []string{"claude"}, true, false, true)
+	if err != nil {
+		t.Fatalf("setup with capture: %v", err)
+	}
+	if report.CaptureEnabled == nil || !*report.CaptureEnabled {
+		t.Errorf("CaptureEnabled = %v, want true (the zero-credit path can run)", report.CaptureEnabled)
+	}
+	if v, err := db.GetConfig(s.db, claudeCaptureConfigKey); err != nil || v != "1" {
+		t.Errorf("claude_session_capture = %q (%v), want \"1\"", v, err)
+	}
+
+	// The setup never disables: a later run without the opt-in leaves the gate
+	// on (disabling lives in Settings → AI integration, one explicit place).
+	if _, err := s.SetupAgentClients(pid, []string{"claude"}, true, false, false); err != nil {
+		t.Fatalf("capture-less second setup: %v", err)
+	}
+	if v, err := db.GetConfig(s.db, claudeCaptureConfigKey); err != nil || v != "1" {
+		t.Errorf("a capture-less setup turned the gate off: %q (%v)", v, err)
+	}
+}
+
 // An auto-grouped project is a scan-time container (usually the home
 // directory), not a project the user works in. Its .claude/settings.json
 // would apply the SessionEnd hook to every project underneath it, so the
@@ -147,7 +192,7 @@ func TestSetupAgentClientsRefusesAutoGroupedProject(t *testing.T) {
 	containerDir := t.TempDir()
 	pid := seedProject(t, s.db, "container", containerDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -175,7 +220,7 @@ func TestSetupAgentClientsRefusesTheVirtualProject(t *testing.T) {
 		t.Skipf("no default project in this database: %v", err)
 	}
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -189,7 +234,7 @@ func TestSetupAgentClientsRefusesAnUnknownClient(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"emacs"}, false, false)
+	report, err := s.SetupAgentClients(pid, []string{"emacs"}, false, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -209,7 +254,7 @@ func TestSetupAgentClientsRefusesAnEmptySelection(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, nil, false, false)
+	report, err := s.SetupAgentClients(pid, nil, false, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -225,7 +270,7 @@ func TestSetupAgentClientsReportsAMissingDirectory(t *testing.T) {
 	s, _ := setupAgentService(t)
 	pid := seedManualProject(t, s, "gone", filepath.Join(t.TempDir(), "deleted"))
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -240,7 +285,7 @@ func TestSetupAgentClientsReportsAMissingDirectory(t *testing.T) {
 func TestSetupAgentClientsReportsAnUnknownProject(t *testing.T) {
 	s, _ := setupAgentService(t)
 
-	report, err := s.SetupAgentClients(99999, []string{"claude"}, false, false)
+	report, err := s.SetupAgentClients(99999, []string{"claude"}, false, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -278,7 +323,7 @@ func TestSetupAgentClientsWritesInstructionFiles(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, true)
+	report, err := s.SetupAgentClients(pid, []string{"claude"}, false, true, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -304,7 +349,7 @@ func TestSetupAgentClientsWritesInstructionFiles(t *testing.T) {
 
 	// Clicking the button twice must not stack two blocks: an agent reading the
 	// same instruction twice every session is a bug the user cannot see.
-	again, err := s.SetupAgentClients(pid, []string{"claude"}, false, true)
+	again, err := s.SetupAgentClients(pid, []string{"claude"}, false, true, false)
 	if err != nil {
 		t.Fatalf("second setup: %v", err)
 	}
@@ -324,7 +369,7 @@ func TestSetupAgentClientsInstructionAndHookAreIndependent(t *testing.T) {
 	projectDir := t.TempDir()
 	pid := seedManualProject(t, s, "demo", projectDir)
 
-	hookOnly, err := s.SetupAgentClients(pid, []string{"claude"}, true, false)
+	hookOnly, err := s.SetupAgentClients(pid, []string{"claude"}, true, false, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -340,7 +385,7 @@ func TestSetupAgentClientsInstructionAndHookAreIndependent(t *testing.T) {
 		}
 	}
 
-	instrOnly, err := s.SetupAgentClients(pid, []string{"claude"}, false, true)
+	instrOnly, err := s.SetupAgentClients(pid, []string{"claude"}, false, true, false)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}

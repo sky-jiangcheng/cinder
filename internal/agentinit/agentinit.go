@@ -384,9 +384,13 @@ cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
 
 # Primary path (ADR-0054): repotory-capture reads the transcript directly
 # and writes a handoff note. Zero credit — survives credit exhaustion.
-if command -v repotory-capture >/dev/null 2>&1; then
-  # Keep stdout/stderr visible: a failed capture must stay diagnosable.
-  repotory-capture 2>&1 || true
+# Keep stdout/stderr visible: a failed capture must stay diagnosable.
+# --strict makes a capture that wrote nothing (capture disabled, no
+# matching project) exit non-zero, so a non-zero here falls through to the
+# model-driven fallback below instead of reporting a silent success. Without
+# it the hook would exit 0 on a capture that produced no note — the
+# "installed but silent" failure this two-tier design exists to remove.
+if command -v repotory-capture >/dev/null 2>&1 && repotory-capture --strict 2>&1; then
   exit 0
 fi
 

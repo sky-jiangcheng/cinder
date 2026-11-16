@@ -8,8 +8,9 @@
 # against a local fixture server, so the failure surfaces here instead.
 #
 # The desktop asset is faked (the goal is the script's URL/extract/install
-# logic, not Wails output), but the MCP archive is a real Go build of
-# ./cmd/mcp, so `cinder-mcp` actually runs afterwards. Release assets carry the
+# logic, not Wails output), but the MCP and capture archives are real Go builds
+# of ./cmd/mcp and ./cmd/repotory-capture, so they actually run afterwards.
+# Release assets carry the
 # version in their names, so the fixtures do too: VERSION pins the fixture tag
 # the scripts build their URLs from, and RELEASES / CINDER_RELEASE_BASE point
 # them at the fixture server instead of GitHub.
@@ -52,6 +53,11 @@ jobs:
       - name: Build MCP server
         run: go build -o dist/cinder-mcp ./cmd/mcp/
 
+      # Same for the capture CLI: a genuine build of ./cmd/repotory-capture, so
+      # the SessionEnd hook's primary path is exercised for real.
+      - name: Build capture CLI
+        run: go build -o dist/cinder-capture ./cmd/repotory-capture/
+
       # The desktop tarball only has to satisfy the script's download and
       # extract steps; building Wails here would need GTK/WebKit and would
       # test release.yml instead of install.sh.
@@ -64,12 +70,14 @@ jobs:
           # fixture does the same so the extract step is exercised as shipped.
           ln -sf cinder dist/repotory
           ln -sf cinder-mcp dist/repotory-mcp
+          ln -sf cinder-capture dist/repotory-capture
           tar -czf "dist/Cinder-$VERSION-linux-amd64.tar.gz" -C dist cinder repotory
           tar -czf "dist/cinder-mcp-$VERSION-linux-amd64.tar.gz" -C dist cinder-mcp repotory-mcp
-          rm -f dist/cinder dist/repotory dist/cinder-mcp dist/repotory-mcp
+          tar -czf "dist/cinder-capture-$VERSION-linux-amd64.tar.gz" -C dist cinder-capture repotory-capture
+          rm -f dist/cinder dist/repotory dist/cinder-mcp dist/repotory-mcp dist/cinder-capture dist/repotory-capture
           # Same manifest shape release.yml uploads, so install.sh's verify
           # path runs for real (not just its "no manifest" skip path).
-          (cd dist && sha256sum "Cinder-$VERSION-linux-amd64.tar.gz" "cinder-mcp-$VERSION-linux-amd64.tar.gz" > SHA256SUMS)
+          (cd dist && sha256sum "Cinder-$VERSION-linux-amd64.tar.gz" "cinder-mcp-$VERSION-linux-amd64.tar.gz" "cinder-capture-$VERSION-linux-amd64.tar.gz" > SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: Serve fixtures over HTTP
@@ -93,10 +101,14 @@ jobs:
           export PATH="$RUNNER_TEMP/bin:$PATH"
           command -v cinder
           command -v cinder-mcp
+          command -v cinder-capture
           # The pre-rename names must keep resolving — that is the whole point
           # of the compat symlinks (existing client configs use those paths).
+          # repotory-capture is not a rename leftover: it is the name the
+          # SessionEnd hook calls, so it must resolve for the hook to work.
           test -L "$RUNNER_TEMP/bin/repotory" || { echo "compat symlink repotory missing" >&2; exit 1; }
           test -L "$RUNNER_TEMP/bin/repotory-mcp" || { echo "compat symlink repotory-mcp missing" >&2; exit 1; }
+          test -L "$RUNNER_TEMP/bin/repotory-capture" || { echo "compat symlink repotory-capture missing" >&2; exit 1; }
           # cinder-mcp serves MCP over stdio; it must answer an initialize
           # handshake, not just exist as a file.
           #
@@ -153,6 +165,9 @@ jobs:
       - name: Build MCP server
         run: go build -o dist/cinder-mcp ./cmd/mcp/
 
+      - name: Build capture CLI
+        run: go build -o dist/cinder-capture ./cmd/repotory-capture/
+
       # macOS install.sh attaches a .dmg with hdiutil; a fixture dmg built
       # with hdiutil is a real one, so the attach/detach path is exercised.
       # The .app bundle layout mirrors what Wails produces (a directory named
@@ -169,11 +184,13 @@ jobs:
           hdiutil create -volname Cinder -srcfolder stage -ov -format UDZO \
             "dist/Cinder-$VERSION-$TARGET.dmg"
           ln -sf cinder-mcp dist/repotory-mcp
+          ln -sf cinder-capture dist/repotory-capture
           tar -czf "dist/cinder-mcp-$VERSION-$TARGET.tar.gz" -C dist cinder-mcp repotory-mcp
-          rm -f dist/cinder-mcp dist/repotory-mcp
+          tar -czf "dist/cinder-capture-$VERSION-$TARGET.tar.gz" -C dist cinder-capture repotory-capture
+          rm -f dist/cinder-mcp dist/repotory-mcp dist/cinder-capture dist/repotory-capture
           # Same manifest shape release.yml uploads, so install.sh's verify
           # path runs for real (not just its "no manifest" skip path).
-          (cd dist && shasum -a 256 "Cinder-$VERSION-$TARGET.dmg" "cinder-mcp-$VERSION-$TARGET.tar.gz" > SHA256SUMS)
+          (cd dist && shasum -a 256 "Cinder-$VERSION-$TARGET.dmg" "cinder-mcp-$VERSION-$TARGET.tar.gz" "cinder-capture-$VERSION-$TARGET.tar.gz" > SHA256SUMS)
           cat dist/SHA256SUMS
 
       - name: Serve fixtures over HTTP
@@ -201,8 +218,13 @@ jobs:
             echo "Cinder.app missing" >&2; exit 1; }
           test -x "$RUNNER_TEMP/bin/cinder-mcp" || {
             echo "cinder-mcp missing or not executable" >&2; exit 1; }
+          test -x "$RUNNER_TEMP/bin/cinder-capture" || {
+            echo "cinder-capture missing or not executable" >&2; exit 1; }
           test -L "$RUNNER_TEMP/bin/repotory-mcp" || {
             echo "compat symlink repotory-mcp missing" >&2; exit 1; }
+          # The hook calls repotory-capture; that name must resolve.
+          test -L "$RUNNER_TEMP/bin/repotory-capture" || {
+            echo "compat symlink repotory-capture missing" >&2; exit 1; }
           # The MCP binary must actually run, not just exist. Same note as the
           # Linux job: `serverInfo.name` stays `repotory-mcp`, frozen.
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
@@ -228,6 +250,9 @@ jobs:
       - name: Build MCP server
         run: go build -o dist/cinder-mcp.exe ./cmd/mcp/
 
+      - name: Build capture CLI
+        run: go build -o dist/cinder-capture.exe ./cmd/repotory-capture/
+
       - name: Pack fixture assets
         shell: pwsh
         run: |
@@ -238,9 +263,11 @@ jobs:
             -DestinationPath "dist/Cinder-$env:VERSION-windows-amd64.zip" -Force
           Compress-Archive -Path dist/cinder-mcp.exe `
             -DestinationPath "dist/cinder-mcp-$env:VERSION-windows-amd64.zip" -Force
+          Compress-Archive -Path dist/cinder-capture.exe `
+            -DestinationPath "dist/cinder-capture-$env:VERSION-windows-amd64.zip" -Force
           # Same manifest shape release.yml uploads, so install.ps1's verify
           # path runs for real (not just its "no manifest" skip path).
-          $lines = foreach ($f in @("dist/Cinder-$env:VERSION-windows-amd64.zip", "dist/cinder-mcp-$env:VERSION-windows-amd64.zip")) {
+          $lines = foreach ($f in @("dist/Cinder-$env:VERSION-windows-amd64.zip", "dist/cinder-mcp-$env:VERSION-windows-amd64.zip", "dist/cinder-capture-$env:VERSION-windows-amd64.zip")) {
             "$((Get-FileHash -Path $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
           }
           Set-Content -Path dist/SHA256SUMS -Value ($lines -join "`r`n") -Encoding ascii -NoNewline
@@ -274,9 +301,12 @@ jobs:
           $dir = "$env:LOCALAPPDATA\Repotory"
           if (-not (Test-Path "$dir\cinder.exe")) { throw "cinder.exe missing" }
           if (-not (Test-Path "$dir\cinder-mcp.exe")) { throw "cinder-mcp.exe missing" }
+          if (-not (Test-Path "$dir\cinder-capture.exe")) { throw "cinder-capture.exe missing" }
           # Pre-rename copies keep existing client configs working.
           if (-not (Test-Path "$dir\repotory.exe")) { throw "compat copy repotory.exe missing" }
           if (-not (Test-Path "$dir\repotory-mcp.exe")) { throw "compat copy repotory-mcp.exe missing" }
+          # The SessionEnd hook calls repotory-capture; that copy must exist.
+          if (-not (Test-Path "$dir\repotory-capture.exe")) { throw "compat copy repotory-capture.exe missing" }
 
       - name: Stop fixture server
         if: always()

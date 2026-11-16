@@ -905,6 +905,12 @@ export interface AgentSetupReport {
    * (ADR-0043), one entry per file. Undefined when not requested.
    */
   instructions?: AgentFileResult[]
+  /**
+   * The claude_session_capture gate state AFTER this call, reported only when
+   * the request asked to enable it. true = the hook's zero-credit primary
+   * path can run; false = the write did not land (a warning accompanies it).
+   */
+  capture_enabled?: boolean
   /** Per-file failures; a half-succeeded registration is reported, not hidden. */
   warnings?: string[]
 }

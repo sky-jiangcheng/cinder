@@ -88,6 +88,13 @@ type AgentSetupReport struct {
 	// Instructions lists the project instruction files that received the managed
 	// block, one entry per file (ADR-0043). nil when not requested.
 	Instructions []agentinit.FileResult `json:"instructions,omitempty"`
+	// CaptureEnabled is the claude_session_capture gate state AFTER this call,
+	// reported only when the request asked to enable it (nil otherwise — the
+	// report must not claim anything about a decision the user did not make).
+	// true means the hook's zero-credit primary path can actually run; false
+	// with a request means the write did not land, which is a warning the user
+	// must see, not silently swallow.
+	CaptureEnabled *bool `json:"capture_enabled,omitempty"`
 	// Warnings collects the per-file failures. A registration that half
 	// succeeded is reported, not hidden behind one boolean.
 	Warnings []string `json:"warnings,omitempty"`
@@ -116,6 +123,17 @@ func AgentClientNames() []string {
 // managed repotory_* block into the project's instruction files (ADR-0043) —
 // the protocol-neutral half, since the hook only exists for Claude Code.
 //
+// enableCapture turns the claude_session_capture gate ON (ADR-0010), the same
+// explicit opt-in the settings toggle performs. It exists so the hook install
+// and its precondition are ONE decision: a hook installed with the gate off
+// silently falls back to a credit-burning model call at every session end,
+// which is exactly the "installed but silent" shape the 2.1 timebox measured.
+// The opt-in stays explicit and default-off — installing the hook never
+// enables capture on its own, and this call can only turn the gate ON, never
+// off (disabling stays where it was set: Settings → AI integration). The gate
+// also powers the on-demand capture button, so it is applied independently of
+// withHook; the UI couples the two checkboxes as a matter of presentation.
+//
 // The two are independent switches and neither replaces the other: the hook
 // catches "the user forgot to wrap up", the instruction file catches "the user
 // is not in Claude Code". Both land in the same CreateHandoffNote path, so a
@@ -125,7 +143,7 @@ func AgentClientNames() []string {
 // is a container, not a project" is an answer the UI can render, and it must
 // not look like a crash. An error is reserved for the service failing to look
 // at all (an unreadable database row).
-func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook, withInstructions bool) (AgentSetupReport, error) {
+func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook, withInstructions, enableCapture bool) (AgentSetupReport, error) {
 	var report AgentSetupReport
 
 	selected, err := parseAgentClients(clients)
@@ -184,6 +202,20 @@ func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook,
 	report.HookSettings = res.HookSettings
 	report.Instructions = res.Instructions
 	report.Warnings = res.Warnings
+
+	if enableCapture {
+		// The write goes through the same UpdateConfig every other surface
+		// uses, so the allow-list and value validation are identical. A
+		// failure lands in Warnings; the gate state below is read back, so
+		// the report never claims the zero-credit path can run when it
+		// cannot.
+		if err := s.UpdateConfig(claudeCaptureConfigKey, "1"); err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("could not enable %s: %v", claudeCaptureConfigKey, err))
+		}
+		v, err := db.GetConfig(s.db, claudeCaptureConfigKey)
+		enabled := err == nil && v == "1"
+		report.CaptureEnabled = &enabled
+	}
 	return report, nil
 }
 

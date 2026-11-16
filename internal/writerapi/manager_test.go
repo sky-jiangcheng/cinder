@@ -241,6 +241,53 @@ func TestSelfElectDisallowedRefuses(t *testing.T) {
 // TestUnknownMethodRefused: the catalogue is the contract. A request naming a
 // method outside it is refused on BOTH sides, so no future client can reach a
 // service method the reviewers never signed off on.
+// TestConfigWriteIsCatalogueCovered pins ADR-0063's reclassification:
+// configuration writes moved from human-gate to catalogue-covered, so a
+// client process forwards them to the writer instead of being refused.
+func TestConfigWriteIsCatalogueCovered(t *testing.T) {
+	dir := t.TempDir()
+	d := openTestDB(t, dir)
+
+	w := newManager(t, d, dir, "w", true, false)
+	c := newManager(t, d, dir, "c", true, false)
+
+	// The classification: UpdateConfig now has a catalogue method, so a client
+	// role forwards it rather than hitting GuardedLocal's refusal.
+	if got := c.DecideWrite("UpdateConfig"); got != WriteForward {
+		t.Fatalf("DecideWrite(UpdateConfig) from a client = %v, want WriteForward", got)
+	}
+	// UpdateScanRoots stays human-gate: granting filesystem scope is a
+	// different decision and must still be refused from a client.
+	if got := c.DecideWrite("UpdateScanRoots"); got != WriteRefuse {
+		t.Fatalf("DecideWrite(UpdateScanRoots) from a client = %v, want WriteRefuse", got)
+	}
+
+	// The forwarded write lands through the contract.
+	var result map[string]string
+	if err := c.ExecuteInto(context.Background(), MethodConfigUpdate, ConfigUpdateArgs{
+		Key: "ai_chat_model", Value: "qwen3",
+	}, &result); err != nil {
+		t.Fatalf("forwarded config write failed: %v", err)
+	}
+	if result["key"] != "ai_chat_model" {
+		t.Errorf("result = %v, want the key echoed", result)
+	}
+	got, err := db.GetConfig(d, "ai_chat_model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "qwen3" {
+		t.Errorf("ai_chat_model = %q, want qwen3", got)
+	}
+
+	// The executor's validation is the service's: an unknown key is refused.
+	if _, err := w.Execute(context.Background(), MethodConfigUpdate, ConfigUpdateArgs{
+		Key: "no_such_key", Value: "x",
+	}); err == nil {
+		t.Fatal("unknown config key must be refused")
+	}
+}
+
 func TestUnknownMethodRefused(t *testing.T) {
 	dir := t.TempDir()
 	d := openTestDB(t, dir)

@@ -404,14 +404,27 @@ func TestContractFixture(t *testing.T) {
 	}
 }
 
-// The SessionEnd hook must not discard repotory-capture output, and must
-// still guard it with || true so a failed capture cannot break session exit.
+// The SessionEnd hook must not discard repotory-capture output, and must let a
+// capture that wrote nothing fall through to the model-driven fallback.
+// ADR-0054's two-tier design is only real if the primary path's failure is
+// observable to the hook: `--strict` makes "wrote nothing" non-zero, and the
+// `if ... && repotory-capture --strict` form consumes that non-zero instead of
+// exiting 0 on a silent no-op.
 func TestHookScriptDoesNotSilenceCapture(t *testing.T) {
 	if strings.Contains(hookScript, "\n  repotory-capture >/dev/null") {
 		t.Errorf("capture output must stay visible:\n%s", hookScript)
 	}
-	if !strings.Contains(hookScript, "\n  repotory-capture 2>&1 || true") {
-		t.Errorf("capture must keep || true:\n%s", hookScript)
+	if !strings.Contains(hookScript, "repotory-capture --strict 2>&1") {
+		t.Errorf("capture must run with --strict and keep output visible:\n%s", hookScript)
+	}
+	if !strings.Contains(hookScript, "if command -v repotory-capture >/dev/null 2>&1 && repotory-capture --strict 2>&1; then") {
+		t.Errorf("capture must be the guarded if-condition so a failure falls through:\n%s", hookScript)
+	}
+	// The old shape ran the capture and then unconditionally `exit 0`, which
+	// reported success for a capture that wrote nothing — the "installed but
+	// silent" failure. Pin that it is gone.
+	if strings.Contains(hookScript, "repotory-capture 2>&1 || true") {
+		t.Errorf("capture must not swallow its exit code with || true:\n%s", hookScript)
 	}
 }
 

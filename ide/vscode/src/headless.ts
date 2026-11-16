@@ -265,6 +265,69 @@ export function parseProjects(text: string): ProjectOption[] {
   return out;
 }
 
+/**
+ * Parse the `repotory_config_get` tool result (ADR-0063).
+ *
+ * Same loud-failure discipline as the other parsers: the tool answers with
+ * JSON on the success path and plain text on the error path, so "this is not
+ * JSON" is the tool refusing — it must throw, never return an empty map (an
+ * empty map would read as "nothing configured" and hide a failed call).
+ */
+export function parseConfig(text: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.trim());
+  } catch {
+    throw new Error(`the config-get tool returned a non-JSON result: ${text.trim()}`);
+  }
+  const obj = parsed as Record<string, unknown> | null;
+  const config = obj?.config as Record<string, string> | undefined;
+  if (!config || typeof config !== "object") {
+    throw new Error(`the config-get tool returned ${text.trim()}, expected a config object`);
+  }
+  return config;
+}
+
+/**
+ * The workspace-resolution payload of `repotory_workspace_resolve`
+ * (ADR-0062): the read-only twin of the ResolveWorkspacePath binding,
+ * field-for-field the same answer the HTTP bridge used to return.
+ */
+export interface WorkspaceResolution {
+  Project?: { id: number; name: string; root_path: string } | null;
+  Repository?: { id: number; path: string } | null;
+  /** The projects this folder could belong to, when it resolves to none. */
+  Candidates?: { id: number; name: string }[] | null;
+}
+
+/**
+ * Parse the `repotory_workspace_resolve` tool result (ADR-0062).
+ *
+ * Same loud-failure discipline as the other parsers: the tool answers with
+ * JSON on the success path and with plain text on the error path
+ * (`makeTextResult` in cmd/mcp/results.go), so "this is not JSON" is the
+ * tool refusing — an empty result is the one answer a user cannot tell
+ * apart from a failed call, and it is exactly what must never be returned
+ * here. A payload that parses but carries no usable shape is rejected too.
+ */
+export function parseWorkspaceResolution(text: string): WorkspaceResolution {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.trim());
+  } catch {
+    throw new Error(`the workspace-resolve tool returned a non-JSON result: ${text.trim()}`);
+  }
+  const obj = parsed as Record<string, unknown> | null;
+  if (!obj || typeof obj !== "object") {
+    throw new Error(`the workspace-resolve tool returned ${text.trim()}, expected a resolution object`);
+  }
+  return {
+    Project: (obj.Project as WorkspaceResolution["Project"]) ?? null,
+    Repository: (obj.Repository as WorkspaceResolution["Repository"]) ?? null,
+    Candidates: (obj.Candidates as WorkspaceResolution["Candidates"]) ?? null,
+  };
+}
+
 /** The AI tidying proposal as the webview needs it: fields plus caveats. */
 export interface OrganizeProposal {
   note_id: number;

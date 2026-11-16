@@ -34,9 +34,12 @@ tag, and the manifests below point at them:
 | `cinder-mcp-<version>-darwin-arm64.tar.gz` / `cinder-mcp-<version>-darwin-amd64.tar.gz` | macOS MCP server | Homebrew Cask |
 | `cinder-mcp-<version>-linux-amd64.tar.gz` | Linux MCP server | Homebrew Formula |
 | `cinder-mcp-<version>-windows-amd64.zip` | Windows MCP server | Scoop |
-| `cinder-server-<version>-darwin-arm64.tar.gz` / `cinder-server-<version>-darwin-amd64.tar.gz` | macOS headless server + web UI | manual (deep-link enhancement) |
-| `cinder-server-<version>-linux-amd64.tar.gz` | Linux headless server + web UI | manual (deep-link enhancement) |
-| `cinder-server-<version>-windows-amd64.zip` | Windows headless server + web UI | manual (deep-link enhancement) |
+| `cinder-capture-<version>-darwin-arm64.tar.gz` / `cinder-capture-<version>-darwin-amd64.tar.gz` | macOS capture CLI | Homebrew Cask |
+| `cinder-capture-<version>-linux-amd64.tar.gz` | Linux capture CLI | Homebrew Formula |
+| `cinder-capture-<version>-windows-amd64.zip` | Windows capture CLI | Scoop |
+| `cinder-server-<version>-darwin-arm64.tar.gz` / `cinder-server-<version>-darwin-amd64.tar.gz` | macOS headless server + web UI | manual — deep links (enhancement) + IDE provider configuration (substantive gap, see ADR-0063) |
+| `cinder-server-<version>-linux-amd64.tar.gz` | Linux headless server + web UI | manual — deep links (enhancement) + IDE provider configuration (substantive gap, see ADR-0063) |
+| `cinder-server-<version>-windows-amd64.zip` | Windows headless server + web UI | manual — deep links (enhancement) + IDE provider configuration (substantive gap, see ADR-0063) |
 
 The desktop app is macOS/Windows/Linux, but only macOS has a real installer
 artifact (`.dmg`); Linux ships a bare tarball and Windows a zip. The MCP server

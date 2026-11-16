@@ -9,7 +9,7 @@ Cinder 面向 AI 代理提供读取通道与自检工具，全部复用同一 `i
 
 ## 价值定位：Cinder 是 AI 的数据源，而非 AI 平台
 
-**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 22 个工具来**消费**这层数据，按需取数、精确检索。
+**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 25 个工具来**消费**这层数据，按需取数、精确检索。
 
 这一层「为什么比让 AI 直接读 git 更优」的论证，见[存储结构优化与 AI 价值](../storage-optimization.md)。
 
@@ -112,11 +112,11 @@ go build -o cinder-server ./cmd/server
 
 - `POST /api/rpc` 用反射覆盖桌面端绑定的全部方法（JSON body 指定 method + args），与 Wails 走的是**同一份实现**；`Startup` / `Shutdown` / `Service` 本身被屏蔽。写操作与 MCP 遵守同一套协议保护（例如交接笔记拒绝被 update 覆盖）。
 - 浏览器开发模式用 `bash scripts/dev.sh`：它同时起无头 API（默认 18765）与 Vite。只跑 `npx vite` 会得到一个「页面能开、每个请求都 502」的假象——那是缺后端，不是应用坏了。
-- **发布资产里只有**：桌面安装包（4 平台）、`cinder-mcp-<平台>`、VS Code 扩展 VSIX。`cinder-server`、`cmd/vector-init`、`cmd/abeval`、`cmd/repotory-capture`、`cmd/wiki-export`（wiki 只读导出）都需自行 `go build`（或 `go run`），未随版本分发。
+- **发布资产里有**：桌面安装包（4 平台）、`cinder-mcp-<平台>`、`cinder-capture-<平台>`（SessionEnd hook 的零 credit 捕捉 CLI，ADR-0010/0054 的主路径二进制）、VS Code 扩展 VSIX。`cinder-server`、`cmd/vector-init`、`cmd/abeval`、`cmd/wiki-export`（wiki 只读导出）仍需自行 `go build`（或 `go run`），未随版本分发。
 
 ## MCP Server（`cinder-mcp`）
 
-MCP 是唯一的 AI 执行接口（`cinder` 无 CLI 子命令）。stdio 协议，进程内单次开库，22 个工具（含 6 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 每日复盘 + 共享会话写入）：
+MCP 是唯一的 AI 执行接口（`cinder` 无 CLI 子命令）。stdio 协议，进程内单次开库，25 个工具（含 6 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 每日复盘 + 共享会话写入）：
 
 会话记忆协议的两端在时序上是这样落位的：
 
@@ -153,6 +153,9 @@ sequenceDiagram
 |------|------|------|
 | `repotory_scan` | 冷启动：播种默认扫描根目录并同步扫描，发现本地 Git 仓库（纯 MCP 安装可用，无需桌面应用） | 写 |
 | `repotory_context` | 会话开始一次注入项目全上下文（技术栈 / README / 待办 / 高相关笔记，交接笔记置顶）。可选 `path`（绝对目录 / cwd）解析归属项目，见「工作区路径解析」 | 读 |
+| `repotory_workspace_resolve` | 把绝对目录解析成归属项目（及目录所在的扫描仓库），返回与 `ResolveWorkspacePath` 绑定逐字段同构的解析结果，无匹配时给候选项目目录（[ADR-0062](../adr/0062-ide-project-lock-over-mcp.md)）。**agent 常规不需要它**：`repotory_context` 的 `path` 已在服务端完成同一份解析；它是给需要**显示**解析结果的人侧客户端（IDE 面板的项目锁）用的。纯读 | 读 |
+| `repotory_config_get` | 读全部配置（每个可设键的当前值 + 扫描根目录）。密钥掩码为 `************`——响应只说「已配置」，绝不外泄凭据。IDE 面板的 provider 设置经它读取（[ADR-0063](../adr/0063-repotory-server-consumer-list.md)） | 读 |
+| `repotory_config_update` | 写单个配置键（键名须在服务端白名单内，数值键拒绝非数值值）。**配置写自 2026-11-16 起为目录写**（ADR-0063：所有者把配置写从 human-gate 重新分类为 catalogue-covered），经单写者契约路由——IDE 面板的 provider 设置（`ai_chat_base_url` / `ai_chat_model` / `ai_chat_api_key`）经它保存，无本地服务也能配置 | 写 |
 | `repotory_handoff` | 会话结束结构化交接（summary/changes/decisions/gotchas/next_steps），落库并供下次 `repotory_context` 置顶读取；落库笔记带 `handoff` 标签，`repotory_notes_update` 拒绝覆盖。`project_id` 可选，缺省时由 `path` 解析。**注意**：这里的 handoff 是**持久化的交接记录**，不是「在 harness / 执行环境之间移交一场正在进行的对话」（那是 VS Code "Hand off a session" 的含义，见 [ADR-0007](adr/0007-session-memory-protocol.md)） | 写 |
 | `repotory_notes_list` | 全部笔记 | 读 |
 | `repotory_notes_search` | FTS5 搜索（query）。可选 `path`：命中仓库内的笔记排到前面——只排序，不过滤 | 读 |
@@ -210,11 +213,13 @@ repository 层（1、2）压过 project 层（3、4），因为命中 repository
 
 **挖掘不再拿任意兄弟仓库作答。** `GetProjectOverview` 过去按 `repos[0].ID` 键入缓存并在项目根目录挖掘，于是一个兄弟仓库容器展示的技术栈 / README / 提交只是排序最前的那个 repository。`GetRepositoryOverview(projectID, repositoryID)` 把挖掘、缓存与提交都收窄到该 repository（这也让挖掘有了真正的 git 根——v13 迁移过去只能做到失效）。一个不属于该项目的 repository id 会被**拒绝**而非替换。
 
-这条解析是**服务端**的，MCP 工具与 VS Code 扩展共用同一实现：`repotory_context` / `repotory_handoff` / `repotory_notes_search` 新增可选 `path`，扩展通过只读绑定 `ResolveWorkspacePath` 拿到归属显示，因此不会在 TypeScript 里重新实现一遍匹配器。注意 `repotory_context` 里 `path` 能解析到项目时**优先于** `project_id`/`project_name`，而 `repotory_handoff` 里 `project_id` 优先、`path` 仅在其缺失时兜底。（`repotory_context` 的 MCP 工具描述仍把 `project_id` 写成「preferred」，但实际是能解析的 `path` 取胜——描述与行为存在已知出入。）
+这条解析是**服务端**的，MCP 工具与 VS Code 扩展共用同一实现：`repotory_context` / `repotory_handoff` / `repotory_notes_search` 新增可选 `path`，扩展通过 `repotory_workspace_resolve` 工具（[ADR-0062](../adr/0062-ide-project-lock-over-mcp.md)：`ResolveWorkspacePath` 绑定的 MCP 孪生，调用同一个服务端匹配器）拿到归属显示，因此不会在 TypeScript 里重新实现一遍匹配器。注意 `repotory_context` 里 `path` 能解析到项目时**优先于** `project_id`/`project_name`，而 `repotory_handoff` 里 `project_id` 优先、`path` 仅在其缺失时兜底。（`repotory_context` 的 MCP 工具描述仍把 `project_id` 写成「preferred」，但实际是能解析的 `path` 取胜——描述与行为存在已知出入。）
 
 ### 桌面端一键接入（不用开终端）
 
 装了桌面 App 的人不必去终端跑脚本：**设置 → 操作 → 接入 AI 客户端**（见[设置](settings.md)）里选一个项目、勾选要接的客户端、点一次「接入」，桌面端就会写好 `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`，可选装上 Claude Code 的 SessionEnd hook，**可选把「开局读 / 收尾写」那两句写进项目的 `AGENTS.md` 与 `CLAUDE.md`**（[ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)），并顺手触发一次扫描。装完直接开 Claude Code，`repotory_context` 就有内容可返回，不用再手动 rescan。
+
+装 hook 时同一个表单里还有第三个勾选：**「开启会话捕捉」**（`claude_session_capture`，[ADR-0010](../adr/0010-session-auto-capture.md)）。它和 hook 是**同一个决定**——hook 装上了但捕捉没开，主路径（读转录落库、零 credit）就是死的，每次会话结束都退回「调模型写交接」并消耗 credit；这正是 2.1 时间盒量到的「装了但静默」的形状。勾选**默认不选**：它扩大的是 Cinder 可以读的东西（会话逐字稿），所以开关必须由用户来拨，接入报告会如实写明开启后的门状态；这个入口只能把门**打开**，关闭仍在设置 → AI 集成那一处。
 
 （Windsurf 是个例外：它的 MCP 配置是**用户级**的，落在 `~/.codeium/windsurf/mcp_config.json`，与项目无关。其余三个客户端的配置写在**项目目录**里，跟着仓库走。）
 
@@ -292,16 +297,25 @@ claude mcp add repotory -- /path/to/cinder-mcp
 }
 ```
 
-配套脚本 `.claude/hooks/repotory-handoff.sh`（记得 `chmod +x`）：
+配套脚本 `.claude/hooks/repotory-handoff.sh`（记得 `chmod +x`；用 `repotory-init --with-hook` 装的是同一份字节）：
 
 ```sh
 #!/bin/sh
 # SessionEnd hook: make the handoff automatic instead of relying on the
-# agent's goodwill. One bounded headless turn costs a fraction of the
-# session it preserves; "the agent will remember to call handoff" costs
-# the entire exit record whenever it forgets.
+# agent's goodwill. Two tiers (ADR-0054): the zero-credit capture first, a
+# bounded headless turn only when that path cannot run.
 set -u
 cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" || exit 0
+
+# Primary: cinder-capture reads the transcript directly and writes the note
+# with no model call at all. --strict makes "wrote nothing" (capture disabled,
+# no matching project) exit non-zero, so a failure falls through to the
+# fallback instead of reporting a silent success.
+if command -v repotory-capture >/dev/null 2>&1 && repotory-capture --strict 2>&1; then
+  exit 0
+fi
+
+# Fallback: one bounded headless turn, a fraction of the session it preserves.
 command -v claude >/dev/null 2>&1 || exit 0
 claude -p --mcp-config .mcp.json \
   'This session ended. Call repotory_handoff for the current project: a concise summary plus next_steps. If the project cannot be resolved, call repotory_context once first. Do nothing else.' \
@@ -311,8 +325,8 @@ claude -p --mcp-config .mcp.json \
 设计要点与代价（写清楚，别让叙事变成吹牛）：
 
 - **触发时机**：会话结束时由 Claude Code 触发，触发原因（`clear` / `logout` / `prompt_input_exit` / `other`）以 JSON 形式写入 stdin；脚本可读 stdin 按需跳过（例如「只是清了上下文」不必交接）。
-- **成本**：一次有界的 headless 回合（`claude -p`），远小于它保存的整场会话上下文；hook 有默认超时（60s），脚本以 `|| true` 静默收尾，不影响会话退出。
-- **降级路径**：没有 `claude` CLI 时直接跳过；MCP 未注册时 headless 调用失败并被吞掉——协议要求交接必须由 `repotory_handoff` 写入，hook 只负责「必定触发」，从不绕过协议直写数据库。
+- **成本**：主路径**零 credit**——`repotory-capture`（随版本分发为 `cinder-capture` 资产，安装后兼容名 `repotory-capture` 进 PATH）直接读转录落库，全程不调 model，credit 耗尽时照常工作；只有主路径跑不了时才花「一次有界 headless 回合」的 credit。hook 有默认超时（60s），脚本以 `|| true` 静默收尾，不影响会话退出。
+- **降级路径**：`repotory-capture` 不在 PATH、`claude_session_capture` 未开启（默认关，ADR-0010 的隐私门）或 cwd 匹配不到项目时，`--strict` 的非零退出码让 hook **落到** `claude -p` 兜底，而不是把「什么都没写」当成成功；`claude` CLI 缺失时直接跳过；MCP 未注册时 headless 调用失败并被吞掉——协议要求交接必须由 `repotory_handoff` 写入，hook 只负责「必定触发」，从不绕过协议直写数据库。
 - **协议保护**：交接笔记带 `handoff` 标签，`repotory_notes_update` 拒绝覆盖它们（防误覆盖），下一次会话由 `repotory_context` 置顶完整渲染。
 - hook 的事件名与配置字段随 Claude Code 版本演进，接入前以 `claude --help` 和官方 hooks 文档为准。
 
@@ -366,18 +380,23 @@ Cinder 在**扫描时一次性**把 git 原始数据解析并物化进本地 SQL
 
 仓库根目录的 [SKILL.md](https://github.com/sky-jiangcheng/cinder/blob/master/SKILL.md) 是给代理阅读的能力卡片（命令、工具表、路径），可直接投喂。
 
-### WorkBuddy 技能包
+### 技能包（跨 agent）
 
-根目录的 `SKILL.md` 是**平台无关**的能力卡片（Claude Code / Cursor 等按需读取）；WorkBuddy 则用**带 frontmatter 的技能包**机制，代理自动发现并按描述触发。
+根目录的 `SKILL.md` 是**平台无关**的能力卡片（Claude Code / Cursor 等按需读取）；`skill/repotory/` 是**带 frontmatter 的技能包**，各 agent 按自己的 skills 目录自动发现、按描述触发。
 
-安装到 WorkBuddy（用户级，全局可用）：
+**技能包与应用无关：一次安装，本机所有 agent 自动检测到。** 每个 agent 扫描自己的用户级 skills 目录，所以安装就是把同一份包放进每个**已检测到**的 agent——一个命令搞定，没有按应用逐个配置，也没有第二份要手工同步的副本：
 
 ```bash
-# 技能包已随 release 提供，解压到用户级 skills 目录即可
-unzip repotory.skill -d ~/.workbuddy/skills/
+bash scripts/install-skill.sh        # 装进本机所有检测到的 agent
+bash scripts/install-skill.sh --list # 看检测到哪些 agent、各自状态
+bash scripts/install-skill.sh uninstall # 从所有已安装的 agent 移除
 ```
 
-装好后 WorkBuddy 里还需要在连接器管理页点一次「信任」，MCP 工具才会出现在工具列表里：
+- **检测规则**：agent 的 skills 目录在机器上存在即视为已检测到（Claude Code `~/.claude/skills`、Codex `~/.codex/skills`、WorkBuddy `~/.workbuddy/skills`；清单见 [`scripts/skill-agents.txt`](https://github.com/sky-jiangcheng/cinder/blob/master/scripts/skill-agents.txt)，新增 agent 加一行即可，安装器与漂移检查同读一份）。
+- **升级后刷新**：Cinder 升级后重跑一次 `install-skill.sh`，各 agent 的已装副本即与仓库同步；`check-skill-package` 门会校验每一份已装副本与仓库一致，发现漂移就报红并提示重跑。
+- **卸载保护**：`uninstall` 只删声明了本仓 `upstream` 的副本，你自己的同名 skill 不会被误删。
+
+WorkBuddy 装好后还需要在连接器管理页点一次「信任」，MCP 工具才会出现在工具列表里：
 
 ```json
 // ~/.workbuddy/mcp.json
@@ -392,7 +411,7 @@ unzip repotory.skill -d ~/.workbuddy/skills/
 
 | 文件 | 作用 |
 |------|------|
-| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、22 个工具的路由决策、agent 不可用的能力清单 |
+| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、25 个工具的路由决策、agent 不可用的能力清单 |
 | `references/mcp-tools.md` | 每个工具的精确参数签名、HTTP RPC 方法映射 |
 | `references/data-model.md` | schema 与不变量（主题归属、迁移规则、handoff 保护、trigram 边界） |
 | `scripts/repotory-query.py` | MCP 不可用时的只读兜底查询（检索 / 列主题 / 列项目 / 库概况） |

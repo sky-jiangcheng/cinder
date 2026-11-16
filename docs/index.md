@@ -84,7 +84,7 @@ flowchart TB
 
     subgraph AGENT["🤖 AI Agent —— 工具面调用"]
         direction LR
-        MCP["cinder-mcp<br/>22 个工具"]
+        MCP["cinder-mcp<br/>25 个工具"]
         DSH["dsh 插件<br/>3 个工具"]
         LLMSTXT["llms.txt 导出"]
         MCP ~~~ DSH ~~~ LLMSTXT

@@ -138,6 +138,50 @@ object McpPayloads {
         }
     }
 
+    /**
+     * The configuration map of `repotory_config_get` (ADR-0063).
+     *
+     * "No config" is not a legitimate answer here — the tool always returns
+     * the full config object (secrets masked). Anything that is not that
+     * shape is the tool refusing, and fails loudly instead of reading as an
+     * empty configuration.
+     */
+    @Throws(McpException::class)
+    fun parseConfig(tool: String, text: String): Map<String, String> {
+        val obj = parseObject(tool, text)
+        val config = obj.get("config") as? JsonObject
+            ?: throw McpException("Cinder tool $tool returned no config object")
+        return config.entrySet().associate { (k, v) ->
+            k to v.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+        }
+    }
+
+    /** The workspace resolution of `repotory_workspace_resolve` (ADR-0062):
+     * Project / Repository / Candidates, field-for-field the
+     * ResolveWorkspacePath binding's answer. "No project" is a legitimate
+     * answer (the folder is not in the knowledge base yet), but "I could not
+     * read the answer" must never be read as one — so anything that is not
+     * a resolution object fails loudly, carrying the server's own words.
+     */
+    @Throws(McpException::class)
+    fun parseWorkspaceResolution(tool: String, text: String): WorkspaceResolution {
+        val obj = parseObject(tool, text)
+        val project = obj.get("Project") as? JsonObject
+        val id = project?.long("id") ?: 0L
+        val name = project?.str("name").orEmpty()
+        val repositoryPath = (obj.get("Repository") as? JsonObject)?.str("path").orEmpty()
+        val candidates = (obj.get("Candidates") as? JsonArray)
+            ?.mapNotNull { element ->
+                if (!element.isJsonObject) return@mapNotNull null
+                val candidate = element.asJsonObject
+                val candidateId = candidate.long("id")
+                if (candidateId <= 0L) return@mapNotNull null
+                ProjectOption(candidateId, candidate.str("name").ifEmpty { "project $candidateId" })
+            }
+            ?: emptyList()
+        return WorkspaceResolution(id, name, repositoryPath, candidates)
+    }
+
     /** The AI tidying proposal (service.NoteOrganizeResult). */
     @Throws(McpException::class)
     fun parseOrganizeProposal(tool: String, text: String): NoteOrganizeResult {

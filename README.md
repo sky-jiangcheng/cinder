@@ -140,7 +140,7 @@ The dashed line is the key: handoffs live in your local SQLite database, not in 
 > Full feature matrix with tier definitions and ADR links: [docs/en/features-overview.md](docs/en/features-overview.md).
 
 - **Knowledge Base (Core)** — Markdown notes with a `/` block editor, FTS5 trigram search, per-save version history with line-level diff, and global ⌘/Ctrl+K search.
-- **AI-Ready Interfaces (Core)** — `cinder-mcp` (22 MCP tools), one-call `repotory_context` / `repotory_handoff`, llms.txt, 8 built-in memory importers (Claude, Codex, OpenCode, CodeBuddy, Cursor, OpenClaw, Hermes…), and data-integrity audit (`repotory_integrity`).
+- **AI-Ready Interfaces (Core)** — `cinder-mcp` (25 MCP tools), one-call `repotory_context` / `repotory_handoff`, llms.txt, 8 built-in memory importers (Claude, Codex, OpenCode, CodeBuddy, Cursor, OpenClaw, Hermes…), and data-integrity audit (`repotory_integrity`).
 - **Knowledge Graph & LLM Wiki (Support, Human-Gated)** — Notes compile into wiki pages as *pending* drafts; review queue (approve, reject, merge); page versions; community summaries; hybrid semantic search with pluggable vector store (sqlite-vec default, Qdrant / Weaviate remote) — every LLM path is opt-in.
 - **Built-in Backups (Core)** — Daily `VACUUM INTO` snapshots (on by default, 14 kept, 0600 permissions); restore is as simple as copying one file back.
 - **Repository Mining (Core)** — README summary, tech stack (20+ manifest formats), language shares, dependencies, contributors, and activity cached per repository.
@@ -221,8 +221,8 @@ Brand display and machine identifiers are deliberately separated layers:
 | Layer | Value | Used for |
 | :--- | :--- | :--- |
 | **Brand (display)** | `Cinder` | `productName`, in-app logo, documentation, and UI copy |
-| **Downloadable artifacts** | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | Release asset names — every file says which build it is |
-| **Binaries** | `cinder` / `cinder-mcp` / `cinder-server` | What `which` finds. The pre-rename names `repotory*` are still installed as symlinks (Windows: copies / Scoop shims) so existing client configs keep working |
+| **Downloadable artifacts** | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-capture-…` / `cinder-server-…` | Release asset names — every file says which build it is |
+| **Binaries** | `cinder` / `cinder-mcp` / `cinder-capture` / `cinder-server` | What `which` finds. The pre-rename names `repotory*` are still installed as symlinks (Windows: copies / Scoop shims) so existing client configs keep working — `repotory-capture` is the name the SessionEnd hook calls |
 | **Repo & package identifier** | `repotory` | GitHub repo name, Go module name, npm package names, docs site URL |
 | **Frozen identifiers** | `repotory` | User data directory, `repotory.db`, MCP tool prefix `repotory_*`, plugin ids, cask/bucket tokens, DB sentinel |
 

@@ -773,6 +773,10 @@ function renderAnnounce() {
     btn.type = 'button';
     btn.textContent = announcement.action.label;
     btn.addEventListener('click', () => {
+      if (announcement.action.target === 'startServer') {
+        vscode.postMessage({ type: 'startServer' });
+        return;
+      }
       openSheet('provider-sheet');
       vscode.postMessage({ type: 'providerLoad' });
     });

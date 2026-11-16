@@ -74,9 +74,8 @@ class ProviderDialog : DialogWrapper(true) {
 
     private fun loadProvider() {
         status.text = "Reading the saved provider…"
-        val url = RepotorySettings.serverUrl()
         onPooled {
-            val outcome = runCatching { readConfig(url) }
+            val outcome = runCatching { readConfig() }
             onEdt {
                 outcome.onSuccess { saved ->
                     baseField.text = saved.baseUrl
@@ -102,11 +101,14 @@ class ProviderDialog : DialogWrapper(true) {
 
     private data class SavedProvider(val baseUrl: String, val model: String, val hasKey: Boolean)
 
-    private fun readConfig(url: String): SavedProvider {
-        val result = repotoryClient.rpc(url, "GetConfig", emptyList()) as? JsonObject
-        val config = result?.getAsJsonObject("config")
-        fun str(key: String): String =
-            config?.get(key)?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+    private fun readConfig(): SavedProvider {
+        // Over MCP since ADR-0063: the config pair is catalogue-covered, so
+        // reading the provider settings needs no running local service.
+        val config = McpPayloads.parseConfig(
+            RepotoryMcp.TOOL_CONFIG_GET,
+            repotoryMcp.callToolText(RepotoryMcp.TOOL_CONFIG_GET, emptyMap()),
+        )
+        fun str(key: String): String = config[key].orEmpty()
         return SavedProvider(
             baseUrl = str("ai_chat_base_url"),
             model = str("ai_chat_model"),
@@ -133,7 +135,7 @@ class ProviderDialog : DialogWrapper(true) {
                 // because the stored key never leaves the host. Every other case
                 // probes the endpoint DIRECTLY, so it works while the desktop
                 // app — and with it the service — is not running.
-                val saved = if (key.isEmpty()) readConfig(url) else null
+                val saved = if (key.isEmpty()) readConfig() else null
                 val testSaved = saved != null && saved.hasKey && saved.baseUrl == base && saved.model == model
                 if (testSaved) {
                     val obj = repotoryClient.rpc(url, "TestAIChatConfigured", emptyList(), RPC_TIMEOUT_MS) as? JsonObject
@@ -204,21 +206,31 @@ class ProviderDialog : DialogWrapper(true) {
             status.text = "Base URL and model are both required."
             return
         }
-        val url = RepotorySettings.serverUrl()
         onPooled {
             val outcome = runCatching {
-                repotoryClient.rpc(url, "UpdateConfig", listOf("ai_chat_base_url", base))
-                repotoryClient.rpc(url, "UpdateConfig", listOf("ai_chat_model", model))
+                writeConfig("ai_chat_base_url", base)
+                writeConfig("ai_chat_model", model)
                 // A blank key means "keep what is stored": writing the mask back
                 // would replace the real credential with asterisks.
                 if (key.isNotEmpty() && key != "********") {
-                    repotoryClient.rpc(url, "UpdateConfig", listOf("ai_chat_api_key", key))
+                    writeConfig("ai_chat_api_key", key)
                 }
             }
             onEdt {
                 outcome.onSuccess { close(OK_EXIT_CODE) }
                     .onFailure { status.text = "Save failed: ${serviceOfflineHint(it.message)}" }
             }
+        }
+    }
+
+    /** One config write over MCP; a rejected key surfaces as a failure. */
+    private fun writeConfig(key: String, value: String) {
+        val text = repotoryMcp.callToolText(
+            RepotoryMcp.TOOL_CONFIG_UPDATE,
+            mapOf("key" to key, "value" to value),
+        )
+        if (text.trimStart().startsWith("error: ")) {
+            throw McpException(text.trimStart().removePrefix("error: ").trim())
         }
     }
 

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"repotory/internal/db"
 )
 
 // resolveCwd has a documented precedence: -cwd flag, then a {"cwd": "..."}
@@ -102,5 +104,31 @@ func TestResolveCwdStdinTruncatedJSONDoesNotPanic(t *testing.T) {
 
 	if got := resolveCwd(""); got != wd {
 		t.Errorf("truncated JSON should fall back to the working dir %q, got %q", wd, got)
+	}
+}
+
+// The SessionEnd hook's fallback decision (ADR-0054 D3) depends on one bit:
+// did the capture write a note or not. run() must turn that bit into the exit
+// code ONLY under --strict — without it the CLI keeps ADR-0010's exit-0
+// "never break session teardown" behavior. The failure here is the real one a
+// hook sees most often: a cwd that resolves to no Cinder project at all.
+//
+// HOME is redirected for the whole test: recordPending writes the durable
+// failure trace into the platform data dir, which must land in the test's
+// temp tree rather than the developer's real config directory.
+func TestRunStrictExitCodeObservesCaptureFailure(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dbPath := filepath.Join(t.TempDir(), "capture-test.db")
+	if _, err := db.InitDB(dbPath); err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+
+	args := []string{"-db", dbPath, "-cwd", "/definitely/not/a/cinder/project"}
+	if code := run(args); code != 0 {
+		t.Errorf("run() without --strict = %d, want 0 (a failed capture never breaks session teardown, ADR-0010)", code)
+	}
+	if code := run(append(args, "-strict")); code != 1 {
+		t.Errorf("run(--strict) = %d, want 1 (the hook falls through to its model-driven fallback)", code)
 	}
 }

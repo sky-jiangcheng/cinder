@@ -147,8 +147,14 @@ var bindingSurfaces = map[string]BindingSurface{
 	"ReorderTodos": {SurfaceDesktopOnly, "", "manual todo ordering is a personal prioritisation act, not a data operation"},
 
 	// ---- config --------------------------------------------------------------
-	"GetConfig":       {SurfaceDesktopOnly, "", "settings page; secrets are masked for it and it is still not an agent surface"},
-	"UpdateConfig":    {SurfaceDesktopOnly, "", "changing privacy gates must never be something an agent can do to itself"},
+	// ADR-0063 (2026-11-16): the owner reclassified configuration writes from
+	// human-gate to catalogue-covered, so the IDE panels can save AI provider
+	// settings over MCP. GetConfig masks secrets as before; UpdateConfig goes
+	// through the single-writer catalogue (config.update) and calls the same
+	// service.UpdateConfig the binding calls. UpdateScanRoots stays
+	// human-gate: granting new filesystem scope is a different decision.
+	"GetConfig":       {SurfaceMCPBacked, "repotory_config_get", "reads the full configuration (secrets masked); the IDE panels read provider settings through it (ADR-0063)"},
+	"UpdateConfig":    {SurfaceMCPBacked, "repotory_config_update", "configuration writes were reclassified from human-gate to catalogue-covered (ADR-0063, 2026-11-16): the agent face and the UI face share one service.UpdateConfig, so the allow-list and value validation are identical"},
 	"UpdateScanRoots": {SurfaceDesktopOnly, "", "granting new filesystem scope is a human decision"},
 
 	// ---- update check ----------------------------------------------------------
@@ -177,7 +183,7 @@ var bindingSurfaces = map[string]BindingSurface{
 	// offer, so these stay desktop-only (the CLI's repotory-init is the
 	// terminal twin of the same work).
 	"ListAgentClients":  {SurfaceDesktopOnly, "", "the client list behind the settings picker; it exists so the UI cannot offer a client the backend would reject"},
-	"SetupAgentClients": {SurfaceDesktopOnly, "", "writes MCP config files, a SessionEnd hook and the repotory block in AGENTS.md/CLAUDE.md into the user's project directory; that is a setup act on the user's machine, and an agent performing it would edit configuration — and instruction files it will later read — without being asked (the CLI's repotory-init is the terminal twin)"},
+	"SetupAgentClients": {SurfaceDesktopOnly, "", "writes MCP config files, a SessionEnd hook and the repotory block in AGENTS.md/CLAUDE.md into the user's project directory, and can flip the claude_session_capture opt-in on — that is a setup act on the user's machine, and an agent performing it would edit configuration — and instruction files it will later read — without being asked (the CLI's repotory-init is the terminal twin)"},
 	// The collected-project instruction checklist (ADR-0054 follow-up). The
 	// status answers are desktop checklist chrome; an agent that scanned can
 	// already read agent_instructions_missing off repotory_scan's result, so a
@@ -255,7 +261,7 @@ var bindingSurfaces = map[string]BindingSurface{
 	"SuggestWikiLinks":       {SurfaceDesktopOnly, "", "assists human authoring by suggesting [[wikilinks]] based on existing approved concept vocabulary"},
 	"MergeWikiPages":         {SurfaceDesktopOnly, "", "a merge destroys information and may only follow a human decision (ADR-0019 decision 1, pinned by TestMergeHasNoAutoPath)"},
 	"RunCommunitySummary":    {SurfaceDesktopOnly, "", "writes model output into the library; reachable by an agent it would defeat the review queue (ADR-0020 decision 9)"},
-	"ResolveWorkspacePath":   {SurfaceDesktopOnly, "", "agents pass `path` to repotory_context instead; a second client-side matcher is the disagreement this avoids"},
+	"ResolveWorkspacePath":   {SurfaceMCPBacked, "repotory_workspace_resolve", "the panels' project lock resolves over MCP (ADR-0062): the matching rules stay in the same server-side ResolveProjectByPath, so no second matcher is introduced; agents still get the resolution via repotory_context's `path`"},
 	"BindWorkspaceToProject": {SurfaceDesktopOnly, "", "filing a workspace folder under a project decides where that folder's sessions get their knowledge from; that is a human decision, and the write has no MCP twin for the same reason MoveNote has none"},
 	"ListWikiPageVersions":   {SurfaceDesktopOnly, "", "the page history panel (ADR-0021); snapshots exist so a HUMAN can notice stale approved content, not so an agent can act on it"},
 	"DiffWikiPageVersion":    {SurfaceDesktopOnly, "", "snapshot-vs-current diff on the review page; it supports a human approve/reject decision"},

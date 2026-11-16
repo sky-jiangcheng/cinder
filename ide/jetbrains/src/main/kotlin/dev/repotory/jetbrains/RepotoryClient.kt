@@ -133,6 +133,23 @@ data class NoteDetail(
 data class ProjectOption(val id: Long, val name: String)
 
 /**
+ * The workspace-resolution payload of `repotory_workspace_resolve`
+ * (ADR-0062): the MCP twin of the ResolveWorkspacePath binding, field-for-
+ * field the same answer the HTTP bridge used to return.
+ */
+data class WorkspaceResolution(
+    val projectId: Long,
+    val projectName: String,
+    /** The repository path when the folder sits inside a scanned repository. */
+    val repositoryPath: String,
+    /** The projects the folder could belong to, when it resolves to none. */
+    val candidates: List<ProjectOption>,
+) {
+    /** True when the folder resolved to a project; the panel locks to it. */
+    val hasProject: Boolean get() = projectId > 0
+}
+
+/**
  * The AI tidying proposal for one note (internal/service/note_organize.go).
  * A PROPOSAL, never a write: the editor opens with it and the user's save
  * is what lands it. `warning` carries non-fatal caveats (a truncated reply,

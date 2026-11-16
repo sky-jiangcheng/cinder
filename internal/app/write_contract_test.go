@@ -128,12 +128,18 @@ func TestBindingWritesRouteDecidesCorrectly(t *testing.T) {
 	// (the fixture's TestUnreachableWriterIsActionableError shape).
 	m := relayClientManager(t, dir)
 
-	// Catalogue-covered write: forward.
-	if got := m.DecideWrite("CreateNoteWithMeta"); got != writerapi.WriteForward {
-		t.Errorf("CreateNoteWithMeta = %v, want WriteForward", got)
+	// Catalogue-covered writes: forward.
+	// UpdateConfig moved here on 2026-11-16 by deliberate audit edit: the owner
+	// reclassified configuration writes from human-gate to catalogue-covered
+	// (ADR-0063) so the IDE panels can save AI provider settings over MCP.
+	for _, name := range []string{"CreateNoteWithMeta", "UpdateConfig"} {
+		if got := m.DecideWrite(name); got != writerapi.WriteForward {
+			t.Errorf("%s = %v, want WriteForward", name, got)
+		}
 	}
-	// Human-gate write: refuse (the desktop owns the gate).
-	for _, name := range []string{"ApproveWikiPage", "MergeWikiPages", "UpdateConfig", "MoveNote"} {
+	// Human-gate writes: refuse (the desktop owns the gate). UpdateScanRoots
+	// stays here — granting new filesystem scope is a different decision.
+	for _, name := range []string{"ApproveWikiPage", "MergeWikiPages", "UpdateScanRoots", "MoveNote"} {
 		if got := m.DecideWrite(name); got != writerapi.WriteRefuse {
 			t.Errorf("%s = %v, want WriteRefuse from a client role", name, got)
 		}

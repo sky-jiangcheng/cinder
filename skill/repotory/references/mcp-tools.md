@@ -1,6 +1,6 @@
 # Cinder MCP 工具完整参考（通道 A）
 
-22 个工具的精确参数签名（取自 `cinder-mcp` 的 `tools/list` 实际响应，非手写推测）。
+25 个工具的精确参数签名（取自 `cinder-mcp` 的 `tools/list` 实际响应，非手写推测）。
 
 ```
 repotory_agent_score()
@@ -9,6 +9,8 @@ repotory_ai_review_rules()
 repotory_ask(query*: string, project_id: number, path: string)
 repotory_chat(content: string, id: string, operation*: string, path: string,
               reply_to: string, role: string, source: string, thread_id: string, title: string)
+repotory_config_get()
+repotory_config_update(key*: string, value*: string)
 repotory_context(path: string, project_id: number, project_name: string)
 repotory_handoff(agent: string, changes: array, decisions: array, gotchas: array,
                  milestone: boolean, next_steps: array, path: string, project_id: number,
@@ -30,6 +32,7 @@ repotory_review_run(date: string, scope: string, dry_run: boolean, no_ai: boolea
 repotory_scan()
 repotory_wiki_read(id*: number)
 repotory_wiki_search(query: string, project_id: number, path: string, limit: number)
+repotory_workspace_resolve(path*: string)
 ```
 
 `*` = 必填。
@@ -132,6 +135,16 @@ FTS5 trigram + bm25 全文检索。
 ### `repotory_projects_stats(id)`
 
 单个项目的统计。
+
+### `repotory_workspace_resolve(path*)`
+
+把绝对目录（IDE 工作区文件夹）解析成归属项目，以及目录所在的扫描仓库。返回与 `ResolveWorkspacePath` 绑定**逐字段同构**的解析结果（`Project` / `Repository` / `MatchedOn` / `Candidates`）；无匹配时返回候选项目目录（ADR-0062）。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `path` | string | ✅ 要解析的绝对目录 |
+
+**agent 常规不需要它**：`repotory_context` 的 `path` 已在服务端完成同一份解析。这个工具是给需要**显示**解析结果的人侧客户端（IDE 面板的项目锁）用的——面板经它锁定当前项目，不再需要本地服务在跑。纯读，不修改任何东西。
 
 ### `repotory_metrics(path?, since?, until?)`
 

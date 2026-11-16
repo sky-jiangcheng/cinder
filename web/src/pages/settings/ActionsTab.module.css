@@ -168,6 +168,14 @@
   color: var(--success);
 }
 
+/* Informational, not a verdict: "the hook is in, the capture gate stays off —
+   here is what that means at session end". Neither success nor danger. */
+.agentStatusInfo {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
 .agentStatusError {
   margin: 0;
   font-size: 13px;

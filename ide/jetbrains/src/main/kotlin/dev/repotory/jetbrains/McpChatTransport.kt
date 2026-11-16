@@ -3,11 +3,14 @@
 // The port the conversation model talks to (ChatSession.kt). It is the ONE
 // place where the two channels meet:
 //
-//   · MCP carries the data (ADR-0035 decision 2): ask, notes, pages, and the
-//     reads behind an opened card.
-//   · HTTP carries the ONE binding MCP does not have: ResolveWorkspacePath,
-//     which answers "which project is this folder" with the server's own
-//     matcher, so the panel and an agent can never disagree about it.
+//   · MCP carries the data (ADR-0035 decision 2): ask, notes, pages, the
+//     reads behind an opened card, and the workspace resolution behind the
+//     project lock (ADR-0062: repotory_workspace_resolve, the MCP twin of
+//     the ResolveWorkspacePath binding).
+//   · HTTP carries the bindings MCP deliberately does not have: MoveNote
+//     (re-filing knowledge is a human decision), BindWorkspaceToProject
+//     (filing a folder under a project is a write a human decides), and the
+//     web-UI probe behind the deep link.
 //
 // The workspace path is the IDE project's own directory: the panel locks
 // itself to the project the user is standing in (ADR-0036 decision 2).

@@ -102,9 +102,12 @@ class ChatSession(
      * the same path, and a second implementation would let the panel and an
      * agent's repotory_context disagree about which knowledge a session gets.
      *
-     * Without the headless service there is no project id to lock to — the
-     * panel then says so and searches across projects, rather than pretending
-     * it is scoped.
+     * The resolution itself is the read-only `repotory_workspace_resolve`
+     * tool (ADR-0062) — the MCP twin of the ResolveWorkspacePath binding,
+     * which calls the same server-side matcher. The project lock therefore
+     * needs the MCP channel, not a running local service: with no MCP
+     * channel there is no project id to lock to, and the panel says so and
+     * searches across projects rather than pretending it is scoped.
      */
     fun refreshScope() {
         val dir = transport.workspacePath()
@@ -113,16 +116,12 @@ class ChatSession(
             return
         }
         try {
-            val res = transport.rpc("ResolveWorkspacePath", listOf(dir))
-            val project = res?.get("Project") as? Map<*, *>
-            val id = (project?.get("id") as? Number)?.toLong() ?: 0L
-            if (project != null && id > 0) {
-                val name = project["name"] as? String ?: ""
-                val repository = ((res["Repository"] as? Map<*, *>)?.get("path") as? String)
-                    ?.let { path -> path.split('/', '\\').lastOrNull() ?: "" }
-                    ?: ""
+            val raw = transport.callTool(TOOL_WORKSPACE_RESOLVE, mapOf("path" to dir))
+            val res = McpPayloads.parseWorkspaceResolution(TOOL_WORKSPACE_RESOLVE, raw)
+            if (res.hasProject) {
+                val repository = res.repositoryPath.split('/', '\\').lastOrNull() ?: ""
                 candidates = emptyList()
-                setScope(ScopeState(id, name, repository, locked = true))
+                setScope(ScopeState(res.projectId, res.projectName, repository, locked = true))
                 return
             }
             setScope(ScopeState())
@@ -134,14 +133,13 @@ class ChatSession(
             // used to be disabled here, which left the reader with nothing to do.
             // They are stored AND posted: the chip's picker reads the stored
             // list, the panel repaints on the event.
-            candidates = parseCandidates(res)
+            candidates = res.candidates
             post(ChatEvent.Candidates(candidates))
         } catch (e: Exception) {
             setScope(ScopeState())
             announce(
                 ChatLevel.WARN,
-                "The local Cinder service is not reachable at ${transport.serverUrl()} — " +
-                    "the project lock needs it, so the panel searches across all projects.",
+                "The Cinder MCP channel is not reachable — the project lock needs it, so the panel searches across all projects.",
             )
         }
     }
@@ -213,15 +211,17 @@ class ChatSession(
      * The plugin reads the server's configuration instead of keeping its own
      * copy: two copies would drift, and the key belongs to the server anyway
      * (the desktop stores it in the `config` table too).
+     *
+     * Over MCP since ADR-0063: the config read/write pair is catalogue-covered,
+     * so this works without a running local service — an IDE-only user
+     * previously had no entry point to configure an endpoint at all.
      */
     fun loadProvider(): ProviderOutcome {
         return try {
-            val payload = transport.rpc("GetConfig", emptyList())
-            val config = (payload?.get("config") as? Map<*, *>)
-                ?.entries
-                ?.mapNotNull { (k, v) -> (k as? String)?.let { it to (v as? String).orEmpty() } }
-                ?.toMap()
-                .orEmpty()
+            val config = McpPayloads.parseConfig(
+                TOOL_CONFIG_GET,
+                transport.callTool(TOOL_CONFIG_GET, emptyMap()),
+            )
             val settings = AISettings(
                 baseUrl = config["ai_chat_base_url"].orEmpty(),
                 model = config["ai_chat_model"].orEmpty(),
@@ -316,7 +316,13 @@ class ChatSession(
     }
 
     private fun updateConfig(key: String, value: String) {
-        transport.rpc("UpdateConfig", listOf(key, value))
+        // The MCP client returns a tool's text verbatim, including the
+        // "error: …" text of a failed call (IsError results do not throw
+        // here) — check the discriminator before treating the call as done.
+        val text = transport.callTool(TOOL_CONFIG_UPDATE, mapOf("key" to key, "value" to value))
+        if (text.trimStart().startsWith("error: ")) {
+            throw McpException(text.trimStart().removePrefix("error: ").trim())
+        }
     }
 
     /** The failure text of an exception, never blank. */
@@ -542,23 +548,6 @@ internal fun checkAskResponse(text: String) {
     }
 }
 
-/**
- * The candidate projects out of a resolution payload.
- *
- * A shape check, not a repair pass: a candidate without an id cannot be
- * bound to, so it is dropped rather than shown as an unusable row.
- */
-private fun parseCandidates(res: Map<String, Any?>?): List<ProjectOption> {
-    val raw = res?.get("Candidates") as? List<*> ?: return emptyList()
-    return raw.mapNotNull { entry ->
-        val map = entry as? Map<*, *> ?: return@mapNotNull null
-        val id = (map["id"] as? Number)?.toLong() ?: 0L
-        if (id <= 0) return@mapNotNull null
-        val name = map["name"] as? String ?: ""
-        ProjectOption(id, name.ifBlank { "project $id" })
-    }
-}
-
 /** The prefix the ask tool uses when no AI endpoint is configured at all. */
 internal const val ASK_NO_ENDPOINT_PREFIX = "No AI endpoint is configured"
 
@@ -570,6 +559,13 @@ internal const val ASK_ZERO_HIT_PREFIX = "No results found for: "
 
 /** The ask answered with the labelled keyword fallback: a refusal, not an answer. */
 internal class SharedAskFallback(val text: String) : IllegalStateException(text)
+
+/** The workspace-resolution tool (ADR-0062): the MCP twin of the binding. */
+private const val TOOL_WORKSPACE_RESOLVE = "repotory_workspace_resolve"
+
+/** The config read/write pair (ADR-0063): the provider settings live here. */
+private const val TOOL_CONFIG_GET = "repotory_config_get"
+private const val TOOL_CONFIG_UPDATE = "repotory_config_update"
 
 private const val TOOL_NOTES_READ = "repotory_notes_read"
 private const val TOOL_WIKI_READ = "repotory_wiki_read"

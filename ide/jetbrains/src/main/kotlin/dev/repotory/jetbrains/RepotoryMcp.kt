@@ -39,6 +39,11 @@ class RepotoryMcp {
         const val TOOL_WIKI_SEARCH = "repotory_wiki_search"
         const val TOOL_WIKI_READ = "repotory_wiki_read"
         const val TOOL_PROJECTS_LIST = "repotory_projects_list"
+        const val TOOL_WORKSPACE_RESOLVE = "repotory_workspace_resolve"
+        // The config read/write pair (ADR-0063): the provider settings live
+        // here, so the panels configure an endpoint without a local service.
+        const val TOOL_CONFIG_GET = "repotory_config_get"
+        const val TOOL_CONFIG_UPDATE = "repotory_config_update"
     }
 
     private var client: McpStdioClient? = null

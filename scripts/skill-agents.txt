@@ -1,0 +1,18 @@
+# The skill's agent registry — the single source of truth shared by
+# scripts/install-skill.sh (what it installs into) and
+# scripts/check-skill-package.mjs (what it verifies is not stale).
+#
+# One line per agent: <agent>\t<skills directory, relative to $HOME>.
+#
+# The skill package itself is app-agnostic: it is the same SKILL.md +
+# references + query script for every agent. Installing it once per detected
+# agent is what makes every agent on the machine discover it automatically —
+# each agent scans its own skills directory, so there is no per-app skill to
+# configure and no second copy to keep in sync by hand.
+#
+# Detection rule: an agent counts as installed when its skills directory
+# EXISTS on this machine. A directory that does not exist yet is listed by
+# `install-skill.sh --list` as available-to-install, never as installed.
+claude	.claude/skills
+codex	.codex/skills
+workbuddy	.workbuddy/skills

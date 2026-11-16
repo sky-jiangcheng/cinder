@@ -27,11 +27,13 @@ import {
   excerpt,
   hitText,
   parseAskAnswer,
+  parseConfig,
   parseOrganizeProposal,
   parseProjects,
   parseSearchHits,
   parseWikiPages,
   parseWikiRead,
+  parseWorkspaceResolution,
   servesWebUi,
   type NoteHit,
   type OrganizeProposal,
@@ -72,14 +74,6 @@ export interface Transport {
   /** Open a URL outside the IDE. */
   openExternal(url: string): Promise<void>;
 }
-
-interface WorkspaceResolution {
-  Project?: { id: number; name: string; root_path: string } | null;
-  Repository?: { id: number; path: string } | null;
-  /** The projects this folder could belong to, when it resolves to none. */
-  Candidates?: { id: number; name: string }[] | null;
-}
-
 
 /** The prefix the ask tool uses when the configured AI endpoint failed. */
 const ASK_ERROR_PREFIX = "error: ";
@@ -143,9 +137,12 @@ export class ChatSession {
    * same path, and a TypeScript reimplementation would let the panel and an
    * agent's repotory_context disagree about which knowledge a session gets.
    *
-   * Without the headless service there is no project id to lock to — the
-   * panel then says so and searches across projects, rather than pretending
-   * it is scoped.
+   * The resolution itself is the read-only `repotory_workspace_resolve` tool
+   * (ADR-0062) — the MCP twin of the ResolveWorkspacePath binding, which calls
+   * the same server-side matcher. The project lock therefore needs the MCP
+   * channel, not a running local service: with no MCP channel there is no
+   * project id to lock to, and the panel says so and searches across projects
+   * rather than pretending it is scoped.
    */
   async refreshScope(): Promise<void> {
     const dir = this.transport.workspacePath();
@@ -154,8 +151,9 @@ export class ChatSession {
       return;
     }
     try {
-      const res = (await this.transport.rpc("ResolveWorkspacePath", [dir])) as WorkspaceResolution | null;
-      if (res?.Project) {
+      const raw = await this.transport.callTool("repotory_workspace_resolve", { path: dir });
+      const res = parseWorkspaceResolution(raw);
+      if (res.Project) {
         const repository = res.Repository?.path
           ? res.Repository.path.split(/[\\/]/).pop() ?? ""
           : "";
@@ -176,13 +174,13 @@ export class ChatSession {
       // to be disabled here, which left the reader with nothing to do.
       this.post({
         type: "projectCandidates",
-        candidates: (res?.Candidates ?? []).map((p) => ({ id: Number(p.id ?? 0), name: p.name ?? "" })),
+        candidates: (res.Candidates ?? []).map((p) => ({ id: Number(p.id ?? 0), name: p.name ?? "" })),
       });
     } catch {
       this.setScope({ projectId: 0, projectName: "", repository: "", locked: false });
       this.announce(
         "warn",
-        `The local Cinder service is not reachable at ${this.transport.serverUrl()} — the project lock needs it, so the panel searches across all projects.`,
+        "The Cinder MCP channel is not reachable — the project lock needs it, so the panel searches across all projects.",
       );
     }
   }
@@ -289,14 +287,15 @@ export class ChatSession {
   // The panel used to have no entry for the model endpoint it depends on: a
   // 404 from `repotory_ask` was the last thing it could say, and the only fix
   // lived in the desktop app's settings page. These handlers read and write the
-  // SAME settings rows, through the same RPC bridge the desktop UI uses.
+  // SAME settings rows the desktop UI uses — over MCP since ADR-0063: the
+  // config read/write pair is catalogue-covered, so the panel needs no local
+  // service to configure an endpoint (an IDE-only user previously had no
+  // entry point at all).
 
   /** The saved chat provider, as far as a client is allowed to see it. */
   private async readSavedProvider(): Promise<{ baseUrl: string; model: string; hasKey: boolean }> {
-    const response = (await this.transport.rpc("GetConfig", [])) as
-      | { config?: Record<string, string> }
-      | null;
-    const config = response?.config ?? {};
+    const raw = await this.transport.callTool("repotory_config_get", {});
+    const config = parseConfig(raw);
     return {
       baseUrl: config["ai_chat_base_url"] ?? "",
       model: config["ai_chat_model"] ?? "",
@@ -318,6 +317,13 @@ export class ChatSession {
         hasKey: false,
         error: serviceOfflineHint(err),
       });
+      // The provider settings live in the service (ADR-0044 decision 5): with
+      // no service there is nothing to read and nothing to save. Offer the
+      // one-click start right where the gap is felt (ADR-0063 A-light).
+      this.announce("warn", "AI provider settings need the local Cinder service — start it with one click.", {
+        label: "启动本地服务",
+        target: "startServer",
+      });
     }
   }
 
@@ -326,12 +332,21 @@ export class ChatSession {
       const base = baseUrl.trim();
       const name = model.trim();
       if (!base || !name) throw new Error("Base URL and model are both required.");
-      await this.transport.rpc("UpdateConfig", ["ai_chat_base_url", base]);
-      await this.transport.rpc("UpdateConfig", ["ai_chat_model", name]);
+      // The MCP client returns a tool's text verbatim, including the "error: …"
+      // text of a failed call (IsError results do not throw here) — the same
+      // discriminator the ask path uses.
+      const write = async (key: string, value: string): Promise<void> => {
+        const text = await this.transport.callTool("repotory_config_update", { key, value });
+        if (text.trimStart().startsWith("error: ")) {
+          throw new Error(text.trimStart().slice("error: ".length));
+        }
+      };
+      await write("ai_chat_base_url", base);
+      await write("ai_chat_model", name);
       // A blank key means "keep what is stored": writing the mask back would
       // replace the real credential with asterisks.
       if (apiKey.trim() && apiKey.trim() !== SECRET_MASK) {
-        await this.transport.rpc("UpdateConfig", ["ai_chat_api_key", apiKey.trim()]);
+        await write("ai_chat_api_key", apiKey.trim());
       }
       const saved = await this.readSavedProvider();
       this.post({ type: "providerState", ...saved });
@@ -983,7 +998,7 @@ export class ChatSession {
   private announce(
     level: "info" | "warn" | "error",
     message: string,
-    action?: { label: string; target: "provider" },
+    action?: { label: string; target: "provider" | "startServer" },
   ): void {
     this.post({ type: "announce", level, message, action });
   }
@@ -1008,7 +1023,7 @@ function errorText(error: unknown): string {
 function serviceOfflineHint(error: unknown): string {
   const text = errorText(error);
   if (/ECONNREFUSED|timeout:|invalid JSON|socket hang up|ECONNRESET/i.test(text)) {
-    return `${text} — the local Cinder service is not reachable. Start the Cinder desktop app, then retry: reading and saving the provider settings go through it. Fetching models and testing the typed values connect DIRECTLY and do not need it.`;
+    return `${text} — 本地 Cinder 服务不可达。在面板顶部点「启动本地服务」（或命令面板 Cinder: Start Local Service）一键启动，然后重试：读写 provider 设置都经它完成。拉取模型与测试已填值是直连端点，不需要它。`;
   }
   return aiFailureHint(text);
 }

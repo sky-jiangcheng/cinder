@@ -1,5 +1,6 @@
 # Cinder Desktop install script for Windows
-# Installs both the desktop app (cinder.exe) and the MCP server (cinder-mcp.exe).
+# Installs the desktop app (cinder.exe), the MCP server (cinder-mcp.exe) and
+# the session-end capture CLI (cinder-capture.exe).
 # Run in PowerShell: iwr -useb https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +16,11 @@ $McpBinaryName = "cinder-mcp.exe"
 # on this machine points at repotory-mcp.exe by absolute path.
 $CompatBinaryName = "repotory.exe"
 $CompatMcpName = "repotory-mcp.exe"
+# The capture CLI is new, but the SessionEnd hook the setup installs calls
+# `repotory-capture` (identifier-layer name, ADR-0049), so that compat copy
+# must exist or the hook's zero-credit primary path is dead.
+$CaptureBinaryName = "cinder-capture.exe"
+$CompatCaptureName = "repotory-capture.exe"
 $Repo = "sky-jiangcheng/cinder"
 $Target = "windows-amd64"
 
@@ -41,8 +47,10 @@ if (-not $Version -and $ReleaseBase -match '/v?([0-9]+\.[0-9]+\.[0-9][^/]*)$') {
 }
 $DesktopAsset = "Cinder-$Version-$Target.zip"
 $McpAsset = "cinder-mcp-$Version-$Target.zip"
+$CaptureAsset = "cinder-capture-$Version-$Target.zip"
 $DesktopUrl = "$ReleaseBase/$DesktopAsset"
 $McpUrl = "$ReleaseBase/$McpAsset"
+$CaptureUrl = "$ReleaseBase/$CaptureAsset"
 
 Write-Host "Installing Cinder $Version ($Target)"
 
@@ -135,6 +143,38 @@ if ($McpDownloaded) {
         Write-Warning "Could not install $McpBinaryName. The desktop app is installed and working."
     } finally {
         if (Test-Path $McpZip) { Remove-Item $McpZip -Force }
+    }
+}
+
+# Session-end capture CLI: the Claude Code SessionEnd hook calls
+# `repotory-capture` (the compat copy below). Non-fatal: older releases do not
+# have the asset yet.
+Write-Host "Downloading Cinder capture CLI for Windows..."
+$CaptureZip = "$env:TEMP\$CaptureAsset"
+$CaptureDownloaded = $false
+try {
+    Invoke-WebRequest -Uri $CaptureUrl -OutFile $CaptureZip
+    $CaptureDownloaded = $true
+} catch {
+    Write-Warning "Could not download $CaptureBinaryName (no asset for $Target, or download failed)."
+    Write-Warning "The SessionEnd hook will fall back to a model call; install manually from $CaptureUrl"
+}
+
+if ($CaptureDownloaded) {
+    # Outside the try on purpose — same reasoning as the MCP block above.
+    Test-AssetSha256 -Path $CaptureZip -AssetName $CaptureAsset
+    try {
+        Expand-Archive -Path $CaptureZip -DestinationPath $InstallDir -Force
+        if (Test-Path "$InstallDir\$CaptureBinaryName") {
+            Copy-Item "$InstallDir\$CaptureBinaryName" "$InstallDir\$CompatCaptureName" -Force
+            Write-Host "Cinder capture CLI installed to $InstallDir\$CaptureBinaryName"
+        } else {
+            Write-Warning "archive did not contain $CaptureBinaryName"
+        }
+    } catch {
+        Write-Warning "Could not install $CaptureBinaryName. The desktop app is installed and working."
+    } finally {
+        if (Test-Path $CaptureZip) { Remove-Item $CaptureZip -Force }
     }
 }
 

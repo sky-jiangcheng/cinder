@@ -25,6 +25,7 @@ class ChatSessionTest {
         private val tools: Map<String, String>,
         private val project: Pair<Long, String>? = null,
         private val rpcFails: Boolean = false,
+        private val toolFails: Boolean = false,
         private val candidates: List<Pair<Long, String>> = emptyList(),
         private val config: Map<String, String> = emptyMap(),
         private val rpcResults: Map<String, Any?> = emptyMap(),
@@ -36,24 +37,44 @@ class ChatSessionTest {
 
         override fun callTool(name: String, args: Map<String, Any?>): String {
             calls.add(name to args)
-            return tools[name] ?: throw IllegalStateException("no such tool: $name")
+            if (toolFails) throw IllegalStateException("repotory-mcp is not running")
+            tools[name]?.let { return it }
+            // The config read/write pair (ADR-0063) is synthesised from the
+            // same fixture the RPC bridge used to answer with.
+            if (name == "repotory_config_get") {
+                val entries = config.entries.joinToString(",") { (k, v) -> "\"$k\":\"$v\"" }
+                return """{"config":{$entries},"scan_roots":[]}"""
+            }
+            if (name == "repotory_config_update") {
+                val key = args["key"] as? String ?: ""
+                val value = args["value"] as? String ?: ""
+                return """{"key":"$key","value":"$value"}"""
+            }
+            // The workspace resolution (ADR-0062) is synthesised from the same
+            // fixtures the RPC bridge used to answer with, so a test that
+            // locks the panel needs no canned tool text.
+            if (name == "repotory_workspace_resolve") {
+                val parts = mutableListOf<String>()
+                if (project != null) {
+                    parts.add("\"Project\":{\"id\":${project.first},\"name\":\"${project.second}\"}")
+                } else {
+                    parts.add("\"Project\":null")
+                }
+                parts.add("\"Repository\":null")
+                if (candidates.isNotEmpty()) {
+                    parts.add(
+                        "\"Candidates\":[" +
+                            candidates.joinToString(",") { "{\"id\":${it.first},\"name\":\"${it.second}\"}" } + "]",
+                    )
+                }
+                return "{" + parts.joinToString(",") + "}"
+            }
+            throw IllegalStateException("no such tool: $name")
         }
 
         override fun rpc(method: String, args: List<Any?>): Map<String, Any?>? {
             rpcCalls.add(method to args)
             if (rpcFails) throw IllegalStateException("connection refused")
-            if (method == "ResolveWorkspacePath") {
-                if (project != null) {
-                    return mapOf("Project" to mapOf("id" to project.first, "name" to project.second))
-                }
-                if (candidates.isNotEmpty()) {
-                    return mapOf(
-                        "Candidates" to candidates.map { mapOf("id" to it.first, "name" to it.second) },
-                    )
-                }
-                return null
-            }
-            if (method == "GetConfig") return mapOf("config" to config)
             @Suppress("UNCHECKED_CAST")
             return rpcResults[method] as? Map<String, Any?>
         }
@@ -258,8 +279,8 @@ class ChatSessionTest {
     }
 
     @Test
-    fun `an unreachable service says so instead of pretending the panel is scoped`() {
-        val transport = FakeTransport(mapOf("repotory_ask" to "no evidence"), rpcFails = true)
+    fun `an unreachable MCP channel says so instead of pretending the panel is scoped`() {
+        val transport = FakeTransport(mapOf("repotory_ask" to "no evidence"), toolFails = true)
         val (events, post) = collector()
         val session = ChatSession(transport, post)
         session.refreshScope()
@@ -267,10 +288,24 @@ class ChatSessionTest {
         val warned = announcements(events).last()
         assertEquals(ChatLevel.WARN, warned.level)
         assertEquals(
-            "The local Cinder service is not reachable at http://127.0.0.1:18765 — " +
-                "the project lock needs it, so the panel searches across all projects.",
+            "The Cinder MCP channel is not reachable — the project lock needs it, " +
+                "so the panel searches across all projects.",
             warned.message,
         )
+    }
+
+    @Test
+    fun `the project lock resolves through the MCP tool, not the HTTP bridge`() {
+        val transport = FakeTransport(mapOf("repotory_ask" to "no evidence"), project = 7L to "Cinder")
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        session.refreshScope()
+        // ADR-0062: the resolution is the MCP twin of the binding, so the
+        // project lock no longer needs a running local service.
+        val call = transport.calls.first { it.first == "repotory_workspace_resolve" }
+        assertEquals("/tmp/work", call.second["path"])
+        assertEquals(7L, session.currentScope().projectId)
+        assertTrue(session.currentScope().locked)
     }
 
     // ------------------------------------------------------------- the turns
@@ -401,6 +436,8 @@ class ChatSessionTest {
         assertEquals("qwen3", settings.model)
         // The server masks the secret; the sheet only needs to know it is there.
         assertTrue(settings.hasKey)
+        // ADR-0063: the read goes over the MCP config tool, not the RPC bridge.
+        assertTrue(transport.calls.any { it.first == "repotory_config_get" })
     }
 
     @Test
@@ -412,7 +449,7 @@ class ChatSessionTest {
         val session = ChatSession(transport, post)
         val outcome = session.saveProvider("http://host/v1", "m", "")
         assertTrue(outcome.ok)
-        val written = transport.rpcCalls.filter { it.first == "UpdateConfig" }.map { it.second[0] }
+        val written = transport.calls.filter { it.first == "repotory_config_update" }.map { it.second["key"] }
         assertTrue(written.contains("ai_chat_base_url"))
         assertTrue(written.contains("ai_chat_model"))
         assertFalse(written.contains("ai_chat_api_key"))
@@ -424,8 +461,20 @@ class ChatSessionTest {
         val (events, post) = collector()
         val session = ChatSession(transport, post)
         session.saveProvider("http://host/v1", "m", "sk-123")
-        val written = transport.rpcCalls.filter { it.first == "UpdateConfig" }.map { it.second }
-        assertTrue(written.any { it[0] == "ai_chat_api_key" && it[1] == "sk-123" })
+        val written = transport.calls.filter { it.first == "repotory_config_update" }.map { it.second }
+        assertTrue(written.any { it["key"] == "ai_chat_api_key" && it["value"] == "sk-123" })
+    }
+
+    @Test
+    fun `a rejected config write fails the save instead of pretending it landed`() {
+        val transport = FakeTransport(
+            tools = mapOf("repotory_config_update" to "error: unknown config key: nope"),
+        )
+        val (events, post) = collector()
+        val session = ChatSession(transport, post)
+        val outcome = session.saveProvider("http://host/v1", "m", "")
+        assertFalse(outcome.ok)
+        assertTrue(outcome.message.contains("unknown config key"))
     }
 
     @Test

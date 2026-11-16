@@ -95,7 +95,12 @@ func TestBindingSurfaceHumanGateHolds(t *testing.T) {
 		"ApproveWikiPage", "RejectWikiPage", "DeleteCompiledPage",
 		"PromoteWikiPageToGlobal", "AssignWikiPageProject",
 		"MergeWikiPages", "RunCommunitySummary", "FileAnswerAsPage",
-		"UpdateConfig", "UpdateScanRoots", "DeleteNote", "RestoreNoteVersion",
+		// UpdateConfig was removed from this list on 2026-11-16 by deliberate
+		// audit edit: the owner reclassified configuration writes from
+		// human-gate to catalogue-covered (ADR-0063) so the IDE panels can
+		// save AI provider settings over MCP. UpdateScanRoots stays gated —
+		// granting new filesystem scope is a different decision.
+		"UpdateScanRoots", "DeleteNote", "RestoreNoteVersion",
 		"TriggerKnowledgeImport", "ImportClaudeMemory", "CaptureClaudeHandoff",
 		"RebuildEmbeddings",
 	}

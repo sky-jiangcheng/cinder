@@ -235,7 +235,7 @@ describe('ActionsTab AI client wiring', () => {
     await pickDemoAndConnect()
 
     await waitFor(() =>
-      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true, true),
+      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true, true, false),
     )
   })
 
@@ -253,8 +253,36 @@ describe('ActionsTab AI client wiring', () => {
     await pickDemoAndConnect()
 
     await waitFor(() =>
-      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true, false),
+      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true, false, false),
     )
+  })
+
+  // ADR-0010: the capture gate rides with the hook decision — a hook installed
+  // with the gate off degrades every session end to a credit-burning model
+  // call. Default OFF on purpose: it widens what Cinder may read (session
+  // transcripts), so the user flips it, never the installer.
+  it('sends the capture opt-in only when the user asked for it', async () => {
+    renderTab()
+
+    const captureBox = await screen.findByRole('checkbox', {
+      name: 'settings.agentClientsCapture',
+    })
+    expect((captureBox as HTMLInputElement).checked).toBe(false)
+
+    fireEvent.click(captureBox)
+    await pickDemoAndConnect()
+
+    await waitFor(() =>
+      expect(setupAgentClients).toHaveBeenCalledWith(1, ['claude'], true, true, true),
+    )
+  })
+
+  it('hides the capture opt-in when the hook is not installed', async () => {
+    renderTab()
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'settings.agentClientsHook' }))
+
+    expect(screen.queryByRole('checkbox', { name: 'settings.agentClientsCapture' })).toBeNull()
   })
 
   it('reports every instruction file it wrote, per file', async () => {

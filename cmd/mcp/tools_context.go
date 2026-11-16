@@ -23,6 +23,11 @@ const maxProjectNameLen = bounds.MaxNameLen
 // repotory_handoff records what the session accomplished (session exit).
 // Together they turn the knowledge base from something an agent has to
 // actively search into a memory layer it starts and ends every session with.
+//
+// repotory_workspace_resolve (ADR-0062) is the read-only twin of the
+// ResolveWorkspacePath binding: the IDE panels' project lock resolves over
+// it instead of the HTTP bridge, so the lock no longer needs a running
+// repotory-server.
 func registerContextTools(mcpServer *server.MCPServer, svc *service.Service, w *writerapi.Manager) {
 	mcpServer.AddTool(mcp.Tool{
 		Name: "repotory_context",
@@ -70,6 +75,47 @@ func registerContextTools(mcpServer *server.MCPServer, svc *service.Service, w *
 		// impossible, not an override of a caller that already knows its project.
 		res := svc.ResolveWorkspace(query, path)
 		return makeTextResult(svc.BuildProjectContext(res)), nil
+	})
+
+	// ADR-0062 decision 1: the read-only twin of the ResolveWorkspacePath
+	// binding, exposed over MCP. The matching rules stay server-side (the
+	// same svc.ResolveProjectByPath the binding calls), so this is not a
+	// second matcher — it is the same answer over a different transport.
+	//
+	// Agents do not normally need it: repotory_context's `path` argument
+	// already resolves the same way internally. The tool exists for the
+	// human-side client that has to DISPLAY which project a workspace
+	// folder belongs to (the IDE panels' project lock, ADR-0036 decision 2)
+	// without requiring a running repotory-server.
+	mcpServer.AddTool(mcp.Tool{
+		Name: "repotory_workspace_resolve",
+		Description: "Resolve an absolute directory (an IDE workspace folder) to the project it belongs to, and to the repository inside it when the directory sits inside a scanned repository. " +
+			"Agents do not normally need this: repotory_context's `path` argument resolves the same way server-side. " +
+			"This is for a human-side client (the IDE panel's project lock) that needs to DISPLAY which project a folder resolves to. " +
+			"Pure read: returns the resolution (Project, Repository, MatchedOn) or a candidate catalog (Candidates) when nothing matches; modifies nothing.",
+		InputSchema: mcp.ToolInputSchema{
+			Type:     "object",
+			Required: []string{"path"},
+			Properties: map[string]any{
+				"path": map[string]any{
+					"type":        "string",
+					"description": "Absolute directory to resolve (the IDE workspace folder).",
+				},
+			},
+		},
+	}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args := req.GetArguments()
+		path, _ := args["path"].(string)
+		if strings.TrimSpace(path) == "" {
+			return makeInvalidResult("path is required"), nil
+		}
+		// The same path limit as the binding, the repotory_context `path`
+		// argument and BindWorkspaceToProject (all from internal/bounds): the
+		// surfaces must not disagree about how long a path they will look at.
+		if msg := bounds.Check("path", path, bounds.MaxPathLen); msg != "" {
+			return makeInvalidResult(msg), nil
+		}
+		return makeJSONResult(svc.ResolveProjectByPath(path))
 	})
 
 	mcpServer.AddTool(mcp.Tool{

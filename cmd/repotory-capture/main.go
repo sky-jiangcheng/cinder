@@ -14,6 +14,12 @@
 // pending record in the platform data dir, never the knowledge layer; the
 // next repotory_context surfaces it. Failures never break session teardown.
 //
+// --strict is the hook's contract, not a user-facing default: it turns a
+// capture that wrote nothing (config off, no matching project) into a non-zero
+// exit so the SessionEnd hook's `if ... && repotory-capture --strict` falls
+// through to its model-driven fallback. Without it the CLI keeps ADR-0010's
+// "never break session teardown" exit-0 behavior.
+//
 // Hook config (via scripts/repotory-init or manually):
 //
 //	"SessionEnd": [{ "hooks": [{ "type": "command", "command": "repotory-capture" }] }]
@@ -37,9 +43,20 @@ import (
 )
 
 func main() {
-	cwdFlag := flag.String("cwd", "", "session working directory (default: stdin .cwd, else os.Getwd)")
-	dbPath := flag.String("db", "", "database path (default: the app's DB)")
-	flag.Parse()
+	os.Exit(run(os.Args[1:]))
+}
+
+// run is the body of the CLI, split out so the exit code is testable and the
+// deferred writer/database cleanup always runs before the process exits with
+// the code this returns (os.Exit would skip the defers).
+func run(args []string) int {
+	fs := flag.NewFlagSet("repotory-capture", flag.ExitOnError)
+	cwdFlag := fs.String("cwd", "", "session working directory (default: stdin .cwd, else os.Getwd)")
+	dbPath := fs.String("db", "", "database path (default: the app's DB)")
+	strict := fs.Bool("strict", false, "exit non-zero when no handoff note was written (for the SessionEnd hook's fallback)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 
 	cwd := resolveCwd(*cwdFlag)
 	if cwd == "" {
@@ -85,14 +102,20 @@ func main() {
 		writerapi.CaptureClaudeArgs{Cwd: cwd}, &report)
 	if err != nil {
 		// Disabled-by-config or no-matching-project are expected, non-fatal for a
-		// hook; still surface them and leave a pending record, but exit 0 so a
-		// failed capture never breaks the user's Claude session teardown.
+		// hook; still surface them and leave a pending record. The default exit
+		// code stays 0 so a failed capture never breaks the user's Claude session
+		// teardown (ADR-0010); --strict lets the hook distinguish "wrote nothing"
+		// and fall through to its model-driven fallback.
 		fmt.Fprintf(os.Stderr, "repotory-capture: %v\n", err)
 		recordPending(cwd, err.Error())
-		return
+		if *strict {
+			return 1
+		}
+		return 0
 	}
 	platform.ClearCapturePending()
 	fmt.Printf("repotory-capture: wrote handoff note %d (%q)\n", report.NoteID, report.Title)
+	return 0
 }
 
 // recordPending leaves a durable trace of a failed capture; stderr alone is

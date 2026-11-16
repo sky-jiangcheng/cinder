@@ -143,7 +143,7 @@ flowchart TB
 > 完整功能表（含层级分类与 ADR 链接）见 [docs/features-overview.md](docs/features-overview.md)。
 
 - **知识库（Core）** —— Markdown 笔记 + `/` 块编辑器、FTS5 全文搜索、逐次保存的版本历史与行级 diff、全局 ⌘/Ctrl+K 搜索。
-- **AI 就绪接口（Core）** —— `cinder-mcp`（22 个 MCP 工具）、单调用注入 `repotory_context` / `repotory_handoff`、llms.txt、8 个内置 Agent 记忆导入源（Claude / Codex / OpenCode / CodeBuddy / Cursor / OpenClaw / Hermes 等）、数据完整性审计（`repotory_integrity`）。
+- **AI 就绪接口（Core）** —— `cinder-mcp`（25 个 MCP 工具）、单调用注入 `repotory_context` / `repotory_handoff`、llms.txt、8 个内置 Agent 记忆导入源（Claude / Codex / OpenCode / CodeBuddy / Cursor / OpenClaw / Hermes 等）、数据完整性审计（`repotory_integrity`）。
 - **知识图谱 & LLM Wiki（Support，人把关）** —— 笔记自动编译为**待审** Wiki 页；审核队列（批准 / 拒绝 / 合并，墓碑语义）；页面版本与合并建议；混合语义检索 + 可插拔向量库（默认 sqlite-vec，支持远程 Qdrant / Weaviate）——LLM 编译流程全面受控。
 - **内置安全备份（Core）** —— 每日 `VACUUM INTO` 自动快照（默认开启，保留 14 份，0600 权限）；恢复仅需拷回单个文件。
 - **仓库自动挖掘（Core）** —— README 摘要、技术栈识别（20+ 清单格式）、语言分布、依赖关系、贡献者、活跃度趋势。
@@ -224,8 +224,8 @@ web/src/           # React 19 + TypeScript：api · hooks · pages · components
 | 分层 | 取值 | 用途 |
 | :--- | :--- | :--- |
 | **品牌（展示）** | `Cinder` | `productName`、应用内 Logo、文档与 UI 文案 |
-| **下载产物** | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-server-…` | 发布资产名——每个文件自己说清是哪个构建 |
-| **可执行文件** | `cinder` / `cinder-mcp` / `cinder-server` | `which` 找到的东西。改名前的 `repotory*` 仍以符号链接安装（Windows 是副本 / Scoop shim），已有客户端配置照旧可用 |
+| **下载产物** | `Cinder-<version>-<target>` / `cinder-mcp-…` / `cinder-capture-…` / `cinder-server-…` | 发布资产名——每个文件自己说清是哪个构建 |
+| **可执行文件** | `cinder` / `cinder-mcp` / `cinder-capture` / `cinder-server` | `which` 找到的东西。改名前的 `repotory*` 仍以符号链接安装（Windows 是副本 / Scoop shim），已有客户端配置照旧可用——`repotory-capture` 是 SessionEnd hook 调用的那个名字 |
 | **仓库与包标识** | `repotory` | GitHub 仓库名、Go module 名、npm 包名、文档站 URL |
 | **冻结标识** | `repotory` | 用户数据目录、`repotory.db`、MCP 工具前缀 `repotory_*`、插件 id、cask/bucket token、DB sentinel |
 

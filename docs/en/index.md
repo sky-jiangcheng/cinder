@@ -85,7 +85,7 @@ flowchart TB
 
     subgraph AGENT["🤖 AI agent — tool surface"]
         direction LR
-        MCP["cinder-mcp<br/>22 tools"]
+        MCP["cinder-mcp<br/>25 tools"]
         DSH["dsh plugin<br/>3 tools"]
         LLMSTXT["llms.txt export"]
         MCP ~~~ DSH ~~~ LLMSTXT

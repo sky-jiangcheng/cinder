@@ -44,22 +44,34 @@ for (const required of [
 // the directory name must equal the frontmatter `name`.
 const skillName = SKILL_DIR.split('/').pop();
 
-// ---- 1b. the installed copy must match the repo copy -------------------------
+// ---- 1b. every installed copy must match the repo copy ----------------------
 //
-// The skill lives in two places: skill/repotory/ in this repo (the source of
-// truth, shipped in the release) and the user's ~/.workbuddy/skills/repotory/
-// (the installed copy). They drift the moment one is edited and the other is
-// not, and the symptom is subtle: the installed copy keeps serving stale tool
-// signatures to every agent while the repo copy looks correct.
+// The skill lives in two kinds of place: skill/repotory/ in this repo (the
+// source of truth, shipped in the release) and one copy per DETECTED AGENT
+// on the user's machine (~/.claude/skills/repotory, ~/.codex/skills/repotory,
+// ~/.workbuddy/skills/repotory, …). The skill is app-agnostic — the same
+// package for every agent — so the copies drift the moment one is edited and
+// the others are not, and the symptom is subtle: stale installed copies keep
+// serving stale tool signatures to every agent while the repo copy looks
+// correct.
 //
-// The installed copy is optional — CI has no user-level skills directory, and
-// a fresh checkout legitimately has none. So this check only fires when the
-// installed copy actually exists.
-const installedDir = join(
-  process.env.HOME ?? '',
-  '.workbuddy/skills/repotory',
-);
-if (existsSync(installedDir)) {
+// scripts/install-skill.sh writes those copies, and this check verifies every
+// one of them. Both read scripts/skill-agents.txt, so a new agent's location
+// is covered by the installer and by this gate from the same line. The
+// installed copies are optional — CI has no user-level skills directories,
+// and a fresh checkout legitimately has none — so this check only fires for
+// the agents that actually have an installed copy.
+const agentTable = readFileSync(new URL('./skill-agents.txt', import.meta.url), 'utf8');
+const installedDirs = [];
+for (const line of agentTable.split('\n')) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#')) continue;
+  const [agent, rel] = trimmed.split('\t');
+  if (!agent || !rel) continue;
+  const installedDir = join(process.env.HOME ?? '', rel.trim(), 'repotory');
+  if (existsSync(installedDir)) installedDirs.push({ agent, installedDir });
+}
+for (const { agent, installedDir } of installedDirs) {
   for (const rel of [
     'SKILL.md',
     'references/mcp-tools.md',
@@ -69,17 +81,17 @@ if (existsSync(installedDir)) {
     const repoCopy = join(SKILL_DIR, rel);
     const installedCopy = join(installedDir, rel);
     if (!existsSync(installedCopy)) {
-      fail(`installed copy is missing ${rel} (${installedDir})`);
+      fail(`installed copy for $agent is missing ${rel} (${installedDir})`);
       continue;
     }
     const a = readFileSync(repoCopy, 'utf8');
     const b = readFileSync(installedCopy, 'utf8');
     if (a !== b) {
       fail(
-        `installed copy differs from the repo copy: ${rel}\n` +
+        `installed copy for ${agent} differs from the repo copy: ${rel}\n` +
           `  repo:      ${repoCopy}\n` +
           `  installed: ${installedCopy}\n` +
-          '  Copy the repo version over the installed one (or reinstall the skill).',
+          '  Re-run scripts/install-skill.sh to refresh every installed copy.',
       );
     }
   }

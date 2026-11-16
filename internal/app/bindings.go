@@ -530,7 +530,10 @@ func (a *App) ListAgentClients() []string { return service.AgentClientNames() }
 // the managed repotory_* instruction block into the project's AGENTS.md /
 // CLAUDE.md (ADR-0043 — the protocol-neutral half: the hook exists only for
 // Claude Code, while every agent that reads an instruction file gets both
-// sentences).
+// sentences). enableCapture is the explicit claude_session_capture opt-in
+// (ADR-0010): installing the hook alone leaves the gate off, which makes the
+// hook's zero-credit primary path inert — the checkbox and the hook are one
+// decision in the UI, and the report states the resulting gate.
 //
 // This is the desktop twin of the CLI's `repotory-init`: same files, same
 // bytes (the two are pinned to one golden fixture by
@@ -539,8 +542,8 @@ func (a *App) ListAgentClients() []string { return service.AgentClientNames() }
 // The report carries a machine-readable code, not a sentence: the UI renders
 // it in the user's language. A refusal — a container project, a missing
 // directory, a client that does not exist — is a code, not an error.
-func (a *App) SetupAgentClients(projectID int64, clients []string, withHook, withInstructions bool) (service.AgentSetupReport, error) {
-	return a.svc.SetupAgentClients(projectID, clients, withHook, withInstructions)
+func (a *App) SetupAgentClients(projectID int64, clients []string, withHook, withInstructions, enableCapture bool) (service.AgentSetupReport, error) {
+	return a.svc.SetupAgentClients(projectID, clients, withHook, withInstructions, enableCapture)
 }
 
 // AgentInstructionsStatusFor reports whether one project's directory carries

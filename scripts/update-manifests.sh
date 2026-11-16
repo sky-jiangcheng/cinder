@@ -40,9 +40,9 @@ update_file() {
   local tmp
   tmp="$(mktemp "${file}.XXXXXX")"
   # `#` as the delimiter, not `|`: the asset-name rule below alternates
-  # (`Cinder-|cinder-mcp-|cinder-server-`), and a `|` delimiter ends the s
-  # command at the first alternation — sed then reports "parentheses not
-  # balanced" and the file keeps the old version. No manifest contains `#`.
+  # (`Cinder-|cinder-mcp-|cinder-capture-|cinder-server-`), and a `|` delimiter
+  # ends the s command at the first alternation — sed then reports "parentheses
+  # not balanced" and the file keeps the old version. No manifest contains `#`.
   if ! sed -E "s#$pattern#$replacement#" "$file" > "$tmp"; then
     echo "  ERROR: sed failed for $file" >&2
     rm -f "$tmp"
@@ -88,7 +88,7 @@ for manifest in packaging/*/scoop/*.json; do
   # Group 3 is the target suffix (-windows-amd64.zip) and must be re-emitted,
   # or the URL names an asset that does not exist.
   update_file "$manifest" \
-    '((Cinder|cinder-mcp|cinder-server)-)[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9.-]+)?' \
+    '((Cinder|cinder-mcp|cinder-capture|cinder-server)-)[0-9]+\.[0-9]+\.[0-9]+([+-][A-Za-z0-9.-]+)?' \
     '\1@VER@\3'
   update_file "$manifest" \
     '@VER@' \

@@ -135,19 +135,23 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 
 ## 三、工具路由（通道 A）
 
-22 个工具，按意图选：
+25 个工具，按意图选：
 
 ### 读
 
 | 工具 | 什么时候用 | 注意 |
 |------|-----------|------|
 | `repotory_context` | **会话开始**，或需要某项目的全景 | 首选入口 |
+| `repotory_config_get` | 读全部配置（密钥掩码为 `************`） | 面板 provider 设置的读取入口（ADR-0063） |
+| `repotory_config_update` | 写单个配置键（键名须在服务端白名单内，数值键拒绝非数值） | 面板 provider 设置的保存入口；写操作经单写者契约路由 |
+
 | `repotory_ask` | 「关于 X 我知道什么？」—— 自然语言提问 | 返回**带出处的答案**（答案正文 + Sources 清单）；未配 AI 端点时退化为关键词匹配，且**会标明那不是答案** |
 | `repotory_wiki_search` | 查**已批准**的知识页（概念 / 实体 / 综合页） | 未批准过的页不会出现；空 `query` = 列出已批准页（按时间倒序） |
 | `repotory_wiki_read` | 读一页的正文 + 出处页 + 来源笔记 | 按 id |
 | `repotory_notes_search` | 精确全文检索 | FTS5 trigram + bm25 排序，支持 CJK |
 | `repotory_notes_read` | 读某条笔记全文 | 按 id |
 | `repotory_notes_list` | 列出全部笔记 | 默认 50，上限 500；单项目工作集用 `context` |
+| `repotory_workspace_resolve` | 把绝对目录解析成归属项目（IDE 面板的项目锁用；无匹配时返回候选目录） | **agent 常规不需要**：`repotory_context` 的 `path` 已含同一份服务端解析；纯读（ADR-0062） |
 | `repotory_metrics` | 「这个库 / 这个项目现在多大、今天动了多少、某段时间动了多少」 | 只读**已存库**的缓存数字：不扫盘、不跑 git、不刷新；`since`/`until` 给日期窗口（`commits`/`additions`/`deletions`），窗口超出最后扫描时 `stale: true` + 计数 `null` 而**不是 0**；未知路径给空计数，代码行覆盖不全给 `null` |
 
 ### 写

@@ -43,6 +43,12 @@ const (
 	MethodReviewRun     = "review.run"
 	MethodCaptureClaude = "capture.claude_session"
 	MethodAuditRecord   = "audit.record"
+	// MethodConfigUpdate (ADR-0063, 2026-11-16): the owner reclassified
+	// configuration writes from human-gate to catalogue-covered so the IDE
+	// panels can save AI provider settings over MCP. The executor calls the
+	// SAME service.UpdateConfig the binding calls, so the allow-list and
+	// value validation are identical on both faces.
+	MethodConfigUpdate = "config.update"
 )
 
 // ErrUnknownMethod is returned when a request names something outside the
@@ -141,6 +147,15 @@ type AuditRecordArgs struct {
 	Row db.AICallLog `json:"row"`
 }
 
+// ConfigUpdateArgs mirrors svc.UpdateConfig: a single key-value pair. The
+// key is validated against the service's allow-list and numeric keys reject
+// non-numeric values — the executor delegates to the same service method, so
+// the agent face and the UI face cannot disagree about what is writable.
+type ConfigUpdateArgs struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 // bindingCatalogueMethods maps the App bindings (internal/app's
 // bindingWrites registry) onto the catalogue method that executes their write.
 // Several bindings share one catalogue method (the tool face is narrower than
@@ -155,6 +170,10 @@ var bindingCatalogueMethods = map[string]string{
 	"UpdateNoteMeta":     MethodNotesUpdate,
 	"CreateHandoff":      MethodHandoffCreate,
 	"RunReviewNow":       MethodReviewRun,
+	// UpdateConfig (ADR-0063, 2026-11-16): configuration writes were
+	// reclassified from human-gate to catalogue-covered. UpdateScanRoots stays
+	// human-gate: granting new filesystem scope is a different decision.
+	"UpdateConfig": MethodConfigUpdate,
 	// CaptureClaudeHandoff and the import triggers are NOT here: they read
 	// other tools' files off disk (ADR-0011 privacy gate) — the desktop is
 	// the surface where that consent lives, so a client process refuses them
@@ -175,6 +194,7 @@ func Methods() []string {
 		MethodNotesCreate, MethodNotesUpdate, MethodHandoffCreate,
 		MethodChatCreate, MethodChatAppend, MethodChatRename,
 		MethodScanRun, MethodReviewRun, MethodCaptureClaude, MethodAuditRecord,
+		MethodConfigUpdate,
 	}
 }
 
@@ -287,6 +307,21 @@ func (e *Executor) Execute(ctx context.Context, method string, raw json.RawMessa
 			return nil, err
 		}
 		return map[string]bool{"recorded": true}, nil
+	case MethodConfigUpdate:
+		var a ConfigUpdateArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(a.Key) == "" {
+			return nil, fmt.Errorf("config key is required")
+		}
+		// The service validates the allow-list and the value shape; the
+		// executor is the same write path the binding uses, so the agent face
+		// and the UI face agree on what is writable (ADR-0063).
+		if err := e.svc.UpdateConfig(a.Key, a.Value); err != nil {
+			return nil, err
+		}
+		return map[string]string{"key": a.Key, "value": a.Value}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownMethod, method)
 	}

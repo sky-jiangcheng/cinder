@@ -56,6 +56,7 @@ func newTestServer(t *testing.T) *testServer {
 	registerAskTool(s, svc)
 	registerWikiTools(s, svc)
 	registerContextTools(s, svc, w)
+	registerConfigTools(s, svc, w)
 	registerScanTool(s, svc, w)
 	registerAuditTools(s, svc)
 	registerReviewTools(s, svc, w)
@@ -138,7 +139,7 @@ func (ts *testServer) jsonPayload(res *mcp.CallToolResult) map[string]any {
 //
 // The literal is duplicated in internal/version/core.go; the drift guard in
 // scripts/check-version-drift.mjs fails if the two copies disagree.
-const wantCoreVersion = "2.0.0"
+const wantCoreVersion = "2.2.0"
 
 func TestToolsRegistered(t *testing.T) {
 	ts := newTestServer(t)
@@ -156,6 +157,9 @@ func TestToolsRegistered(t *testing.T) {
 		"repotory_integrity",
 		"repotory_context",
 		"repotory_handoff",
+		"repotory_workspace_resolve",
+		"repotory_config_get",
+		"repotory_config_update",
 		"repotory_scan",
 		"repotory_ai_audit",
 		"repotory_ai_review_rules",
@@ -185,6 +189,112 @@ func TestToolsRegistered(t *testing.T) {
 	if version.CoreVersion != wantCoreVersion {
 		t.Errorf("core version = %q, want %q — the contract version moves when the tool surface moves "+
 			"(minor = additive, major = breaking), so bump it here on purpose", version.CoreVersion, wantCoreVersion)
+	}
+}
+
+// TestWorkspaceResolveMatchesBinding pins ADR-0062's same-source rule: the
+// repotory_workspace_resolve tool must answer byte-for-byte what the
+// ResolveWorkspacePath binding answers for the same path. The two surfaces
+// share one matcher (the same svc.ResolveProjectByPath call), and a client
+// must never be able to tell them apart — that is what keeps an agent and a
+// panel from disagreeing about which project a folder belongs to.
+func TestWorkspaceResolveMatchesBinding(t *testing.T) {
+	ts := newTestServer(t)
+	pid := ts.seedProject("demo", "/tmp/demo")
+	tx, err := ts.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertRepositoryTx(tx, "/tmp/demo/pay-common", pid); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dir := range []string{
+		"/tmp/demo/pay-common",     // tier 1: repository exact
+		"/tmp/demo/pay-common/src", // tier 2: repository ancestor
+		"/tmp/demo",                // tier 3: project exact
+		"/tmp/demo/other",          // tier 4: project ancestor
+		"/nowhere/at/all",          // unresolved: candidate catalog
+	} {
+		want, err := json.MarshalIndent(ts.svc.ResolveProjectByPath(dir), "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := ts.call("repotory_workspace_resolve", map[string]any{"path": dir})
+		if got := strings.TrimSpace(ts.text(res)); got != string(want) {
+			t.Errorf("repotory_workspace_resolve(%q) = %s, want the binding's %s", dir, got, want)
+		}
+	}
+
+	// The argument guards: the same path limit the binding enforces, plus a
+	// required-path check that only exists at the MCP edge.
+	if res := ts.call("repotory_workspace_resolve", map[string]any{
+		"path": strings.Repeat("a", bounds.MaxPathLen+1),
+	}); !res.IsError {
+		t.Errorf("a path over MaxPathLen must be rejected, got %s", ts.text(res))
+	}
+	if res := ts.call("repotory_workspace_resolve", map[string]any{}); !res.IsError {
+		t.Errorf("a missing path must be rejected, got %s", ts.text(res))
+	}
+	if res := ts.call("repotory_workspace_resolve", map[string]any{"path": "  "}); !res.IsError {
+		t.Errorf("a blank path must be rejected, got %s", ts.text(res))
+	}
+}
+
+// TestConfigTools pins the config read/write pair (ADR-0063): the read masks
+// secrets, the write goes through the single-writer catalogue and validates
+// against the same allow-list the HTTP binding enforces.
+func TestConfigTools(t *testing.T) {
+	ts := newTestServer(t)
+
+	get := ts.call("repotory_config_get", nil)
+	payload := ts.jsonPayload(get)
+	config, _ := payload["config"].(map[string]any)
+	if config == nil {
+		t.Fatalf("config_get returned no config object")
+	}
+	// Unset keys are absent from the map (only stored rows come back); the
+	// seeded defaults are present.
+	if config["daily_code_standard"] != "500" {
+		t.Errorf("seeded default daily_code_standard = %v, want 500", config["daily_code_standard"])
+	}
+
+	// A known string key writes and reads back.
+	upd := ts.call("repotory_config_update", map[string]any{"key": "ai_chat_model", "value": "qwen3"})
+	if upd.IsError {
+		t.Fatalf("config update errored: %s", ts.text(upd))
+	}
+	res := ts.jsonPayload(upd)
+	if res["key"] != "ai_chat_model" || res["value"] != "qwen3" {
+		t.Errorf("update result = %v, want key/value echo", res)
+	}
+	get2 := ts.jsonPayload(ts.call("repotory_config_get", nil))
+	config2, _ := get2["config"].(map[string]any)
+	if config2["ai_chat_model"] != "qwen3" {
+		t.Errorf("ai_chat_model = %v, want qwen3", config2["ai_chat_model"])
+	}
+
+	// A secret is masked on the read side, never returned in plaintext.
+	ts.call("repotory_config_update", map[string]any{"key": "ai_chat_api_key", "value": "sk-secret"})
+	get3 := ts.jsonPayload(ts.call("repotory_config_get", nil))
+	config3, _ := get3["config"].(map[string]any)
+	if config3["ai_chat_api_key"] != "********" {
+		t.Errorf("ai_chat_api_key = %v, want the mask", config3["ai_chat_api_key"])
+	}
+
+	// Unknown key and missing argument are rejected, not silently accepted.
+	if res := ts.call("repotory_config_update", map[string]any{"key": "no_such_key", "value": "x"}); !res.IsError {
+		t.Errorf("unknown key must be rejected, got %s", ts.text(res))
+	}
+	if res := ts.call("repotory_config_update", map[string]any{"value": "x"}); !res.IsError {
+		t.Errorf("missing key must be rejected, got %s", ts.text(res))
+	}
+	// A numeric key rejects a non-numeric value.
+	if res := ts.call("repotory_config_update", map[string]any{"key": "scan_depth", "value": "deep"}); !res.IsError {
+		t.Errorf("non-numeric value for a numeric key must be rejected, got %s", ts.text(res))
 	}
 }
 

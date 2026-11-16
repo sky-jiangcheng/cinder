@@ -82,6 +82,7 @@ func main() {
 	registerAskTool(mcpServer, svc)
 	registerWikiTools(mcpServer, svc)
 	registerContextTools(mcpServer, svc, writers)
+	registerConfigTools(mcpServer, svc, writers)
 	registerScanTool(mcpServer, svc, writers)
 	registerAuditTools(mcpServer, svc)
 	registerReviewTools(mcpServer, svc, writers)

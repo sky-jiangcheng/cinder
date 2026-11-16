@@ -184,6 +184,7 @@ export type ExtMessage =
   // settings page. These four messages let the same panel read, test and write
   // the provider it is actually using (the desktop app reads the same rows).
   | { type: "providerLoad" }
+  | { type: "startServer" }
   | { type: "providerSave"; baseUrl: string; model: string; apiKey: string }
   | { type: "providerTest"; baseUrl: string; model: string; apiKey: string }
   | { type: "providerModels"; baseUrl: string; apiKey: string }
@@ -236,7 +237,7 @@ export type ViewMessage =
       type: "announce";
       level: "info" | "warn" | "error";
       message: string;
-      action?: { label: string; target: "provider" };
+      action?: { label: string; target: "provider" | "startServer" };
     }
   /** The AI provider sheet's current state (secrets stay masked). */
   | {

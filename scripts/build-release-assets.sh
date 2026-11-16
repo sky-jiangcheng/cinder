@@ -2,9 +2,12 @@
 # Build release artifacts into assets/releases/v<version>/.
 #
 # Two products ship from one release:
-#   - cinder-mcp  : pure Go, zero CGO. Cross-compiles for every target from
-#                   any host, so this script can always produce all four.
-#   - cinder      : the Wails desktop shell. It links GTK/WebKit on Linux and
+#   - cinder-mcp     : pure Go, zero CGO. Cross-compiles for every target from
+#                      any host, so this script can always produce all four.
+#   - cinder-capture : same recipe (pure Go, zero CGO) — the SessionEnd hook
+#                      target that turns a closing Claude Code session into a
+#                      handoff note without calling any model.
+#   - cinder         : the Wails desktop shell. It links GTK/WebKit on Linux and
 #                     needs the native toolchain on macOS and Windows, so it can
 #                     only be produced on each target's own CI runner - exactly
 #                     what .github/workflows/release.yml does on a tag push.
@@ -73,6 +76,34 @@ build_mcp() {
   echo "  ✓ $asset"
 }
 
+build_capture() {
+  local target="$1" goos="$2" goarch="$3"
+  local stage="$OUT/.stage/$target"
+  mkdir -p "$stage"
+
+  # Same build recipe as the MCP server: a pure stdio/file CLI with no UI
+  # dependency, so it cross-compiles cleanly and runs anywhere.
+  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+    go build -ldflags "$LDFLAGS" -o "$stage/cinder-capture" ./cmd/repotory-capture/ 2>&1 | sed 's/^/    /'
+
+  local asset
+  case "$target" in
+    windows-amd64)
+      mv "$stage/cinder-capture" "$stage/cinder-capture.exe"
+      asset="cinder-capture-$VERSION-$target.zip"
+      (cd "$stage" && zip -q -j "$OUT/$asset" cinder-capture.exe)
+      ;;
+    *)
+      # The archive carries the hook-facing name as a symlink: the SessionEnd
+      # hook calls `command -v repotory-capture`, so that name must resolve.
+      ln -sf cinder-capture "$stage/repotory-capture"
+      asset="cinder-capture-$VERSION-$target.tar.gz"
+      tar -czf "$OUT/$asset" -C "$stage" cinder-capture repotory-capture
+      ;;
+  esac
+  echo "  ✓ $asset"
+}
+
 # The desktop shell needs web/dist to exist for //go:embed (see ci.yml), plus a
 # platform toolchain. Returns 1 with a reason instead of dying.
 can_build_desktop() {
@@ -93,7 +124,7 @@ can_build_desktop() {
   esac
 }
 
-echo "[1/2] MCP server (all targets)"
+echo "[1/3] MCP server (all targets)"
 for t in "${TARGETS[@]}"; do
   case "$t" in
     linux-amd64)   build_mcp "$t" linux   amd64 ;;
@@ -104,7 +135,18 @@ for t in "${TARGETS[@]}"; do
 done
 
 echo
-echo "[2/2] Desktop app"
+echo "[2/3] Capture CLI (all targets)"
+for t in "${TARGETS[@]}"; do
+  case "$t" in
+    linux-amd64)   build_capture "$t" linux   amd64 ;;
+    darwin-amd64)  build_capture "$t" darwin  amd64 ;;
+    darwin-arm64)  build_capture "$t" darwin  arm64 ;;
+    windows-amd64) build_capture "$t" windows amd64 ;;
+  esac
+done
+
+echo
+echo "[3/3] Desktop app"
 DESKTOP_SKIPPED=0
 if [ "$MCP_ONLY" -eq 1 ]; then
   echo "  skipped (--mcp-only)"

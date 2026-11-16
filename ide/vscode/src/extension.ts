@@ -12,16 +12,18 @@
 import * as vscode from "vscode";
 import * as path from "node:path";
 import * as os from "node:os";
-import { accessSync, constants as fsConstants, existsSync } from "node:fs";
+import { accessSync, constants as fsConstants, existsSync, mkdirSync } from "node:fs";
 import { exec, execFile } from "node:child_process";
 import { McpStdioClient } from "./mcpClient.js";
 import { getJson, postJson } from "./headless.js";
 import { RepotoryChatConsoleProvider } from "./chatConsole.js";
 import { ChatSession, type Transport } from "./chatSession.js";
+import { ServerLauncher, type StartOutcome } from "./serverLauncher.js";
 
 const CONFIG_SECTION = "repotory";
 const SERVER_URL_KEY = "serverUrl";
 const MCP_PATH_KEY = "mcpPath";
+const SERVER_BINARY_KEY = "serverBinary";
 const MCP_ENV = "REPOTORY_MCP_BIN";
 // `cinder-mcp` first, `repotory-mcp` second: the rename kept the old name as
 // a symlink on every install (ADR-0049 补注), so an older machine still works.
@@ -35,6 +37,8 @@ const CONSOLE_VIEW_ID = "repotory.notesSearch";
 export let output: vscode.OutputChannel;
 let mcp: McpStdioClient | null = null;
 let extensionContext: vscode.ExtensionContext | undefined;
+/** The optional `repotory-server` child process (ADR-0063 A-light). */
+let serverLauncher: ServerLauncher | null = null;
 
 
 function serverUrl(): string {
@@ -249,6 +253,93 @@ async function pingHeadless(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+function serverLauncherFor(): ServerLauncher {
+  if (!serverLauncher) {
+    const logDir = extensionContext?.globalStorageUri.fsPath;
+    if (logDir) mkdirSync(logDir, { recursive: true });
+    serverLauncher = new ServerLauncher({
+      logPath: logDir ? path.join(logDir, "cinder-server.log") : undefined,
+    });
+  }
+  return serverLauncher;
+}
+
+async function pickServerBinary(): Promise<string | undefined> {
+  const picked = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: false,
+    openLabel: "使用此文件",
+    title: "选择 repotory-server 可执行文件",
+  });
+  const file = picked?.[0];
+  if (!file) return undefined;
+  if (!isExecutable(file.fsPath)) {
+    void vscode.window.showWarningMessage(`Cinder: 该文件不可执行：${file.fsPath}`);
+    return undefined;
+  }
+  await vscode.workspace
+    .getConfiguration(CONFIG_SECTION)
+    .update(SERVER_BINARY_KEY, file.fsPath, vscode.ConfigurationTarget.Global);
+  return file.fsPath;
+}
+
+/**
+ * One-click local service start (ADR-0063 A-light).
+ *
+ * Ports the JetBrains `RepotoryServerManager` pattern: never fights a running
+ * instance, only starts loopback, only from a binary the user already has,
+ * and reports why it could not. The provider-configuration gap (the panel
+ * cannot save an AI endpoint without a running service) becomes one click.
+ */
+async function startServerCommand(): Promise<void> {
+  const launcher = serverLauncherFor();
+  const settingGetter = () =>
+    vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>(SERVER_BINARY_KEY) ?? "";
+  const outcome: StartOutcome = await withProgress("启动本地服务", () =>
+    launcher.start(serverUrl(), settingGetter, (line) => output.appendLine(line)),
+  );
+  switch (outcome.kind) {
+    case "alreadyRunning":
+      void vscode.window.showInformationMessage(`Cinder: ${serverUrl()} 上已有服务在应答。`);
+      return;
+    case "started":
+      if (outcome.healthy) {
+        void vscode.window.showInformationMessage(
+          outcome.webUi
+            ? `Cinder: 本地服务已就绪（${serverUrl()}），深链可用。`
+            : `Cinder: 本地服务已就绪（${serverUrl()}）。该二进制旁没有 web/，深链将不可用。`,
+        );
+      } else {
+        void vscode.window.showWarningMessage(
+          `Cinder: 服务进程在运行，但 ${serverUrl()} 尚未应答。查看输出面板里的启动日志。`,
+        );
+      }
+      return;
+    case "binaryMissing": {
+      const choice = await vscode.window.showErrorMessage(
+        `Cinder: 未找到 repotory-server 可执行文件。已查找：\n${outcome.searched}`,
+        "选择可执行文件…",
+        "打开下载页",
+      );
+      if (choice === "选择可执行文件…") {
+        await pickServerBinary();
+        if (await pingHeadless()) {
+          void vscode.window.showInformationMessage("Cinder: 本地服务已在运行。");
+          return;
+        }
+        void startServerCommand();
+      } else if (choice === "打开下载页") {
+        void vscode.env.openExternal(vscode.Uri.parse(RELEASES_URL));
+      }
+      return;
+    }
+    case "failed":
+      void vscode.window.showErrorMessage(`Cinder: ${outcome.message}`);
+      return;
   }
 }
 
@@ -545,9 +636,15 @@ async function diagnose(context: vscode.ExtensionContext): Promise<void> {
       description: serverOk
         ? serverUrl()
         : `未连接到 ${serverUrl()}（搜索仍可经 cinder-mcp 完成）`,
-      detail: serverOk ? "健康检查通过" : "桌面版可在设置中修改 repotory.serverUrl；点击重新检测",
+      detail: serverOk
+        ? "健康检查通过"
+        : "点击一键启动本地服务（ADR-0063 A-light）；或在设置中修改 repotory.serverUrl",
       run: async () => {
-        await diagnose(context);
+        if (serverOk) {
+          await diagnose(context);
+          return;
+        }
+        await startServerCommand();
       },
     },
     {
@@ -711,6 +808,10 @@ export function activate(context: vscode.ExtensionContext): void {
       await openDesktop();
       return;
     }
+    if (msg.type === "startServer") {
+      await startServerCommand();
+      return;
+    }
     await session.handle(msg);
   };
   chatConsole.onReady = () => {
@@ -767,6 +868,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   register("repotory.registerMcp", () => registerMcp(context));
   register("repotory.diagnose", () => diagnose(context));
+  register("repotory.startServer", () => startServerCommand());
   register("repotory.setMcpPath", async () => {
     await pickMcpBinary();
   });
@@ -783,5 +885,8 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+  // Stop only the server this extension started (ADR-0063 A-light); a server
+  // the user runs themselves is not ours to kill.
+  serverLauncher?.stopOwned();
   mcp?.stop();
 }

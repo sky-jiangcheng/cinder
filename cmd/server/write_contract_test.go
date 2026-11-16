@@ -184,11 +184,22 @@ func TestServerClientRoleForwardsAndRefuses(t *testing.T) {
 		t.Fatalf("refusal is not actionable: %q", msg)
 	}
 
-	// 4. Config write (UpdateConfig is a human-gate write: privacy gates are
-	// never agent-self-service) refuses with the same actionable shape.
+	// 4. Config write forwards like any catalogue write. UpdateConfig was
+	// reclassified from human-gate to catalogue-covered on 2026-11-16
+	// (ADR-0063): the owner decided the IDE panels may save AI provider
+	// settings over MCP, so a client-role server forwards it to the writer.
+	// UpdateScanRoots stays human-gate and keeps refusing.
 	code, payload = rpc(t, ts.URL, "UpdateConfig", "auto_import", "1")
+	if code != http.StatusOK {
+		t.Fatalf("forwarded UpdateConfig = %d (%v), want 200", code, payload)
+	}
+	var autoImport string
+	if err := desktopDB.QueryRow(`SELECT value FROM app_config WHERE key = ?`, "auto_import").Scan(&autoImport); err != nil || autoImport != "1" {
+		t.Fatalf("forwarded config write did not land on the writer (value=%q err=%v)", autoImport, err)
+	}
+	code, payload = rpc(t, ts.URL, "UpdateScanRoots", "/nowhere")
 	if code != http.StatusForbidden {
-		t.Fatalf("client-role UpdateConfig = %d (%v), want 403", code, payload)
+		t.Fatalf("client-role UpdateScanRoots = %d (%v), want 403", code, payload)
 	}
 }
 

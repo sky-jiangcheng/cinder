@@ -120,6 +120,14 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
   // every other agent reads). Both write into files the user tracks in git, so
   // both are reported per file below and neither is silent.
   const [withInstructions, setWithInstructions] = useState(true)
+  // ADR-0010: the claude_session_capture gate, offered alongside the hook
+  // because the two are one decision — a hook installed with the gate off
+  // falls back to a credit-burning model call at every session end (the exact
+  // "installed but silent" shape the 2.1 timebox measured). Unlike the hook
+  // and the instruction block this defaults OFF: it widens what Cinder may
+  // read (session transcripts), so the default is not installed for the user,
+  // and the call itself can only turn the gate on, never off.
+  const [withCapture, setWithCapture] = useState(false)
   const [scanAfter, setScanAfter] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [agentReport, setAgentReport] = useState<AgentSetupReport | null>(null)
@@ -288,7 +296,7 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
     if (!targetProject || pickedClients.length === 0) return
     setConnecting(true)
     try {
-      const report = await setupAgentClients(Number(targetProject), pickedClients, withHook, withInstructions)
+      const report = await setupAgentClients(Number(targetProject), pickedClients, withHook, withInstructions, withCapture)
       setAgentReport(report)
       if (report.code) return
       if (scanAfter) {
@@ -474,6 +482,21 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
             />
             <span>{t('settings.agentClientsHook')}</span>
           </label>
+          {/* The capture opt-in rides with the hook: the hook's zero-credit
+              primary path reads transcripts only when this gate is on, so
+              installing the hook without it silently degrades every session
+              end to the credit-burning fallback. Default off on purpose —
+              it widens what Cinder may read, so the user flips it, not us. */}
+          {withHook && (
+            <label className={s.agentCheck}>
+              <input
+                type="checkbox"
+                checked={withCapture}
+                onChange={(e) => setWithCapture(e.target.checked)}
+              />
+              <span>{t('settings.agentClientsCapture')}</span>
+            </label>
+          )}
           <label className={s.agentCheck}>
             <input
               type="checkbox"
@@ -522,6 +545,23 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
                   <li>
                     <span className={s.agentFileStatus}>{t(AGENT_STATUS_KEYS[agentReport.hook_settings.status])}</span>
                     <code>{agentReport.hook_settings.path}</code>
+                  </li>
+                )}
+                {/* The gate state, stated where the hook is stated. Undefined
+                    = the user did not make this decision, and the report does
+                    not pretend they did — it says what the hook will do. */}
+                {agentReport.capture_enabled !== undefined && (
+                  <li>
+                    <span className={agentReport.capture_enabled ? s.agentStatusOk : s.agentStatusError} role="status">
+                      {t(agentReport.capture_enabled ? 'settings.agentClientsCaptureOn' : 'settings.agentClientsCaptureOff')}
+                    </span>
+                  </li>
+                )}
+                {agentReport.hook && agentReport.capture_enabled === undefined && (
+                  <li>
+                    <span className={s.agentStatusInfo} role="status">
+                      {t('settings.agentClientsCaptureSkipped')}
+                    </span>
                   </li>
                 )}
                 {(agentReport.instructions ?? []).map((f, i) => (

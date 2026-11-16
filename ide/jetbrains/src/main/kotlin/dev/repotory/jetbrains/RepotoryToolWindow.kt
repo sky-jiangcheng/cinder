@@ -1664,11 +1664,12 @@ private class AnnouncementBar : JPanel(BorderLayout(JBUI.scale(6), 0)) {
 /**
  * The announcement bar's text.
  *
- * It wraps: the messages say things like "The local Cinder service is not
- * reachable at http://127.0.0.1:18765 — the project lock needs it, so the
- * panel searches across all projects", and a label that cannot wrap either
- * clips that sentence or claims the whole width of the panel and pushes the
- * dismiss button off the edge.
+ * It wraps: the messages say things like "The Cinder MCP channel is not
+ * reachable — the project lock needs it, so the panel searches across all
+ * projects" (ADR-0062: the project lock runs over MCP, not the local
+ * service), and a label that cannot wrap either clips that sentence or
+ * claims the whole width of the panel and pushes the dismiss button off the
+ * edge.
  */
 private class AnnouncementText : JTextArea() {
     init {

@@ -33,7 +33,7 @@ The lock is a **default, not a restriction** — the chip opens and the panel go
 | **Pages** | The project id goes to `repotory_wiki_search` — the server really filters (that project's pages **plus** the global ones) |
 | **Notes** | `repotory_notes_search` has **no project parameter** (`path` only re-ranks), so the panel filters the hits itself and says so: `Locked to <project>: K of N matches shown. The notes tool has no project filter, so the panel filtered the list.` |
 
-A project that resolves to no project, or a service that is not running, leaves the panel unlocked **and says why** — the panel never pretends to be scoped.
+A workspace that resolves to no project, or an MCP channel that is not reachable, leaves the panel unlocked **and says why** — the panel never pretends to be scoped.
 
 ## The external AI provider
 
@@ -51,7 +51,7 @@ Three things worth knowing:
 
 If the workspace folder resolves to no project, the scope chip stops being a dead end: it offers the candidate projects the service knows about. Pick one and the plugin files this folder under it — a real binding in the knowledge base, not a per-window setting — and the next resolution hits it directly. The picker is the *only* place a project is chosen by hand; everything else is resolved from the path.
 
-If there are no candidates either (the service is unreachable, or nothing matches), the chip says so and the panel searches across all projects — it never pretends to be scoped to something.
+If there are no candidates either (the MCP channel is unreachable, or nothing matches), the chip says so and the panel searches across all projects — it never pretends to be scoped to something.
 
 ## Requirements
 

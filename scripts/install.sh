@@ -8,6 +8,7 @@
 #   Linux   Cinder-<ver>-linux-amd64.tar.gz   -> bare `cinder` binary
 #   macOS   Cinder-<ver>-darwin-<arch>.dmg    -> Cinder.app
 #   MCP     cinder-mcp-<ver>-<target>.tar.gz  -> bare `cinder-mcp` binary
+#   Capture cinder-capture-<ver>-<target>.tar.gz -> bare `cinder-capture` binary
 set -e
 
 BINARY_NAME="cinder"
@@ -17,6 +18,11 @@ BINARY_NAME="cinder"
 COMPAT_BINARY_NAME="repotory"
 MCP_BINARY_NAME="cinder-mcp"
 COMPAT_MCP_BINARY_NAME="repotory-mcp"
+# The capture CLI is new, but the hook script the setup installs calls
+# `repotory-capture` — the identifier-layer name (ADR-0049) — so that compat
+# name must resolve or the hook's zero-credit primary path is dead.
+CAPTURE_BINARY_NAME="cinder-capture"
+COMPAT_CAPTURE_BINARY_NAME="repotory-capture"
 REPO="sky-jiangcheng/cinder"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -253,5 +259,40 @@ else
     echo "Register it with an AI client: claude mcp add repotory -- $INSTALL_DIR/$MCP_BINARY_NAME"
   else
     mcp_install_hint "extract or install failed"
+  fi
+fi
+
+# --- Session-end capture CLI ---------------------------------------------------
+# Ships as its own pure-Go archive. The Claude Code SessionEnd hook the setup
+# writes calls `repotory-capture` (the compat name below); without the binary
+# on PATH the hook's zero-credit primary path never runs and every session end
+# falls back to a credit-burning model call (or nothing). Non-fatal, same as
+# the MCP block above.
+echo ""
+echo "Downloading Cinder capture CLI for $TARGET..."
+
+CAPTURE_ASSET="cinder-capture-$VERSION-$TARGET.tar.gz"
+CAPTURE_URL="$RELEASES/$CAPTURE_ASSET"
+
+capture_install_hint() {
+  echo "WARNING: could not install $CAPTURE_BINARY_NAME ($1)." >&2
+  echo "         The SessionEnd hook will fall back to a model call at session end." >&2
+  echo "         Install it manually:" >&2
+  echo "         $CAPTURE_URL" >&2
+  echo "         then: tar -xzf $CAPTURE_ASSET && sudo install -m 0755 $CAPTURE_BINARY_NAME $INSTALL_DIR/" >&2
+}
+
+if ! fetch "$CAPTURE_URL" "$TMP_DIR/$CAPTURE_ASSET"; then
+  capture_install_hint "no asset for $TARGET, or download failed"
+else
+  # Verified outside an if-condition on purpose — same reasoning as the MCP
+  # block above: a checksum mismatch must abort, not degrade to the hint.
+  verify_sha256 "$TMP_DIR/$CAPTURE_ASSET" "$CAPTURE_ASSET"
+  if tar -xzf "$TMP_DIR/$CAPTURE_ASSET" -C "$TMP_DIR" "$CAPTURE_BINARY_NAME" \
+    && install_binary "$TMP_DIR/$CAPTURE_BINARY_NAME" "$INSTALL_DIR/$CAPTURE_BINARY_NAME"; then
+    as_root ln -sf "$CAPTURE_BINARY_NAME" "$INSTALL_DIR/$COMPAT_CAPTURE_BINARY_NAME"
+    echo "Cinder capture CLI installed to $INSTALL_DIR/$CAPTURE_BINARY_NAME (hook name: $COMPAT_CAPTURE_BINARY_NAME)"
+  else
+    capture_install_hint "extract or install failed"
   fi
 fi

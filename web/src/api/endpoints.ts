@@ -738,6 +738,11 @@ export function listAgentClients(): Promise<string[]> {
 /**
  * Register the MCP server with the picked clients for one project.
  *
+ * `enableCapture` is the explicit claude_session_capture opt-in (ADR-0010):
+ * installing the SessionEnd hook with the gate off leaves its zero-credit
+ * primary path inert, so the checkbox rides along with the hook decision.
+ * The report's `capture_enabled` carries the gate state AFTER the call.
+ *
  * A refusal comes back as a code in the report (never as a thrown error):
  * "that project is a container" is an answer the UI renders, not a crash.
  */
@@ -746,10 +751,11 @@ export function setupAgentClients(
   clients: string[],
   withHook: boolean,
   withInstructions: boolean,
+  enableCapture: boolean,
 ): Promise<AgentSetupReport> {
   return call<AgentSetupReport>({
     method: 'SetupAgentClients',
-    args: [projectId, clients, withHook, withInstructions],
+    args: [projectId, clients, withHook, withInstructions, enableCapture],
   }).then(d => d ?? { code: '', blocking: false, binary: '', files: [] })
 }
 

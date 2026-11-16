@@ -173,6 +173,7 @@ func TestWriteToolsCoveredByCatalogue(t *testing.T) {
 		"repotory_chat":          "chat.create+chat.append+chat.rename",
 		"repotory_scan":          "scan.run",
 		"repotory_review_run":    "review.run",
+		"repotory_config_update": "config.update",
 		"(repotory-capture bin)": "capture.claude_session",
 		"(ai audit rows)":        "audit.record",
 	}

@@ -9,7 +9,7 @@ Cinder provides read channels and self-check tools for AI agents, all reusing th
 
 ## Value proposition: Cinder is a data source for AI, not an AI platform
 
-**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 22 MCP tools, fetching on demand and searching precisely.
+**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 25 MCP tools, fetching on demand and searching precisely.
 
 For the argument for why this layer is better than letting AI read git directly, see [Storage Optimization and AI Value](../storage-optimization.md).
 
@@ -112,9 +112,9 @@ go build -o cinder-server ./cmd/server
 
 - `POST /api/rpc` reflects every desktop binding (JSON body naming method + args) and runs the **same implementation** as Wails; `Startup` / `Shutdown` / `Service` itself are excluded. Write operations obey the same protocol protections as MCP (for example handoff notes refuse to be overwritten by update).
 - For browser development use `bash scripts/dev.sh`: it starts the headless API (default 18765) *and* Vite. Running `npx vite` alone yields a page that loads but 502s every request — that is a missing backend, not a broken app.
-- **Release assets contain only**: the desktop installers (4 platforms), `cinder-mcp-<platform>`, and the VS Code VSIX. `cinder-server`, `cmd/vector-init`, `cmd/abeval`, `cmd/repotory-capture` and `cmd/wiki-export` (the read-only wiki export) must be built yourself (`go build` / `go run`); they are not distributed with releases.
+- **Release assets contain**: the desktop installers (4 platforms), `cinder-mcp-<platform>`, `cinder-capture-<platform>` (the SessionEnd hook's zero-credit capture CLI — the binary behind ADR-0010/0054's primary path), and the VS Code VSIX. `cinder-server`, `cmd/vector-init`, `cmd/abeval` and `cmd/wiki-export` (the read-only wiki export) must still be built yourself (`go build` / `go run`); they are not distributed with releases.
 
-MCP is the only AI execution interface (the `cinder` binary dispatches no CLI subcommands). stdio protocol, the database is opened once per process, 22 tools (including 6 write operations: scan + note create/update + session handoff + daily review + shared conversation writes):
+MCP is the only AI execution interface (the `cinder` binary dispatches no CLI subcommands). stdio protocol, the database is opened once per process, 25 tools (including 6 write operations: scan + note create/update + session handoff + daily review + shared conversation writes):
 
 The two ends of the session memory protocol, in sequence:
 
@@ -151,6 +151,9 @@ A **fully offline local model** (ollama / LM Studio) speaks the same MCP; the wi
 |------|-------------|------------|
 | `repotory_scan` | Cold start: seeds the default scan roots and scans them synchronously, discovering local Git repositories (works with a pure MCP install, no desktop app needed) | Write |
 | `repotory_context` | Injects the full project context at session start (tech stack / README / todos / highly relevant notes, with handoff notes pinned to the top). Optional `path` (an absolute directory / cwd) resolves the owning project — see "Workspace path resolution" | Read |
+| `repotory_workspace_resolve` | Resolves an absolute directory to the project it belongs to (and to the scanned repository the directory sits inside), returning a result field-for-field identical to the `ResolveWorkspacePath` binding; when nothing matches it returns a candidate-project catalogue ([ADR-0062](../adr/0062-ide-project-lock-over-mcp.md)). **Agents do not normally need it**: `repotory_context`'s `path` already performs the same resolution server-side; it exists for the human-side client that needs to **display** the resolution (the IDE panels' project lock). Pure read | Read |
+| `repotory_config_get` | Reads the full configuration: every settable key's current value plus the scan roots. Secrets are masked to `************` — the response says a key is configured, never what it is. The IDE panels read their provider settings through it ([ADR-0063](../adr/0063-repotory-server-consumer-list.md)) | Read |
+| `repotory_config_update` | Updates a single configuration key (the key must be on the service's allow-list; numeric keys reject non-numeric values). **Configuration writes are catalogue-covered since 2026-11-16** (ADR-0063: the owner reclassified them from human-gate to catalogue-covered) and route through the single-writer contract — the IDE panels save provider settings (`ai_chat_base_url` / `ai_chat_model` / `ai_chat_api_key`) through it, with no local service required | Write |
 | `repotory_handoff` | Structured handoff at session end (summary/changes/decisions/gotchas/next_steps), persisted to the database and read back pinned-to-top by the next `repotory_context`; notes written this way carry a `handoff` tag, and `repotory_notes_update` refuses to overwrite them. `project_id` is optional and resolved from `path` when omitted. **Note**: a handoff here is a **persisted handoff record**, not the act of moving a live conversation between harnesses or execution environments (that is VS Code's "Hand off a session"; see [ADR-0007](adr/0007-session-memory-protocol.md)) | Write |
 | `repotory_notes_list` | All notes | Read |
 | `repotory_notes_search` | FTS5 search (query). Optional `path`: notes recorded inside the matched repository rank first — ranking only, nothing filtered | Read |
@@ -208,11 +211,13 @@ The repository tiers (1, 2) beat the project tiers (3, 4) because a repository m
 
 **Mining no longer answers with an arbitrary sibling.** `GetProjectOverview` keyed its cache by `repos[0].ID` and mined at the project root, so for a container of sibling repositories the tech stack / README / commits shown were whichever repository sorted first. `GetRepositoryOverview(projectID, repositoryID)` narrows mining, cache and commits to that repository (which also gives mining a real git root — the v13 case migration could only invalidate). A repository id that does not belong to the project is **refused**, not substituted.
 
-This resolution lives **server-side** and is shared by the MCP tools and the VS Code extension: `repotory_context` / `repotory_handoff` / `repotory_notes_search` gained an optional `path`, and the extension reads its scope display from the new read-only `ResolveWorkspacePath` binding, so the client never reimplements the matcher. Note that in `repotory_context` a `path` that resolves to a project takes precedence over `project_id`/`project_name`, whereas in `repotory_handoff` `project_id` wins and `path` is only the fallback when it is absent. (The tool's own MCP description still calls `project_id` "preferred"; for `repotory_context` the resolving path actually wins — a known mismatch between the description string and `ResolveWorkspace`.)
+This resolution lives **server-side** and is shared by the MCP tools and the VS Code extension: `repotory_context` / `repotory_handoff` / `repotory_notes_search` gained an optional `path`, and the extension reads its scope display from the `repotory_workspace_resolve` tool ([ADR-0062](../adr/0062-ide-project-lock-over-mcp.md): the MCP twin of the `ResolveWorkspacePath` binding, calling the same server-side matcher), so the client never reimplements the matcher. Note that in `repotory_context` a `path` that resolves to a project takes precedence over `project_id`/`project_name`, whereas in `repotory_handoff` `project_id` wins and `path` is only the fallback when it is absent. (The tool's own MCP description still calls `project_id` "preferred"; for `repotory_context` the resolving path actually wins — a known mismatch between the description string and `ResolveWorkspace`.)
 
 ### Desktop one-click connect (no terminal)
 
 If you installed the desktop app, you never need to open a terminal: under **Settings → Actions → Connect AI clients** (see [Settings](settings.md)) pick a project, tick the clients you want, and press "Connect" once. The desktop app then writes `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`, optionally installs the Claude Code SessionEnd hook, **optionally writes the "read at the start / hand off at the end" instructions into the project's `AGENTS.md` and `CLAUDE.md`** ([ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)), and kicks off a scan. Open Claude Code afterwards and `repotory_context` already has content to return — no manual rescan.
+
+When the hook is selected, the same form carries a third checkbox: **enable session capture** (`claude_session_capture`, [ADR-0010](../adr/0010-session-auto-capture.md)). It is **one decision with the hook** — a hook installed with the gate off has a dead primary path (read the transcript, write the note, zero credit) and every session end falls back to a model call that costs credit; that is the exact "installed but silent" shape the 2.1 timebox measured. The checkbox defaults **off**: what it widens is what Cinder may read (session transcripts), so the user flips the switch, not the installer. The report states the gate state after the call, and this entry point can only turn the gate **on** — turning it off stays where it was set, under Settings → AI integration.
 
 (Windsurf is the exception: its MCP config is **user-level**, at `~/.codeium/windsurf/mcp_config.json`, and has nothing to do with the project. The other three clients get their config inside the **project directory**, so it travels with the repository.)
 
@@ -290,16 +295,25 @@ Write it into `.claude/settings.json` (project level, shared with collaborators 
 }
 ```
 
-The companion script `.claude/hooks/repotory-handoff.sh` (remember to `chmod +x`):
+The companion script `.claude/hooks/repotory-handoff.sh` (remember to `chmod +x`; `repotory-init --with-hook` installs the exact same bytes):
 
 ```sh
 #!/bin/sh
 # SessionEnd hook: make the handoff automatic instead of relying on the
-# agent's goodwill. One bounded headless turn costs a fraction of the
-# session it preserves; "the agent will remember to call handoff" costs
-# the entire exit record whenever it forgets.
+# agent's goodwill. Two tiers (ADR-0054): the zero-credit capture first, a
+# bounded headless turn only when that path cannot run.
 set -u
 cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" || exit 0
+
+# Primary: cinder-capture reads the transcript directly and writes the note
+# with no model call at all. --strict makes "wrote nothing" (capture disabled,
+# no matching project) exit non-zero, so a failure falls through to the
+# fallback instead of reporting a silent success.
+if command -v repotory-capture >/dev/null 2>&1 && repotory-capture --strict 2>&1; then
+  exit 0
+fi
+
+# Fallback: one bounded headless turn, a fraction of the session it preserves.
 command -v claude >/dev/null 2>&1 || exit 0
 claude -p --mcp-config .mcp.json \
   'This session ended. Call repotory_handoff for the current project: a concise summary plus next_steps. If the project cannot be resolved, call repotory_context once first. Do nothing else.' \
@@ -309,8 +323,8 @@ claude -p --mcp-config .mcp.json \
 Design points and costs (stated plainly, so the narrative doesn't oversell):
 
 - **Trigger**: fired by Claude Code when a session ends; the trigger reason (`clear` / `logout` / `prompt_input_exit` / `other`) is written to stdin as JSON, and the script can read stdin and skip when appropriate (e.g. "the context was just cleared" doesn't need a handoff).
-- **Cost**: one bounded headless turn (`claude -p`), a fraction of the whole session context it preserves; the hook has a default timeout (60s) and the script ends silently with `|| true`, so the session exit is never blocked.
-- **Fallback path**: skipped outright when the `claude` CLI is missing; when MCP is not registered, the headless call fails and is swallowed — the protocol requires handoffs to be written through `repotory_handoff`; the hook only guarantees "it always fires" and never bypasses the protocol to write the database directly.
+- **Cost**: the primary path costs **zero credit** — `repotory-capture` (shipped as the `cinder-capture` release asset; the compat name `repotory-capture` lands on PATH at install time) parses the transcript and writes the note with no model call, so it keeps working when credits are gone. Only when that path cannot run does the fallback spend one bounded headless turn. The hook has a default timeout (60s) and the script ends silently with `|| true`, so the session exit is never blocked.
+- **Fallback path**: when `repotory-capture` is not on PATH, when `claude_session_capture` is disabled (default off, ADR-0010's privacy gate), or when the cwd matches no project, the non-zero exit from `--strict` makes the hook **fall through** to `claude -p` instead of reporting a silent success; skipped outright when the `claude` CLI is missing; when MCP is not registered, the headless call fails and is swallowed — the protocol requires handoffs to be written through `repotory_handoff`; the hook only guarantees "it always fires" and never bypasses the protocol to write the database directly.
 - **Protocol protection**: handoff notes carry the `handoff` tag and `repotory_notes_update` refuses to overwrite them (guarding against accidental clobbering); in the next session, `repotory_context` renders them in full, pinned to the top.
 - The hook's event name and configuration fields evolve with Claude Code versions; before wiring it up, defer to `claude --help` and the official hooks documentation.
 
@@ -366,16 +380,23 @@ Cinder parses and materializes the raw git data into local SQLite **once at scan
 
 ### The WorkBuddy skill package
 
-The root `SKILL.md` is a **platform-agnostic** capability card (Claude Code / Cursor and friends read it on demand). WorkBuddy instead uses **frontmatter-bearing skill packages** that agents discover automatically and trigger by description.
+### The skill package (cross-agent)
 
-Installing into WorkBuddy (user level, available everywhere):
+The root `SKILL.md` is a **platform-agnostic** capability card (Claude Code / Cursor and friends read it on demand); `skill/repotory/` is the **frontmatter-bearing skill package** that each agent discovers in its own skills directory and triggers by description.
+
+**The skill is app-agnostic: one install, and every agent on the machine detects it.** Each agent scans its own user-level skills directory, so installing means dropping the same package into every **detected** agent — one command, no per-app configuration, and no second copy to keep in sync by hand:
 
 ```bash
-# The package ships with the release; unzip it into the user-level skills directory
-unzip repotory.skill -d ~/.workbuddy/skills/
+bash scripts/install-skill.sh        # install into every detected agent
+bash scripts/install-skill.sh --list # which agents are detected, and their status
+bash scripts/install-skill.sh uninstall # remove from every installed agent
 ```
 
-After that, WorkBuddy still needs one **Trust** click in the connector management page before the MCP tools appear in the tool list:
+- **Detection rule**: an agent counts as detected when its skills directory exists on this machine (Claude Code `~/.claude/skills`, Codex `~/.codex/skills`, WorkBuddy `~/.workbuddy/skills`; the list lives in [`scripts/skill-agents.txt`](https://github.com/sky-jiangcheng/cinder/blob/master/scripts/skill-agents.txt) — add one line to support a new agent; the installer and the drift check read the same file).
+- **Refresh after an upgrade**: re-run `install-skill.sh` after upgrading Cinder and every installed copy syncs to the repo; the `check-skill-package` gate verifies each installed copy against the repo and goes red with the fix hint when one drifts.
+- **Uninstall guard**: `uninstall` only removes copies declaring this repo's `upstream` — your own skill of the same name is never deleted.
+
+WorkBuddy still needs one **Trust** click in the connector management page before the MCP tools appear in the tool list:
 
 ```json
 // ~/.workbuddy/mcp.json
@@ -390,7 +411,7 @@ Package contents:
 
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 22 tools, and the list of capabilities agents must not use |
+| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 25 tools, and the list of capabilities agents must not use |
 | `references/mcp-tools.md` | Exact parameter signatures per tool, plus the HTTP RPC method mapping |
 | `references/data-model.md` | Schema and invariants (topic ownership, migration rules, handoff protection, trigram boundaries) |
 | `scripts/repotory-query.py` | Read-only fallback queries when MCP is unavailable (search / list topics / list projects / library stats) |

@@ -21,6 +21,7 @@ function fakeTransport(
   tools: Record<string, string>,
   project?: { id: number; name: string },
   rpcResults: Record<string, unknown> = {},
+  toolFails = false,
 ): FakeTransport {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   const rpcs: Array<{ method: string; args: unknown[] }> = [];
@@ -29,16 +30,23 @@ function fakeTransport(
     rpcs,
     async callTool(name, args) {
       calls.push({ name, args });
+      if (toolFails) throw new Error("repotory-mcp is not running");
       const value = tools[name];
-      if (value === undefined) throw new Error(`no such tool: ${name}`);
-      return value;
+      if (value !== undefined) return value;
+      // The workspace resolution (ADR-0062) is synthesised from the same
+      // fixture the RPC bridge used to answer with, so a test that locks the
+      // panel needs no canned tool text.
+      if (name === "repotory_workspace_resolve" && project) {
+        return JSON.stringify({ Project: { id: project.id, name: project.name }, Repository: null });
+      }
+      if (name === "repotory_workspace_resolve") {
+        return JSON.stringify({ Project: null, Repository: null });
+      }
+      throw new Error(`no such tool: ${name}`);
     },
     async rpc(method, args) {
       rpcs.push({ method, args });
       if (method in rpcResults) return rpcResults[method];
-      if (method === "ResolveWorkspacePath" && project) {
-        return { Project: { id: project.id, name: project.name }, Repository: null };
-      }
       return null;
     },
     serverUrl: () => "http://127.0.0.1:18765",
@@ -257,16 +265,15 @@ test("a note card with the same id as a todo still reads the note", async () => 
 // The candidates ARE the next step (ADR-0044 decision 6).
 
 test("an unresolved workspace sends the candidate projects to the panel", async () => {
-  const transport = fakeTransport({}, undefined, {
-    ResolveWorkspacePath: {
-      Project: null,
-      Repository: null,
-      Candidates: [
-        { id: 12, name: "CBiPay" },
-        { id: 19, name: "CBiPay-Other" },
-      ],
-    },
+  const resolution = JSON.stringify({
+    Project: null,
+    Repository: null,
+    Candidates: [
+      { id: 12, name: "CBiPay" },
+      { id: 19, name: "CBiPay-Other" },
+    ],
   });
+  const transport = fakeTransport({ repotory_workspace_resolve: resolution });
   const { messages, post } = collector();
   const session = new ChatSession(transport, post);
   await session.refreshScope();
@@ -281,10 +288,43 @@ test("an unresolved workspace sends the candidate projects to the panel", async 
   );
 });
 
+test("an unreachable MCP channel says so instead of pretending the panel is scoped", async () => {
+  const transport = fakeTransport({}, undefined, {}, true);
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.refreshScope();
+  assert.equal(session.currentScope().projectId, 0);
+  // ADR-0062: the project lock runs over MCP, so the banner names the MCP
+  // channel — not a local service that is no longer the lock's transport.
+  const warned = [...messages].reverse().find((m) => m.type === "announce");
+  assert.ok(warned && warned.type === "announce");
+  assert.equal(warned.level, "warn");
+  assert.equal(
+    warned.message,
+    "The Cinder MCP channel is not reachable — the project lock needs it, so the panel searches across all projects.",
+  );
+});
+
+test("the project lock resolves through the MCP tool, not the HTTP bridge", async () => {
+  const transport = fakeTransport({}, { id: 7, name: "Cinder" });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.refreshScope();
+  const call = transport.calls.find((c) => c.name === "repotory_workspace_resolve");
+  assert.ok(call, "the workspace must resolve through the MCP tool");
+  assert.deepEqual(call.args, { path: "/tmp/work" });
+  assert.equal(session.currentScope().projectId, 7);
+  assert.equal(session.currentScope().locked, true);
+  assert.ok(messages.some((m) => m.type === "scope"));
+});
+
 test("picking a project files the workspace under it and resolves again", async () => {
-  const transport = fakeTransport({}, undefined, {
-    ResolveWorkspacePath: { Project: null, Repository: null, Candidates: [{ id: 12, name: "CBiPay" }] },
+  const resolution = JSON.stringify({
+    Project: null,
+    Repository: null,
+    Candidates: [{ id: 12, name: "CBiPay" }],
   });
+  const transport = fakeTransport({ repotory_workspace_resolve: resolution });
   const { messages, post } = collector();
   const session = new ChatSession(transport, post);
   await session.handle({ type: "pickProject", projectId: 12 });
@@ -292,6 +332,72 @@ test("picking a project files the workspace under it and resolves again", async 
   assert.ok(bind, "the workspace must be bound through the binding");
   assert.deepEqual(bind.args, ["/tmp/work", 12]);
   // The scope is re-resolved after the binding, so the panel locks itself.
-  assert.ok(transport.rpcs.some((r) => r.method === "ResolveWorkspacePath"));
+  assert.ok(transport.calls.some((c) => c.name === "repotory_workspace_resolve"));
   assert.ok(messages.some((m) => m.type === "scope"));
+});
+
+// -------------------------------------------------- the AI provider (ADR-0063)
+//
+// The provider settings live in the service and are read/written over MCP
+// since the config pair became catalogue-covered: an IDE-only user (no
+// desktop, no server) can now configure an endpoint.
+
+test("the provider settings are read over the MCP config tool", async () => {
+  const get = JSON.stringify({
+    config: { ai_chat_base_url: "http://127.0.0.1:1234/v1", ai_chat_model: "qwen3", ai_chat_api_key: "********" },
+    scan_roots: [],
+  });
+  const transport = fakeTransport({ repotory_config_get: get });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({ type: "providerLoad" });
+  const call = transport.calls.find((c) => c.name === "repotory_config_get");
+  assert.ok(call, "the provider settings must be read over the MCP tool");
+  const state = messages.find((m) => m.type === "providerState");
+  assert.ok(state && state.type === "providerState");
+  assert.equal(state.baseUrl, "http://127.0.0.1:1234/v1");
+  assert.equal(state.model, "qwen3");
+  assert.equal(state.hasKey, true);
+});
+
+test("saving the provider writes each key over the MCP config tool", async () => {
+  const transport = fakeTransport({
+    "repotory_config_get": JSON.stringify({
+      config: { ai_chat_base_url: "http://127.0.0.1:1234/v1", ai_chat_model: "qwen3" },
+      scan_roots: [],
+    }),
+    "repotory_config_update": JSON.stringify({ key: "ai_chat_base_url", value: "http://h/v1" }),
+  });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({
+    type: "providerSave",
+    baseUrl: "http://h/v1",
+    model: "qwen3",
+    apiKey: "",
+  });
+  const writes = transport.calls.filter((c) => c.name === "repotory_config_update");
+  assert.deepEqual(
+    writes.map((w) => [w.args.key, w.args.value]),
+    [
+      ["ai_chat_base_url", "http://h/v1"],
+      ["ai_chat_model", "qwen3"],
+    ],
+  );
+  const result = messages.find((m) => m.type === "providerResult");
+  assert.ok(result && result.type === "providerResult");
+  assert.equal(result.ok, true);
+});
+
+test("a rejected config write surfaces as a failed save, not a success", async () => {
+  const transport = fakeTransport({
+    "repotory_config_update": "error: unknown config key: nope",
+  });
+  const { messages, post } = collector();
+  const session = new ChatSession(transport, post);
+  await session.handle({ type: "providerSave", baseUrl: "http://h/v1", model: "m", apiKey: "" });
+  const result = messages.find((m) => m.type === "providerResult");
+  assert.ok(result && result.type === "providerResult");
+  assert.equal(result.ok, false);
+  assert.match(result.message, /unknown config key/);
 });
