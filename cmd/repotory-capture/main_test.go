@@ -120,8 +120,16 @@ func TestRunStrictExitCodeObservesCaptureFailure(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	dbPath := filepath.Join(t.TempDir(), "capture-test.db")
-	if _, err := db.InitDB(dbPath); err != nil {
+	// The schema-creating handle is closed right away: run() opens its own
+	// per-invocation handle, and an extra open handle would keep the file
+	// locked — Windows cannot RemoveAll a file another process holds, so
+	// t.TempDir cleanup would fail the test after its assertions passed.
+	database, err := db.InitDB(dbPath)
+	if err != nil {
 		t.Fatalf("InitDB: %v", err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatalf("close schema handle: %v", err)
 	}
 
 	args := []string{"-db", dbPath, "-cwd", "/definitely/not/a/cinder/project"}
