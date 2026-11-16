@@ -4,7 +4,7 @@
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
   "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.39.2/cinder-capture-2.39.2-windows-amd64.zip",
-  "hash": "sha256:0360b3b81a606e564cac358d8d58a5ba2a244dd9b523ea895e25c6bc31d7f2c1",
+  "hash": "sha256:d4d55305c51d5d8ceefb2b26add030d3f5540a56187883e075ffb6ec623127c7",
   "bin": ["cinder-capture.exe", ["cinder-capture.exe", "repotory-capture"]],
   "checkver": {
     "url": "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest",
