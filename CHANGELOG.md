@@ -4,6 +4,11 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
+## [2.39.1] - 2026-11-16
+
+### 修复
+- **问答证据不再拽入会话日志；codex 导入笔记标题不再撞车（桌面助手「hello 出六条依据」排查，2026-11-16）**：用户对着桌面「Cinder 助手」发一句 `hello`，「本次依据」列出 6 条——3 条 Session Handoff + 1 条样例笔记 + **2 条标题为 `<environment_context> · 019f7f28` 的 codex 会话日志**。逐条核实到 SQL：这不是错乱，是取证装配（`GatherEvidence`）的既定形状——交接通道按时间置顶（ADR-0040，与问题无关），检索通道按词法命中（那两条日志正文里确实各有字面 "hello"）。但两个真实的质量缺陷被这次排查抓出：① **`kind=log` 的导入会话逐字稿当「依据」没有价值只有噪声**——环境信封、工具流水不是答案素材；修法落在**证据层**（`evidenceNotes` 与项目过滤同处一条 `continue`），检索面零改动（日志仍是可搜的历史，`SearchHit` 新增 `Kind` 字段把 kind 带到内存层，FTS / LIKE / 向量补取三条 SQL 同批带列）；负例验证过（撤掉过滤 → 测试红）。② **codex 标题公式撞车**——旧公式取「首条消息首行 + session id 前 8 位」，而 Codex 的 session id 是 UUIDv7，**前 8 位是毫秒时间戳**：同一 ~50 天窗口开的会话共享它，且 Codex 多数会话首行恰好都是注入的 `<environment_context>` 信封——live 库里两条无关会话因此同名（`019f7f28` ×2，标题撞车、列表里无法区分、幂等键互相遮蔽）。修法：`titleFor` 改取 UUID 的**随机段**（第三段，每会话独立）；信封剥离前的首行不再进标题。改公式会牵动 `(project, source, title)` 幂等键——**旧行必须原地改名而不是重复导入**：`plugin.ImportDoc` 新增 `LegacyTitles`（导入器声明自己旧公式写过的标题），`upsertDoc` 正查不到时按旧标题找到原行、保留 id 与版本史改名再落新内容，`PreviewImport` 同语义分类（改名算 update 不算 create，预览不许对计数说谎）；codex 侧列出两种历史形状（2026-10-21 剥离修复前后各一种）。回归：`TestGatherEvidence_ExcludesSessionLogs`（含「SearchNotes 仍出 log」的反向断言）、`TestTitleForResistsTimestampCollision`、`TestLegacyCandidatesCoverBothRevisions`、`TestUpsertDocRenamesLegacyTitleRow`、`TestUpsertDocLegacyRenameStillWritesChangedContent`、`TestPreviewClassifiesLegacyRenameAsUpdate`。**已知代价（如实记）**：live 库里既有的 46 条 codex 笔记要等下一次导入才改名；改名按内容哈希判定，正文未变时只动标题与 `updated_at` 一次。中英手册「AI 集成」证据通道一节同批补「会话日志不进证据」。
+
 ## [2.39.0] - 2026-11-16
 
 ### 新增
