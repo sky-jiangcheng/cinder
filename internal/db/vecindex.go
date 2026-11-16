@@ -231,7 +231,7 @@ func NoteHitsByIDs(db *sql.DB, ids []int64, query string) ([]SearchHit, error) {
 		args[i] = id
 	}
 	rows, err := db.Query(
-		"SELECT id, project_id, title, content FROM project_notes WHERE id IN ("+placeholders+")", args...)
+		"SELECT id, project_id, title, content, kind FROM project_notes WHERE id IN ("+placeholders+")", args...)
 	if err != nil {
 		return nil, fmt.Errorf("db: note hits by ids: %w", err)
 	}
@@ -240,7 +240,7 @@ func NoteHitsByIDs(db *sql.DB, ids []int64, query string) ([]SearchHit, error) {
 	for rows.Next() {
 		var h SearchHit
 		var content string
-		if err := rows.Scan(&h.ID, &h.ProjectID, &h.Title, &content); err != nil {
+		if err := rows.Scan(&h.ID, &h.ProjectID, &h.Title, &content, &h.Kind); err != nil {
 			return nil, err
 		}
 		h.Type = "note"

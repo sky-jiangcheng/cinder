@@ -112,3 +112,26 @@ func TestPreviewImportUnknownSource(t *testing.T) {
 		t.Fatal("an unknown source must error")
 	}
 }
+
+// Preview must classify a formula-change doc the way upsertDoc will handle it:
+// a legacy-title row exists, so the real import renames it in place — an
+// update, not a create. Reporting it as a new note would lie about the count
+// the UI shows.
+func TestPreviewClassifiesLegacyRenameAsUpdate(t *testing.T) {
+	database := setupDB(t)
+	pid := newProject(t, database, "preview-rename")
+	if _, err := db.CreateNoteEx(database, pid, "old title", "body", "", "log", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	rt := New(database)
+	rt.RegisterSource("codex", staticImporter{source: "codex", docs: []plugin.ImportDoc{
+		{ProjectID: pid, Title: "new title", Content: "body", Kind: "log", LegacyTitles: []string{"old title"}},
+	}})
+	pv, err := rt.PreviewImport("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pv.Created != 0 || pv.Updated != 1 {
+		t.Fatalf("preview = created %d / updated %d, want 0/1 (rename in place)", pv.Created, pv.Updated)
+	}
+}

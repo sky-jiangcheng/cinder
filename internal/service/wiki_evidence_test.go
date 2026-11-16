@@ -747,3 +747,58 @@ func TestGatherEvidence_HandoffIsNotDuplicated(t *testing.T) {
 		t.Fatalf("expected the handoff exactly once, got %d copies: %+v", count, ev.Items)
 	}
 }
+
+// Imported session logs (kind=log) are the user's history, not answer
+// evidence. A keyword that appears in transcript envelopes ("hello" did —
+// the 2026-11-16 desktop report: a one-word greeting returned six sources,
+// three of them codex session logs titled "<environment_context>") must
+// reach the evidence set only through the knowledge side. The search
+// surfaces keep returning logs; this is the evidence layer's own filter,
+// next to the project scope, for the same reason.
+func TestGatherEvidence_ExcludesSessionLogs(t *testing.T) {
+	svc, _ := setupService(t)
+	pid := seedProject(t, svc.db, "log-filter-proj", "/tmp/log-filter-proj")
+
+	knowledgeID := evidenceNote(t, svc, pid, "zephyrine design", "zephyrine 的架构决策记录", "knowledge", "manual")
+	logID := evidenceNote(t, svc, pid, "zephyrine session log", "zephyrine hello 会话逐字稿", "log", "codex")
+
+	ev := svc.GatherEvidence(pid, "zephyrine", EvidenceBudget{})
+	seen := map[int64]bool{}
+	for _, it := range ev.Items {
+		seen[it.ID] = true
+	}
+	if !seen[knowledgeID] {
+		t.Errorf("the knowledge note did not reach the evidence set: %+v", ev.Items)
+	}
+	if seen[logID] {
+		t.Errorf("an imported session log entered the evidence set: %+v", ev.Items)
+	}
+
+	// The filter is the evidence layer's, not the retriever's: the search
+	// path the product uses must still find the log.
+	hits, err := svc.SearchNotes("zephyrine")
+	if err != nil {
+		t.Fatalf("SearchNotes: %v", err)
+	}
+	found := false
+	for _, h := range hits {
+		if h.ID == logID {
+			found = true
+			if h.Kind != "log" {
+				t.Errorf("hit kind = %q, want log (the SQL must carry it for the filter)", h.Kind)
+			}
+		}
+	}
+	if !found {
+		t.Error("SearchNotes lost the log note — the filter leaked into the search surface")
+	}
+}
+
+func evidenceNote(t *testing.T, svc *Service, projectID int64, title, content, kind, source string) int64 {
+	t.Helper()
+	note, err := db.CreateNoteEx(svc.db, projectID, title, content, "", kind, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return note.ID
+}

@@ -72,7 +72,7 @@ func TestParseRolloutFile(t *testing.T) {
 func TestTitleForStableAndUnique(t *testing.T) {
 	p := parsed{sessionID: "019d0a9b-8c9a-7f03", firstUser: "Fix the flaky test in auth", date: "2026-03-20"}
 	got := titleFor(p)
-	if got != "Fix the flaky test in auth · 019d0a9b" {
+	if got != "Fix the flaky test in auth · 7f03" {
 		t.Errorf("title = %q", got)
 	}
 	if titleFor(p) != got {
@@ -80,6 +80,51 @@ func TestTitleForStableAndUnique(t *testing.T) {
 	}
 	if titleFor(parsed{}) != "Codex 会话" {
 		t.Errorf("empty parsed title = %q", titleFor(parsed{}))
+	}
+}
+
+// The old formula keyed the id on its first 8 hex characters, which in a
+// UUIDv7 is the MILLISECOND TIMESTAMP: two sessions started in the same
+// ~50-day window share it, and Codex opens most sessions with the same
+// injected envelope — so the live library grew two notes titled
+// "<environment_context> · 019f7f28" for unrelated sessions (2026-11-16).
+// The new formula keys on the random segment; same timestamp head, same
+// first line, different titles.
+func TestTitleForResistsTimestampCollision(t *testing.T) {
+	a := parsed{sessionID: "019f7f28-1121-7451-8596-496babdbe598", firstUser: "hello"}
+	b := parsed{sessionID: "019f7f28-99ab-7cde-a123-456789abcdef01", firstUser: "hello"}
+	if titleFor(a) == titleFor(b) {
+		t.Errorf("sessions sharing the timestamp head still collide: %q", titleFor(a))
+	}
+	if !strings.Contains(titleFor(a), "7451") || !strings.Contains(titleFor(b), "7cde") {
+		t.Errorf("title must carry the random segment: %q / %q", titleFor(a), titleFor(b))
+	}
+}
+
+// LegacyTitles carries the pre-2.39 title for the same session file so the
+// runtime renames the old row instead of duplicating it. Both shapes the old
+// formula could have produced (raw first line / envelope-stripped first line)
+// must be listed when they differ.
+func TestLegacyCandidatesCoverBothRevisions(t *testing.T) {
+	p := parsed{
+		sessionID:    "019f7f28-1121-7451-8596-496babdbe598",
+		firstUserRaw: "<environment_context>\n  <cwd>/a</cwd>\n</environment_context>\n真正的指令",
+		firstUser:    "真正的指令",
+	}
+	cands := legacyCandidates(p)
+	if len(cands) != 2 {
+		t.Fatalf("candidates = %v, want the raw-line and stripped-line legacy shapes", cands)
+	}
+	if cands[0] != "<environment_context> · 019f7f28" {
+		t.Errorf("first candidate = %q, want the pre-2026-10-21 title", cands[0])
+	}
+	if cands[1] != "真正的指令 · 019f7f28" {
+		t.Errorf("second candidate = %q, want the post-2026-10-21 legacy title", cands[1])
+	}
+	// A session whose first message was already a real prompt has one shape.
+	q := parsed{sessionID: "019d0a9b-8c9a-7f03", firstUserRaw: "Fix the flaky test", firstUser: "Fix the flaky test"}
+	if got := legacyCandidates(q); len(got) != 1 || got[0] != "Fix the flaky test · 019d0a9b" {
+		t.Errorf("single-shape candidates = %v", got)
 	}
 }
 

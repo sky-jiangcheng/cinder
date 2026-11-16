@@ -93,6 +93,12 @@ type parsed struct {
 	date          string // YYYY-MM-DD, from the meta timestamp
 	firstUser     string
 	lastAssistant string
+	// firstUserRaw is the FIRST user message as it appeared in the file,
+	// before envelope stripping. It exists only to compute the legacy title
+	// (titleFor's pre-2.39 formula kept the raw first line, so notes imported
+	// before then carry "<environment_context> · <id>" as their title and the
+	// runtime must find and rename those rows, not duplicate them).
+	firstUserRaw string
 }
 
 // Import walks the Codex session directories and returns one note per session
@@ -156,7 +162,33 @@ func (i *Importer) docFor(path string, projects []db.Project, repos []db.Reposit
 		Kind:      "log",
 		Tags:      "codex",
 		Source:    SourceName,
+		// The old formula's title for the SAME session file. The 2.39 title
+		// change (timestamp head → random tail, and the envelope-aware
+		// snippet) would otherwise re-import every existing codex note as a
+		// NEW row next to the old one: upsert keys on (project, source,
+		// title). The runtime renames the legacy row in place when it finds
+		// one, so history, versions and idempotency survive the formula move.
+		LegacyTitles: legacyCandidates(p),
 	}, true
+}
+
+// legacyCandidates lists the titles the previous formula could have written
+// for this session: the raw-first-line variant, and the envelope-stripped
+// variant of the same (the 2026-10-21 smoke fix changed which text the title
+// was built from, so libraries touched by both revisions carry both shapes).
+func legacyCandidates(p parsed) []string {
+	out := make([]string, 0, 2)
+	seen := map[string]bool{}
+	add := func(t string) {
+		if t == "" || seen[t] {
+			return
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	add(legacyTitleFor(p))
+	add(legacyTitleFor(parsed{sessionID: p.sessionID, firstUserRaw: p.firstUser}))
+	return out
 }
 
 // sessionRoots lists the directories to scan for rollout files.
@@ -211,6 +243,9 @@ func parseRolloutFile(path string) (parsed, error) {
 				// message verbatim put "<environment_context> · 019f7f28" as the
 				// note title and a full sandbox-permission XML tree as its body
 				// on all 50 sampled notes (the 2026-10-21 UI smoke test).
+				if p.firstUserRaw == "" {
+					p.firstUserRaw = txt
+				}
 				if p.firstUser == "" {
 					if txt = stripBoilerplate(txt); txt != "" {
 						p.firstUser = txt
@@ -312,12 +347,42 @@ func extractText(raw json.RawMessage) string {
 }
 
 // titleFor builds a stable, collision-resistant note title: a first-prompt
-// snippet plus the short session id (and date when known). Deterministic across
+// snippet plus the random tail of the session id. Deterministic across
 // re-imports of the same file, so upsertDoc updates rather than duplicates.
+//
+// The tail, not the head: Codex session ids are UUIDv7, whose first 8 hex
+// characters are the millisecond timestamp. Two sessions started in the same
+// ~50-day window shared that prefix, and Codex opens most sessions with the
+// same injected envelope — so the old formula (first line of the first
+// message + the id head) produced the SAME title for unrelated sessions
+// ("<environment_context> · 019f7f28" ×2 on the live library, 2026-11-16).
+// The third UUID segment is random per session; it disambiguates.
 func titleFor(p parsed) string {
 	snip := ""
 	if p.firstUser != "" {
 		firstLine := strings.TrimSpace(strings.SplitN(p.firstUser, "\n", 2)[0])
+		snip = truncateRunes(firstLine, titlePromptRunes)
+	}
+	suffix := sessionIDSuffix(p.sessionID)
+	switch {
+	case snip != "" && suffix != "":
+		return snip + " · " + suffix
+	case snip != "":
+		return snip
+	case suffix != "":
+		return "Codex 会话 · " + suffix
+	default:
+		return "Codex 会话"
+	}
+}
+
+// legacyTitleFor reproduces the pre-2.39 title formula for one session, so
+// the runtime can find the rows the old formula wrote and rename them in
+// place instead of inserting duplicates next to them.
+func legacyTitleFor(p parsed) string {
+	snip := ""
+	if p.firstUserRaw != "" {
+		firstLine := strings.TrimSpace(strings.SplitN(p.firstUserRaw, "\n", 2)[0])
 		snip = truncateRunes(firstLine, titlePromptRunes)
 	}
 	id8 := p.sessionID
@@ -333,6 +398,26 @@ func titleFor(p parsed) string {
 		return "Codex 会话 · " + id8
 	default:
 		return "Codex 会话"
+	}
+}
+
+// sessionIDSuffix returns the part of a rollout session id that varies per
+// session. A full UUIDv7 looks like 019f7f28-1121-7451-8596-496babdbe598:
+// segment 0 is the timestamp (collides across nearby sessions), segment 2 is
+// random. Short/partial ids seen in fixtures and old files fall back to the
+// last segment, then to the whole string.
+func sessionIDSuffix(id string) string {
+	if id == "" {
+		return ""
+	}
+	segs := strings.Split(id, "-")
+	switch {
+	case len(segs) >= 3:
+		return segs[2]
+	case len(segs) == 2:
+		return segs[1]
+	default:
+		return segs[0]
 	}
 }
 

@@ -13,6 +13,7 @@ package runtime
 import (
 	"crypto/sha256"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -442,6 +443,21 @@ func (r *Runtime) PreviewImport(name string) (ImportPreview, error) {
 		}
 		item := ImportPreviewItem{Title: d.Title, ProjectID: pid, Action: "create"}
 		_, lerr := db.GetNoteBySourceTitle(r.db, pid, src.name, d.Title)
+		if lerr == sql.ErrNoRows {
+			// Same semantics as upsertDoc: a row under a legacy title is
+			// renamed in place, which the UI should see as an update, not a
+			// create that would inflate the "new notes" count on every
+			// formula-change run.
+			for _, lt := range d.LegacyTitles {
+				if lt == "" || lt == d.Title {
+					continue
+				}
+				if _, err := db.GetNoteBySourceTitle(r.db, pid, src.name, lt); err == nil {
+					lerr = nil
+					break
+				}
+			}
+		}
 		switch {
 		case lerr == nil:
 			item.Action = "update"
@@ -485,11 +501,28 @@ func (r *Runtime) upsertDoc(doc plugin.ImportDoc, source string) (bool, error) {
 		kind = "knowledge"
 	}
 	existing, err := db.GetNoteBySourceTitle(r.db, doc.ProjectID, source, doc.Title)
+	if errors.Is(err, sql.ErrNoRows) && len(doc.LegacyTitles) > 0 {
+		// The importer changed its title formula. The row the OLD formula
+		// wrote is still there, holding this same document under a different
+		// name; creating the new title next to it would duplicate the note
+		// and orphan the user's edits and version history on the old row.
+		// Rename in place instead — same id, same history, new title — then
+		// fall through with the found row.
+		for _, lt := range doc.LegacyTitles {
+			if lt == "" || lt == doc.Title {
+				continue
+			}
+			if old, lerr := db.GetNoteBySourceTitle(r.db, doc.ProjectID, source, lt); lerr == nil {
+				existing, err = old, nil
+				break
+			}
+		}
+	}
 	if err == nil {
 		// A 4h sync re-imports the same files. Rewriting an unchanged doc
 		// refreshes updated_at, which pushes kind=log notes ahead of curated
 		// knowledge in recency-ordered context. Skip the write entirely.
-		if doc.Content != "" && sha256.Sum256([]byte(doc.Content)) == sha256.Sum256([]byte(existing.Content)) {
+		if doc.Content != "" && sha256.Sum256([]byte(doc.Content)) == sha256.Sum256([]byte(existing.Content)) && existing.Title == doc.Title {
 			return false, nil
 		}
 		if doc.Content != "" {

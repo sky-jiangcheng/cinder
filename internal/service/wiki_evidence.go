@@ -523,6 +523,18 @@ func (s *Service) evidenceNotes(query string, projectID int64, limit int, start 
 		if projectID > 0 && h.ProjectID != projectID {
 			continue
 		}
+		// Imported session logs (kind=log) are not answer evidence. They are
+		// verbatim transcripts of past agent sessions — environment envelopes,
+		// tool chatter, a stray "hello" — and a keyword like "hello" pulls
+		// them in as [N4]…[N6] next to the real knowledge, which reads as
+		// "the assistant invented noise". The SEARCH surfaces keep returning
+		// them (they are the user's history, and search is the right place to
+		// find them); this filter belongs to the evidence layer alone, next to
+		// the project filter, for exactly the same reason: the question asks
+		// for knowledge, not for a transcript.
+		if h.Kind == "log" {
+			continue
+		}
 		srcPath := "fts"
 		if s.semanticEnabled() {
 			srcPath = "semantic"

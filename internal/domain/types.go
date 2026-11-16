@@ -215,6 +215,11 @@ type SearchHit struct {
 	Title     string  `json:"title"`
 	Snippet   string  `json:"snippet"`
 	Rank      float64 `json:"rank,omitempty"` // bm25 score; lower = more relevant
+	// Kind is the note kind (knowledge | log | idea | other) for note hits;
+	// empty for todo hits. It exists so the AI evidence channel can exclude
+	// imported session logs without a second query — the search surfaces
+	// themselves do not filter on it.
+	Kind string `json:"kind,omitempty"`
 }
 
 // RepoMeta represents a row in the repo_meta table.

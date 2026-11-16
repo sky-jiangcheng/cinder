@@ -367,3 +367,86 @@ func TestTriggerImportSurfacesDocFailure(t *testing.T) {
 		t.Fatalf("failed doc counted as written: %+v", run)
 	}
 }
+
+// A title-formula change must RENAME the row the old formula wrote, not
+// insert a second note with the same body (the 2.39 codex title fix). The
+// importer declares the old titles via LegacyTitles; the runtime finds the
+// legacy row, renames it in place, and keeps one note with the new title.
+func TestUpsertDocRenamesLegacyTitleRow(t *testing.T) {
+	database := setupDB(t)
+	pid := newProject(t, database, "rename")
+	src := &staticImporter{source: "codex", docs: []plugin.ImportDoc{
+		{ProjectID: pid, Title: "<environment_context> · 019f7f28", Content: "session body", Kind: "log"},
+	}}
+	rt := New(database)
+	rt.RegisterSource("codex", src)
+	if _, err := rt.TriggerImport("codex"); err != nil {
+		t.Fatal(err)
+	}
+	var firstID int64
+	if err := database.QueryRow("SELECT id FROM project_notes WHERE title = ?", "<environment_context> · 019f7f28").Scan(&firstID); err != nil {
+		t.Fatal(err)
+	}
+
+	// The same session file, now titled by the new formula.
+	src.docs[0].Title = "hello · 7451"
+	src.docs[0].LegacyTitles = []string{"<environment_context> · 019f7f28"}
+	if _, err := rt.TriggerImport("codex"); err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM project_notes WHERE source = 'codex'").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("the formula change duplicated the note: %d rows", count)
+	}
+	var id int64
+	var title string
+	if err := database.QueryRow("SELECT id, title FROM project_notes WHERE source = 'codex'").Scan(&id, &title); err != nil {
+		t.Fatal(err)
+	}
+	if id != firstID {
+		t.Errorf("row was replaced (id %d -> %d), want renamed in place", firstID, id)
+	}
+	if title != "hello · 7451" {
+		t.Errorf("title = %q, want the new formula title", title)
+	}
+}
+
+// A legacy row the USER edited (content differs from the file) must still be
+// renamed and refreshed — the rename is the importer's own bookkeeping, and
+// the content guard only protects against pointless updated_at churn.
+func TestUpsertDocLegacyRenameStillWritesChangedContent(t *testing.T) {
+	database := setupDB(t)
+	pid := newProject(t, database, "rename-dirty")
+	src := &staticImporter{source: "codex", docs: []plugin.ImportDoc{
+		{ProjectID: pid, Title: "old title", Content: "v1", Kind: "log"},
+	}}
+	rt := New(database)
+	rt.RegisterSource("codex", src)
+	if _, err := rt.TriggerImport("codex"); err != nil {
+		t.Fatal(err)
+	}
+	src.docs[0].Title = "new title"
+	src.docs[0].Content = "v2"
+	src.docs[0].LegacyTitles = []string{"old title"}
+	if _, err := rt.TriggerImport("codex"); err != nil {
+		t.Fatal(err)
+	}
+	var title, content string
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM project_notes WHERE source = 'codex'").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("rows = %d, want 1", count)
+	}
+	if err := database.QueryRow("SELECT title, content FROM project_notes WHERE source = 'codex'").Scan(&title, &content); err != nil {
+		t.Fatal(err)
+	}
+	if title != "new title" || content != "v2" {
+		t.Errorf("row = (%q, %q), want (new title, v2)", title, content)
+	}
+}

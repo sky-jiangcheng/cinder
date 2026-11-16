@@ -64,7 +64,7 @@ func SearchNotes(db *sql.DB, query string) ([]SearchHit, error) {
 // (relaxed); `q` is the original query, used only to render the snippet.
 func searchNotesFTS(db *sql.DB, q, matchExpr string) ([]SearchHit, error) {
 	rows, err := db.Query(
-		"SELECT n.id, n.project_id, n.title, n.content, bm25(project_notes_fts) "+
+		"SELECT n.id, n.project_id, n.title, n.content, n.kind, bm25(project_notes_fts) "+
 			"FROM project_notes_fts f "+
 			"JOIN project_notes n ON n.id = f.rowid "+
 			"WHERE project_notes_fts MATCH ? "+
@@ -84,7 +84,7 @@ func searchNotesFTS(db *sql.DB, q, matchExpr string) ([]SearchHit, error) {
 		var h SearchHit
 		var content string
 		var rank float64
-		if err := rows.Scan(&h.ID, &h.ProjectID, &h.Title, &content, &rank); err != nil {
+		if err := rows.Scan(&h.ID, &h.ProjectID, &h.Title, &content, &h.Kind, &rank); err != nil {
 			return nil, err
 		}
 		h.Type = "note"
@@ -186,7 +186,7 @@ func likeQuery(db *sql.DB, q string, patterns []string) ([]SearchHit, error) {
 	args = append(args, searchResultLimit)
 
 	rows, err := db.Query(
-		"SELECT id, project_id, title, content, "+rankExpr+" AS rank "+
+		"SELECT id, project_id, title, content, kind, "+rankExpr+" AS rank "+
 			"FROM project_notes WHERE "+strings.Join(where, " OR ")+
 			" ORDER BY rank LIMIT ?",
 		args...)
@@ -198,7 +198,7 @@ func likeQuery(db *sql.DB, q string, patterns []string) ([]SearchHit, error) {
 	for rows.Next() {
 		var h SearchHit
 		var content string
-		if err := rows.Scan(&h.ID, &h.ProjectID, &h.Title, &content, &h.Rank); err != nil {
+		if err := rows.Scan(&h.ID, &h.ProjectID, &h.Title, &content, &h.Kind, &h.Rank); err != nil {
 			return nil, err
 		}
 		h.Type = "note"

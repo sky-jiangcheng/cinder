@@ -99,4 +99,12 @@ type ImportDoc struct {
 	Tags     string // comma-separated tags
 	Kind     string // note kind: knowledge | log | idea | other
 	Source   string // provenance, e.g. "claude"
+	// LegacyTitles optionally lists titles an earlier revision of this
+	// importer used for the SAME source document. The runtime upserts by
+	// (project, source, title); when an importer changes its title formula,
+	// the old row would otherwise be re-imported as a duplicate next to the
+	// row it renames. Listing the old titles lets the runtime find that row
+	// and rename it in place (history and idempotency survive the formula
+	// move). Importers that never change their formula leave it nil.
+	LegacyTitles []string
 }
