@@ -4,7 +4,7 @@
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
   "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.39.1/Cinder-2.39.1-windows-amd64.zip",
-  "hash": "sha256:3a29d61749d9b1fb2fe16b59c83a4c28b70190e18231bea53b4dbed68c721704",
+  "hash": "sha256:7a1a0ad89c7d8af08d0fc7512f2049bb6036575ccd0a3fe80b265b95b0840ade",
   "bin": ["cinder.exe", ["cinder.exe", "repotory"]],
   "checkver": {
     "url": "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest",
