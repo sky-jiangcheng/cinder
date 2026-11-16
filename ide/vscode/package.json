@@ -2,7 +2,7 @@
   "name": "repotory-vscode",
   "displayName": "Cinder Memory",
   "publisher": "sky-jiangcheng",
-  "version": "2.38.1",
+  "version": "2.39.0",
   "description": "The local-first memory layer for AI coding agents. Browse, search and hand off your local knowledge base without leaving the editor. One VSIX covers VS Code, Cursor and Windsurf.",
   "license": "MIT",
   "engines": {
@@ -55,6 +55,10 @@
         }
       },
       {
+        "command": "repotory.startServer",
+        "title": "Cinder: Start Local Service"
+      },
+      {
         "command": "repotory.setMcpPath",
         "title": "Cinder: Set repotory-mcp Path"
       },
@@ -96,6 +100,11 @@
           "type": "string",
           "default": "",
           "description": "Absolute path to the repotory-mcp executable. Leave empty to auto-detect from PATH, Homebrew/Scoop directories and the extension storage. Set it from the Command Palette with \"Cinder: Set repotory-mcp Path\"."
+        },
+        "repotory.serverBinary": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the repotory-server executable, used by \"Cinder: Start Local Service\" (ADR-0063 A-light). Leave empty to auto-detect from PATH and common install directories."
         }
       }
     },
