@@ -18,7 +18,7 @@ func TestHandoffFromSessionFillsSections(t *testing.T) {
 		LastAssistantText: "Refactored the parser; tests green.",
 		ToolsUsed:         []string{"Edit", "Bash"},
 	}
-	in := handoffFromSession(sess)
+	in := handoffFromClaudeSession(sess)
 	if in.Agent != "claude-code" {
 		t.Errorf("agent = %q", in.Agent)
 	}
@@ -44,7 +44,7 @@ func TestHandoffFromSessionFillsSections(t *testing.T) {
 func TestHandoffFromSessionFallsBackToPrompt(t *testing.T) {
 	// No assistant text: summary falls back to the first prompt, and Changes
 	// still carries the header line so the handoff is valid.
-	in := handoffFromSession(claude.Session{FirstUserPrompt: "Build the cache", SessionID: "sid"})
+	in := handoffFromClaudeSession(claude.Session{FirstUserPrompt: "Build the cache", SessionID: "sid"})
 	if in.Summary != "Build the cache" {
 		t.Errorf("summary fallback = %q", in.Summary)
 	}
@@ -58,7 +58,7 @@ func TestHandoffFromSessionCapsToolItems(t *testing.T) {
 	for i := range tools {
 		tools[i] = "t" + string(rune('a'+i%26)) + strings.Repeat("x", i)
 	}
-	in := handoffFromSession(claude.Session{LastAssistantText: "s", ToolsUsed: tools})
+	in := handoffFromClaudeSession(claude.Session{LastAssistantText: "s", ToolsUsed: tools})
 	if len(in.Changes) > maxHandoffItems {
 		t.Fatalf("changes %d exceeds max %d", len(in.Changes), maxHandoffItems)
 	}
@@ -139,6 +139,57 @@ func TestCaptureClaudeSessionByCwd(t *testing.T) {
 	}
 	if res.NoteID == 0 {
 		t.Errorf("expected a persisted note, got %+v", res)
+	}
+}
+
+func TestCaptureAgentSessionByCwdWorkBuddy(t *testing.T) {
+	// The multi-agent one-shot path: same gate, same cwd-vs-root lookup, but
+	// the session comes from WorkBuddy's store and the note records the
+	// WorkBuddy agent name.
+	svc, _ := setupService(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	root := "/Users/tester/ProjX"
+	pid := seedProject(t, svc.db, "ProjX", root)
+	if pid == 0 {
+		t.Fatal("seed project failed")
+	}
+	dir := filepath.Join(home, ".workbuddy", "projects", strings.TrimPrefix(strings.ReplaceAll(root, "/", "-"), "-"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const transcript = `{"type":"session-meta","sessionId":"wb-t1"}
+{"type":"message","role":"user","content":[{"type":"input_text","text":"wb cwd 捕获"}]}
+{"type":"message","role":"assistant","content":[{"type":"output_text","text":"写好了"}]}
+`
+	if err := os.WriteFile(filepath.Join(dir, "wb-t1.jsonl"), []byte(transcript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.UpdateConfig("claude_session_capture", "1"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.CaptureAgentSessionByCwd("workbuddy", root)
+	if err != nil {
+		t.Fatalf("capture by cwd (workbuddy): %v", err)
+	}
+	if res.NoteID == 0 {
+		t.Fatalf("expected a persisted note, got %+v", res)
+	}
+	var content string
+	if err := svc.db.QueryRow("SELECT content FROM project_notes WHERE id = ?", res.NoteID).Scan(&content); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(content, "Written by `workbuddy`") {
+		t.Errorf("note content missing workbuddy agent line: %q", content[:200])
+	}
+	// Unknown agents fail loudly, not silently.
+	if _, err := svc.CaptureAgentSessionByCwd("cursor", root); err == nil {
+		t.Error("expected an error for an unknown agent")
+	}
+	// Empty agent keeps the hook's historical default: claude.
+	if _, err := svc.CaptureAgentSessionByCwd("", root); err != nil && !strings.Contains(err.Error(), "no capturable") {
+		t.Errorf("empty agent should behave as claude, got: %v", err)
 	}
 }
 

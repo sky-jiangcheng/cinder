@@ -142,9 +142,14 @@ type ReviewRunArgs struct {
 	NoAI   bool      `json:"no_ai"`
 }
 
-// CaptureClaudeArgs wraps the SessionEnd hook's single argument.
+// CaptureClaudeArgs carries the one-shot capture's arguments. Agent selects
+// the session store to read ("" or "claude" = Claude Code; also workbuddy /
+// qoder / trae / dsh / auto — see internal/importers/agents). The method name
+// predates multi-agent support; the empty default keeps the existing hook
+// payload byte-compatible.
 type CaptureClaudeArgs struct {
-	Cwd string `json:"cwd"`
+	Cwd   string `json:"cwd"`
+	Agent string `json:"agent,omitempty"`
 }
 
 // AuditRecordArgs carries a fully assembled audit row. The row's Surface is
@@ -311,7 +316,7 @@ func (e *Executor) Execute(ctx context.Context, method string, raw json.RawMessa
 		if strings.TrimSpace(a.Cwd) == "" {
 			return nil, fmt.Errorf("cwd is required")
 		}
-		return e.svc.CaptureClaudeSessionByCwd(a.Cwd)
+		return e.svc.CaptureAgentSessionByCwd(a.Agent, a.Cwd)
 	case MethodAuditRecord:
 		var a AuditRecordArgs
 		if err := decode(raw, &a); err != nil {

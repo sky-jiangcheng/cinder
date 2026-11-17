@@ -1,10 +1,14 @@
-// Command repotory-capture is the B-end Claude Code SessionEnd hook target
-// (ADR-0010): it captures the just-closed session as a handoff note.
+// Command repotory-capture is the B-end SessionEnd hook target (ADR-0010) and
+// the one-shot capture CLI for every agent store Cinder can read: Claude Code
+// (default), WorkBuddy, Qoder, Trae CN, DeepSeek Harness (DSH), or whichever
+// store has the newest session for the cwd (--agent auto).
 //
 // Claude Code runs a SessionEnd hook as an external command with the session's
 // working directory. Resolve cwd from (in order): -cwd flag, a JSON object on
 // stdin with a "cwd" field, then the process's own working dir. Then resolve the
 // matching Cinder project and run the same capture the desktop button does.
+// Other agents have no hook mechanism, so their capture is one-shot by
+// invocation: `repotory-capture --agent qoder --cwd <dir>` after a session.
 //
 // It is inert unless `claude_session_capture=1` AND the project matches — so a
 // hook installed but not enabled is a harmless no-op, and reading transcripts
@@ -52,6 +56,7 @@ func main() {
 func run(args []string) int {
 	fs := flag.NewFlagSet("repotory-capture", flag.ExitOnError)
 	cwdFlag := fs.String("cwd", "", "session working directory (default: stdin .cwd, else os.Getwd)")
+	agentFlag := fs.String("agent", "claude", "agent session store to read: claude, workbuddy, qoder, trae, dsh, or auto (newest across all)")
 	dbPath := fs.String("db", "", "database path (default: the app's DB)")
 	strict := fs.Bool("strict", false, "exit non-zero when no handoff note was written (for the SessionEnd hook's fallback)")
 	if err := fs.Parse(args); err != nil {
@@ -99,7 +104,7 @@ func run(args []string) int {
 
 	var report service.HandoffResult
 	err = writers.ExecuteInto(context.Background(), writerapi.MethodCaptureClaude,
-		writerapi.CaptureClaudeArgs{Cwd: cwd}, &report)
+		writerapi.CaptureClaudeArgs{Cwd: cwd, Agent: *agentFlag}, &report)
 	if err != nil {
 		// Disabled-by-config or no-matching-project are expected, non-fatal for a
 		// hook; still surface them and leave a pending record. The default exit
