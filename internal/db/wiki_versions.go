@@ -143,7 +143,7 @@ var pageVersionSchemaStatements = []string{
 // migration v18 was split out to avoid.
 func EnsurePageVersions(db *sql.DB) error {
 	for _, stmt := range pageVersionSchemaStatements {
-		if _, err := db.Exec(stmt); err != nil {
+		if err := execDDLRetryingBusy(db, stmt); err != nil {
 			if isAlreadyExistsErr(err) {
 				continue
 			}

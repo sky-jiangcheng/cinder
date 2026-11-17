@@ -75,7 +75,7 @@ var pageEmbedDirtyStatements = []string{
 // independently idempotent: a peer that loses the race ends in the same state.
 func EnsurePageEmbedDirty(db *sql.DB) error {
 	for _, stmt := range pageEmbedDirtyStatements {
-		if _, err := db.Exec(stmt); err != nil {
+		if err := execDDLRetryingBusy(db, stmt); err != nil {
 			if isAlreadyExistsErr(err) {
 				continue
 			}
