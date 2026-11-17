@@ -34,3 +34,31 @@ bash scripts/dev.sh
 - **冻结标识**（`repotory` 二进制名/数据目录/MCP 前缀 `repotory_*`）绑定用户数据迁移史，不「顺手统一」——见 CONTRIBUTING「范围冻结」
 - **品牌分两层：显示层全换、标识层冻结**（见 [ADR-0049](docs/adr/0049-brand-restructure-manus-style.md)）：显示层是母品牌 **Cinder** / 桌面 **Cinder Desktop** / 独立仓助手 **Warden**，真相源是 `build/brand.json`；标识层（二进制名 / 数据目录 / MCP 前缀 / 插件 id / cask token / skill 名…）绑的是用户数据与别人机器上的配置，**一个字都不许改**。CI 硬门 `brand`（`scripts/check-brand.mjs`）两头都查：产品名必须等于 `brand.json`、冻结清单逐条仍在原处、当前面不留旧品牌词、App 里的 `BrandMark` 与母图同源。**要改品牌词先改 `build/brand.json`**——两仓各有一份（主仓 `build/brand.json`、agent 仓 `brand.json`），CI 各跑各的仓，谁也看不到对方，所以要同批改
 - **图标四域（ADR-0052 / The Knot）**：`build/icon.svg` 是 Cinder 母图（三叶结，3 段 path），`build/icon-warden.svg` 是 Warden 母图（8 字，1 段 path）——两者同一条等宽带构造，只改圈数；另有 `build/icon-small.svg` / `icon-warden-small.svg` 供 ≤20px 实心剪影域。`generate-icons.mjs` 派生「品牌域方边纯色」「OS 应用域 squircle + 渐变/柔投影」「字形域单色透明底」「小尺寸域 ≤20px」四套；`renderPng()` 按尺寸自动切域。改母图后必须跑生成器；Warden 那套要带 `--agent-repo ../warden`，且 CI 同步门只覆盖本仓（先 `--check --tracked-only` 再生成，别反过来）。App 内几何由生成器写入 `web/src/components/brandMarkPaths.ts`，`check-brand.mjs` 第⑤门逐字节比对全部 path ——见 CONTRIBUTING「品牌图标四域规则」
+
+<!-- repotory:begin -->
+## Cinder memory layer
+
+This project's knowledge and session memory live in Cinder, a local SQLite
+database, reachable through the repotory_* MCP tools.
+
+- At the start of work, call repotory_context with the current repository path
+  and read what it returns before you plan. Its first entry is the most recent
+  session handoff, so the previous session's conclusions come first.
+- After each meaningful work unit (a feature, a fix, a test run), call
+  repotory_handoff with milestone=true to record the current state and what is
+  still unfinished. This is a rolling checkpoint: if the session is killed
+  mid-work, the last checkpoint is the next session's starting point.
+- Before you finish, call repotory_handoff (without milestone) for a session
+  summary with gotchas, decisions, changes, next_steps and a short summary.
+- If you detect credits are running low, write a milestone handoff immediately
+  before continuing.
+- Record what a later session would otherwise re-learn the hard way — a
+  constraint that is not visible in the code, a decision and the alternative
+  it rejected, a trap you just hit. Do not record what the commit log already
+  shows: a list of files touched is not a handoff, and the notes that bury the
+  useful signal are the ones that stop the next session from reading them.
+
+Installed by Cinder. To remove, delete everything between the repotory:begin
+and repotory:end markers (this block is plain text in your repository, and it
+will show up in git status until you commit or delete it).
+<!-- repotory:end -->

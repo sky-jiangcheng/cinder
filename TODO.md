@@ -70,15 +70,14 @@
 
 > 2.1 / 12.7 / ADR-0054 的**代码侧**已闭环（capture 转正为发布产物、hook `--strict` 降级、接入勾选 opt-in）。本条记的是**这台机器上的部署运行态**：接入流程一次没跑通，供给链路从二进制到指令块全断。证据均为活库只读查询（`~/Library/Application Support/repotory/repotory.db`）与本机文件核对，未写库。
 
-- [ ] **2.5 本机 AI 客户端接入未落地：handoff 供给在这台机器上全链路断开** ——
-  - **库存口径**：136 条笔记，handoff 仅 **4**（`manual` 测试笔记 1 条 2026-10-18；`mcp` / agent=`mavis` 3 条 2026-10-26）；**`auto-captured` 0 条、milestone 0 条**。导入器来源 102 条（codex 46 / opencode 31 / codebuddy 15 / openclaw 6 / codebuddy-memory 2 / claude 1 / cursor 1）标签零 handoff——导入器按设计落普通知识笔记，本就不是交接记录。`~/.claude/projects` 下 15 个转录，10-26 之后的会话零交接。
-  - **capture CLI 不在 PATH**：`/usr/local/bin`、`~/.local/bin` 只有 `repotory-mcp`、`repotory-server`，无 `repotory-capture` / `cinder-capture`；数据目录无 `capture-pending.jsonl`——捕获 CLI 从未被调起（运行失败会落一条 pending）。
-  - **SessionEnd 钩子未接**：`~/.claude/settings.json` 的 `hooks.SessionEnd` 只有 iTerm2 `handle-agent-hook` 与 Otty 钩子；`~/.claude/hooks/` 是空目录，`repotory-handoff.sh` 未写入。
-  - **指令块未写**：已核对 `~/Workspace/Script`、`~/Workspace/Script/cinder`、`~/Workspace/Java/CBIBank` 三个根，都没有带 `<!-- repotory:begin/end -->` 区块的 AGENTS.md / CLAUDE.md（cinder 自己的 AGENTS.md 里 `repotory_handoff` 命中为 0）；`--with-instructions` 这步在本机没跑过。
-  - **`.mcp.json` 死路径**：`cinder/.mcp.json` 的 command 指向 `build/bin/repotory-mcp`，而 `build/bin/` 下只有 `Cinder.app`——hook 兜底回退（`claude -p --mcp-config .mcp.json`）拉起的二进制也不存在。
-  - **配置门状态**：`claude_session_capture=1` 已开，但开关本身不产生记录（`internal/service/handoff_capture.go:28`：only explicitly triggered，无后台轮询）；`auto_import=0`。
-  - **验收（这台机器）**：① PATH 可解析 `repotory-capture`（走 release 安装包，或本地 `go build ./cmd/repotory-capture`）；② `settings.json` SessionEnd 条目与 `.claude/hooks/repotory-handoff.sh` 就位；③ 项目根指令块写入；④ `.mcp.json` 路径与实际安装位置一致（或删掉死路径）；⑤ 一次真实 Claude 会话结束后库中出现 `auto-captured` handoff；捕获失败进 `capture-pending.jsonl` 可排查。
-  - **待定（工具缺口，不擅自立项）**：接入状态现在只能手工逐项核对（二进制在不在 PATH、钩子条目在不在 settings、指令块在不在项目根、mcp 路径活不活）。是否在 CLI / 桌面端补一道「接入体检」（逐项 `✓/!/✗`、走真实路径，参照 Warden `init` 的做法），与 2.1 的 handoff 度量门、12.8 的三进程日志/打点同批评估。
+- [x] **2.5 本机 AI 客户端接入未落地：handoff 供给在这台机器上全链路断开** —— ✅ **已接入（2026-11-17）**，验收五项全过：
+  - ① `repotory-capture` 已进 PATH（`go build ./cmd/repotory-capture` → `~/.local/bin/`，该目录已在 PATH）。
+  - ② 钩子装在**用户级**（一处覆盖所有项目，不动工作仓库）：`~/.claude/hooks/repotory-handoff.sh`（标准两档脚本，主路径改用绝对路径 `/Users/jiangcheng/.local/bin/repotory-capture`，防 GUI 启动无 PATH）+ `~/.claude/settings.json` SessionEnd 追加条目（保留原 iTerm2 条目）。
+  - ③ 指令块已写：`repotory-init --client claude --with-instructions` 跑在 `~/Workspace/Script`（AGENTS.md / CLAUDE.md / .mcp.json 新建，非 git 仓库零污染）与 `cinder/`（AGENTS.md 追加区块 + CLAUDE.md 新建，随本条提交）。
+  - ④ `cinder/.mcp.json` 死路径已修：`build/bin/repotory-mcp` → `/usr/local/bin/repotory-mcp`（init 自动探测；该文件未跟踪，留本地）。
+  - ⑤ 端到端已验证：手工喂 `{"cwd":".../CBiPay"}` → note 212 落库（`handoff, auto-captured`，本机首条）；**同会话重跑返回同一 note（ADR-0057 幂等实测）**；无匹配 cwd → strict 退出 1 + `capture-pending.jsonl` 留痕，成功后 pending 自动清空。真实 SessionEnd 触发待下一次会话自然发生。
+  - **接入时发现的 live 数据缺口（未动库，待拍板）**：`repositories` 表 id=1173（路径恰为 `.../MiddlePlatform/midplatform-data-monitor`）挂在容器项目 137（MiddlePlatform）名下，而项目 74 根路径与其完全相同——解析 tier 1（仓库精确匹配）命中 137，137 根下无 transcript → 该仓库的会话捕获落空。修法候选：仓库 1173 改挂 74（语义更准），或在扫描端修这个关联；需要确认扫描器的建链语义后改。
+
 
 #### 审计过程中新发现（2026-10-26，均已核实）
 
