@@ -49,6 +49,13 @@ type dshLine struct {
 func parseDSH(r io.Reader) (Session, error) {
 	var s Session
 	s.Agent = DSH
+	// Chunks whose type we do not recognise but which do carry text. Kept apart
+	// from LastAssistantText so a known text chunk always wins; a session whose
+	// only content is an unknown-but-textual chunk still gets a summary line
+	// instead of an empty handoff. Local DSH sessions so far are all transport
+	// failures (no text at all), so this was written against the event schema
+	// rather than a captured success — see TODO 2.5 残留.
+	var looseText string
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), 8<<20)
 	for sc.Scan() {
@@ -83,14 +90,57 @@ func parseDSH(r io.Reader) (Session, error) {
 			}
 		case "assistant/attempt":
 			for _, st := range ev.Data.Stream {
-				if t := strings.TrimSpace(st.Chunk.Text); t != "" &&
-					(st.Chunk.Type == "text" || st.Chunk.Type == "output_text" || st.Chunk.Type == "text-delta") {
+				t := strings.TrimSpace(st.Chunk.Text)
+				if t == "" {
+					continue
+				}
+				switch dshChunkKind(st.Chunk.Type) {
+				case dshText:
 					s.LastAssistantText = truncateRunes(t, 6000)
+				case dshMaybeText:
+					looseText = truncateRunes(t, 6000)
 				}
 			}
 		}
 	}
+	if s.LastAssistantText == "" {
+		s.LastAssistantText = looseText
+	}
 	return s, sc.Err()
+}
+
+// dshChunk is how a stream chunk's text is treated.
+type dshChunk int
+
+const (
+	// dshIgnore — the text is reasoning, a tool payload, usage or an error;
+	// carrying it into a handoff would describe the plumbing, not the work.
+	dshIgnore dshChunk = iota
+	// dshText — a chunk type this parser knows to be assistant prose.
+	dshText
+	// dshMaybeText — an unrecognised type that still carries text. Used only
+	// when no known text chunk exists, so a schema drift degrades to a coarse
+	// summary instead of a blank one.
+	dshMaybeText
+)
+
+// dshChunkKind classifies one chunk type. Matching is on substrings because
+// the type vocabulary has drifted between harness versions ("text",
+// "text-delta", "output_text", "reasoning", "tool-call", ...).
+func dshChunkKind(kind string) dshChunk {
+	k := strings.ToLower(strings.TrimSpace(kind))
+	switch {
+	case strings.Contains(k, "reason"), strings.Contains(k, "think"),
+		strings.Contains(k, "tool"), strings.Contains(k, "error"),
+		strings.Contains(k, "usage"), strings.Contains(k, "finish"),
+		strings.Contains(k, "metadata"):
+		return dshIgnore
+	case strings.Contains(k, "text"):
+		return dshText
+	case k == "":
+		return dshMaybeText
+	}
+	return dshMaybeText
 }
 
 func latestDSH(cwd string) (Session, bool, error) {

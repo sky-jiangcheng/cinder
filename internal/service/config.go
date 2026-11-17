@@ -26,6 +26,13 @@ var allowedConfigKeys = map[string]bool{
 	// else (incl. unset) keeps it OFF. Reading session transcripts is
 	// privacy-sensitive, so it is never implicitly enabled (ADR-0010).
 	"claude_session_capture": true,
+	// Auto-install the ADR-0043 instruction block into every collected project
+	// (AGENTS.md + CLAUDE.md). Default ON: the block is the only registration
+	// surface that works for every agent, and a project that never received it
+	// starts every session blind (the 2026-11-10 audit's first cause). "0"
+	// turns the automatic write off; the per-project one-click top-up stays
+	// available either way.
+	"agent_instructions_auto": true,
 	// Target project for the agent-GLOBAL memory importers (openclaw / hermes).
 	// Value is a project name or numeric id; unset -> those sources skip. See
 	// memsrc.TargetProject and ADR-0011.

@@ -174,6 +174,67 @@ func TestLatestDSHDecompressesAndSkipsHarnessReminders(t *testing.T) {
 	}
 }
 
+// A successful DSH attempt is what the local store has never produced (every
+// session on this machine ends in "transport error", no text chunk at all), so
+// the shapes below are written from the event schema: a known text chunk must
+// win, reasoning must never be mistaken for prose, and an unknown-but-textual
+// chunk must still fill the summary rather than leave it blank.
+func TestDSHAssistantTextSurvivesSchemaDrift(t *testing.T) {
+	cases := []struct {
+		name  string
+		event string
+		want  string
+	}{
+		{
+			name:  "known text chunk",
+			event: `{"type":"assistant/attempt","seq":1,"data":{"stream":[{"type":"chunk","chunk":{"type":"text-delta","text":"闭环已确认。"}}]}}`,
+			want:  "闭环已确认。",
+		},
+		{
+			name: "reasoning is not prose",
+			event: `{"type":"assistant/attempt","seq":1,"data":{"stream":[` +
+				`{"type":"chunk","chunk":{"type":"reasoning","text":"想想怎么写"}},` +
+				`{"type":"chunk","chunk":{"type":"text","text":"最终答案"}},` +
+				`{"type":"chunk","chunk":{"type":"reasoning","text":"再想想"}}]}}`,
+			want: "最终答案",
+		},
+		{
+			name: "unknown type still yields text",
+			event: `{"type":"assistant/attempt","seq":1,"data":{"stream":[` +
+				`{"type":"chunk","chunk":{"type":"delta","text":"漂移后的形状"}}]}}`,
+			want: "漂移后的形状",
+		},
+		{
+			name:  "transport error carries no text",
+			event: `{"type":"assistant/attempt","seq":1,"data":{"stream":[{"type":"chunk","chunk":{"type":"finish","text":""}}]}}`,
+			want:  "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := fakeHome(t)
+			cwd := "/Users/tester/Script"
+			sessDir := filepath.Join(home, ".dsh", "sessions", "-"+strings.ReplaceAll(cwd, "/", "-")+"--", "session-d2")
+			if err := os.MkdirAll(sessDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			events := `{"type":"session","version":4,"id":"session-d2","cwd":"` + cwd + `"}` + "\n" +
+				`{"type":"user/message","seq":2,"data":{"content":[{"type":"text","text":"看一下 DSH"}],"source":{"kind":"user"}}}` + "\n" +
+				tc.event + "\n"
+			if err := writeZstd(filepath.Join(sessDir, "session.v4.jsonl.zstd"), events); err != nil {
+				t.Fatal(err)
+			}
+			sess, ok, err := LatestForCwd(cwd, DSH)
+			if err != nil || !ok {
+				t.Fatalf("ok=%v err=%v", ok, err)
+			}
+			if sess.LastAssistantText != tc.want {
+				t.Errorf("assistant text = %q, want %q", sess.LastAssistantText, tc.want)
+			}
+		})
+	}
+}
+
 func TestLatestAnyPicksTheNewestStore(t *testing.T) {
 	home := fakeHome(t)
 	cwd := "/Users/tester/Script"

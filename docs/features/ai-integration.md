@@ -31,6 +31,7 @@ Cinder 面向 AI 代理提供读取通道与自检工具，全部复用同一 `i
 | 键 | 默认 | 用途 | 开了会把什么发出去 |
 |----|------|------|-------------------|
 | `claude_session_capture` | 关 | 允许按需读取 Claude 会话转录做交接（[ADR-0010](../adr/0010-session-auto-capture.md)） | 无外发，但会读盘上转录 |
+| `agent_instructions_auto` | 开 | 项目被扫描收集时，把交接指令块写进它的 `AGENTS.md` / `CLAUDE.md`（[ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)）；`=0` 关掉自动写 | 无外发，只写项目里的两个 Markdown 文件 |
 | `openclaw_project` / `hermes_project` | 空 | 两个 agent 全局记忆源的归属项目；不设则该源整批 skip | 无 |
 | `semantic_search` + `embedding_base_url` / `embedding_model` / `embedding_api_key` / `embedding_dim` | 关 / 空 | 向量召回补 FTS5 盲区（[ADR-0012](../adr/0012-semantic-search.md)） | **笔记文本** → 你的 embedding 端点 |
 | `vector_store` + `vector_store_url` / `vector_store_api_key` / `vector_store_collection` | `local` | 向量存哪：本地 sqlite-vec 或远程 Qdrant / Weaviate（[ADR-0013](../adr/0013-vector-database-selection.md)） | 向量（非原文）→ 你的远程库 |
@@ -345,6 +346,8 @@ SessionEnd hook 只存在于 Claude Code。**换任何一个别的 agent，那�
 ```
 
 - **两个文件都写，不按客户端选**。一份没人读的指令文件是**惰性的**——它既不产生行为，也不产生错误。写两份的代价只是多一个文件；按客户端挑的代价是**用户一换 agent 就悄悄失效**。`AGENTS.md` 是跨 agent 的事实标准（Codex / opencode / Cursor / Amp 都读），`CLAUDE.md` 是 Claude Code 自己那份。
+- **扫描时自动写，不用你点**。项目被扫描收集的那一刻，区块就落盘（未设 `agent_instructions_auto` 即为开，`=0` 关掉自动写，逐项目的一键补齐仍在）。扫描容器、合成默认行、目录缺失的项目跳过——容器根上的指令文件会作用于它下面每个仓库。判「是否需要写」比的是**整块文本**，所以旧版本写下的块会在下次扫描被原地替换，当前块一次都不重写（仓库不会因此一直 dirty）。**这也是「不管什么 agent 都自动注册」的全部机制**：不逐个客户端写 MCP 配置（WorkBuddy / Qoder / Trae CN / DSH 的配置位置多数没有权威文档，猜一个写进去就是「按钮说注册成功、客户端看不见」），而是写那个所有客户端都读的文件，再由下一条补齐工具缺失的那一半。
+- **客户端没有 `repotory_*` 工具时**：区块最后一条让 agent 收尾跑 `cinder-capture --agent auto --cwd .`——它读该目录最新的会话转录、**零模型调用**地写一条交接。捕获与客户端无关（Claude Code / WorkBuddy / Qoder / Trae CN / DSH 的 store 都能读），所以没有 MCP 注册也能闭环。
 - **标记之外一律不动**。已有区块 → 原地替换（所以点两次不会叠出两个区块）；文件已存在 → 追加到末尾；文件不存在 → 创建。**区块之前是你自己的内容，我们拥有那一段，不拥有那个文件**；改动前照旧留 `.repotory-init.bak` 备份，报告逐文件列出「新建 / 已改 / 未变」。
 - **它进你的 git**。第一次点完，`git status` 会多出（或改动）这两个文件——这是「接入」这件事本来的形状，不是副作用被藏起来了。不想被提交的目录可以只装 hook。
 - **区块里第三句是重点**：「记那些下一次会话会重新踩一遍的东西，**不要记 commit log 已经显示的东西**」。少了这句，指令只会让 agent 写活动流水——那正是本项目上游枯竭的形状（`idea` 类笔记 0 条）。

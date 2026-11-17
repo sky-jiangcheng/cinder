@@ -336,6 +336,13 @@ func (s *Service) runCollectedScan(ctx context.Context) (out ScanResult, err err
 	}
 	s.refreshCollectedStats(ctx, collectedIDs)
 	_ = db.SetConfig(s.db, "last_stats_backfill", s.git.GetTodayDate())
+	// Writing the block for every collected project is what "managed by Cinder"
+	// now means for the agent side: whatever client the user opens in that
+	// directory, AGENTS.md carries the protocol. Runs before the count below so
+	// the reported number is the state after the top-up, not before it.
+	if wrote, failed := s.autoInstallAgentInstructions(collectedIDs); wrote > 0 || failed > 0 {
+		log.Printf("agent instructions auto-install: %d project(s) written, %d failed", wrote, failed)
+	}
 	// The instruction checklist rides the scan result (ADR-0054 follow-up): a
 	// collection just happened, which is the moment the user can act on "these
 	// N projects have no AGENTS.md/CLAUDE.md block, so their agent sessions

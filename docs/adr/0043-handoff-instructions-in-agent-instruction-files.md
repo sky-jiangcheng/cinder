@@ -141,3 +141,17 @@ handoff 一条没多。三条可能的产地全断：
 **记一条与本篇无关的观察**：全量 `npm test` 首跑出现过一次 `NoteSection.test.tsx > keeps the stored note when the tidy call fails` 单例红灯，**单文件复跑两次全绿、全量复跑亦绿**——形状与本仓 2026-11-03 已修的那族「等 mock 被调用当成了等数据落地」竞态一致（ADR-0026 记的就是这件事），本篇未触碰该文件，**不在本轮处理**，记在这里以免下次被当成新问题重查。
 
 **已知代价（落地时确认）**：区块文本会进用户的 `git status`——已在区块末尾自述「如何删掉它」并写明这一点；`CLAUDE.md` 与 `AGENTS.md` 内容重复是决策② 的故意选择（宁可重复，不要惰性）；模型服从仍不保证，因此 hook 那条路**不废弃**。
+
+## 补注（2026-11-17）：区块改为「项目被收集即落盘」，且与客户端无关
+
+ADR-0043 当初把写区块定成**用户的动作**（设置页勾选 / `repotory-init --with-instructions`）——理由是「写进别人跟踪的文件不是替别人做的决定」。这条边界在**一机多 agent** 之后失效了：本机 16 个已收集项目里只有 2 个曾被手动 init 过，其余项目每次会话都从零开始；而「逐个客户端注册」也走不通——Claude / Cursor / VS Code / Windsurf 之外的 WorkBuddy、Qoder、Trae CN、DSH，本机磁盘上只有 WorkBuddy 的 `~/.workbuddy/mcp.json` 有权威位置，另三家的配置路径无文档、无样本，猜一个写进去就是「按钮说注册成功、客户端看不见」。
+
+**改法**：区块成为唯一的注册面，并且由扫描自动落盘。
+
+- **扫描时自动写**（`internal/service/scan_instructions.go`）：`runCollectedScan` 提交后对每个 collected 项目 upsert 受管区块；**未设 `agent_instructions_auto` 即为开**，`=0` 关闭自动写（逐项目一键补齐的路径保留）。容器 / 合成默认行 / 目录缺失跳过（复用 `refusalForProject`），标记外内容不动，单文件失败计数不致命。
+- **区块内容即版本**：判「是否需要写」不再看 `repotory:begin` 标记，而是比对**整块文本**。因此旧版本写下的块会在下一次扫描被原地替换（否则旧协议会在成百个仓库里石化），而当前块一次都不重写（二次扫描 mtime 不变）。
+- **文本 agent 中立**：开头点名 Claude Code / Cursor / VS Code / Windsurf / WorkBuddy / Qoder / Trae / DSH 与「任何读这个文件的客户端」，并**新增一条兜底**——客户端没有 `repotory_*` 工具时，收尾跑 `cinder-capture --agent auto --cwd .`（读 transcript、零模型调用）。这条兜底是「不做逐 agent MCP 注册」这个决定的前提：工具缺失的那一半由捕获补齐，捕获与客户端无关。
+
+**代价与边界（诚实记录）**：① 区块会进用户仓库的 `git status`——区块末段自述删除法，这一条 ADR-0043 原有代价不变，只是现在会自动发生；② **不读 AGENTS.md 的客户端仍然拿不到**（Trae 的 `.trae/rules`、DSH 的 profile 目录都未验证，不猜路径）；③ 容器项目（例如本机 `~/Workspace/Script`、`~/`）刻意不写——容器根上的指令文件会作用于其下每个仓库，`~/AGENTS.md` 更是不该由工具创建的文件。
+
+**验证**：真机 live 库 16 个 collected 项目 → 5 个真项目写入、11 个扫描容器跳过、0 失败；二次运行 0 写。`internal/service/scan_instructions_test.go` 3 例（写入 + 幂等 mtime、旧块就地替换且标记外内容保真、容器跳过 + `agent_instructions_auto=0` 生效）；Go/mjs 双实现与 `testdata/contract.json` 同批更新，`scripts/check-agent-init-contract.mjs` 绿。
