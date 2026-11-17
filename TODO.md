@@ -85,7 +85,10 @@
     - **区块文本改为 agent 中立**（`internal/agentinit/instructions.go` + 两个 mjs 孪生 + `testdata/contract.json` 同批）：开头点名 Claude Code / Cursor / VS Code / Windsurf / WorkBuddy / Qoder / Trae / DSH 与「任何读这个文件的客户端」，**新增一条兜底**——客户端没有 `repotory_*` 工具时，收尾跑 `cinder-capture --agent auto --cwd .`（读 transcript、零模型调用），所以没有 MCP 注册也能闭环。
     - **残留 ①（无 hook 的 agent 要手动调）**：不另做 hook，兜底命令写进区块即闭合；capture 的 `--agent auto` 按 mtime 跨 store 取最新，不要求用户知道是哪一家。
     - **残留 ②（DSH 全为 transport error）**：真机复查三个 store——本机 DSH 会话**无一个成功 attempt**（12 次 attempt 全是 `trae/qoder: transport error: fetch failed`，连一个 text chunk 都没有），形状只能按事件 schema 写。解析器补成「已知文本块优先 / 未知但带文本的块兜底 / reasoning·tool·usage·finish 忽略」，配 4 例表驱动测试（真机形状 + 漂移形状）；**首个真实成功会话后仍需回验一次**。
-    - **残留 ③（逐 agent MCP 注册）**：**决定不做**。四家里只有 WorkBuddy 的配置位置有权威文档（`~/.workbuddy/mcp.json`），Qoder / Trae CN / DSH 本机目录下**没有任何 mcp 配置文件**可参照，猜路径写进去就是「按钮说注册成功、客户端看不见」那种失败；而 AGENTS.md 是所有客户端都读的那一个面，工具缺失的那一半由上面的 capture 兜底补齐。ADR-0043 中英双份加注记录这条边界。
+    - **残留 ③（逐 agent MCP 注册）**：**决定不做**。四家里只有 WorkBuddy 的配置位置有权威文档（`~/.workbuddy/mcp.json`），Qoder / Trae CN / DSH 本机目录下**没有任何 mcp 配置文件**可参照，猜路径写进去就是「按钮说注册成功、客户端看不见」那种失败；而 AGENTS.md 是所有客户端都读的那一个面，工具缺失的那一半由上面的 capture 兜底补齐。
+  - **两个开口收口（2026-11-17 晚）**：
+    - **设置页补上开关**：`agent_instructions_auto` 之前只能走 MCP `repotory_config_update` 或直接改库，现在「设置 → 插件 → Agent 指令注册」有一个开关（`web/src/pages/settings/PluginsTab.tsx` + 中英语言包各 5 条）。种值取 `initialConfig.agent_instructions_auto !== '0'` 而**不是** `=== '1'`——后端默认开，按 `= '1'` 读会让「从没碰过这个键」的用户看到开关是关的、而后端照样在写，UI 就在撒谎。
+    - **「Trae 只读 `.trae/rules`、DSH 只读 profile 目录」这个假设被证伪**（反查两家二进制，不是查文档）：**Trae CN** `/Applications/Trae CN.app/.../workbench.desktop.main.js` 里设置项 `AI.rules.importAgentsMd`（描述 "Include AGENTS.md in context."）**`default: true`**，规则发现走 `findAgentMDsInWorkspaceRoots` + 文件模式 `**/AGENTS.md`，`ruleBrand` 是 `Agents`，`.trae/rules` 只是并列来源之一；同一处 `AI.rules.importClaudeMd` **`default: false`**（本机用户设置里被手动开成 `true`），所以 Trae 下真正生效的是 `AGENTS.md` 那一份。**DSH** `/Applications/DeepSeek Harness.app/Contents/Resources/app.asar` 内文档写明指令链是 `$DSH_HOME/AGENTS.md` → agents home 的 `AGENTS.md` → **从项目根到会话 cwd 的逐级候选**，且 `CLAUDE.md` 与 `AGENTS.md` 内容相同只渲染一次。**结论：不需要任何额外路径**，本轮自动注册对这两家同样生效；ADR-0043 中英双份的边界②已按此改写，`docs/features/ai-integration.md` 中英各加一条「谁真的会读到」。**仍开着的口子**：Trae 的 `AI.rules.importAgentsMd` 用户可自行关掉、DSH 首个真实成功会话后仍需回验助手文本块形状——这两条无代码可补，属外部状态。
 
 
 #### 审计过程中新发现（2026-10-26，均已核实）

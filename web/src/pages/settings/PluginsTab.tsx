@@ -33,6 +33,11 @@ export default function PluginsTab({ initialAutoImport, initialClaudeCapture, in
   const [preview, setPreview] = useState<{ name: string; data: ImportPreview } | null>(null)
   const [autoImport, setAutoImport] = useState(initialAutoImport)
   const [claudeCapture, setClaudeCapture] = useState(initialClaudeCapture)
+  // Default is ON, unlike every other switch here, so the seed is "not
+  // explicitly off" rather than "= 1". Reading it as `=== '1'` would flip the
+  // switch off for every user who never touched the key while the backend
+  // keeps writing the block — the UI would be lying about the state.
+  const [agentInstructions, setAgentInstructions] = useState(initialConfig.agent_instructions_auto !== '0')
   const [targets, setTargets] = useState<Record<string, string>>(
     Object.fromEntries(TARGET_PROJECT_KEYS.map((k) => [k, initialTargets[k] ?? ''])),
   )
@@ -114,6 +119,11 @@ export default function PluginsTab({ initialAutoImport, initialClaudeCapture, in
   const handleClaudeCaptureToggle = (on: boolean) => {
     setClaudeCapture(on)
     void persist('claude_session_capture', on ? '1' : '0', on ? t('settings.claudeCapOn') : t('settings.claudeCapOff'))
+  }
+
+  const handleAgentInstructionsToggle = (on: boolean) => {
+    setAgentInstructions(on)
+    void persist('agent_instructions_auto', on ? '1' : '0', on ? t('settings.agentInstOn') : t('settings.agentInstOff'))
   }
 
   const handleSyncToggle = (name: string, on: boolean) => {
@@ -359,6 +369,28 @@ export default function PluginsTab({ initialAutoImport, initialClaudeCapture, in
             <button className="btn btn-secondary btn-sm" onClick={handleCapture} disabled={!claudeCapture || capturing}>
               {capturing ? t('settings.capturing') : t('settings.captureBtn')}
             </button>
+          </div>
+        </div>
+      </section>
+
+      {/* --- Agent instruction block: written on every scan, no per-client setup --- */}
+      <section className="settings-group">
+        <h2 className="settings-group-title">{t('settings.groupAgentInstructions')}</h2>
+        <div className="form-group">
+          <label id="settings-agent-instructions-label">{t('settings.agentInstLabel')}</label>
+          <div className="toggle-row">
+            <button
+              className={`${css.toggle} ${agentInstructions ? css.toggleOn : ''}`}
+              onClick={() => handleAgentInstructionsToggle(!agentInstructions)}
+              disabled={saving}
+              aria-pressed={agentInstructions}
+              aria-labelledby="settings-agent-instructions-label"
+            >
+              <span className={css.toggleKnob} />
+            </button>
+            <span className="form-hint" style={{ marginTop: 0 }}>
+              {agentInstructions ? t('settings.agentInstOnHint') : t('settings.agentInstOffHint')}
+            </span>
           </div>
         </div>
       </section>
