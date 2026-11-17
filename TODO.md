@@ -76,7 +76,7 @@
   - ③ 指令块已写：`repotory-init --client claude --with-instructions` 跑在 `~/Workspace/Script`（AGENTS.md / CLAUDE.md / .mcp.json 新建，非 git 仓库零污染）与 `cinder/`（AGENTS.md 追加区块 + CLAUDE.md 新建，随本条提交）。
   - ④ `cinder/.mcp.json` 死路径已修：`build/bin/repotory-mcp` → `/usr/local/bin/repotory-mcp`（init 自动探测；该文件未跟踪，留本地）。
   - ⑤ 端到端已验证：手工喂 `{"cwd":".../CBiPay"}` → note 212 落库（`handoff, auto-captured`，本机首条）；**同会话重跑返回同一 note（ADR-0057 幂等实测）**；无匹配 cwd → strict 退出 1 + `capture-pending.jsonl` 留痕，成功后 pending 自动清空。真实 SessionEnd 触发待下一次会话自然发生。
-  - **接入时发现的 live 数据缺口（未动库，待拍板）**：`repositories` 表 id=1173（路径恰为 `.../MiddlePlatform/midplatform-data-monitor`）挂在容器项目 137（MiddlePlatform）名下，而项目 74 根路径与其完全相同——解析 tier 1（仓库精确匹配）命中 137，137 根下无 transcript → 该仓库的会话捕获落空。修法候选：仓库 1173 改挂 74（语义更准），或在扫描端修这个关联；需要确认扫描器的建链语义后改。
+  - **接入时发现的 live 数据缺口（2026-11-17 分析定案，待拍板）**：仓库 1173（路径恰为 `.../MiddlePlatform/midplatform-data-monitor`）挂在容器项目 137（MiddlePlatform，auto-grouped，11-10 扫描按 grouper Rule 1「孤仓库→父目录成容器」创建）名下；项目 74（10-14 创建，auto=0，collected=0，名下 5 条笔记）根路径与仓库完全相同却 0 仓库——清理规则「无仓库**且**无笔记**且**无 todo 才删」让 74 凭笔记永生，成为暗数据（cwd 解析永远到不了它）。**这不是孤立脏数据，是现行扫描语义的必然输出**，纯数据修会被下次扫描的 `ON CONFLICT DO UPDATE` 打回。真正的代码级缺口在 `CaptureClaudeSessionByCwd`：transcript 按 `proj.RootPath` 查，而 tier 1/2 解析（仓库挂容器）时 root ≠ cwd，slug 目录不存在 → 捕获系统性落空——所有「孤仓库挂容器」的仓库都中招，不只这一个。**修法候选**：A（推荐，治本）capture 按 cwd 本身 slug 查 transcript、项目只定 note 归属，一行改动 + 测试；B 数据粒度二选一——B1 仓库 1173 改挂 74（per-repo 粒度，但扫描会回退且 level_override 每次扫描被 SyncProjectTx 重置为 0，用户分级不持久，需另查）或 B2 74 的 5 条笔记迁 137、删 74（与扫描语义一致）。
 
 
 #### 审计过程中新发现（2026-10-26，均已核实）
