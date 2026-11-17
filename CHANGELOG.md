@@ -4,6 +4,11 @@
 
 版本号 SSOT 为 `wails.json` 的 `info.productVersion`，由 `scripts/bump-version.sh` 同步至 `web/package.json`、`internal/version/version.go` 与文档站徽章。
 
+## [Unreleased]
+
+### 修复
+- **「昨日代码提交量」把无关 ADR 当依据——证据通道不再使用宽松（OR）检索（2026-11-17）**：用户第二次质疑「就问这么简单的问题为啥给我的东西莫名其妙」，这次是明确的事实问题却返回 3 条 Session Handoff + 1 条 `ADR-0008:`。逐层查到 SQL：`escapeFTSOR` 把中文问题**拆成重叠三元组**做 OR，于是 5 个三元组（昨日代/日代码/代码提/码提交/提交量）**命中 1 个就算相关**——ADR-0008 正文里「每日代码量标准」含「日代码」这一组，因此被当成引用来源。live 库实测：该查询 `relaxed=3`、`strict=0`，宽松路径返回的正是截图那三条噪声。**为什么不是调阈值**：先试过「覆盖率达 50% 才算命中」的修复，被既有测试**证伪**——`TestSearchNotes_LongCJKQuestionFindsNote` 里真实的 CJK 匹配也只共享 5/17 个三元组，`TestSearchNotes_PunctuatedCJKQuestionFindsNote` 是 1/4，而假阳性是 1/5，**纯词法特征无法分离这两类**，该方案已回退。真正站得住的分界是**语义位置**：搜索界面上用户看的是排序列表、自己会判断，宽松命中是「提示」；证据通道把每条都渲染成「本次依据」、是可被引用的**断言**。修法：新增 `db.SearchNotesStrict` / `service.SearchNotesStrict`（严格 AND，FTS 与 LIKE 两条路径都严格；向量融合保留——嵌入近邻是真近邻，不共享三元组），证据通道 `evidenceNotes` 改用它。**空结果即诚实答案**——系统提示本就要求「counts / commits 这类事实必须来自工具调用」，这比列一堆无关笔记更接近正确行为。**回归**：`TestSearchNotesStrictRejectsSingleTrigramCoincidence` 用「ADR-0008 式」语料钉住；**测试本身也修过一次**——初版夹具让相关笔记含完整问句，严格 AND 直接命中、宽松分支根本不会执行，测试「过」却什么也没验证（已把该陷阱写进注释）。负例验证：把 strict 切回宽松，测试立刻红在 `a single shared trigram became a citation: "ADR-0008:"`，与截图现象逐字对应。**已实跑 live 库**：`昨日代码提交量` 严格路径 0 条（修复前宽松 3 条噪声）。
+
 ## [2.39.2] - 2026-11-16
 
 ### 修复

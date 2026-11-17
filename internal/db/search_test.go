@@ -540,3 +540,62 @@ func TestLikeTerms(t *testing.T) {
 		}
 	}
 }
+
+// The evidence channel must not accept a coincidence as a citation.
+//
+// Reproduced from the live library (2026-11-17): asking "昨日代码提交量" put an
+// unrelated ADR under "本次依据" because the ADR mentions "每日代码量标准" — one
+// shared trigram ("日代码"). The relaxed OR path exists for the SEARCH surface,
+// where the user scans a ranked list and judges it; the evidence channel renders
+// every hit as a source, so it must not relax at all. A real CJK match can also
+// share a single trigram, which is why no ratio threshold works here — the
+// difference is the surface, not the score.
+func TestSearchNotesStrictRejectsSingleTrigramCoincidence(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	pid := createTestProject(t, db, "strict-evidence-project")
+
+	// The coincidental note: shares exactly one trigram ("日代码").
+	coincidence, err := CreateNoteEx(db, pid, "ADR-0008:", "仪表盘「生产力门面」——目标环 / 每日代码量标准 / 工作日告警。", "", "knowledge", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The genuinely relevant note. It must NOT contain the whole question:
+	// if it did, strict AND would match it and the relaxed branch would never
+	// run — the test would pass while probing nothing (verified: the first
+	// version of this test did exactly that). A real user question rephrases
+	// the note it is looking for.
+	relevant, err := CreateNoteEx(db, pid, "提交统计", "代码提交量按仓库聚合，合并提交不计入行数。", "", "knowledge", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	question := "昨日代码提交量"
+
+	// The search surface may still surface the coincidence (a hint the user
+	// can dismiss); strict must not.
+	strict, err := SearchNotesStrict(db, question)
+	if err != nil {
+		t.Fatalf("SearchNotesStrict: %v", err)
+	}
+	for _, h := range strict {
+		if h.ID == coincidence.ID {
+			t.Errorf("a single shared trigram became a citation: %q", h.Title)
+		}
+	}
+	// The relaxed surface still offers both — the hint behaviour is unchanged.
+	relaxed, err := SearchNotes(db, question)
+	if err != nil {
+		t.Fatalf("SearchNotes: %v", err)
+	}
+	var sawCoincidence bool
+	for _, h := range relaxed {
+		if h.ID == coincidence.ID {
+			sawCoincidence = true
+		}
+	}
+	if !sawCoincidence {
+		t.Skip("relaxed path no longer returns the coincidence; the strict assertion still holds")
+	}
+	_ = relevant
+}

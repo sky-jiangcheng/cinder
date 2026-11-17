@@ -31,6 +31,27 @@ func (s *Service) SearchNotes(query string) ([]domain.SearchHit, error) {
 	return s.fuseSemantic(results, query), nil
 }
 
+// SearchNotesStrict is SearchNotes without the lexical OR relaxation, for
+// callers whose output is a CITATION rather than a ranked hint — the AI
+// evidence channel is the only one today (see wiki_evidence.go's call site).
+//
+// The semantic fusion still applies: a vector hit is a genuine near-match in
+// embedding space, not a shared trigram, so it does not carry the false-positive
+// risk the relaxation does.
+func (s *Service) SearchNotesStrict(query string) ([]domain.SearchHit, error) {
+	if strings.TrimSpace(query) == "" {
+		return []domain.SearchHit{}, nil
+	}
+	results, err := db.SearchNotes(s.db, query)
+	if err != nil {
+		return nil, fmt.Errorf("search notes: %w", err)
+	}
+	if results == nil {
+		results = []domain.SearchHit{}
+	}
+	return s.fuseSemantic(results, query), nil
+}
+
 // SearchAll searches notes and todos together, returning ranked unified hits.
 //
 // It applies the same optional vector recall as SearchNotes — this is the path

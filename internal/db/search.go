@@ -31,6 +31,27 @@ const (
 // cannot match). If the FTS index is unavailable or yields no rows, it falls
 // back to LIKE so search never regresses.
 func SearchNotes(db *sql.DB, query string) ([]SearchHit, error) {
+	return searchNotes(db, query, true)
+}
+
+// SearchNotesStrict is SearchNotes WITHOUT the OR relaxation: a row must match
+// every term of the query.
+//
+// The relaxed path exists for the search surface, where a user sees a ranked
+// list and judges it themselves — a loose hit there is a hint, not a claim.
+// The AI evidence channel is the opposite: every hit is rendered as "本次依据 /
+// sources for this answer", so a coincidence is presented as a citation. The
+// relaxation made that concrete: a Chinese question is ONE term expanded into
+// trigrams, so "昨日代码提交量" matched a note containing only "每日代码量" and
+// the panel listed an unrelated ADR as evidence (reported 2026-11-16 and again
+// 2026-11-17). No lexical threshold separates those two cases — a genuine CJK
+// match can share as little as one trigram too — so the fix is to stop
+// relaxing where the output is a citation, not to tune a ratio.
+func SearchNotesStrict(db *sql.DB, query string) ([]SearchHit, error) {
+	return searchNotes(db, query, false)
+}
+
+func searchNotes(db *sql.DB, query string, relax bool) ([]SearchHit, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return nil, nil
@@ -40,6 +61,9 @@ func SearchNotes(db *sql.DB, query string) ([]SearchHit, error) {
 		if err == nil {
 			if len(hits) > 0 {
 				return hits, nil // strict AND matched: behaviour unchanged
+			}
+			if !relax {
+				return hits, nil // caller wants precision: an empty result is the answer
 			}
 			// M3-C (ADR-0012): strict AND yielded ZERO rows — relax by dropping
 			// English stopwords and OR-ing the remaining terms. This only ever
@@ -55,6 +79,9 @@ func SearchNotes(db *sql.DB, query string) ([]SearchHit, error) {
 			return hits, nil // empty AND result: preserve original behaviour
 		}
 		// FTS index missing or query rejected: fall through to LIKE.
+	}
+	if !relax {
+		return searchNotesLikeStrict(db, q)
 	}
 	return searchNotesLike(db, q)
 }
@@ -153,6 +180,17 @@ func likeTerms(q string) []string {
 // An empty patterns slice yields no rows rather than every row, which is what
 // `LIKE '%%'` would do.
 func likeQuery(db *sql.DB, q string, patterns []string) ([]SearchHit, error) {
+	return likeQueryJoin(db, q, patterns, " OR ")
+}
+
+// searchNotesLikeStrict is the LIKE fallback for the precision path: every
+// pattern must match (AND), where likeQuery OR-s them.
+func searchNotesLikeStrict(db *sql.DB, q string) ([]SearchHit, error) {
+	return likeQueryJoin(db, q, []string{q}, " AND ")
+}
+
+// likeQueryJoin is likeQuery with an explicit boolean joiner.
+func likeQueryJoin(db *sql.DB, q string, patterns []string, joiner string) ([]SearchHit, error) {
 	if len(patterns) == 0 {
 		return nil, nil
 	}
@@ -187,7 +225,7 @@ func likeQuery(db *sql.DB, q string, patterns []string) ([]SearchHit, error) {
 
 	rows, err := db.Query(
 		"SELECT id, project_id, title, content, kind, "+rankExpr+" AS rank "+
-			"FROM project_notes WHERE "+strings.Join(where, " OR ")+
+			"FROM project_notes WHERE "+strings.Join(where, joiner)+
 			" ORDER BY rank LIMIT ?",
 		args...)
 	if err != nil {

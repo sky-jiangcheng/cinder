@@ -507,7 +507,15 @@ func (s *Service) evidenceNotes(query string, projectID int64, limit int, start 
 	if time.Since(start) > budget {
 		return nil // the deadline covers the embedding round trip, not just SQL
 	}
-	hits, err := s.SearchNotes(query)
+	// Strict, not relaxed (2026-11-17): every hit here is rendered as
+	// "本次依据 / sources for this answer", so a coincidence is presented as a
+	// citation. The OR relaxation that the search surface needs — a user scans
+	// a ranked list and judges it — is what put an unrelated ADR under a
+	// question about "昨日代码提交量" (it contains "每日代码量", one shared
+	// trigram). No lexical ratio can separate that from a genuine CJK match,
+	// so the evidence channel simply does not relax. An empty set is honest;
+	// the answer path already prefers a tool call for facts like commit counts.
+	hits, err := s.SearchNotesStrict(query)
 	if err != nil {
 		log.Printf("evidenceNotes: %v", err)
 		return nil
