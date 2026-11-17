@@ -53,6 +53,27 @@ type contentBlock struct {
 	Name string `json:"name"` // tool_use
 }
 
+// contentBlocks tolerates the two shapes Claude Code writes for
+// message.content: a block array (most versions) and a plain string
+// (observed on v2.1.296 user turns). A string is treated as one text block;
+// a line whose content is neither form fails to unmarshal and is skipped
+// whole — same lenient posture as every other unknown field.
+type contentBlocks []contentBlock
+
+func (c *contentBlocks) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*c = contentBlocks{{Type: "text", Text: str}}
+		return nil
+	}
+	var arr []contentBlock
+	if err := json.Unmarshal(data, &arr); err != nil {
+		return err
+	}
+	*c = arr
+	return nil
+}
+
 // envelopeLine is the minimal, version-tolerant view of one transcript line.
 type envelopeLine struct {
 	Type        string `json:"type"`
@@ -63,8 +84,8 @@ type envelopeLine struct {
 	GitBranch   string `json:"gitBranch"`
 	IsSidechain bool   `json:"isSidechain"`
 	Message     struct {
-		Role    string         `json:"role"`
-		Content []contentBlock `json:"content"`
+		Role    string        `json:"role"`
+		Content contentBlocks `json:"content"`
 	} `json:"message"`
 }
 

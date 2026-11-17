@@ -51,6 +51,29 @@ func TestParseSessionSummary(t *testing.T) {
 	}
 }
 
+// v2.1.296 writes user turns with message.content as a plain string, not a
+// block array — the whole line used to fail unmarshal and be skipped, leaving
+// FirstUserPrompt empty for real sessions.
+const stringContentFixture = `{"type":"user","sessionId":"sess-str","promptId":"p1","timestamp":"2026-11-09T09:09:37.756Z","message":{"role":"user","content":"解决当前项目pull连接问题"},"cwd":"/Users/u/Proj","gitBranch":"feat"}
+{"type":"assistant","sessionId":"sess-str","timestamp":"2026-11-09T09:10:00.000Z","message":{"role":"assistant","content":"reconnect fixed"}}
+`
+
+func TestParseSessionStringContent(t *testing.T) {
+	s, err := ParseSession(strings.NewReader(stringContentFixture))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if s.FirstUserPrompt != "解决当前项目pull连接问题" {
+		t.Errorf("firstUserPrompt = %q", s.FirstUserPrompt)
+	}
+	if s.LastAssistantText != "reconnect fixed" {
+		t.Errorf("lastAssistantText = %q", s.LastAssistantText)
+	}
+	if !s.HasContent() {
+		t.Error("HasContent should be true")
+	}
+}
+
 func TestParseSessionNoContent(t *testing.T) {
 	s, err := ParseSession(strings.NewReader(`{"type":"mode","sessionId":"x"}` + "\n" + `{"type":"cost-state"}` + "\n"))
 	if err != nil {

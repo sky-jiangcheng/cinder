@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"repotory/internal/db"
 	"repotory/internal/importers/claude"
 )
 
@@ -138,5 +139,54 @@ func TestCaptureClaudeSessionByCwd(t *testing.T) {
 	}
 	if res.NoteID == 0 {
 		t.Errorf("expected a persisted note, got %+v", res)
+	}
+}
+
+func TestCaptureClaudeSessionByCwdLooksUpTranscriptByCwd(t *testing.T) {
+	// The live-data shape that broke the hook: a repository row points at a
+	// container auto-group project whose root is the repo's PARENT, so tier-1
+	// resolution attributes the cwd to a project whose root has no slug dir.
+	// The transcript must be looked up by the cwd itself, and the note still
+	// lands in the resolved project's bucket.
+	svc, _ := setupService(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	repo := "/Users/tester/MiddlePlatform/midplatform-data-monitor"
+	container := "/Users/tester/MiddlePlatform"
+	cpid := seedProject(t, svc.db, "MiddlePlatform", container)
+	if cpid == 0 {
+		t.Fatal("seed container project failed")
+	}
+	if err := db.UpsertRepository(svc.db, repo, cpid); err != nil {
+		t.Fatal(err)
+	}
+
+	slug := strings.ReplaceAll(repo, "/", "-")
+	dir := filepath.Join(home, ".claude", "projects", slug)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sess.jsonl"), []byte(hookSession), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.UpdateConfig("claude_session_capture", "1"); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := svc.CaptureClaudeSessionByCwd(repo)
+	if err != nil {
+		t.Fatalf("capture with repo-under-container cwd: %v", err)
+	}
+	if res.NoteID == 0 {
+		t.Fatalf("expected a persisted note, got %+v", res)
+	}
+	var projID int64
+	if err := svc.db.QueryRow("SELECT project_id FROM project_notes WHERE id = ?", res.NoteID).Scan(&projID); err != nil {
+		t.Fatal(err)
+	}
+	if projID != cpid {
+		t.Errorf("note %d attributed to project %d, want container %d", res.NoteID, projID, cpid)
 	}
 }

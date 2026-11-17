@@ -44,6 +44,12 @@ func (s *Service) CaptureClaudeHandoff(projectID int64) (*HandoffResult, error) 
 	if !ok {
 		return nil, fmt.Errorf("no capturable Claude Code session for %s", proj.RootPath)
 	}
+	return s.captureSession(sess, projectID)
+}
+
+// captureSession is the shared tail of both capture paths: map the parsed
+// session onto a handoff and persist it under the given project.
+func (s *Service) captureSession(sess claude.Session, projectID int64) (*HandoffResult, error) {
 	in := handoffFromSession(sess)
 	in.ProjectID = projectID
 	return s.CreateHandoffNote(in)
@@ -51,16 +57,33 @@ func (s *Service) CaptureClaudeHandoff(projectID int64) (*HandoffResult, error) 
 
 // CaptureClaudeSessionByCwd resolves the project for a working directory
 // through the same path tiers every other caller uses, then runs the same
-// gated on-demand capture. It exists for the B-end SessionEnd hook: Claude
-// Code runs `repotory-capture` with the closing session's cwd. A short final
-// path segment used to substring-match unrelated projects; an ambiguous or
+// gated capture. It exists for the B-end SessionEnd hook: Claude Code runs
+// `repotory-capture` with the closing session's cwd. A short final path
+// segment used to substring-match unrelated projects; an ambiguous or
 // unknown path now writes nothing rather than guessing.
+//
+// The transcript is looked up by the CWD ITSELF, not the resolved project's
+// root: Claude keys transcript dirs by the session's cwd, and path-tier
+// resolution can attribute a cwd to a project whose root differs from it
+// (tier 1: a repository row pointing at a container auto-group project).
+// Looking up by the resolved root would systematically miss every such
+// session; the project here only decides which bucket the note lands in.
 func (s *Service) CaptureClaudeSessionByCwd(cwd string) (*HandoffResult, error) {
 	res := s.ResolveProjectByPath(cwd)
 	if res == nil || res.Project == nil || len(res.Candidates) > 0 {
 		return nil, fmt.Errorf("no unambiguous Cinder project matches cwd %q", cwd)
 	}
-	return s.CaptureClaudeHandoff(res.Project.ID)
+	if !s.claudeCaptureEnabled() {
+		return nil, fmt.Errorf("Claude session capture is disabled (set %s=1 to enable)", claudeCaptureConfigKey)
+	}
+	sess, ok, err := claude.LatestSessionForRootPath(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("no capturable Claude Code session for %s", cwd)
+	}
+	return s.captureSession(sess, res.Project.ID)
 }
 
 // handoffFromSession maps a parsed Claude session onto a HandoffInput,
