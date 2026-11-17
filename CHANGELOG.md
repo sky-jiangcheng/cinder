@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.40.0] - 2026-11-17
+
 ### 新增
 - **设置页补上 `agent_instructions_auto` 开关，并反查确认 Trae CN / DSH 也读 `AGENTS.md`（2026-11-17）**：自动写区块的后端键此前只进 allow-list，没有任何 UI——用户想知道「扫描会不会动我的仓库」只能去翻库或调 MCP。现在「设置 → 插件 → Agent 指令注册」有一个开关（`web/src/pages/settings/PluginsTab.tsx`，中英语言包各 5 条）。种值读 `initialConfig.agent_instructions_auto !== '0'` 而不是 `=== '1'`：后端默认开，按 `= '1'` 读会让从没碰过这个键的用户看到「关」、而后端照样在写。**同一轮把上一版留下的错误结论改掉**——此前 ADR-0043 补注把「Trae 的 `.trae/rules`、DSH 的 profile 目录」记成无法覆盖的边界，反查二进制后证伪：Trae CN 的设置项 `AI.rules.importAgentsMd`（"Include AGENTS.md in context."）**默认开**，规则发现走 `**/AGENTS.md`（`findAgentMDsInWorkspaceRoots`），而同处的 `AI.rules.importClaudeMd` **默认关**；DSH 的 `app.asar` 内文档写明指令链是 `$DSH_HOME/AGENTS.md` → agents home → 项目根到会话 cwd 逐级，`CLAUDE.md` 与 `AGENTS.md` 同内容只渲染一次。两家都不需要额外路径，自动注册对它们同样成立；ADR-0043 中英双份的边界②与 `ai-integration.md` 中英「谁真的会读到」按实测改写。前端 tsc / eslint / 413 用例全绿。
 - **扫描即完成 agent 注册：受管区块自动写进每个已收集项目的 AGENTS.md（2026-11-17）**：用户的要求是「后续管理到的项目不管什么 agent 都自动注册，直接更新 AGENTS.md」。此前区块是「用户点一次」的动作（ADR-0043），本机 16 个已收集项目只有 2 个真正拿到过，其余每次会话从零开始；而逐个客户端注册在 WorkBuddy / Qoder / Trae CN / DSH 上走不通——四家里只有 WorkBuddy 的 `~/.workbuddy/mcp.json` 有权威位置，另三家本机连一个配置文件都没有。落法：**区块成为唯一注册面，由扫描自动落盘**。新增 `internal/service/scan_instructions.go`，`runCollectedScan` 提交后对每个 collected 项目 upsert（未设 `agent_instructions_auto` 即为开，`=0` 关自动写；容器 / 合成默认行 / 目录缺失跳过，标记外内容不动，单文件失败计数不致命）。判「是否需要写」改成**比对整块文本**而非只看标记，于是旧版本块在下次扫描被原地替换、当前块永不重写（二次扫描 mtime 不变，仓库不会永久 dirty）。区块文本同批改为 agent 中立（点名 Claude Code / Cursor / VS Code / Windsurf / WorkBuddy / Qoder / Trae / DSH 与任何读该文件的客户端），并加一条兜底：客户端没有 `repotory_*` 工具时收尾跑 `cinder-capture --agent auto --cwd .`（读 transcript、零模型调用）——这条兜底正是「不做逐 agent MCP 注册」的前提。Go 与 mjs 双实现、`testdata/contract.json`、`scripts/check-agent-init-contract.mjs` 同批一致。**真机**：live 库 16 个 collected → 5 个真项目写入、11 个扫描容器跳过、0 失败，二次跑 0 写。
@@ -13,8 +15,6 @@
 
 ### 变更
 - **`repotory_chat` 新增 `set_path`：线程仓库归属事后可改挂（2026-11-17）**：Warden 线程的作用域此前在创建时固定——首条消息发出时下拉留空，线程永远 unscoped，仓库工具面与 milestone handoff 都不挂，且旧 UI 把下拉锁死、想补也补不了。本批打通事后补挂链路：MCP `repotory_chat` 增加可选 `set_path` 操作（`thread_id` 必填、`path` 可选；absent 与 `""` 都清回 unscoped，与 create 同一条可选规则）→ writerapi 目录新增 `chat.set_path`（`ChatSetPathArgs` 镜像 service，`Methods()` 注册进写契约门）→ service `SetChatThreadPath` 事务内改 `chat_threads.path`，校验与 `CreateChatThread` 同源（绝对路径形态、4096 字节上限），不校验消息数——改挂只影响下一次生成读到的作用域。`CoreVersion` 2.2.0 → 2.3.0 minor（加性操作，既有操作形状不动，工具数仍 25）。中英手册、SKILL.md、mcp-tools.md 同批更新；配套的 Warden 侧（`conversation_set_path` 命令、前端解锁、handoff 审计与 replay 修复）见 warden 仓库同日提交。
-
-### 变更
 - **悬浮小机器人入口整体移除，形象移交 Warden 作桌宠（2026-11-17）**：用户决定——「Warden 桌宠设计成动物要求太高，目前设计还是不够丝滑，那就降低实现难度，使用这个小机器人形象吧」。判断依据成立：桌宠在 Warden 是**产品本身**（常驻、可拖、读文件系统上下文），在工作台只是装饰；同一形象分居两处，一处是角色、一处是配件，两边都做不好。同时核实到首页 `HomeKnowledgeAssistant` 与悬浮面板是**同一个对话、同一个路由**，第二个入口删掉不损失任何能力。执行：`AgentBot.tsx` / `AgentBot.module.css` / `AgentBot.test.tsx` 删除（15 个用例随之移除，web 用例 428 → 413），`App.tsx` 摘掉挂载点，`fab.css` 注释同步；**保留** `Icon` 的 `bot` 字形——它仍标注回答面板里的 AI 身份，也是 Warden 桌宠同一剪影的来源。ADR-0041 中英双份加日期加注（订正历史 = 加注不改写），写清「其余决策继续有效」：共享仪表盘作用域、拖拽位置持久化、卡片口径与仪表盘同源属数据层，不随入口消失。
 
 ### 修复
