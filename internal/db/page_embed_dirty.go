@@ -61,9 +61,24 @@ var pageEmbedDirtyStatements = []string{
 // EnsurePageEmbedDirty creates the page dirty table and its triggers. Idempotent,
 // exported so tests (and InitDB's re-assert) can set it up without the full
 // migration machinery — same contract as EnsureNoteEmbedDirty.
+//
+// "Already exists" is tolerated rather than fatal, and that tolerance is load
+// bearing: this runs on EVERY database open (InitDB re-asserts it so a dropped
+// trigger heals), and several processes open the same file — the desktop app,
+// one cinder-mcp per IDE, cinder-server. Two of them starting together both run
+// `DROP TRIGGER IF EXISTS` and then both run `CREATE TRIGGER`; the second CREATE
+// arrives after the first one committed, and without this guard it takes the
+// whole process down with "trigger ... already exists" before the handshake.
+// The sibling EnsureNoteEmbedDirty has always carried the same guard; this one
+// was missing it, which is why only the page side failed under concurrent
+// startup. The statements are not wrapped in one transaction because each is
+// independently idempotent: a peer that loses the race ends in the same state.
 func EnsurePageEmbedDirty(db *sql.DB) error {
 	for _, stmt := range pageEmbedDirtyStatements {
 		if _, err := db.Exec(stmt); err != nil {
+			if isAlreadyExistsErr(err) {
+				continue
+			}
 			return fmt.Errorf("db: ensure page embed dirty queue: %w", err)
 		}
 	}

@@ -2,6 +2,8 @@ package db
 
 import (
 	"database/sql"
+	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -182,6 +184,60 @@ func TestEnsurePageEmbedDirtyIsIdempotent(t *testing.T) {
 		t.Fatalf("second ensure: %v", err)
 	}
 	assertPageDirty(t, db, page.ID, true, "after re-applying the DDL (queue must survive)")
+}
+
+// Multiple processes open the same database: the desktop app, one cinder-mcp per
+// IDE, cinder-server. InitDB re-asserts this DDL on EVERY open, so two of them
+// starting together both run DROP TRIGGER IF EXISTS and then both run
+// CREATE TRIGGER. The second CREATE can land after the first committed and used
+// to take the whole process down with "trigger wiki_pages_embed_au already
+// exists" before it could even answer `initialize`. The sibling
+// EnsureNoteEmbedDirty always tolerated that error; this side did not.
+//
+// Reproduced with real handles on one file — each goroutine opens its own
+// *sql.DB, which is what a separate process is from SQLite's point of view. A
+// single handle cannot race with itself, and an in-memory database is private
+// to its handle, so neither would catch this.
+//
+// This failure is user-visible: the client sees the server exit before the
+// handshake ("init failed: EOF") with no explanation, and only the server's own
+// log names the trigger.
+func TestEnsurePageEmbedDirtySurvivesConcurrentOpeners(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "race.db")
+	first, err := InitDB(path)
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	first.Close() //nolint:errcheck
+
+	const openers = 16
+	const rounds = 6
+	var wg sync.WaitGroup
+	failures := make(chan error, openers*rounds)
+	for i := 0; i < openers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Its own handle: the peer process.
+			d, err := InitDB(path)
+			if err != nil {
+				failures <- err
+				return
+			}
+			defer d.Close() //nolint:errcheck
+			for j := 0; j < rounds; j++ {
+				if err := EnsurePageEmbedDirty(d); err != nil {
+					failures <- err
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(failures)
+	for err := range failures {
+		t.Errorf("concurrent ensure must not fail a process: %v", err)
+	}
 }
 
 func assertPageDirty(t *testing.T, db *sql.DB, id int64, want bool, when string) {

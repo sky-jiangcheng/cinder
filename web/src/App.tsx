@@ -8,7 +8,6 @@ import { applyTheme, getStoredTheme, listenSystemTheme, storeTheme, type ThemeMo
 import ErrorBoundary from './components/ErrorBoundary'
 import { getConnectionKind, subscribeConnection, startHealthPoll, isDesktopRuntime } from './api/transport'
 import { startUpdateCheck } from './api/updateStatus'
-import AgentBot from './components/AgentBot'
 import UpdateDownloadUI from './components/UpdateDownloadUI'
 import SideRail from './components/SideRail'
 import ContextRail from './components/ContextRail'
@@ -249,10 +248,11 @@ function App() {
           </div>
           <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
           <ToastHost toasts={toasts} onDismiss={(id) => setToasts(prev => prev.filter(x => x.id !== id))} />
-          {/* The floating agent: a draggable bot that knows the page it is on.
-              It replaces the old capture button, which sat on top of the chat
-              page's send button. */}
-          <AgentBot onToast={pushToast} />
+          {/* The floating robot is gone (2026-11-17, product decision): the
+              home page's assistant is the same conversation on the same route,
+              so a second entry that duplicated it was chrome with a body count
+              — and the robot character now belongs to Warden, where a desk pet
+              is the product rather than decoration on a workbench. */}
           {/* The update download's progress surfaces live at the app level:
               the download survives navigation, and a progress indicator that
               disappears when the user leaves the settings page is not a

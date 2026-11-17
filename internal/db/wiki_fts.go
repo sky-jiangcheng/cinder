@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Page retrieval for the wiki layer (ADR-0014 决策 3 / TODO M6-W2).
@@ -72,11 +73,51 @@ func dropWikiFTS(db *sql.DB) error {
 // index was created after pages already existed (the triggers only cover writes
 // from here on) and after the v7-style empty-index failure this repo has already
 // lived through once (see migration v12).
+//
+// A schema change under a concurrent opener is retried rather than fatal.
+// `INSERT ...('rebuild')` runs against the FTS5 virtual table, and SQLite
+// invalidates a compiled virtual-table statement when any connection changes
+// the schema ("database schema has changed: vtable constructor failed",
+// SQLITE_SCHEMA). Several processes open this file — the desktop app, one
+// cinder-mcp per IDE, cinder-server — and each one re-asserts its schema on
+// open, so a page compile racing a peer's DDL is ordinary, not exceptional.
+// The rebuild is idempotent, so re-running it is the whole fix; a bounded
+// number of attempts keeps a genuinely broken index from spinning forever.
 func RebuildWikiFTS(db *sql.DB) error {
-	if _, err := db.Exec(`INSERT INTO wiki_pages_fts(wiki_pages_fts) VALUES('rebuild')`); err != nil {
-		return fmt.Errorf("db: rebuild wiki FTS: %w", err)
+	// Bounded: enough attempts to outlast a peer's concurrent DDL burst,
+	// few enough that a real corruption still surfaces promptly.
+	const attempts = 5
+	var err error
+	for attempt := 0; attempt < attempts; attempt++ {
+		if _, err = db.Exec(`INSERT INTO wiki_pages_fts(wiki_pages_fts) VALUES('rebuild')`); err == nil {
+			return nil
+		}
+		if !isSchemaChangedErr(err) {
+			// Not a race: a missing table or a corrupt index is the caller's
+			// to see on the first answer, not something to retry.
+			return fmt.Errorf("db: rebuild wiki FTS: %w", err)
+		}
+		// A short, growing pause lets the peer's transaction land before the
+		// statement is compiled again.
+		time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
 	}
-	return nil
+	return fmt.Errorf("db: rebuild wiki FTS: %w", err)
+}
+
+// isSchemaChangedErr reports SQLITE_SCHEMA, the "a peer changed the schema
+// while this statement was compiled" answer.
+//
+// Matched on the message because the driver surfaces it as a plain string:
+// FTS5 reports it as "database schema has changed", and the vtable layer
+// prefixes it with "vtable constructor failed". Both spellings mean the same
+// retryable condition, and neither is a data problem.
+func isSchemaChangedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "database schema has changed") ||
+		strings.Contains(msg, "vtable constructor failed")
 }
 
 // SearchWikiPages ranks APPROVED pages by bm25 over title+content — the status

@@ -3,8 +3,10 @@
    ============================================ */
 
 /* P35 moved the fab-* rules to components/QuickCaptureFab.module.css and the
-   ai-* rules to components/AIAskPanel.module.css; both components are gone
-   now that the floating entry is the agent bot (components/AgentBot.tsx),
+   ai-* rules to components/AIAskPanel.module.css; both components are gone,
+   and so is the floating agent entry that replaced them (2026-11-17 — the
+   home page's assistant is the same conversation, and the robot character
+   moved to Warden). Only the content shell these entries all shared is left,
    which owns its own styles.
 
    What stays here is the one class the capture box still applies to its

@@ -139,3 +139,13 @@ No backend change, no schema change, no `internal/app` binding change, no change
 - After switching to **"All"**, the card becomes `commits 39 / my lines added +10,327 / my lines deleted -3,236 / my files 149 / repos 7`, and the dashboard switches in step to "today's goal 10327 / 500 lines / personal added 10327 / personal files 149 / across 7 repositories" — **same source, same numbers on both sides**; the card's footer switches to "Line counts use the same scope as the dashboard (all repositories)".
 
 **Regression**: 35 new frontend tests (`agentContext.test.ts` 19: route → context dispatch, project page scope, the card taking the personal figures, **reading in the dashboard's scope**, the date-aware title, the footer following the scope, a failed read reported honestly; `AgentBot.test.tsx` 13: the button staying clear of the send button, opening the panel on a click, a drag not opening the panel, the position persisting, staying inside the window on resize, **the card showing the personal figures**, **reading in the dashboard's scope**, **re-reading when the scope changes**; `dashboardScope.test.ts` 3: the defaults, no new object when nothing changed, notifying only on a real change). The full `npm test` run passes **48 files / 410 tests**; `npm run build`, `npm run lint`, `check-i18n-keys` and `check-i18n-interpolation` are all green.
+
+---
+
+> **Addendum (2026-11-17): the floating bot entry this ADR introduced has been removed entirely.**
+>
+> Product decision: **the robot character moves to Warden as its desk pet, and Cinder no longer keeps it.** In Warden a desk pet *is* the product (resident, draggable, reads filesystem context); on a workbench it was decoration — the same character in two places, a character in one and an accessory in the other, done well in neither. Separately, the home page's `HomeKnowledgeAssistant` and the floating panel were **the same conversation on the same route**, so the second entry cost a capability nothing.
+>
+> Execution: `AgentBot.tsx` / `AgentBot.module.css` / `AgentBot.test.tsx` deleted (15 tests with them), the mount point removed from `App.tsx`, and the `fab.css` comment updated. **Kept**: the `Icon` `bot` glyph — it still labels the AI in the answer panel, and it is the same silhouette Warden's pet is drawn from.
+>
+> The ADR's **other decisions stand**: shared dashboard scope (`dashboardScope`), drag-position persistence, and card figures agreeing with the dashboard — those are data and state concerns, unaffected by an entry point going away. ADR-0047's decision ② ("the bot inside the workbench") falls with this one, but its argument for a **separate host** (copilot apart from the workbench) is untouched.
