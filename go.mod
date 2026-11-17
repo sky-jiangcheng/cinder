@@ -12,7 +12,7 @@ go 1.26.0
 toolchain go1.26.11
 
 require (
-	github.com/klauspost/compress v1.19.2
+	github.com/klauspost/compress v1.20.2
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/philippgille/chromem-go v0.7.0

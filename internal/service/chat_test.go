@@ -371,6 +371,14 @@ func TestChatSetPathReattachesAndClearsScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	scope := fixturePath("/workspace/repo")
+	// Backdate the row before the update. On Windows the clock can hand back the
+	// same instant twice in a row, so "strictly newer than the thread we just
+	// created" is a coin flip there; this asserts what set_path actually
+	// promises — it writes updated_at — instead of what the timer can resolve.
+	const past = "2020-01-01T00:00:00.000000000Z"
+	if _, err := s.db.Exec("UPDATE chat_threads SET updated_at = ? WHERE id = ?", past, thread.ID); err != nil {
+		t.Fatal(err)
+	}
 	scoped, err := s.SetChatThreadPath(ctx, thread.ID, scope)
 	if err != nil {
 		t.Fatal(err)
@@ -378,8 +386,8 @@ func TestChatSetPathReattachesAndClearsScope(t *testing.T) {
 	if scoped.Path != scope {
 		t.Fatalf("path = %q, want %q", scoped.Path, scope)
 	}
-	if scoped.UpdatedAt <= thread.UpdatedAt {
-		t.Fatal("set_path did not advance the thread timestamp")
+	if scoped.UpdatedAt <= past {
+		t.Fatal("set_path did not write updated_at")
 	}
 	listed, err := s.ListChatThreads(ctx, scope)
 	if err != nil || len(listed) != 1 {

@@ -202,6 +202,12 @@ func TestEnsurePageEmbedDirtyIsIdempotent(t *testing.T) {
 // This failure is user-visible: the client sees the server exit before the
 // handshake ("init failed: EOF") with no explanation, and only the server's own
 // log names the trigger.
+//
+// Each goroutine opens the way a real process does — OpenWithRetry, which is
+// what cmd/mcp and cmd/server call — rather than bare InitDB. Sixteen openers
+// racing on a -race runner can exhaust busy_timeout inside the migration and
+// come back with SQLITE_BUSY; retrying that is the shipped behaviour, and the
+// already-exists race above still surfaces because it is not a lock error.
 func TestEnsurePageEmbedDirtySurvivesConcurrentOpeners(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "race.db")
 	first, err := InitDB(path)
@@ -219,7 +225,7 @@ func TestEnsurePageEmbedDirtySurvivesConcurrentOpeners(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// Its own handle: the peer process.
-			d, err := InitDB(path)
+			d, err := OpenWithRetry(path)
 			if err != nil {
 				failures <- err
 				return

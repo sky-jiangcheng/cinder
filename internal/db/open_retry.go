@@ -4,12 +4,28 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"repotory/internal/errcode"
 )
 
 const openAttempts = 6
+
+// initRetryable reports whether a failed InitDB is worth a whole retry.
+//
+// "database is locked" is the documented case. "database schema has changed"
+// (SQLITE_SCHEMA) belongs here too: every open re-asserts the same DDL, so when
+// two processes start together one can have its FTS vtable invalidated between
+// statements by the other's commit — the schema settles as soon as that
+// transaction ends, so a retry converges. A genuinely broken schema fails the
+// same way every time and still exhausts the attempts with its error intact.
+func initRetryable(err error) bool {
+	if errcode.IsLockContention(err) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "database schema has changed")
+}
 
 // OpenWithRetry opens the knowledge base, retrying while another Cinder
 // process holds the write lock. Opening the shared SQLite file writes (WAL
@@ -26,7 +42,7 @@ func OpenWithRetry(path string) (*sql.DB, error) {
 			return handle, nil
 		}
 		err = initErr
-		if !errcode.IsLockContention(initErr) {
+		if !initRetryable(initErr) {
 			return nil, err
 		}
 		if attempt == openAttempts {
