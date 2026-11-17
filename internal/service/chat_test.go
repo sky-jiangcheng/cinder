@@ -363,6 +363,50 @@ func TestChatClientIDsAndUnicodeTitles(t *testing.T) {
 	}
 }
 
+func TestChatSetPathReattachesAndClearsScope(t *testing.T) {
+	s, _ := setupService(t)
+	ctx := context.Background()
+	thread, err := s.CreateChatThread(ctx, chatID(1), "topic", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := fixturePath("/workspace/repo")
+	scoped, err := s.SetChatThreadPath(ctx, thread.ID, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scoped.Path != scope {
+		t.Fatalf("path = %q, want %q", scoped.Path, scope)
+	}
+	if scoped.UpdatedAt <= thread.UpdatedAt {
+		t.Fatal("set_path did not advance the thread timestamp")
+	}
+	listed, err := s.ListChatThreads(ctx, scope)
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("scoped list: %d %v", len(listed), err)
+	}
+	cleared, err := s.SetChatThreadPath(ctx, thread.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Path != "" {
+		t.Fatalf("cleared path = %q, want empty", cleared.Path)
+	}
+	if got, err := s.ListChatThreads(ctx, scope); err != nil || len(got) != 0 {
+		t.Fatalf("unscoped after clear: %d %v", len(got), err)
+	}
+	// Unknown thread, bad UUID and invalid path mirror the rename write.
+	if _, err := s.SetChatThreadPath(ctx, chatID(99), scope); !errors.Is(err, ErrChatThreadNotFound) {
+		t.Fatalf("unknown thread: %v", err)
+	}
+	if _, err := s.SetChatThreadPath(ctx, "bad", scope); err == nil {
+		t.Fatal("accepted invalid thread UUID")
+	}
+	if _, err := s.SetChatThreadPath(ctx, thread.ID, "relative"); err == nil {
+		t.Fatal("accepted relative path")
+	}
+}
+
 func TestChatValidationAndStorageErrors(t *testing.T) {
 	s, _ := setupService(t)
 	ctx := context.Background()

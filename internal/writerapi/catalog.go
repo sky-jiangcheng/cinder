@@ -39,6 +39,7 @@ const (
 	MethodChatCreate    = "chat.create"
 	MethodChatAppend    = "chat.append"
 	MethodChatRename    = "chat.rename"
+	MethodChatSetPath   = "chat.set_path"
 	MethodScanRun       = "scan.run"
 	MethodReviewRun     = "review.run"
 	MethodCaptureClaude = "capture.claude_session"
@@ -123,6 +124,13 @@ type ChatRenameArgs struct {
 	Title    string `json:"title"`
 }
 
+// ChatSetPathArgs mirrors svc.SetChatThreadPath. An empty Path clears the
+// thread back to unscoped.
+type ChatSetPathArgs struct {
+	ThreadID string `json:"thread_id"`
+	Path     string `json:"path"`
+}
+
 // ReviewRunArgs mirrors reviewrun.Options. Date is carried as RFC3339 because
 // time.Time's JSON form is what round-trips; the zero value means "yesterday"
 // exactly as in-process.
@@ -192,7 +200,7 @@ func CatalogueMethodForBinding(binding string) string {
 func Methods() []string {
 	return []string{
 		MethodNotesCreate, MethodNotesUpdate, MethodHandoffCreate,
-		MethodChatCreate, MethodChatAppend, MethodChatRename,
+		MethodChatCreate, MethodChatAppend, MethodChatRename, MethodChatSetPath,
 		MethodScanRun, MethodReviewRun, MethodCaptureClaude, MethodAuditRecord,
 		MethodConfigUpdate,
 	}
@@ -275,6 +283,12 @@ func (e *Executor) Execute(ctx context.Context, method string, raw json.RawMessa
 			return nil, err
 		}
 		return e.svc.RenameChatThread(ctx, a.ThreadID, a.Title)
+	case MethodChatSetPath:
+		var a ChatSetPathArgs
+		if err := decode(raw, &a); err != nil {
+			return nil, err
+		}
+		return e.svc.SetChatThreadPath(ctx, a.ThreadID, a.Path)
 	case MethodScanRun:
 		// Seeding and scanning are one operation from the agent's point of
 		// view, and both write; doing them together keeps a non-writer from

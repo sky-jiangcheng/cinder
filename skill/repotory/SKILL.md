@@ -161,7 +161,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 | `repotory_notes_create` | 记一条新知识 | 必填 `project_id` / `title` / `content`；`category` ∈ knowledge / log / idea / other |
 | `repotory_notes_update` | 改已有笔记 | **省略字段保持原值**；故意没有「清空标题/标签」的方式 —— 要清就写新笔记；可选 `pinned`（`true` 置顶 / `false` 取消置顶 / 省略保持原状态） |
 | `repotory_handoff` | 写会话交接 | 见上 |
-| `repotory_chat` | 与 Warden / 另一个 IDE 插件共享主题和已完成的消息 | `operation` ∈ `list`/`create`/`read`/`append`/`rename`；id 用客户端生成的 UUID，同 id 同载荷幂等、同 id 不同载荷报错**不覆盖**；与笔记 / 检索 / 审批完全隔离 |
+| `repotory_chat` | 与 Warden / 另一个 IDE 插件共享主题和已完成的消息 | `operation` ∈ `list`/`create`/`read`/`append`/`rename`/`set_path`；id 用客户端生成的 UUID，同 id 同载荷幂等、同 id 不同载荷报错**不覆盖**；与笔记 / 检索 / 审批完全隔离 |
 
 ### 自检
 

@@ -199,14 +199,14 @@ FTS5 trigram + bm25 全文检索。
 
 ### `repotory_chat(operation*, ...)`
 
-跨端**共享会话**：Warden 与 IDE 插件之间同步「主题」和「已完成的消息」。五个操作在一个工具里，靠 `operation` 区分。
+跨端**共享会话**：Warden 与 IDE 插件之间同步「主题」和「已完成的消息」。六个操作在一个工具里，靠 `operation` 区分。
 
 | 参数 | 说明 |
 |------|------|
-| `operation` | **必填**：`list` / `create` / `read` / `append` / `rename` |
-| `path` | `list` 可选精确路径（空 = 全部主题）；`create` 的主题归属（空 = 不绑定工作区） |
+| `operation` | **必填**：`list` / `create` / `read` / `append` / `rename` / `set_path` |
+| `path` | `list` 可选精确路径（空 = 全部主题）；`create` / `set_path` 的主题归属（空 = 不绑定工作区） |
 | `id` | `create` / `append` 的消息或主题 id：**客户端生成的 UUID** |
-| `thread_id` | `read` / `append` / `rename` 指向的主题 UUID |
+| `thread_id` | `read` / `append` / `rename` / `set_path` 指向的主题 UUID |
 | `title` | `create` / `rename` 的标题：非空、无控制字符、至多 160 个 Unicode 字符 |
 | `role` | `append`：`user` / `assistant` |
 | `content` | `append`：消息正文，原样保存（至多 1 MiB UTF-8） |

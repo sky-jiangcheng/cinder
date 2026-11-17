@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### 新增
+- **`repotory_chat` 新增 `set_path`：线程仓库归属事后可改挂（2026-11-17）**：Warden 线程的作用域此前在创建时固定——首条消息发出时下拉留空，线程永远 unscoped，仓库工具面与 milestone handoff 都不挂，且旧 UI 把下拉锁死、想补也补不了。本批打通事后补挂链路：MCP `repotory_chat` 增加可选 `set_path` 操作（`thread_id` 必填、`path` 可选；absent 与 `""` 都清回 unscoped，与 create 同一条可选规则）→ writerapi 目录新增 `chat.set_path`（`ChatSetPathArgs` 镜像 service，`Methods()` 注册进写契约门）→ service `SetChatThreadPath` 事务内改 `chat_threads.path`，校验与 `CreateChatThread` 同源（绝对路径形态、4096 字节上限），不校验消息数——改挂只影响下一次生成读到的作用域。`CoreVersion` 2.2.0 → 2.3.0 minor（加性操作，既有操作形状不动，工具数仍 25）。中英手册、SKILL.md、mcp-tools.md 同批更新；配套的 Warden 侧（`conversation_set_path` 命令、前端解锁、handoff 审计与 replay 修复）见 warden 仓库同日提交。
+
 ### 变更
 - **悬浮小机器人入口整体移除，形象移交 Warden 作桌宠（2026-11-17）**：用户决定——「Warden 桌宠设计成动物要求太高，目前设计还是不够丝滑，那就降低实现难度，使用这个小机器人形象吧」。判断依据成立：桌宠在 Warden 是**产品本身**（常驻、可拖、读文件系统上下文），在工作台只是装饰；同一形象分居两处，一处是角色、一处是配件，两边都做不好。同时核实到首页 `HomeKnowledgeAssistant` 与悬浮面板是**同一个对话、同一个路由**，第二个入口删掉不损失任何能力。执行：`AgentBot.tsx` / `AgentBot.module.css` / `AgentBot.test.tsx` 删除（15 个用例随之移除，web 用例 428 → 413），`App.tsx` 摘掉挂载点，`fab.css` 注释同步；**保留** `Icon` 的 `bot` 字形——它仍标注回答面板里的 AI 身份，也是 Warden 桌宠同一剪影的来源。ADR-0041 中英双份加日期加注（订正历史 = 加注不改写），写清「其余决策继续有效」：共享仪表盘作用域、拖拽位置持久化、卡片口径与仪表盘同源属数据层，不随入口消失。
 

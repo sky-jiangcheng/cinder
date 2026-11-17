@@ -14,12 +14,12 @@ import (
 func registerChatTool(s *server.MCPServer, svc *service.Service, w *writerapi.Manager) {
 	s.AddTool(mcp.Tool{
 		Name:        "repotory_chat",
-		Description: "Share persistent chat threads and messages between Warden and IDE clients. Isolated from knowledge notes, retrieval and approvals. Operations: list (at most 100, optional exact path; empty means all), create (client UUID id, title, optional absolute path — absent or empty is unscoped), read (thread_id; latest 500 messages in insertion order), append (thread_id, client UUID or UUID-reply id, role, content, source, optional reply_to referencing a user UUID in this thread), rename (thread_id, title). Create/append retries with identical IDs and payloads are idempotent; conflicts never overwrite content.",
+		Description: "Share persistent chat threads and messages between Warden and IDE clients. Isolated from knowledge notes, retrieval and approvals. Operations: list (at most 100, optional exact path; empty means all), create (client UUID id, title, optional absolute path — absent or empty is unscoped), read (thread_id; latest 500 messages in insertion order), append (thread_id, client UUID or UUID-reply id, role, content, source, optional reply_to referencing a user UUID in this thread), rename (thread_id, title), set_path (thread_id, optional absolute path; empty clears the thread back to unscoped). Create/append retries with identical IDs and payloads are idempotent; conflicts never overwrite content.",
 		InputSchema: mcp.ToolInputSchema{
 			Type:     "object",
 			Required: []string{"operation"},
 			Properties: map[string]any{
-				"operation": map[string]any{"type": "string", "enum": []string{"list", "create", "read", "append", "rename"}},
+				"operation": map[string]any{"type": "string", "enum": []string{"list", "create", "read", "append", "rename", "set_path"}},
 				"path":      map[string]any{"type": "string", "description": "Absolute workspace path or empty; at most 4096 UTF-8 bytes. Stored verbatim; list matches exactly."},
 				"id":        map[string]any{"type": "string", "description": "Client-generated UUID for create; UUID or UUID-reply for append idempotency."},
 				"thread_id": map[string]any{"type": "string", "description": "Existing chat thread UUID."},
@@ -37,14 +37,15 @@ func registerChatTool(s *server.MCPServer, svc *service.Service, w *writerapi.Ma
 			return makeErrorResult(err), nil
 		}
 		required, ok := map[string][]string{
-			"list":   {},
-			"create": {"id", "title"},
-			"read":   {"thread_id"},
-			"append": {"thread_id", "id", "role", "content", "source"},
-			"rename": {"thread_id", "title"},
+			"list":     {},
+			"create":   {"id", "title"},
+			"read":     {"thread_id"},
+			"append":   {"thread_id", "id", "role", "content", "source"},
+			"rename":   {"thread_id", "title"},
+			"set_path": {"thread_id"},
 		}[op]
 		if !ok {
-			return makeInvalidResult("operation must be list, create, read, append or rename"), nil
+			return makeInvalidResult("operation must be list, create, read, append, rename or set_path"), nil
 		}
 		values := map[string]string{}
 		for _, key := range required {
@@ -108,6 +109,24 @@ func registerChatTool(s *server.MCPServer, svc *service.Service, w *writerapi.Ma
 			var thread service.ChatThread
 			if e := w.ExecuteInto(ctx, writerapi.MethodChatRename, writerapi.ChatRenameArgs{
 				ThreadID: values["thread_id"], Title: values["title"],
+			}, &thread); e != nil {
+				err = e
+			} else {
+				payload = struct {
+					Thread *service.ChatThread `json:"thread"`
+				}{&thread}
+			}
+		case "set_path":
+			// Same optional-path rule as create: absent and "" both clear the
+			// scope; a numeric/null path must not silently become the whole
+			// library.
+			path, e := toolString(args, "path", false)
+			if e != nil {
+				return makeErrorResult(e), nil
+			}
+			var thread service.ChatThread
+			if e := w.ExecuteInto(ctx, writerapi.MethodChatSetPath, writerapi.ChatSetPathArgs{
+				ThreadID: values["thread_id"], Path: path,
 			}, &thread); e != nil {
 				err = e
 			} else {

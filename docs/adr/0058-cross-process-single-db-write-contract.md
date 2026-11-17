@@ -113,3 +113,4 @@
 - 桌面从「唯一写者」变为「优先写者」：agent 自举期间桌面没在跑 backup ticker，快照密度短暂下降；桌面一启动即接管，窗口有界。
 - **桌面的 UI 写面本轮没有接入目录**：它 normally 就是写者，所以没有区别；只有「桌面启动时 agent 正忙、接管被拒」这个窗口里，桌面的绑定写与 agent 写者会并发——退化成契约前的旧行为（busy_timeout 兜底），不是新增的洞，但也不能声称已闭环。收敛方向与 `cmd/server` 同批：绑定层在 `!IsWriter()` 时把写转给持锁者。
 - **`CoreVersion` 不动（2.0.0）**：工具名、参数、成功线形全部未变；新错误 code 走 2.0.0 已声明的开放 code 枚举。fixture（`scripts/mcp-tools.fixture.json`）无需改。
+- **补记（2026-11-16）：目录 +1 `chat.set_path`**——`repotory_chat` 新增 `set_path` 操作（`thread_id`，可选绝对路径；空串把线程清回 unscoped），目录方法 `chat.set_path`（`ChatSetPathArgs`）走单写者契约，执行器调用同一个 `svc.SetChatThreadPath`，路径校验与 `create` 同一套。这是加法：既有操作的线形不变，`CoreVersion` 2.2.0 → **2.3.0（minor）**，工具数仍 25，fixture 无需改。

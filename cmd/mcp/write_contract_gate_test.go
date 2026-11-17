@@ -170,7 +170,7 @@ func TestWriteToolsCoveredByCatalogue(t *testing.T) {
 		"repotory_notes_create":  "notes.create",
 		"repotory_notes_update":  "notes.update",
 		"repotory_handoff":       "handoff.create",
-		"repotory_chat":          "chat.create+chat.append+chat.rename",
+		"repotory_chat":          "chat.create+chat.append+chat.rename+chat.set_path",
 		"repotory_scan":          "scan.run",
 		"repotory_review_run":    "review.run",
 		"repotory_config_update": "config.update",

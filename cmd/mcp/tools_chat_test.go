@@ -62,6 +62,61 @@ func TestChatCreateRejectsNonStringPath(t *testing.T) {
 	}
 }
 
+func TestChatSetPathReattachesAndClearsThread(t *testing.T) {
+	ts := newTestServer(t)
+	scope := filepath.Join(t.TempDir(), "scoped")
+	if _, errMsg := chatCreate(t, ts, map[string]any{
+		"operation": "create",
+		"id":        "5f0f0b1a-4444-4aac-9a1a-0123456789ab",
+		"title":     "topic",
+	}); errMsg != "" {
+		t.Fatalf("create: %s", errMsg)
+	}
+	payload, errMsg := chatCreate(t, ts, map[string]any{
+		"operation": "set_path",
+		"thread_id": "5f0f0b1a-4444-4aac-9a1a-0123456789ab",
+		"path":      scope,
+	})
+	if errMsg != "" {
+		t.Fatalf("set_path: %s", errMsg)
+	}
+	thread, _ := payload["thread"].(map[string]any)
+	if got, _ := thread["path"].(string); got != scope {
+		t.Errorf("path = %q, want %q", got, scope)
+	}
+	cleared, errMsg := chatCreate(t, ts, map[string]any{
+		"operation": "set_path",
+		"thread_id": "5f0f0b1a-4444-4aac-9a1a-0123456789ab",
+	})
+	if errMsg != "" {
+		t.Fatalf("clear: %s", errMsg)
+	}
+	thread, _ = cleared["thread"].(map[string]any)
+	if got, _ := thread["path"].(string); got != "" {
+		t.Errorf("cleared path = %q, want empty", got)
+	}
+}
+
+// The optional path keeps the same non-string guard as create: a number must
+// not silently widen the scope to the whole library.
+func TestChatSetPathRejectsNonStringPath(t *testing.T) {
+	ts := newTestServer(t)
+	if _, errMsg := chatCreate(t, ts, map[string]any{
+		"operation": "create",
+		"id":        "5f0f0b1a-5555-4aac-9a1a-0123456789ab",
+		"title":     "topic",
+	}); errMsg != "" {
+		t.Fatalf("create: %s", errMsg)
+	}
+	if _, errMsg := chatCreate(t, ts, map[string]any{
+		"operation": "set_path",
+		"thread_id": "5f0f0b1a-5555-4aac-9a1a-0123456789ab",
+		"path":      123,
+	}); errMsg == "" {
+		t.Fatal("numeric path accepted")
+	}
+}
+
 // A supplied path is still stored — the relaxation must not turn into the
 // create branch ignoring the argument.
 func TestChatCreateStoresSuppliedPath(t *testing.T) {

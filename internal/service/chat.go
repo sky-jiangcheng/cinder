@@ -309,6 +309,34 @@ func (s *Service) AppendChatMessage(ctx context.Context, in ChatAppendInput) (*C
 	return &ChatMessage{ID: in.ID, Role: in.Role, Content: in.Content, Source: in.Source, ReplyTo: in.ReplyTo, CreatedAt: stamp}, nil
 }
 
+// SetChatThreadPath re-attaches an existing thread to a repository, or clears
+// it back to unscoped with an empty path. The scope is a label, not permission
+// to read disk; validation mirrors CreateChatThread.
+func (s *Service) SetChatThreadPath(ctx context.Context, id, path string) (*ChatThread, error) {
+	if err := validateChatID("thread_id", id); err != nil {
+		return nil, err
+	}
+	if err := validateChatPath(path); err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, "UPDATE chat_threads SET path = ?, updated_at = MAX(updated_at, ?) WHERE id = ?", path, chatTimestamp(), id); err != nil {
+		return nil, err
+	}
+	t, err := scanChatThread(tx.QueryRowContext(ctx, "SELECT "+chatThreadColumns+" FROM chat_threads WHERE id = ?", id))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
 func (s *Service) RenameChatThread(ctx context.Context, id, title string) (*ChatThread, error) {
 	if err := validateChatID("thread_id", id); err != nil {
 		return nil, err
