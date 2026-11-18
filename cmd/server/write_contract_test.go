@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"repotory/internal/aiaudit"
 	"strings"
 	"testing"
 
@@ -46,7 +47,7 @@ func startServer(t *testing.T, dir string) (*httptest.Server, *writerapi.Manager
 	m, err := writerapi.New(svc, writerapi.Options{
 		DBPath:           dbPath,
 		Process:          "cinder-server",
-		Surface:          service.AISurfaceHTTP,
+		Surface:          aiaudit.SurfaceHTTP,
 		SelfElectAllowed: true,
 	})
 	if err != nil {
@@ -137,7 +138,7 @@ func TestServerClientRoleForwardsAndRefuses(t *testing.T) {
 	desktop, err := writerapi.New(desktopSvc, writerapi.Options{
 		DBPath:           dbPath,
 		Process:          "Cinder Desktop",
-		Surface:          service.AISurfaceDesktop,
+		Surface:          aiaudit.SurfaceDesktop,
 		SelfElectAllowed: true,
 		AssertWriter:     true,
 	})

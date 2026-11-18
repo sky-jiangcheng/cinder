@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"repotory/internal/aiaudit"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func newManager(t *testing.T, d *sql.DB, dir, process string, selfElect, assertW
 	m, err := New(svc, Options{
 		DBPath:           filepath.Join(dir, "repotory.db"),
 		Process:          process,
-		Surface:          service.AISurfaceMCP,
+		Surface:          aiaudit.SurfaceMCP,
 		CoreVersion:      "test",
 		SelfElectAllowed: selfElect,
 		AssertWriter:     assertWriter,
@@ -393,7 +394,7 @@ func TestChannelFailureReleasesTheRole(t *testing.T) {
 	lost := make(chan string, 1)
 	m, err := New(svc, Options{
 		DBPath: filepath.Join(dir, "repotory.db"), Process: "cinder-mcp",
-		Surface: service.AISurfaceMCP, SelfElectAllowed: true,
+		Surface: aiaudit.SurfaceMCP, SelfElectAllowed: true,
 		OnLost: func(reason string) { lost <- reason },
 	})
 	if err != nil {

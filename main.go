@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"repotory/internal/aiaudit"
 	"runtime"
 	"strings"
 
@@ -58,7 +59,7 @@ func main() {
 	svc := service.New(database, gitUser)
 	// This process IS the desktop surface (ADR-0030): every model call it
 	// makes was started by a human in the app, and the audit row says so.
-	svc.SetAuditSurface(service.AISurfaceDesktop)
+	svc.Audit.SetSurface(aiaudit.SurfaceDesktop)
 	// The single-writer contract (ADR-0058 / TODO 13.1). The desktop claims the
 	// role: it is the surface a human is looking at, it hosts the backup / sync
 	// / compile tickers that write the most, and Wails enforces it as a
@@ -69,7 +70,7 @@ func main() {
 	writers, err := writerapi.New(svc, writerapi.Options{
 		DBPath:           dbPath,
 		Process:          "Cinder Desktop",
-		Surface:          service.AISurfaceDesktop,
+		Surface:          aiaudit.SurfaceDesktop,
 		CoreVersion:      version.CoreVersion,
 		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
 		SelfElectAllowed: true,
@@ -82,7 +83,7 @@ func main() {
 	// the local executor; it matters in the one case where a busy agent kept
 	// the role, and then the app's own audit INSERT would be a write past the
 	// gate. Same rule as cmd/mcp.
-	svc.SetAuditForwarder(writers.RecordAudit)
+	svc.Audit.SetForwarder(writers.RecordAudit)
 	// Safety net for the path where wails.Run fails before OnShutdown ever
 	// fires; Shutdown is idempotent, the real release is the hook above.
 	defer writers.Shutdown()

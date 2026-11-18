@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"repotory/internal/aiaudit"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ func main() {
 	svc := service.New(d, platform.GetGitUserName())
 	// This process IS the MCP surface (ADR-0030): every model call it makes
 	// is an agent call, and the audit row says so.
-	svc.SetAuditSurface(service.AISurfaceMCP)
+	svc.Audit.SetSurface(aiaudit.SurfaceMCP)
 	// The single-writer contract (ADR-0058 / TODO 13.1): at most one Cinder
 	// process writes the shared database. This process either holds that role
 	// itself — which is what keeps the README's "no desktop app required"
@@ -47,7 +48,7 @@ func main() {
 	writers, err := writerapi.New(svc, writerapi.Options{
 		DBPath:           dbPath,
 		Process:          "cinder-mcp",
-		Surface:          service.AISurfaceMCP,
+		Surface:          aiaudit.SurfaceMCP,
 		CoreVersion:      version.CoreVersion,
 		SchemaVersion:    writerapi.CurrentSchemaVersion(d),
 		SelfElectAllowed: true,
@@ -58,7 +59,7 @@ func main() {
 	// An audit INSERT is a write too: routed through the same contract, or a
 	// non-writer process would either contend with the writer's lock or drop
 	// the row silently — losing exactly the agent calls the trail exists for.
-	svc.SetAuditForwarder(writers.RecordAudit)
+	svc.Audit.SetForwarder(writers.RecordAudit)
 	// Drain any tool-triggered background work before closing the shared DB
 	// handle, and report a close failure instead of dropping it. The writer
 	// role goes FIRST: unpublish, then drain, then close.
@@ -238,7 +239,7 @@ func registerTools(mcpServer *server.MCPServer, svc *service.Service, w *writera
 		if msg := bounds.Check("path", path, bounds.MaxPathLen); msg != "" {
 			return makeInvalidResult(msg), nil
 		}
-		hits, err := svc.SearchAll(query)
+		hits, err := svc.SearchAll(ctx, query)
 		if err != nil {
 			return makeErrorResult(err), nil
 		}

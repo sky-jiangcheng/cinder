@@ -322,7 +322,7 @@ func (e *Executor) Execute(ctx context.Context, method string, raw json.RawMessa
 		if err := decode(raw, &a); err != nil {
 			return nil, err
 		}
-		if err := e.svc.RecordAuditRow(a.Row); err != nil {
+		if err := e.svc.Audit.RecordRow(a.Row); err != nil {
 			return nil, err
 		}
 		return map[string]bool{"recorded": true}, nil

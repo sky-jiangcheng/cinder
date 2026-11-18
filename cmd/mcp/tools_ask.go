@@ -76,10 +76,10 @@ func registerAskTool(mcpServer *server.MCPServer, svc *service.Service) {
 			return makeInvalidResult(msg), nil
 		}
 
-		answer, err := svc.AskAIWithEvidence(projectID, query, service.DefaultEvidenceBudget)
+		answer, err := svc.AskAIWithEvidence(ctx, projectID, query, service.DefaultEvidenceBudget)
 		if err != nil {
 			if errors.Is(err, service.ErrAIChatNotConfigured) {
-				fallback, fbErr := keywordFallback(svc, query)
+				fallback, fbErr := keywordFallback(ctx, svc, query)
 				if fbErr != nil {
 					return makeErrorResult(fbErr), nil
 				}
@@ -98,8 +98,8 @@ func registerAskTool(mcpServer *server.MCPServer, svc *service.Service) {
 //
 // The label is the point. The old tool returned this text unqualified and an
 // agent read it as an answer; the wording has to say what it is.
-func keywordFallback(svc *service.Service, query string) (string, error) {
-	hits, err := svc.SearchAll(query)
+func keywordFallback(ctx context.Context, svc *service.Service, query string) (string, error) {
+	hits, err := svc.SearchAll(ctx, query)
 	if err != nil {
 		return "", err
 	}

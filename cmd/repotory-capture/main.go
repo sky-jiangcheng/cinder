@@ -38,6 +38,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"repotory/internal/aiaudit"
 
 	"repotory/internal/db"
 	"repotory/internal/platform"
@@ -90,7 +91,7 @@ func run(args []string) int {
 	writers, err := writerapi.New(svc, writerapi.Options{
 		DBPath:           path,
 		Process:          "repotory-capture",
-		Surface:          service.AISurfaceMCP,
+		Surface:          aiaudit.SurfaceMCP,
 		CoreVersion:      version.CoreVersion,
 		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
 		SelfElectAllowed: true,
@@ -100,7 +101,7 @@ func run(args []string) int {
 		log.Fatalf("repotory-capture: write contract: %v", err)
 	}
 	defer writers.Shutdown()
-	svc.SetAuditForwarder(writers.RecordAudit)
+	svc.Audit.SetForwarder(writers.RecordAudit)
 
 	var report service.HandoffResult
 	err = writers.ExecuteInto(context.Background(), writerapi.MethodCaptureClaude,

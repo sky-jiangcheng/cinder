@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -138,7 +139,7 @@ func runAgentScore(svc *service.Service) string {
 	// ADR-0055 D2: a successful zero-hit query returns an explicit empty
 	// slice, and a broken FTS5 path returns an error. The old code encoded
 	// that distinction as nil-vs-non-nil, which was lost at every JSON exit.
-	hits, searchErr := svc.SearchAll("test")
+	hits, searchErr := svc.SearchAll(context.Background(), "test")
 	if searchErr == nil {
 		parts = append(parts, fmt.Sprintf("  ✅ Search (FTS5) operational (%d hit(s) for probe)", len(hits)))
 		record(true)

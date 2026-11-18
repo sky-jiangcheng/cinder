@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"repotory/internal/aiaudit"
 	"runtime"
 	"strings"
 	"testing"
@@ -163,7 +164,7 @@ func newRelayClientManager(t *testing.T, dir, dbPath string) *writerapi.Manager 
 	m, err := writerapi.New(svc, writerapi.Options{
 		DBPath:           dbPath,
 		Process:          "cinder-server",
-		Surface:          service.AISurfaceHTTP,
+		Surface:          aiaudit.SurfaceHTTP,
 		SelfElectAllowed: false,
 		AssertWriter:     false,
 	})

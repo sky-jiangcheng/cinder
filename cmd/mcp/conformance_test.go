@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -67,7 +68,7 @@ func TestFixtureQuotesTheRealFallbackWording(t *testing.T) {
 	t.Cleanup(func() { _ = database.Close() })
 	svc := service.New(database, "tester")
 
-	zeroHit, err := keywordFallback(svc, "nothing matches this query at all")
+	zeroHit, err := keywordFallback(context.Background(), svc, "nothing matches this query at all")
 	if err != nil {
 		t.Fatalf("keywordFallback: %v", err)
 	}
@@ -80,7 +81,7 @@ func TestFixtureQuotesTheRealFallbackWording(t *testing.T) {
 	if _, err := svc.CreateNoteWithMeta(defaultProject, "decided on X", "the decision body", "", "knowledge", "manual"); err != nil {
 		t.Fatalf("seed note: %v", err)
 	}
-	matchList, err := keywordFallback(svc, "decided")
+	matchList, err := keywordFallback(context.Background(), svc, "decided")
 	if err != nil {
 		t.Fatalf("keywordFallback with hits: %v", err)
 	}

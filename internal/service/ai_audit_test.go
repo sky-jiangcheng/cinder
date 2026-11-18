@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"repotory/internal/aiaudit"
+	"repotory/internal/aiclient"
 	"strings"
 	"testing"
 
@@ -32,7 +34,7 @@ func newAuditTestService(t *testing.T, handler http.HandlerFunc) *Service {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 	svc := New(database, "tester")
-	svc.SetAuditSurface(AISurfaceMCP)
+	svc.Audit.SetSurface(aiaudit.SurfaceMCP)
 
 	if handler != nil {
 		srv := httptest.NewServer(handler)
@@ -74,7 +76,7 @@ func okHandler(reply string) http.HandlerFunc {
 func TestAuditOffByDefaultChangesNothing(t *testing.T) {
 	svc := newAuditTestService(t, okHandler("hello"))
 
-	result, err := svc.chatWithAudit(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "hi"}}, aiChatTimeout)
+	result, err := svc.chatWithAudit(mustCfg(t, svc), []aiclient.Message{{Role: "user", Content: "hi"}}, aiclient.ChatTimeout)
 	if err != nil {
 		t.Fatalf("chat: %v", err)
 	}
@@ -100,7 +102,7 @@ func TestAuditRecordsCallWhenEnabled(t *testing.T) {
 	}
 
 	const secret = "客户身份证 110101199001011234"
-	_, err := svc.chatWithAudit(mustCfg(t, svc), []chatMessage{{Role: "user", Content: secret}}, aiChatTimeout)
+	_, err := svc.chatWithAudit(mustCfg(t, svc), []aiclient.Message{{Role: "user", Content: secret}}, aiclient.ChatTimeout)
 	if err != nil {
 		t.Fatalf("chat: %v", err)
 	}
@@ -113,8 +115,8 @@ func TestAuditRecordsCallWhenEnabled(t *testing.T) {
 		t.Fatalf("audit rows = %d, want 1", len(rows))
 	}
 	row := rows[0]
-	if row.Surface != AISurfaceMCP {
-		t.Errorf("surface = %q, want %q", row.Surface, AISurfaceMCP)
+	if row.Surface != aiaudit.SurfaceMCP {
+		t.Errorf("surface = %q, want %q", row.Surface, aiaudit.SurfaceMCP)
 	}
 	if row.Model != "test-model" {
 		t.Errorf("model = %q, want test-model", row.Model)
@@ -149,14 +151,14 @@ func TestInputReviewBlocksTheCall(t *testing.T) {
 		t.Fatalf("set rules: %v", err)
 	}
 
-	_, err := svc.chatWithAudit(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "查一下客户身份证号"}}, aiChatTimeout)
+	_, err := svc.chatWithAudit(mustCfg(t, svc), []aiclient.Message{{Role: "user", Content: "查一下客户身份证号"}}, aiclient.ChatTimeout)
 	if err == nil {
 		t.Fatal("expected the input review to block the call")
 	}
 	if called != 0 {
 		t.Errorf("endpoint was called %d times, want 0 — a blocked prompt must not be sent", called)
 	}
-	var blocked aiBlockedError
+	var blocked aiaudit.BlockedError
 	if !strings.Contains(err.Error(), "身份证") {
 		t.Errorf("error %q does not name the matched rule", err.Error())
 	}
@@ -177,7 +179,7 @@ func TestInputReviewAllowsCleanPrompt(t *testing.T) {
 		t.Fatalf("set rules: %v", err)
 	}
 
-	if _, err := svc.chatWithAudit(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "这个函数怎么写"}}, aiChatTimeout); err != nil {
+	if _, err := svc.chatWithAudit(mustCfg(t, svc), []aiclient.Message{{Role: "user", Content: "这个函数怎么写"}}, aiclient.ChatTimeout); err != nil {
 		t.Fatalf("chat: %v", err)
 	}
 	rows, err := db.ListAICallLog(svc.db, 10)
@@ -187,8 +189,8 @@ func TestInputReviewAllowsCleanPrompt(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("audit rows = %d, want 1", len(rows))
 	}
-	if rows[0].InputVerdict != AIReviewAllow {
-		t.Errorf("input_verdict = %q, want %q", rows[0].InputVerdict, AIReviewAllow)
+	if rows[0].InputVerdict != aiaudit.VerdictAllow {
+		t.Errorf("input_verdict = %q, want %q", rows[0].InputVerdict, aiaudit.VerdictAllow)
 	}
 }
 
@@ -203,7 +205,7 @@ func TestInputReviewOffMeansNotScreened(t *testing.T) {
 		t.Fatalf("set rules: %v", err)
 	}
 
-	if _, err := svc.chatWithAudit(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "查一下客户身份证号"}}, aiChatTimeout); err != nil {
+	if _, err := svc.chatWithAudit(mustCfg(t, svc), []aiclient.Message{{Role: "user", Content: "查一下客户身份证号"}}, aiclient.ChatTimeout); err != nil {
 		t.Fatalf("chat: %v", err)
 	}
 	rows, _ := db.ListAICallLog(svc.db, 10)
@@ -239,7 +241,7 @@ func TestOutputReviewFlagsStreamedReply(t *testing.T) {
 
 	var delivered strings.Builder
 	_, _, err := svc.streamChatWithAudit(mustCfg(t, svc),
-		[]chatMessage{{Role: "user", Content: "hi"}}, aiAskTimeout,
+		[]aiclient.Message{{Role: "user", Content: "hi"}}, aiAskTimeout,
 		func(d string) { delivered.WriteString(d) })
 	if err != nil {
 		t.Fatalf("stream: %v", err)
@@ -258,9 +260,9 @@ func TestOutputReviewFlagsStreamedReply(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("audit rows = %d, want 1", len(rows))
 	}
-	if rows[0].OutputVerdict != AIReviewFlagged {
+	if rows[0].OutputVerdict != aiaudit.VerdictFlagged {
 		t.Errorf("output_verdict = %q, want %q — a streamed reply can only be flagged, not blocked",
-			rows[0].OutputVerdict, AIReviewFlagged)
+			rows[0].OutputVerdict, aiaudit.VerdictFlagged)
 	}
 }
 
@@ -268,7 +270,7 @@ func TestOutputReviewFlagsStreamedReply(t *testing.T) {
 // the guards are triggers, so this is a structural fact, not a convention.
 func TestAuditLogIsAppendOnly(t *testing.T) {
 	svc := newAuditTestService(t, nil)
-	if err := db.InsertAICallLog(svc.db, db.AICallLog{Surface: AISurfaceMCP, Model: "m"}); err != nil {
+	if err := db.InsertAICallLog(svc.db, db.AICallLog{Surface: aiaudit.SurfaceMCP, Model: "m"}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	if _, err := svc.db.Exec("UPDATE ai_call_log SET model = 'edited'"); err == nil {
@@ -287,7 +289,7 @@ func TestInvalidReviewRuleIsSkippedNotFatal(t *testing.T) {
 	if err := svc.UpdateConfig("ai_review_rules", "(((\n身份证"); err != nil {
 		t.Fatalf("set rules: %v", err)
 	}
-	rules := svc.aiReviewRules()
+	rules := svc.Audit.Rules()
 	if len(rules) != 1 {
 		t.Fatalf("rules = %d, want 1 — the broken line is skipped, the good one survives", len(rules))
 	}
@@ -303,11 +305,11 @@ func TestRulesAreCaseInsensitive(t *testing.T) {
 	if err := svc.UpdateConfig("ai_review_rules", "password"); err != nil {
 		t.Fatalf("set rules: %v", err)
 	}
-	rules := svc.aiReviewRules()
+	rules := svc.Audit.Rules()
 	if len(rules) != 1 {
 		t.Fatalf("rules = %d, want 1", len(rules))
 	}
-	if got := aiMatchRule("my PASSWORD is 123", rules); got == "" {
+	if got := aiaudit.MatchRule("my PASSWORD is 123", rules); got == "" {
 		t.Error("case-insensitive match failed")
 	}
 }

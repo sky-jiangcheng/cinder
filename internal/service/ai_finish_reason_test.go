@@ -1,9 +1,11 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"repotory/internal/aiclient"
 	"strings"
 	"testing"
 	"time"
@@ -58,20 +60,20 @@ func TestTruncatedHintWordingIsActionable(t *testing.T) {
 }
 
 func TestAIFinishReasonReadsFirstChoice(t *testing.T) {
-	var cr chatResponse
+	var cr aiclient.Response
 	if err := json.Unmarshal([]byte(`{"choices":[{"finish_reason":"length","message":{"content":"{\"a\":"}}]}`), &cr); err != nil {
 		t.Fatal(err)
 	}
-	if got := aiFinishReason(cr); got != "length" {
-		t.Errorf("aiFinishReason = %q, want length", got)
+	if got := aiclient.FinishReason(cr); got != "length" {
+		t.Errorf("aiclient.FinishReason = %q, want length", got)
 	}
 	if cr.Choices[0].Message.Content != `{"a":` {
 		t.Errorf("content mangled: %q", cr.Choices[0].Message.Content)
 	}
 
-	var empty chatResponse
-	if got := aiFinishReason(empty); got != "" {
-		t.Errorf("aiFinishReason on no choices = %q, want empty", got)
+	var empty aiclient.Response
+	if got := aiclient.FinishReason(empty); got != "" {
+		t.Errorf("aiclient.FinishReason on no choices = %q, want empty", got)
 	}
 }
 
@@ -97,7 +99,7 @@ func TestAskAIWithEvidenceReportsTruncation(t *testing.T) {
 	// encoding/json rather than a hand-escaped literal, which is where this kind
 	// of fixture usually goes wrong.
 	reply = mustJSON("length", `[{"type":"create_page","title":"很长的标题"}`)
-	ans, err := svc.AskAIWithEvidence(0, "问题", EvidenceBudget{MaxItems: 1})
+	ans, err := svc.AskAIWithEvidence(context.Background(), 0, "问题", EvidenceBudget{MaxItems: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +108,7 @@ func TestAskAIWithEvidenceReportsTruncation(t *testing.T) {
 	}
 
 	reply = mustJSON("stop", "完整答案")
-	ans, err = svc.AskAIWithEvidence(0, "问题", EvidenceBudget{MaxItems: 1})
+	ans, err = svc.AskAIWithEvidence(context.Background(), 0, "问题", EvidenceBudget{MaxItems: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -137,12 +139,12 @@ func mustJSON(finishReason, content string) string {
 // local 27B. Under the plain chat ceiling a legitimate answer was reported as a
 // timeout, so this pins the ceiling to the one that fits the payload.
 func TestAskAITimeoutFitsTheEvidencePayload(t *testing.T) {
-	if aiAskTimeout <= aiChatTimeout {
+	if aiAskTimeout <= aiclient.ChatTimeout {
 		t.Errorf("aiAskTimeout (%v) must exceed the plain-chat ceiling (%v): the evidence path sends a far larger prompt",
-			aiAskTimeout, aiChatTimeout)
+			aiAskTimeout, aiclient.ChatTimeout)
 	}
 	// It still has to be a ceiling: an unbounded interactive call is the failure
-	// mode aiChatTimeout exists to prevent.
+	// mode aiclient.ChatTimeout exists to prevent.
 	if aiAskTimeout > DefaultBatchChatTimeout {
 		t.Errorf("aiAskTimeout (%v) must not exceed the batch ceiling (%v); the HTTP write deadline is derived from the latter",
 			aiAskTimeout, DefaultBatchChatTimeout)
@@ -155,7 +157,7 @@ func TestAskAITimeoutFitsTheEvidencePayload(t *testing.T) {
 // "failed" on work the model was still doing.
 func TestAskAIWithEvidence_SlowAnswerStillArrives(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Longer than aiChatTimeout would allow, far shorter than aiAskTimeout.
+		// Longer than aiclient.ChatTimeout would allow, far shorter than aiAskTimeout.
 		time.Sleep(150 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(mustJSON("stop", "慢但完整的答案")))
@@ -169,7 +171,7 @@ func TestAskAIWithEvidence_SlowAnswerStillArrives(t *testing.T) {
 	if err := db.SetConfig(svc.db, "ai_chat_model", "test-model"); err != nil {
 		t.Fatal(err)
 	}
-	ans, err := svc.AskAIWithEvidence(0, "问题", EvidenceBudget{MaxItems: 1})
+	ans, err := svc.AskAIWithEvidence(context.Background(), 0, "问题", EvidenceBudget{MaxItems: 1})
 	if err != nil {
 		t.Fatalf("a slow answer inside the ceiling must not fail: %v", err)
 	}

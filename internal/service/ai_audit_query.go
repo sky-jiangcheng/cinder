@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"repotory/internal/aiaudit"
 
 	"repotory/internal/db"
 )
@@ -46,13 +47,13 @@ const AIRetentionAppendOnly = "append_only"
 // GetAIAuditStatus reports the plugin's current state and a summary of the
 // recorded calls.
 func (s *Service) GetAIAuditStatus() (*AIAuditStatus, error) {
-	cfg := s.resolveAuditConfig()
+	cfg := s.Audit.Resolve()
 	status := &AIAuditStatus{
-		AuditEnabled: cfg.auditEnabled,
-		ReviewInput:  cfg.reviewInput,
-		ReviewOutput: cfg.reviewOutput,
-		RuleCount:    len(cfg.rules),
-		Surface:      s.auditSurfaceOf(),
+		AuditEnabled: cfg.Enabled,
+		ReviewInput:  cfg.ReviewInput,
+		ReviewOutput: cfg.ReviewOutput,
+		RuleCount:    len(cfg.Rules),
+		Surface:      s.Audit.Surface(),
 		TableExists:  db.AICallLogTableExists(s.db),
 		Retention:    AIRetentionAppendOnly,
 	}
@@ -66,9 +67,9 @@ func (s *Service) GetAIAuditStatus() (*AIAuditStatus, error) {
 	status.CallCount = len(rows)
 	for _, r := range rows {
 		switch {
-		case r.InputVerdict == AIReviewBlocked:
+		case r.InputVerdict == aiaudit.VerdictBlocked:
 			status.BlockedCount++
-		case r.OutputVerdict == AIReviewFlagged:
+		case r.OutputVerdict == aiaudit.VerdictFlagged:
 			status.FlaggedCount++
 		}
 	}

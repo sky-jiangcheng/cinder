@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"repotory/internal/aiaudit"
 	"strings"
 	"syscall"
 	"time"
@@ -87,7 +88,7 @@ func main() {
 	svc := service.New(database, gitUser)
 	// This process IS the HTTP surface (ADR-0030): every model call it makes
 	// arrives over the HTTP / JSON-RPC API, and the audit row says so.
-	svc.SetAuditSurface(service.AISurfaceHTTP)
+	svc.Audit.SetSurface(aiaudit.SurfaceHTTP)
 	// The single-writer contract (ADR-0058 / TODO 13.6). The server elects
 	// when no other Cinder writes (a standalone headless install keeps every
 	// capability it has today, tickers included) and forwards when a desktop
@@ -98,7 +99,7 @@ func main() {
 	writers, err := writerapi.New(svc, writerapi.Options{
 		DBPath:           platform.GetDbPath(),
 		Process:          "cinder-server",
-		Surface:          service.AISurfaceHTTP,
+		Surface:          aiaudit.SurfaceHTTP,
 		CoreVersion:      version.CoreVersion,
 		SchemaVersion:    writerapi.CurrentSchemaVersion(database),
 		SelfElectAllowed: true,
@@ -106,7 +107,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("write contract: %v", err)
 	}
-	svc.SetAuditForwarder(writers.RecordAudit)
+	svc.Audit.SetForwarder(writers.RecordAudit)
 
 	// Run the same startup sequence the desktop App runs. Without it the
 	// knowledge-source importers are never registered, so GetKnowledgeSources

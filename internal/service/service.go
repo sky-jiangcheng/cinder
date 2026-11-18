@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"repotory/internal/aiaudit"
+	"repotory/internal/aitools"
 	"repotory/internal/core/git"
 	pluginruntime "repotory/internal/core/plugin/runtime"
 	"repotory/internal/db"
@@ -45,18 +47,11 @@ type Service struct {
 	// set only by tests, for the same reason as backupDir.
 	liveDbPath string
 
-	// auditForwarder, when set, receives every audit row instead of this
-	// process writing it itself. Installed by the agent entry points when
-	// another process holds the single-writer role (ADR-0058). Set once at
-	// startup like auditSurface; read without synchronisation.
-	auditForwarder func(db.AICallLog) error
-
-	// auditSurface names the surface this process serves ("mcp", "http",
-	// "desktop"), written once at startup by each entry point and read when an
-	// AI call is audited (ADR-0030). Each binary IS one surface, so it is
-	// declared per process rather than passed per call — there is no moment at
-	// which one process serves two of them. An empty value reads as "unknown".
-	auditSurface string
+	// Audit owns the ADR-0030 audit/review plugin: the declared surface, the
+	// optional single-writer forwarder (ADR-0058) and every audit row. The
+	// recorder holds its own state, so the service no longer carries the
+	// surface and forwarder as loose fields.
+	Audit *aiaudit.Recorder
 
 	// remoteDialer builds the object-store client for one L2 upload (ADR-0025
 	// L2). Nil at runtime — the real minio dialer runs — and overridden by
@@ -141,7 +136,7 @@ type Service struct {
 
 	// toolRegistry holds the callable tools exposed to the AI conversation
 	// (Function Calling). Populated once at construction.
-	toolRegistry *toolRegistry
+	toolRegistry *aitools.Registry
 }
 
 // New creates a Service with production dependencies: the local git CLI
@@ -158,7 +153,8 @@ func NewWithDeps(database *sql.DB, provider git.Provider, runtime *pluginruntime
 	s.updates = newUpdateDownloader()
 	// Initialize the Function Calling tool registry and register the
 	// dashboard / code-stats tools so the AI conversation can query them.
-	s.toolRegistry = newToolRegistry()
+	s.Audit = aiaudit.New(database)
+	s.toolRegistry = aitools.NewRegistry()
 	s.registerDashboardTools(s.toolRegistry)
 	s.registerDashboardToolsExtra(s.toolRegistry)
 	// Every finished download is written to disk, so a bundle the user

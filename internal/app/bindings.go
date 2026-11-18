@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"repotory/internal/aiclient"
 	"strings"
 	"time"
 
@@ -265,12 +266,12 @@ func (a *App) GetNoteCounts() []domain.NoteCount { return a.svc.GetNoteCounts() 
 
 // SearchNotes searches note content/title/tags across all projects.
 func (a *App) SearchNotes(query string) ([]domain.SearchHit, error) {
-	return a.svc.SearchNotes(query)
+	return a.svc.SearchNotes(context.Background(), query)
 }
 
 // SearchAll searches notes and todos together.
 func (a *App) SearchAll(query string) ([]domain.SearchHit, error) {
-	return a.svc.SearchAll(query)
+	return a.svc.SearchAll(context.Background(), query)
 }
 
 // --- Notes ------------------------------------------------------------------
@@ -684,14 +685,14 @@ func (a *App) RebuildPageEmbeddings() (int, error) {
 // to the OpenAI-compatible chat endpoint configured in Settings → AI, and
 // returns the assistant reply for the Q&A panel.
 func (a *App) AskAI(projectID int64, question string) (string, error) {
-	return a.svc.AskAI(projectID, question)
+	return a.svc.AskAI(context.Background(), projectID, question)
 }
 
 // AskAIWithEvidence answers with a retrieved, citable context and returns the
 // evidence it used, so the panel can render refs and offer 存为页面. AskAI stays
 // as the plain path (and as the no-evidence fallback inside this one).
 func (a *App) AskAIWithEvidence(projectID int64, question string) (*service.EvidenceAnswer, error) {
-	return a.svc.AskAIWithEvidence(projectID, question, service.DefaultEvidenceBudget)
+	return a.svc.AskAIWithEvidence(context.Background(), projectID, question, service.DefaultEvidenceBudget)
 }
 
 // GetReviewConfig returns the daily-review settings (ADR-0053 D5).
@@ -1035,32 +1036,32 @@ func (a *App) LayeredProjectContext(projectID int64, query string, includeTransc
 	if projectID < 0 {
 		return nil, fmt.Errorf("project id must be >= 0 (0 = whole-library scope)")
 	}
-	return a.svc.BuildLayeredMemory(projectID, query, service.DefaultLayerBudget, includeTranscripts), nil
+	return a.svc.BuildLayeredMemory(context.Background(), projectID, query, service.DefaultLayerBudget, includeTranscripts), nil
 }
 
 // ListAIModels probes the endpoint's /models (with path candidates and the
 // localhost fallback) using the form's current values — no save required.
 // ResolvedBaseURL is the base that actually worked, so the UI can adopt it.
-func (a *App) ListAIModels(baseURL, apiKey string) (*service.AIModelListResult, error) {
-	return service.ListAIModels(baseURL, apiKey)
+func (a *App) ListAIModels(baseURL, apiKey string) (*aiclient.ModelListResult, error) {
+	return aiclient.ListModels(baseURL, apiKey)
 }
 
 // TestAIChat verifies a specific model responds to a minimal completion,
 // using the form's current values.
-func (a *App) TestAIChat(baseURL, model, apiKey string) (*service.AITestResult, error) {
-	return service.TestAIChat(baseURL, model, apiKey)
+func (a *App) TestAIChat(baseURL, model, apiKey string) (*aiclient.TestResult, error) {
+	return aiclient.TestChat(baseURL, model, apiKey)
 }
 
 // TestAIChatConfigured verifies the SAVED provider. The settings form cannot
 // know the stored API key (GetConfig masks it), so "test what is actually
 // configured" is a distinct binding, not a client-side echo of a masked value.
-func (a *App) TestAIChatConfigured() (*service.AITestResult, error) {
+func (a *App) TestAIChatConfigured() (*aiclient.TestResult, error) {
 	return a.svc.TestAIChatConfigured()
 }
 
 // ListAIModelsConfigured lists the SAVED provider's models, same rationale as
 // TestAIChatConfigured.
-func (a *App) ListAIModelsConfigured() (*service.AIModelListResult, error) {
+func (a *App) ListAIModelsConfigured() (*aiclient.ModelListResult, error) {
 	return a.svc.ListAIModelsConfigured()
 }
 

@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"repotory/internal/aiaudit"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -101,7 +102,7 @@ type Manager struct {
 // its own ("direct", never "writer"), so a status readout cannot mistake it for
 // a process that actually holds the election.
 func Direct(svc *service.Service) *Manager {
-	return &Manager{opts: Options{Surface: service.AISurfaceUnknown}, exec: NewExecutor(svc), role: roleDirect}
+	return &Manager{opts: Options{Surface: aiaudit.SurfaceUnknown}, exec: NewExecutor(svc), role: roleDirect}
 }
 
 // roleDirect: no election, no channel, local execution only.
@@ -118,7 +119,7 @@ func New(svc *service.Service, opts Options) (*Manager, error) {
 		return nil, errors.New("writerapi: New needs a database path")
 	}
 	if opts.Surface == "" {
-		opts.Surface = service.AISurfaceUnknown
+		opts.Surface = aiaudit.SurfaceUnknown
 	}
 	m := &Manager{opts: opts, exec: NewExecutor(svc)}
 	if err := m.elect(); err != nil {
