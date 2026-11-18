@@ -1,9 +1,12 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"repotory/internal/aiclient"
+	"repotory/internal/aitools"
 	"strings"
 	"testing"
 	"time"
@@ -94,7 +97,7 @@ func TestAskWithToolsEchoesToolCallsBackToTheProvider(t *testing.T) {
 	svc := newAuditTestService(t, handler)
 	cfg := mustCfg(t, svc)
 
-	reply, _, err := svc.askWithTools(cfg, []chatMessage{{Role: "user", Content: "how many projects?"}}, svc.toolRegistry.definitions(), 5*time.Second)
+	reply, _, err := aitools.Ask(context.Background(), cfg.provider(), []aiclient.Message{{Role: "user", Content: "how many projects?"}}, svc.toolRegistry.Definitions(), svc.toolRegistry, 5*time.Second)
 	if err != nil {
 		t.Fatalf("askWithTools: %v", err)
 	}
@@ -179,10 +182,11 @@ func TestStreamAskWithToolsReassemblesFragmentsAndEchoesThem(t *testing.T) {
 	svc := newAuditTestService(t, handler)
 	cfg := mustCfg(t, svc)
 
-	reply, _, err := svc.streamAskWithTools(
-		cfg,
-		[]chatMessage{{Role: "user", Content: "how many projects?"}},
-		svc.toolRegistry.definitions(),
+	reply, _, err := aitools.AskStream(context.Background(),
+		cfg.provider(),
+		[]aiclient.Message{{Role: "user", Content: "how many projects?"}},
+		svc.toolRegistry.Definitions(),
+		svc.toolRegistry,
 		func(delta string) { gotDeltas.WriteString(delta) },
 		func(id, name string) { gotCalls = append(gotCalls, [2]string{id, name}) },
 		func(id string, _ any) { gotResults = append(gotResults, id) },
@@ -240,15 +244,15 @@ func TestAskWithToolsRoundCapForcesAFinalTextOnlyRound(t *testing.T) {
 	svc := newAuditTestService(t, handler)
 	cfg := mustCfg(t, svc)
 
-	reply, _, err := svc.askWithTools(cfg, []chatMessage{{Role: "user", Content: "loop me"}}, svc.toolRegistry.definitions(), 5*time.Second)
+	reply, _, err := aitools.Ask(context.Background(), cfg.provider(), []aiclient.Message{{Role: "user", Content: "loop me"}}, svc.toolRegistry.Definitions(), svc.toolRegistry, 5*time.Second)
 	if err != nil {
 		t.Fatalf("askWithTools: %v", err)
 	}
 	if reply != "final answer" {
 		t.Fatalf("reply = %q, want the forced text round's answer", reply)
 	}
-	if toolRequests != maxToolRounds {
-		t.Fatalf("%d tool rounds, want exactly maxToolRounds (%d)", toolRequests, maxToolRounds)
+	if toolRequests != aitools.MaxRounds {
+		t.Fatalf("%d tool rounds, want exactly aitools.MaxRounds (%d)", toolRequests, aitools.MaxRounds)
 	}
 	if textRequests != 1 {
 		t.Fatalf("%d text-only rounds, want exactly 1", textRequests)
@@ -262,7 +266,7 @@ func TestAskWithToolsRoundCapForcesAFinalTextOnlyRound(t *testing.T) {
 // the loop still never ran it; the raw XML reached the user as the answer.
 func TestInlineToolCallsParse(t *testing.T) {
 	raw := "Let me check. <tool_call>\n<function=query_daily_stats>\n<parameter=repo_path>\n/tmp/repo\n</parameter>\n<parameter=date>\n2026-11-10\n</parameter>\n</function>\n</tool_call>"
-	calls := inlineToolCalls(raw)
+	calls := aitools.InlineToolCalls(raw)
 	if len(calls) != 1 {
 		t.Fatalf("parsed %d calls, want 1", len(calls))
 	}
@@ -280,10 +284,10 @@ func TestInlineToolCallsParse(t *testing.T) {
 	if strings.ContainsAny(calls[0].Function.Arguments, "\n") {
 		t.Errorf("arguments keep raw newlines: %q", calls[0].Function.Arguments)
 	}
-	if calls := inlineToolCalls("just an answer with <tool_call> but no close"); len(calls) != 0 {
+	if calls := aitools.InlineToolCalls("just an answer with <tool_call> but no close"); len(calls) != 0 {
 		t.Errorf("unclosed call parsed as %v", calls)
 	}
-	if calls := inlineToolCalls("plain answer"); len(calls) != 0 {
+	if calls := aitools.InlineToolCalls("plain answer"); len(calls) != 0 {
 		t.Errorf("plain text parsed as %v", calls)
 	}
 }
@@ -315,7 +319,7 @@ func TestAskWithToolsRunsInlineContentCalls(t *testing.T) {
 	svc := newAuditTestService(t, handler)
 	cfg := mustCfg(t, svc)
 
-	reply, _, err := svc.askWithTools(cfg, []chatMessage{{Role: "user", Content: "how many projects?"}}, svc.toolRegistry.definitions(), 5*time.Second)
+	reply, _, err := aitools.Ask(context.Background(), cfg.provider(), []aiclient.Message{{Role: "user", Content: "how many projects?"}}, svc.toolRegistry.Definitions(), svc.toolRegistry, 5*time.Second)
 	if err != nil {
 		t.Fatalf("askWithTools: %v", err)
 	}
@@ -343,7 +347,7 @@ func stubChunk(t *testing.T, body any) string {
 //
 // The configured value is a BASE ("https://api.deepseek.com", ".../v1"), not a
 // completions endpoint. Every other AI path resolved it through
-// aiCandidateURLs; the tool loop posted to the bare base, so a provider whose
+// aiclient.CandidateURLs; the tool loop posted to the bare base, so a provider whose
 // completions route sits one segment deeper answered 404 while Settings → AI
 // still called the endpoint healthy.
 func TestAskWithToolsResolvesTheBaseURL(t *testing.T) {
@@ -367,7 +371,7 @@ func TestAskWithToolsResolvesTheBaseURL(t *testing.T) {
 		t.Fatalf("set base url: %v", err)
 	}
 
-	reply, _, err := svc.askWithTools(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "hi"}}, nil, 5*time.Second)
+	reply, _, err := aitools.Ask(context.Background(), mustCfg(t, svc).provider(), []aiclient.Message{{Role: "user", Content: "hi"}}, nil, svc.toolRegistry, 5*time.Second)
 	if err != nil {
 		t.Fatalf("askWithTools must walk to the working URL, got: %v", err)
 	}
@@ -413,10 +417,11 @@ func TestStreamAskWithToolsResolvesTheBaseURL(t *testing.T) {
 	}
 
 	var deltas strings.Builder
-	reply, _, err := svc.streamAskWithTools(
-		mustCfg(t, svc),
-		[]chatMessage{{Role: "user", Content: "hi"}},
+	reply, _, err := aitools.AskStream(context.Background(),
+		mustCfg(t, svc).provider(),
+		[]aiclient.Message{{Role: "user", Content: "hi"}},
 		nil,
+		svc.toolRegistry,
 		func(d string) { deltas.WriteString(d) },
 		nil,
 		nil,
@@ -445,7 +450,7 @@ func TestAskWithToolsDoesNotWalkCandidatesOnAuthFailure(t *testing.T) {
 	}
 	svc := newAuditTestService(t, handler)
 
-	_, _, err := svc.askWithTools(mustCfg(t, svc), []chatMessage{{Role: "user", Content: "hi"}}, nil, 5*time.Second)
+	_, _, err := aitools.Ask(context.Background(), mustCfg(t, svc).provider(), []aiclient.Message{{Role: "user", Content: "hi"}}, nil, svc.toolRegistry, 5*time.Second)
 	if err == nil {
 		t.Fatal("expected an auth error")
 	}

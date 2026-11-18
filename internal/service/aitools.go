@@ -1,196 +1,18 @@
 package service
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"time"
+	"repotory/internal/aitools"
 
 	"repotory/internal/db"
 	"repotory/internal/stats"
 )
 
-// ---------------------------------------------------------------------------
-// OpenAI-compatible Function Calling types
-// ---------------------------------------------------------------------------
-
-// toolDefinition is the OpenAI-compatible "tools" array entry.
-type toolDefinition struct {
-	Type     string `json:"type"`
-	Function struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Parameters  any    `json:"parameters"`
-	} `json:"function"`
-}
-
-// toolCall is one tool invocation the model asked for.
-type toolCall struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
-}
-
-// inlineToolCalls parses the tool-call form some models emit as CONTENT —
-// `<tool_call><function=name><parameter=k>v</parameter></function></tool_call>`
-// — instead of the OpenAI tool_calls field. Observed live against
-// nvidia/nemotron on OpenRouter (2026-11-11): the header told the model which
-// tools exist, it chose the right repo and date, and the loop never ran the
-// call — the raw XML reached the user as the answer. Only the parameters'
-// inner text is untrusted model output and is never executed as anything but
-// a JSON argument value; names must match a REGISTERED tool before anything
-// runs. Returns nil when the content carries no inline calls; the caller
-// keeps the text as the answer in that case.
-func inlineToolCalls(content string) []toolCall {
-	open := "<tool_call>"
-	var calls []toolCall
-	for {
-		start := strings.Index(content, open)
-		if start < 0 {
-			break
-		}
-		rest := content[start+len(open):]
-		end := strings.Index(rest, "</tool_call>")
-		if end < 0 {
-			break
-		}
-		body := rest[:end]
-		content = rest[end+len("</tool_call>"):]
-		call := toolCall{Type: "function"}
-		if name := xmlBetween(body, "<function=", ">"); name != "" {
-			call.Function.Name = name
-		} else if name = xmlBetween(body, "<function>", "</function>"); name != "" {
-			call.Function.Name = name
-		}
-		if call.Function.Name == "" {
-			continue
-		}
-		args := map[string]any{}
-		for _, chunk := range strings.Split(body, "<parameter=")[1:] {
-			eq := strings.Index(chunk, ">")
-			if eq < 0 {
-				continue
-			}
-			key := chunk[:eq]
-			val := chunk[eq+1:]
-			const close = "</parameter>"
-			if !strings.Contains(val, close) {
-				continue
-			}
-			args[strings.TrimSpace(key)] = strings.TrimSpace(val[:strings.Index(val, close)])
-		}
-		b, err := json.Marshal(args)
-		if err != nil {
-			continue
-		}
-		call.Function.Arguments = string(b)
-		calls = append(calls, call)
-	}
-	return calls
-}
-
-// xmlBetween returns the text between the first occurrence of open and the
-// following close, or "" when either is missing. (Named to stay clear of
-// review_ai.go byte-delimited between.)
-func xmlBetween(s, open, close string) string {
-	i := strings.Index(s, open)
-	if i < 0 {
-		return ""
-	}
-	rest := s[i+len(open):]
-	j := strings.Index(rest, close)
-	if j < 0 {
-		return ""
-	}
-	return rest[:j]
-}
-
-// contentWithoutInlineCalls strips the inline tool-call XML so a mixed turn
-// (prose plus calls) does not repeat the call syntax around the answer. The
-// full original content is still echoed to the provider on the follow-up
-// round; this cleaned form is only for display if the turn ends up final.
-func contentWithoutInlineCalls(content string) string {
-	out := content
-	for {
-		start := strings.Index(out, "<tool_call>")
-		if start < 0 {
-			break
-		}
-		rest := out[start:]
-		end := strings.Index(rest, "</tool_call>")
-		if end < 0 {
-			break
-		}
-		out = out[:start] + rest[end+len("</tool_call>"):]
-	}
-	return strings.TrimSpace(out)
-}
-
-// toolFunc is the server-side implementation of one callable tool.
-type toolFunc func(ctx context.Context, args map[string]any) (any, error)
-
-// toolRegistry maps a tool name to its OpenAI definition and implementation.
-type toolRegistry struct {
-	defs  []toolDefinition
-	funcs map[string]toolFunc
-}
-
-func newToolRegistry() *toolRegistry {
-	return &toolRegistry{funcs: make(map[string]toolFunc)}
-}
-
-func (r *toolRegistry) register(name, desc string, parameters any, fn toolFunc) {
-	r.defs = append(r.defs, toolDefinition{
-		Type: "function",
-		Function: struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Parameters  any    `json:"parameters"`
-		}{
-			Name:        name,
-			Description: desc,
-			Parameters:  parameters,
-		},
-	})
-	r.funcs[name] = fn
-}
-
-func (r *toolRegistry) definitions() []toolDefinition {
-	if len(r.defs) == 0 {
-		return nil
-	}
-	return r.defs
-}
-
-func (r *toolRegistry) call(ctx context.Context, name, rawArgs string) (any, error) {
-	fn, ok := r.funcs[name]
-	if !ok {
-		return nil, fmt.Errorf("unknown tool: %s", name)
-	}
-	var args map[string]any
-	if rawArgs != "" {
-		if err := json.Unmarshal([]byte(rawArgs), &args); err != nil {
-			return nil, fmt.Errorf("invalid arguments for %s: %w", name, err)
-		}
-	}
-	return fn(ctx, args)
-}
-
-// maxToolRounds bounds the number of model→tool→model iterations.
-const maxToolRounds = 5
-
 // registerDashboardTools registers the tools that surface the dashboard's
 // code-stats and project-listing capabilities to the AI conversation.
-func (s *Service) registerDashboardTools(reg *toolRegistry) {
-	reg.register(
+func (s *Service) registerDashboardTools(reg *aitools.Registry) {
+	reg.Register(
 		"query_daily_stats",
 		"Query daily code-change stats for one repository on a given date. Returns files_changed, lines_added, lines_deleted and commits.",
 		map[string]any{
@@ -204,13 +26,13 @@ func (s *Service) registerDashboardTools(reg *toolRegistry) {
 		},
 		s.toolQueryDailyStats,
 	)
-	reg.register(
+	reg.Register(
 		"list_projects",
 		"List all known projects in Cinder, with names, root paths and repository counts.",
 		map[string]any{"type": "object", "properties": map[string]any{}},
 		s.toolListProjects,
 	)
-	reg.register(
+	reg.Register(
 		"get_project_stats",
 		"Get aggregated daily code-change stats for one project on a given date.",
 		map[string]any{
@@ -223,7 +45,7 @@ func (s *Service) registerDashboardTools(reg *toolRegistry) {
 		},
 		s.toolGetProjectStats,
 	)
-	reg.register(
+	reg.Register(
 		"search_notes",
 		"Search the local knowledge base (notes and pages) for relevant content.",
 		map[string]any{
@@ -357,7 +179,7 @@ func (s *Service) toolSearchNotes(ctx context.Context, args map[string]any) (any
 	if v, ok := args["project_id"].(float64); ok {
 		projectID = int64(v)
 	}
-	hits, err := s.SearchAll(query)
+	hits, err := s.SearchAll(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -385,137 +207,6 @@ func (s *Service) toolSearchNotes(ctx context.Context, args map[string]any) (any
 // Tool-calling loop for AskAI / AskAIWithEvidence
 // ---------------------------------------------------------------------------
 
-// toolChatRequest is the OpenAI-compatible request body with tools support.
-type toolChatRequest struct {
-	Model    string           `json:"model"`
-	Messages []chatMessage    `json:"messages"`
-	Tools    []toolDefinition `json:"tools,omitempty"`
-}
-
-// toolChatResponse is the response body that may carry tool_calls.
-type toolChatResponse struct {
-	Choices []struct {
-		Message struct {
-			Content   string     `json:"content"`
-			ToolCalls []toolCall `json:"tool_calls,omitempty"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Error *chatErrorEnvelope `json:"error"`
-}
-
-// askWithTools runs a single model call with tool definitions, executes any
-// tool calls the model requests, feeds results back, and repeats up to
-// maxToolRounds times. Returns the final assistant reply and finish reason.
-func (s *Service) askWithTools(cfg aiChatConfig, messages []chatMessage, tools []toolDefinition, timeout time.Duration) (string, string, error) {
-	// cfg.baseURL is the CONFIGURED base ("https://api.deepseek.com" or
-	// ".../v1"), never a completions endpoint. The plain and streaming chat
-	// paths resolve it through aiCandidateURLs; this loop used to post to the
-	// bare base, which is a 404 on every provider whose completions route sits
-	// one segment deeper — the "AI endpoint returned 404: Not Found" the
-	// assistant panel showed while Settings → AI reported a healthy endpoint.
-	// Candidates are tried in the same order, with the same rule as those
-	// paths: a 404 means "wrong shape of URL, try the next one".
-	candidates := aiCandidateURLs(cfg.baseURL, "/chat/completions")
-	url := candidates[0]
-	round := 0
-	for {
-		round++
-		body, err := json.Marshal(toolChatRequest{
-			Model:    cfg.model,
-			Messages: messages,
-			Tools:    tools,
-		})
-		if err != nil {
-			return "", "", err
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		status, rawBody, err := aiPostJSON(ctx, url, cfg.apiKey, body)
-		cancel()
-		if err != nil {
-			return "", "", err
-		}
-		if next, ok := nextAICandidate(candidates, url, status); ok {
-			url = next
-			// A URL probe is not a tool round: the model has not seen this
-			// attempt, so it must not eat into the tool budget.
-			round--
-			continue
-		}
-		if status != http.StatusOK {
-			return "", "", fmt.Errorf("AI endpoint returned %d: %s", status, truncateBytes(string(rawBody), 300))
-		}
-		var cr toolChatResponse
-		if err := json.Unmarshal(rawBody, &cr); err != nil {
-			return "", "", err
-		}
-		if cr.Error != nil {
-			kind := strings.TrimSpace(cr.Error.Metadata.ErrorType)
-			msg := strings.TrimSpace(cr.Error.Message)
-			switch {
-			case msg != "" && kind != "":
-				return "", "", fmt.Errorf("AI endpoint error (%s): %s", kind, truncateBytes(msg, 300))
-			case msg != "":
-				return "", "", fmt.Errorf("AI endpoint error: %s", truncateBytes(msg, 300))
-			case kind != "":
-				return "", "", fmt.Errorf("AI endpoint error (%s)", kind)
-			default:
-				return "", "", fmt.Errorf("AI endpoint returned an error")
-			}
-		}
-		if len(cr.Choices) == 0 {
-			return "", "", fmt.Errorf("no choices returned")
-		}
-		msg := cr.Choices[0].Message
-		assistantContent := msg.Content
-		calls := msg.ToolCalls
-		// Some models emit tool calls as inline XML in content instead of the
-		// tool_calls field (see inlineToolCalls). Recognising them here is the
-		// difference between the loop running the query and the user reading
-		// raw `<tool_call>` syntax as the answer.
-		if len(calls) == 0 {
-			calls = inlineToolCalls(assistantContent)
-		}
-		// The echo carries the tool_calls the model emitted: a tool message is
-		// only defined as the response to a PRECEDING assistant message with
-		// tool_calls, and strict providers reject the pairing when the
-		// assistant half is missing.
-		messages = append(messages, chatMessage{Role: "assistant", Content: assistantContent, ToolCalls: calls})
-		if len(calls) == 0 {
-			return assistantContent, cr.Choices[0].FinishReason, nil
-		}
-		if tools == nil {
-			// The previous round hit the cap and forced text-only (below); a
-			// provider that still answers with tool calls is broken.
-			return "", "", fmt.Errorf("the model kept requesting tools after the final round")
-		}
-		if round >= maxToolRounds {
-			// Round cap. Returning the current turn would surface an empty
-			// reply — the model spoke in tool_calls, not words. One last call
-			// WITHOUT tools forces an answer in text.
-			tools = nil
-		}
-		for i := range calls {
-			if calls[i].ID == "" {
-				calls[i].ID = fmt.Sprintf("call_%d", i)
-			}
-			result, err := s.toolRegistry.call(context.Background(), calls[i].Function.Name, calls[i].Function.Arguments)
-			var content string
-			if err != nil {
-				content = fmt.Sprintf("{\"error\": \"%s\"}", err.Error())
-			} else {
-				b, _ := json.Marshal(result)
-				content = string(b)
-			}
-			messages = append(messages, chatMessage{
-				Role:       "tool",
-				Content:    content,
-				ToolCallID: calls[i].ID,
-			})
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Additional dashboard tools
 // ---------------------------------------------------------------------------
@@ -523,8 +214,8 @@ func (s *Service) askWithTools(cfg aiChatConfig, messages []chatMessage, tools [
 // registerDashboardToolsExtra registers the additional dashboard tools,
 // including the batch-project query tool used when a user picks several
 // projects.
-func (s *Service) registerDashboardToolsExtra(reg *toolRegistry) {
-	reg.register(
+func (s *Service) registerDashboardToolsExtra(reg *aitools.Registry) {
+	reg.Register(
 		"get_recent_commits",
 		"Get the most recent commits across one project's repositories, newest first. Returns hash, time, message, author and branch per commit.",
 		map[string]any{
@@ -537,7 +228,7 @@ func (s *Service) registerDashboardToolsExtra(reg *toolRegistry) {
 		},
 		s.toolGetRecentCommits,
 	)
-	reg.register(
+	reg.Register(
 		"get_heatmap",
 		"Get daily code-change heatmap for one project over a trailing window of days. Returns per-day lines_added, lines_deleted and commits.",
 		map[string]any{
@@ -550,7 +241,7 @@ func (s *Service) registerDashboardToolsExtra(reg *toolRegistry) {
 		},
 		s.toolGetHeatmap,
 	)
-	reg.register(
+	reg.Register(
 		"get_project_overview",
 		"Get a project's overview: name, path, repository count, total and personal lines added/deleted for today, and whether today is below the daily standard.",
 		map[string]any{
@@ -562,7 +253,7 @@ func (s *Service) registerDashboardToolsExtra(reg *toolRegistry) {
 		},
 		s.toolGetProjectOverview,
 	)
-	reg.register(
+	reg.Register(
 		"query_project_stats",
 		"Query aggregate daily code-change stats for one or more projects. Required when the user has selected several projects from project list. Returns one record per project.",
 		map[string]any{
@@ -722,250 +413,6 @@ func (s *Service) toolGetProjectOverview(ctx context.Context, args map[string]an
 // ---------------------------------------------------------------------------
 // Streaming tool-calling loop (for AskAIWithEvidenceStream)
 // ---------------------------------------------------------------------------
-
-// streamToolChoice is one tool_call entry inside a streaming delta chunk.
-type streamToolChoice struct {
-	Index    int    `json:"index"`
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Function struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-	} `json:"function"`
-}
-
-// streamToolDelta is one SSE data: payload of a streaming tool-enabled response.
-type streamToolDelta struct {
-	Choices []struct {
-		Delta struct {
-			Content   string             `json:"content"`
-			ToolCalls []streamToolChoice `json:"tool_calls,omitempty"`
-		} `json:"delta"`
-		FinishReason *string `json:"finish_reason"`
-	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
-// toolCallAcc accumulates one tool_call across multiple SSE chunks.
-type toolCallAcc struct {
-	Index int
-	ID    string
-	Name  string
-	Args  strings.Builder
-}
-
-// aiPostJSONToolStream posts a tool-enabled streaming request to ONE url and
-// delivers each decoded SSE chunk to onDelta.
-//
-// The status comes back BESIDE the error, not inside it, so the caller can
-// tell "this URL shape is wrong" (404 — try the next candidate) from "the
-// endpoint answered" (401, 5xx — do not retry). Falls back to localhost like
-// the batch path.
-func aiPostJSONToolStream(ctx context.Context, rawURL, apiKey string, body []byte, onDelta func(streamToolDelta)) (int, error) {
-	try := func(u string) (int, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
-		if err != nil {
-			return 0, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return 0, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-			return resp.StatusCode, fmt.Errorf("AI endpoint returned %d: %s", resp.StatusCode, truncateBytes(string(raw), 300))
-		}
-		return resp.StatusCode, parseSSEToolStream(resp.Body, onDelta)
-	}
-	status, err := try(rawURL)
-	if err != nil {
-		if fallback := aiLocalhostFallback(rawURL); fallback != "" {
-			status, err = try(fallback)
-		}
-	}
-	return status, err
-}
-
-// parseSSEToolStream consumes an OpenAI-compatible SSE stream that may carry
-// content deltas and tool_call deltas. Each chunk is handed to onDelta.
-func parseSSEToolStream(r io.Reader, onDelta func(streamToolDelta)) error {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 16*1024), 4<<20)
-	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if payload == "" {
-			continue
-		}
-		if payload == "[DONE]" {
-			break
-		}
-		var delta streamToolDelta
-		if err := json.Unmarshal([]byte(payload), &delta); err != nil {
-			return fmt.Errorf("malformed SSE chunk: %w", err)
-		}
-		if delta.Error != nil && delta.Error.Message != "" {
-			return fmt.Errorf("%s", delta.Error.Message)
-		}
-		onDelta(delta)
-	}
-	return sc.Err()
-}
-
-// streamAskWithTools runs a streaming model call with tool definitions,
-// executing any tool calls the model requests and feeding results back,
-// repeating up to maxToolRounds times. Content deltas flow to onDelta as they
-// arrive; tool call start/result flow to onToolCall/onToolResult.
-// Returns the final assistant reply and finish reason.
-func (s *Service) streamAskWithTools(
-	cfg aiChatConfig,
-	messages []chatMessage,
-	tools []toolDefinition,
-	onDelta func(string),
-	onToolCall func(id, name string),
-	onToolResult func(id string, result any),
-	timeout time.Duration,
-) (string, finishReasons, error) {
-	// Same URL resolution as the batch tool loop: cfg.baseURL is a BASE
-	// ("https://api.deepseek.com", ".../v1"), never a completions endpoint.
-	// The assistant panel streams, so this path is the one the user actually
-	// hits — posting it to the bare base is what produced the 404.
-	candidates := aiCandidateURLs(cfg.baseURL, "/chat/completions")
-	url := candidates[0]
-	round := 0
-	for {
-		round++
-		body, err := json.Marshal(toolChatRequest{
-			Model:    cfg.model,
-			Messages: messages,
-			Tools:    tools,
-		})
-		if err != nil {
-			return "", "", err
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-
-		var acc strings.Builder
-		var finishReason finishReasons
-		var calls []toolCallAcc
-
-		status, err := aiPostJSONToolStream(ctx, url, cfg.apiKey, body, func(delta streamToolDelta) {
-			for _, c := range delta.Choices {
-				if c.Delta.Content != "" {
-					acc.WriteString(c.Delta.Content)
-					if onDelta != nil {
-						onDelta(c.Delta.Content)
-					}
-				}
-				for _, tc := range c.Delta.ToolCalls {
-					for len(calls) <= tc.Index {
-						calls = append(calls, toolCallAcc{})
-					}
-					tca := &calls[tc.Index]
-					if tc.ID != "" {
-						tca.ID = tc.ID
-					}
-					if tc.Function.Name != "" {
-						tca.Name = tc.Function.Name
-					}
-					if tc.Function.Arguments != "" {
-						tca.Args.WriteString(tc.Function.Arguments)
-					}
-				}
-				if c.FinishReason != nil && *c.FinishReason != "" {
-					finishReason = finishReasons(*c.FinishReason)
-				}
-			}
-		})
-		cancel()
-		if err != nil {
-			if next, ok := nextAICandidate(candidates, url, status); ok {
-				url = next
-				// A URL probe is not a tool round: the model has not seen this
-				// attempt, so it must not eat into the tool budget.
-				round--
-				continue
-			}
-			return "", "", err
-		}
-
-		// Inline XML tool calls (see inlineToolCalls) fold into the same
-		// accumulator shape the native protocol uses, so execution below is
-		// one path for both forms.
-		if len(calls) == 0 {
-			for _, tc := range inlineToolCalls(acc.String()) {
-				acc := toolCallAcc{ID: tc.ID, Name: tc.Function.Name}
-				acc.Args.WriteString(tc.Function.Arguments)
-				calls = append(calls, acc)
-			}
-		}
-		if len(calls) == 0 {
-			return acc.String(), finishReason, nil
-		}
-
-		if tools == nil {
-			// The previous round hit the cap and forced text-only (below); a
-			// provider that still answers with tool calls is broken.
-			return "", "", fmt.Errorf("the model kept requesting tools after the final round")
-		}
-		if round >= maxToolRounds {
-			// Round cap. Returning the current turn would surface an empty
-			// reply — the model spoke in tool_calls, not words. One last call
-			// WITHOUT tools forces an answer in text.
-			tools = nil
-		}
-
-		// Tool calls: echo the assistant turn WITH the calls it made (a tool
-		// result is only defined as the response to them), then execute each
-		// and feed the results back. A provider that never sent an id gets a
-		// stable synthetic one — the pairing only has to agree within this
-		// conversation.
-		for i := range calls {
-			if calls[i].ID == "" {
-				calls[i].ID = fmt.Sprintf("call_%d", i)
-			}
-		}
-		echo := make([]toolCall, len(calls))
-		for i, tc := range calls {
-			echo[i] = toolCall{ID: tc.ID, Type: "function"}
-			echo[i].Function.Name = tc.Name
-			echo[i].Function.Arguments = tc.Args.String()
-		}
-		messages = append(messages, chatMessage{Role: "assistant", Content: acc.String(), ToolCalls: echo})
-
-		for _, tc := range calls {
-			if onToolCall != nil {
-				onToolCall(tc.ID, tc.Name)
-			}
-			result, err := s.toolRegistry.call(context.Background(), tc.Name, tc.Args.String())
-			var content string
-			if err != nil {
-				content = fmt.Sprintf("{\"error\": \"%s\"}", err.Error())
-			} else {
-				b, _ := json.Marshal(result)
-				content = string(b)
-			}
-			if onToolResult != nil {
-				onToolResult(tc.ID, result)
-			}
-			messages = append(messages, chatMessage{
-				Role:       "tool",
-				Content:    content,
-				ToolCallID: tc.ID,
-			})
-		}
-	}
-}
 
 func (s *Service) toolQueryProjectStats(ctx context.Context, args map[string]any) (any, error) {
 	projectIDsRaw, _ := args["project_ids"].([]any)
