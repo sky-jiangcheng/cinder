@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -16,11 +17,11 @@ import (
 // read as "nothing matched" — a failure must not masquerade as zero hits.
 // An empty query is a legitimate zero-hit answer, so it returns an explicit
 // empty slice with a nil error.
-func (s *Service) SearchNotes(query string) ([]domain.SearchHit, error) {
+func (s *Service) SearchNotes(ctx context.Context, query string) ([]domain.SearchHit, error) {
 	if strings.TrimSpace(query) == "" {
 		return []domain.SearchHit{}, nil
 	}
-	results, err := db.SearchNotes(s.db, query)
+	results, err := db.SearchNotes(ctx, s.db, query)
 	if err != nil {
 		return nil, fmt.Errorf("search notes: %w", err)
 	}
@@ -38,11 +39,11 @@ func (s *Service) SearchNotes(query string) ([]domain.SearchHit, error) {
 // The semantic fusion still applies: a vector hit is a genuine near-match in
 // embedding space, not a shared trigram, so it does not carry the false-positive
 // risk the relaxation does.
-func (s *Service) SearchNotesStrict(query string) ([]domain.SearchHit, error) {
+func (s *Service) SearchNotesStrict(ctx context.Context, query string) ([]domain.SearchHit, error) {
 	if strings.TrimSpace(query) == "" {
 		return []domain.SearchHit{}, nil
 	}
-	results, err := db.SearchNotes(s.db, query)
+	results, err := db.SearchNotesStrict(ctx, s.db, query)
 	if err != nil {
 		return nil, fmt.Errorf("search notes: %w", err)
 	}
@@ -67,11 +68,11 @@ func (s *Service) SearchNotesStrict(query string) ([]domain.SearchHit, error) {
 // let a todo and a note collide and silently overwrite each other. Splitting
 // first keeps the two ID spaces apart; the vector index only ever holds note
 // embeddings, so notes are the only subset it can extend.
-func (s *Service) SearchAll(query string) ([]domain.SearchHit, error) {
+func (s *Service) SearchAll(ctx context.Context, query string) ([]domain.SearchHit, error) {
 	if strings.TrimSpace(query) == "" {
 		return []domain.SearchHit{}, nil
 	}
-	results, err := db.SearchAll(s.db, query)
+	results, err := db.SearchAll(ctx, s.db, query)
 	if err != nil {
 		return nil, fmt.Errorf("search all: %w", err)
 	}

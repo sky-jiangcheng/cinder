@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -58,7 +59,7 @@ func TestUpgradeSchema_V12RepairsDriftedFTSIndex(t *testing.T) {
 
 	// Search is now silently incomplete rather than broken: no error, fewer
 	// results. This is the symptom users would report.
-	hits, err := SearchNotes(database, "登录模块")
+	hits, err := SearchNotes(context.Background(), database, "登录模块")
 	if err != nil {
 		t.Fatalf("expected a silent under-report, not an error; got %v", err)
 	}
@@ -90,9 +91,9 @@ func TestUpgradeSchema_V12RepairsDriftedFTSIndex(t *testing.T) {
 	// the docsize shadow table - including for CJK, which is what the trigram
 	// tokenizer exists for.
 	for _, query := range []string{"登录模块", "缓存穿透", "trigram"} {
-		hits, err := SearchNotes(database, query)
+		hits, err := SearchNotes(context.Background(), database, query)
 		if err != nil {
-			t.Fatalf("SearchNotes(%q) after repair: %v", query, err)
+			t.Fatalf("SearchNotes(context.Background(), %q) after repair: %v", query, err)
 		}
 		if len(hits) == 0 {
 			t.Errorf("query %q still returns nothing after the v12 rebuild", query)

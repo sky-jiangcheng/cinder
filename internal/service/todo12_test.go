@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -61,7 +62,7 @@ func TestPartialCompileJobNoteIsVisibleToPoller(t *testing.T) {
 func TestFileAnswerAsPageLandsAsPendingAIPage(t *testing.T) {
 	svc, _ := setupService(t)
 	projectID, _, _ := buildGateCorpus(t, svc)
-	ev := svc.GatherEvidence(projectID, "release checklist migration dry run rollback", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), projectID, "release checklist migration dry run rollback", EvidenceBudget{})
 	id, err := svc.FileAnswerAsPage(projectID, "what is the rollback plan", "answer body", ev, nil)
 	if err != nil {
 		t.Fatalf("FileAnswerAsPage: %v", err)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func scopePage(t *testing.T, svc *Service, pid int64, slug, content, status stri
 // the layer is silent — the state every real library was in before ADR-0031.
 func globalProfileItems(t *testing.T, svc *Service, projectID int64) int {
 	t.Helper()
-	m := svc.BuildLayeredMemory(projectID, "", LayerBudget{}, false)
+	m := svc.BuildLayeredMemory(context.Background(), projectID, "", LayerBudget{}, false)
 	for _, blk := range m.Blocks {
 		if blk.Layer == LayerGlobalProfile {
 			return blk.Items
@@ -118,7 +119,7 @@ func TestPromoteWikiPageToGlobal_WidensVisibilityToEveryProject(t *testing.T) {
 // for a project. It calls the same GatherEvidence entry point the answer
 // panel uses, so the test measures what a user would actually see.
 func evidenceHasPage(svc *Service, projectID, pageID int64) bool {
-	ev := svc.GatherEvidence(projectID, "globalprofile", EvidenceBudget{MaxItems: 20, Deadline: 2 * time.Second})
+	ev := svc.GatherEvidence(context.Background(), projectID, "globalprofile", EvidenceBudget{MaxItems: 20, Deadline: 2 * time.Second})
 	for _, item := range ev.Items {
 		if item.Type == "page" && item.ID == pageID {
 			return true

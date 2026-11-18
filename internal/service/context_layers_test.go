@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -57,7 +58,7 @@ func TestBuildLayeredMemory_OrientationOnlyRetrievesNothing(t *testing.T) {
 	svc, _ := setupService(t)
 	pid := layerCorpus(t, svc)
 
-	m := svc.BuildLayeredMemory(pid, "", LayerBudget{}, false)
+	m := svc.BuildLayeredMemory(context.Background(), pid, "", LayerBudget{}, false)
 	if m.FellBack {
 		t.Error("orientation-only assembly claims it fell back to per-fact retrieval")
 	}
@@ -78,8 +79,8 @@ func TestBuildLayeredMemory_TranscriptsAreOptIn(t *testing.T) {
 	pid := layerCorpus(t, svc)
 
 	q := "gateway backoff"
-	off := svc.BuildLayeredMemory(pid, q, LayerBudget{}, false)
-	on := svc.BuildLayeredMemory(pid, q, LayerBudget{}, true)
+	off := svc.BuildLayeredMemory(context.Background(), pid, q, LayerBudget{}, false)
+	on := svc.BuildLayeredMemory(context.Background(), pid, q, LayerBudget{}, true)
 
 	var notesOff, notesOn, transcripts int
 	for _, blk := range off.Blocks {
@@ -118,7 +119,7 @@ func TestBuildLayeredMemory_OrderIsStableBeforeVolatile(t *testing.T) {
 		db.WikiStatusApproved, "manual"); err != nil {
 		t.Fatal(err)
 	}
-	m := svc.BuildLayeredMemory(pid, "gateway backoff", LayerBudget{}, true)
+	m := svc.BuildLayeredMemory(context.Background(), pid, "gateway backoff", LayerBudget{}, true)
 	if len(m.Blocks) < 3 {
 		t.Fatalf("expected at least L3+L2+L1, got %+v", m.Layers())
 	}
@@ -154,7 +155,7 @@ func TestBuildLayeredMemory_CapsArePerLayer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	m := svc.BuildLayeredMemory(pid, "gateway backoff", LayerBudget{GlobalChars: 120}, true)
+	m := svc.BuildLayeredMemory(context.Background(), pid, "gateway backoff", LayerBudget{GlobalChars: 120}, true)
 	var global LayerBlock
 	for _, blk := range m.Blocks {
 		if blk.Layer == LayerGlobalProfile {
@@ -192,7 +193,7 @@ func TestBuildLayeredMemory_ExcludesPendingFromGlobalProfile(t *testing.T) {
 		db.WikiStatusPending, compileSourceTag); err != nil {
 		t.Fatal(err)
 	}
-	m := svc.BuildLayeredMemory(pid, "", LayerBudget{}, false)
+	m := svc.BuildLayeredMemory(context.Background(), pid, "", LayerBudget{}, false)
 	if strings.Contains(m.Render(), "Unreviewed thing") {
 		t.Error("a pending page entered the orientation context")
 	}
@@ -204,7 +205,7 @@ func TestBuildLayeredMemory_ExcludesPendingFromGlobalProfile(t *testing.T) {
 		db.WikiStatusApproved, "manual"); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(svc.BuildLayeredMemory(pid, "", LayerBudget{}, false).Render(), "Owned Elsewhere") {
+	if strings.Contains(svc.BuildLayeredMemory(context.Background(), pid, "", LayerBudget{}, false).Render(), "Owned Elsewhere") {
 		t.Error("another project's page leaked into this project's orientation")
 	}
 }
@@ -212,7 +213,7 @@ func TestBuildLayeredMemory_ExcludesPendingFromGlobalProfile(t *testing.T) {
 // Nothing configured must be a clean empty, not a panic or a fake block.
 func TestBuildLayeredMemory_EmptyStore(t *testing.T) {
 	svc, _ := setupService(t)
-	m := svc.BuildLayeredMemory(0, "anything", LayerBudget{}, true)
+	m := svc.BuildLayeredMemory(context.Background(), 0, "anything", LayerBudget{}, true)
 	if len(m.Blocks) != 0 || m.Chars != 0 || m.Render() != "" {
 		t.Errorf("empty store produced %+v", m)
 	}
@@ -223,7 +224,7 @@ func TestBuildLayeredMemory_EmptyStore(t *testing.T) {
 		db.WikiStatusApproved, "manual"); err != nil {
 		t.Fatal(err)
 	}
-	m2 := svc.BuildLayeredMemory(0, "", LayerBudget{}, false)
+	m2 := svc.BuildLayeredMemory(context.Background(), 0, "", LayerBudget{}, false)
 	if len(m2.Blocks) != 1 || m2.Blocks[0].Layer != LayerGlobalProfile {
 		t.Errorf("global-only assembly = %+v", m2.Layers())
 	}
@@ -269,7 +270,7 @@ func TestBuildLayeredMemory_UnscopedGivesCatalog(t *testing.T) {
 	svc, _ := setupService(t)
 	pid := catalogCorpus(t, svc)
 
-	m := svc.BuildLayeredMemory(0, "", LayerBudget{}, false)
+	m := svc.BuildLayeredMemory(context.Background(), 0, "", LayerBudget{}, false)
 	cat := catalogBlock(t, m)
 	if cat == nil {
 		t.Fatalf("expected a catalog block under the unscoped scope, got %+v", m.Layers())
@@ -293,7 +294,7 @@ func TestBuildLayeredMemory_ProjectScopeKeepsTheScenario(t *testing.T) {
 	svc, _ := setupService(t)
 	pid := catalogCorpus(t, svc)
 
-	m := svc.BuildLayeredMemory(pid, "", LayerBudget{}, false)
+	m := svc.BuildLayeredMemory(context.Background(), pid, "", LayerBudget{}, false)
 	if catalogBlock(t, m) != nil {
 		t.Fatalf("the catalog and the project scenario must not stack: %+v", m.Layers())
 	}
@@ -320,7 +321,7 @@ func TestBuildLayeredMemory_CatalogTrimsOverBudget(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	m := svc.BuildLayeredMemory(0, "", LayerBudget{CatalogChars: 80}, false)
+	m := svc.BuildLayeredMemory(context.Background(), 0, "", LayerBudget{CatalogChars: 80}, false)
 	cat := catalogBlock(t, m)
 	if cat == nil {
 		t.Fatalf("expected a catalog block, got %+v", m.Layers())

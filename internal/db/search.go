@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"html"
 	"strings"
@@ -30,8 +31,8 @@ const (
 // LIKE scan (which also covers 2-character CJK queries the trigram tokenizer
 // cannot match). If the FTS index is unavailable or yields no rows, it falls
 // back to LIKE so search never regresses.
-func SearchNotes(db *sql.DB, query string) ([]SearchHit, error) {
-	return searchNotes(db, query, true)
+func SearchNotes(ctx context.Context, db *sql.DB, query string) ([]SearchHit, error) {
+	return searchNotes(ctx, db, query, true)
 }
 
 // SearchNotesStrict is SearchNotes WITHOUT the OR relaxation: a row must match
@@ -47,17 +48,17 @@ func SearchNotes(db *sql.DB, query string) ([]SearchHit, error) {
 // 2026-11-17). No lexical threshold separates those two cases — a genuine CJK
 // match can share as little as one trigram too — so the fix is to stop
 // relaxing where the output is a citation, not to tune a ratio.
-func SearchNotesStrict(db *sql.DB, query string) ([]SearchHit, error) {
-	return searchNotes(db, query, false)
+func SearchNotesStrict(ctx context.Context, db *sql.DB, query string) ([]SearchHit, error) {
+	return searchNotes(ctx, db, query, false)
 }
 
-func searchNotes(db *sql.DB, query string, relax bool) ([]SearchHit, error) {
+func searchNotes(ctx context.Context, db *sql.DB, query string, relax bool) ([]SearchHit, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return nil, nil
 	}
 	if ftsUsable(q) {
-		hits, err := searchNotesFTS(db, q, escapeFTS(q))
+		hits, err := searchNotesFTS(ctx, db, q, escapeFTS(q))
 		if err == nil {
 			if len(hits) > 0 {
 				return hits, nil // strict AND matched: behaviour unchanged
@@ -72,7 +73,7 @@ func searchNotes(db *sql.DB, query string, relax bool) ([]SearchHit, error) {
 			// It stays WITHIN FTS (no new LIKE fallback), so a broken/empty
 			// index still yields nothing exactly as before.
 			if orExpr := escapeFTSOR(q); orExpr != "" {
-				if relaxed, rerr := searchNotesFTS(db, q, orExpr); rerr == nil {
+				if relaxed, rerr := searchNotesFTS(ctx, db, q, orExpr); rerr == nil {
 					return relaxed, nil
 				}
 			}
@@ -81,16 +82,16 @@ func searchNotes(db *sql.DB, query string, relax bool) ([]SearchHit, error) {
 		// FTS index missing or query rejected: fall through to LIKE.
 	}
 	if !relax {
-		return searchNotesLikeStrict(db, q)
+		return searchNotesLikeStrict(ctx, db, q)
 	}
-	return searchNotesLike(db, q)
+	return searchNotesLike(ctx, db, q)
 }
 
 // searchNotesFTS matches a prepared FTS5 expression against the index, ranked
 // by bm25. `matchExpr` is produced by escapeFTS (strict AND) or escapeFTSOR
 // (relaxed); `q` is the original query, used only to render the snippet.
-func searchNotesFTS(db *sql.DB, q, matchExpr string) ([]SearchHit, error) {
-	rows, err := db.Query(
+func searchNotesFTS(ctx context.Context, db *sql.DB, q, matchExpr string) ([]SearchHit, error) {
+	rows, err := db.QueryContext(ctx,
 		"SELECT n.id, n.project_id, n.title, n.content, n.kind, bm25(project_notes_fts) "+
 			"FROM project_notes_fts f "+
 			"JOIN project_notes n ON n.id = f.rowid "+
@@ -133,8 +134,8 @@ func searchNotesFTS(db *sql.DB, q, matchExpr string) ([]SearchHit, error) {
 // whole query here — and as a single substring it can never match, because no
 // note contains that exact run including the spaces. The retry only ever runs
 // on an EMPTY result, so it cannot displace a working answer.
-func searchNotesLike(db *sql.DB, q string) ([]SearchHit, error) {
-	hits, err := likeQuery(db, q, []string{q})
+func searchNotesLike(ctx context.Context, db *sql.DB, q string) ([]SearchHit, error) {
+	hits, err := likeQuery(ctx, db, q, []string{q})
 	if err != nil || len(hits) > 0 {
 		return hits, err
 	}
@@ -142,7 +143,7 @@ func searchNotesLike(db *sql.DB, q string) ([]SearchHit, error) {
 	if len(terms) < 2 {
 		return hits, nil
 	}
-	return likeQuery(db, q, terms)
+	return likeQuery(ctx, db, q, terms)
 }
 
 // likeTerms splits a query into the units worth OR-ing: whitespace-separated
@@ -179,18 +180,18 @@ func likeTerms(q string) []string {
 //
 // An empty patterns slice yields no rows rather than every row, which is what
 // `LIKE '%%'` would do.
-func likeQuery(db *sql.DB, q string, patterns []string) ([]SearchHit, error) {
-	return likeQueryJoin(db, q, patterns, " OR ")
+func likeQuery(ctx context.Context, db *sql.DB, q string, patterns []string) ([]SearchHit, error) {
+	return likeQueryJoin(ctx, db, q, patterns, " OR ")
 }
 
 // searchNotesLikeStrict is the LIKE fallback for the precision path: every
 // pattern must match (AND), where likeQuery OR-s them.
-func searchNotesLikeStrict(db *sql.DB, q string) ([]SearchHit, error) {
-	return likeQueryJoin(db, q, []string{q}, " AND ")
+func searchNotesLikeStrict(ctx context.Context, db *sql.DB, q string) ([]SearchHit, error) {
+	return likeQueryJoin(ctx, db, q, []string{q}, " AND ")
 }
 
 // likeQueryJoin is likeQuery with an explicit boolean joiner.
-func likeQueryJoin(db *sql.DB, q string, patterns []string, joiner string) ([]SearchHit, error) {
+func likeQueryJoin(ctx context.Context, db *sql.DB, q string, patterns []string, joiner string) ([]SearchHit, error) {
 	if len(patterns) == 0 {
 		return nil, nil
 	}
@@ -223,7 +224,7 @@ func likeQueryJoin(db *sql.DB, q string, patterns []string, joiner string) ([]Se
 	}
 	args = append(args, searchResultLimit)
 
-	rows, err := db.Query(
+	rows, err := db.QueryContext(ctx,
 		"SELECT id, project_id, title, content, kind, "+rankExpr+" AS rank "+
 			"FROM project_notes WHERE "+strings.Join(where, joiner)+
 			" ORDER BY rank LIMIT ?",
@@ -249,8 +250,8 @@ func likeQueryJoin(db *sql.DB, q string, patterns []string, joiner string) ([]Se
 // SearchAll searches notes and todos, returning unified ranked hits. Notes use
 // the FTS5 path (with LIKE fallback) via SearchNotes; todos use the FTS index
 // when usable and fall back to LIKE otherwise.
-func SearchAll(db *sql.DB, query string) ([]SearchHit, error) {
-	hits, err := SearchNotes(db, query)
+func SearchAll(ctx context.Context, db *sql.DB, query string) ([]SearchHit, error) {
+	hits, err := SearchNotes(ctx, db, query)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +259,7 @@ func SearchAll(db *sql.DB, query string) ([]SearchHit, error) {
 	if q == "" {
 		return hits, nil
 	}
-	todoHits, err := searchTodos(db, q)
+	todoHits, err := searchTodos(ctx, db, q)
 	if err != nil {
 		return nil, err
 	}
@@ -266,18 +267,18 @@ func SearchAll(db *sql.DB, query string) ([]SearchHit, error) {
 }
 
 // searchTodos searches todo titles via FTS5 when usable, else LIKE.
-func searchTodos(db *sql.DB, q string) ([]SearchHit, error) {
+func searchTodos(ctx context.Context, db *sql.DB, q string) ([]SearchHit, error) {
 	if ftsUsable(q) {
-		hits, err := searchTodosFTS(db, q)
+		hits, err := searchTodosFTS(ctx, db, q)
 		if err == nil {
 			return hits, nil
 		}
 	}
-	return searchTodosLike(db, q)
+	return searchTodosLike(ctx, db, q)
 }
 
-func searchTodosFTS(db *sql.DB, q string) ([]SearchHit, error) {
-	rows, err := db.Query(
+func searchTodosFTS(ctx context.Context, db *sql.DB, q string) ([]SearchHit, error) {
+	rows, err := db.QueryContext(ctx,
 		"SELECT t.id, t.project_id, t.title FROM project_todos_fts f "+
 			"JOIN project_todos t ON t.id = f.rowid "+
 			"WHERE project_todos_fts MATCH ? "+
@@ -300,9 +301,9 @@ func searchTodosFTS(db *sql.DB, q string) ([]SearchHit, error) {
 	return hits, rows.Err()
 }
 
-func searchTodosLike(db *sql.DB, q string) ([]SearchHit, error) {
+func searchTodosLike(ctx context.Context, db *sql.DB, q string) ([]SearchHit, error) {
 	pattern := "%" + escapeLike(q) + "%"
-	rows, err := db.Query(
+	rows, err := db.QueryContext(ctx,
 		"SELECT id, project_id, title FROM project_todos WHERE title LIKE ? ESCAPE '\\' ORDER BY sort_order ASC, id ASC LIMIT ?",
 		pattern, searchResultLimit)
 	if err != nil {

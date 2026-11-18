@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"repotory/internal/aiclient"
 
 	"repotory/internal/service/wikigen"
 )
@@ -11,8 +12,8 @@ import (
 // three). It is the whole reason the model-driven write side could leave the
 // monolith: what stays behind is endpoint resolution, the API key and the
 // ADR-0030 audit row — the things that must not travel — and what crosses is one
-// narrow interface. The kernels never see aiChatConfig, chatMessage or
-// *AITestResult; they see Role/Content in and Text/FinishReason out.
+// narrow interface. The kernels never see aiChatConfig, aiclient.Message or
+// *aiclient.TestResult; they see Role/Content in and Text/FinishReason out.
 type wikigenChat struct{ s *Service }
 
 // Available reports whether an endpoint is configured at all. Any configuration
@@ -34,9 +35,9 @@ func (b wikigenChat) Chat(ctx context.Context, msgs []wikigen.Message) (wikigen.
 	if err != nil {
 		return wikigen.Reply{}, fmt.Errorf("%w: %v", wikigen.ErrNotConfigured, err)
 	}
-	converted := make([]chatMessage, len(msgs))
+	converted := make([]aiclient.Message, len(msgs))
 	for i, m := range msgs {
-		converted[i] = chatMessage{Role: m.Role, Content: m.Content}
+		converted[i] = aiclient.Message{Role: m.Role, Content: m.Content}
 	}
 	res, err := b.s.chatWithAudit(cfg, converted, wikigen.BatchTimeout)
 	if err != nil {

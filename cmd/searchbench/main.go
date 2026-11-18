@@ -32,6 +32,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -210,7 +211,7 @@ func buildStages(database *sql.DB, svc *service.Service, projectID int64) []stag
 		{
 			name: "lexical",
 			fn: func(q string) error {
-				_, err := db.SearchNotes(database, q)
+				_, err := db.SearchNotes(context.Background(), database, q)
 				return err
 			},
 		},
@@ -247,7 +248,7 @@ func buildStages(database *sql.DB, svc *service.Service, projectID int64) []stag
 	stages = append(stages, stage{
 		name: "notes",
 		fn: func(q string) error {
-			_, err := svc.SearchNotes(q)
+			_, err := svc.SearchNotes(context.Background(), q)
 			return err
 		},
 	})
@@ -260,7 +261,7 @@ func buildStages(database *sql.DB, svc *service.Service, projectID int64) []stag
 		if s, ok := seeds[q]; ok {
 			return s
 		}
-		hits, err := db.SearchNotes(database, q)
+		hits, err := db.SearchNotes(context.Background(), database, q)
 		if err != nil {
 			return nil
 		}
@@ -309,7 +310,7 @@ func buildStages(database *sql.DB, svc *service.Service, projectID int64) []stag
 		stages = append(stages, stage{
 			name: "evidence",
 			fn: func(q string) error {
-				svc.GatherEvidence(projectID, q, service.DefaultEvidenceBudget)
+				svc.GatherEvidence(context.Background(), projectID, q, service.DefaultEvidenceBudget)
 				return nil
 			},
 		})

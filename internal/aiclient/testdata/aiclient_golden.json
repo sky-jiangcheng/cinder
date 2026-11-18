@@ -1,0 +1,32 @@
+[
+  {
+    "method": "GET",
+    "path": "/v1/models",
+    "header": {
+      "accept": "",
+      "authorization": "Bearer sk-test",
+      "content-type": ""
+    },
+    "body": ""
+  },
+  {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "header": {
+      "accept": "",
+      "authorization": "Bearer sk-test",
+      "content-type": "application/json"
+    },
+    "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"}]}"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "header": {
+      "accept": "",
+      "authorization": "Bearer sk-test",
+      "content-type": "application/json"
+    },
+    "body": "{\"model\":\"m\",\"messages\":[],\"stream\":true}"
+  }
+]

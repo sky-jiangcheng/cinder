@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -197,13 +198,13 @@ func TestEvidencePagesVectorSeedRescue(t *testing.T) {
 
 	// OFF (default): no pages at all.
 	_ = db.SetConfig(svc.db, "wiki_graph_search", "0")
-	if ids := pageIDsOf(svc.GatherEvidence(0, vectorSeedQuery, pageEvalBudget)); len(ids) != 0 {
+	if ids := pageIDsOf(svc.GatherEvidence(context.Background(), 0, vectorSeedQuery, pageEvalBudget)); len(ids) != 0 {
 		t.Fatalf("off state must surface no pages, got %v", ids)
 	}
 
 	// ON: both pages surface, vector-recall order preserved (A exact match first).
 	_ = db.SetConfig(svc.db, "wiki_graph_search", "1")
-	ids := pageIDsOf(svc.GatherEvidence(0, vectorSeedQuery, pageEvalBudget))
+	ids := pageIDsOf(svc.GatherEvidence(context.Background(), 0, vectorSeedQuery, pageEvalBudget))
 	if len(ids) != 2 {
 		t.Fatalf("graph arm = %v, want exactly the two seeded pages", ids)
 	}
@@ -252,13 +253,13 @@ func TestEvidencePagesGraphHopBeyondVectorRecall(t *testing.T) {
 
 	// OFF: nothing (pure FTS).
 	_ = db.SetConfig(svc.db, "wiki_graph_search", "0")
-	if ids := pageIDsOf(svc.GatherEvidence(0, vectorSeedQuery, pageEvalBudget)); len(ids) != 0 {
+	if ids := pageIDsOf(svc.GatherEvidence(context.Background(), 0, vectorSeedQuery, pageEvalBudget)); len(ids) != 0 {
 		t.Fatalf("off state must surface no pages, got %v", ids)
 	}
 
 	// ON: pageB surfaces through the A --ref--> B hop.
 	_ = db.SetConfig(svc.db, "wiki_graph_search", "1")
-	ids := pageIDsOf(svc.GatherEvidence(0, vectorSeedQuery, pageEvalBudget))
+	ids := pageIDsOf(svc.GatherEvidence(context.Background(), 0, vectorSeedQuery, pageEvalBudget))
 	if !containsID(ids, pageB) {
 		t.Fatalf("graph hop failed: pageB %d not in evidence %v", pageB, ids)
 	}
@@ -288,14 +289,14 @@ func TestEvidencePagesFTSPrefixPreservedUnderGraph(t *testing.T) {
 
 	// OFF: pure FTS.
 	_ = db.SetConfig(svc.db, "wiki_graph_search", "0")
-	offIDs := pageIDsOf(svc.GatherEvidence(0, vectorSeedQuery, pageEvalBudget))
+	offIDs := pageIDsOf(svc.GatherEvidence(context.Background(), 0, vectorSeedQuery, pageEvalBudget))
 	if len(offIDs) != 1 || offIDs[0] != pageC {
 		t.Fatalf("off state = %v, want [%d]", offIDs, pageC)
 	}
 
 	// ON: the FTS prefix stands untouched; the neighbour appends behind it.
 	_ = db.SetConfig(svc.db, "wiki_graph_search", "1")
-	onIDs := pageIDsOf(svc.GatherEvidence(0, vectorSeedQuery, pageEvalBudget))
+	onIDs := pageIDsOf(svc.GatherEvidence(context.Background(), 0, vectorSeedQuery, pageEvalBudget))
 	if len(onIDs) != 2 || onIDs[0] != pageC || onIDs[1] != pageD {
 		t.Fatalf("on state = %v, want [%d %d] (prefix preserved, neighbour appended)", onIDs, pageC, pageD)
 	}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"repotory/internal/db"
@@ -11,7 +12,7 @@ import (
 // the old single-value shape for assertion-heavy retrieval tests, but a storage
 // fault fails loudly instead of being read as "zero hits".
 func (s *Service) mustSearchAll(q string) []domain.SearchHit {
-	hits, err := s.SearchAll(q)
+	hits, err := s.SearchAll(context.Background(), q)
 	if err != nil {
 		panic(err)
 	}
@@ -19,7 +20,7 @@ func (s *Service) mustSearchAll(q string) []domain.SearchHit {
 }
 
 func (s *Service) mustSearchNotes(q string) []domain.SearchHit {
-	hits, err := s.SearchNotes(q)
+	hits, err := s.SearchNotes(context.Background(), q)
 	if err != nil {
 		panic(err)
 	}

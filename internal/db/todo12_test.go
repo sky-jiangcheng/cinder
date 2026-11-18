@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ func TestSearchNotes_HandoffTaggedHitStaysInTopN(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, err := SearchNotes(database, "deploy")
+	hits, err := SearchNotes(context.Background(), database, "deploy")
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}

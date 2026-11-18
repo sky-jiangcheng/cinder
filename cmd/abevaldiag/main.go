@@ -14,6 +14,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"flag"
@@ -132,11 +133,11 @@ func runEvidence(database *sql.DB, svc *service.Service, path string, k int, onl
 	// difference".
 	baseArm := func(q string) []abeval.DocID {
 		_ = db.SetConfig(database, graphSearchKey, "0")
-		return docIDs(svc.GatherEvidence(0, q, diagBudget))
+		return docIDs(svc.GatherEvidence(context.Background(), 0, q, diagBudget))
 	}
 	candArm := func(q string) []abeval.DocID {
 		_ = db.SetConfig(database, graphSearchKey, "1")
-		return docIDs(svc.GatherEvidence(0, q, diagBudget))
+		return docIDs(svc.GatherEvidence(context.Background(), 0, q, diagBudget))
 	}
 
 	var lexSum, candSum float64
@@ -177,11 +178,11 @@ func runNotes(database *sql.DB, svc *service.Service, path string, k int, onlyMi
 	}
 	baseArm := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "0")
-		return noteIDs(svc.SearchNotes(q))
+		return noteIDs(svc.SearchNotes(context.Background(), q))
 	}
 	candArm := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "1")
-		return noteIDs(svc.SearchNotes(q))
+		return noteIDs(svc.SearchNotes(context.Background(), q))
 	}
 	var lexSum, hybSum float64
 	full := 0

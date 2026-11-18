@@ -34,6 +34,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -150,7 +151,7 @@ func main() {
 	// positives.
 	lexical := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "0")
-		return noteIDs(svc.SearchAll(q))
+		return noteIDs(svc.SearchAll(context.Background(), q))
 	}
 
 	// Hybrid arm: enable + rebuild the vector index once, then search with
@@ -165,7 +166,7 @@ func main() {
 	}
 	hybrid := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "1")
-		return noteIDs(svc.SearchAll(q))
+		return noteIDs(svc.SearchAll(context.Background(), q))
 	}
 
 	lex, hyb, dRecall, dNDCG := abeval.Compare(cases, *k, lexical, hybrid)
@@ -180,7 +181,7 @@ func main() {
 	// number is the one that needs re-measuring.
 	notesOnly := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "1")
-		return ids(svc.SearchNotes(q))
+		return ids(svc.SearchNotes(context.Background(), q))
 	}
 	_, hybNotes, dRecallNotes, dNDCGNotes := abeval.Compare(cases, *k, lexical, notesOnly)
 	fmt.Println(hybNotes.SummaryLine("hybrid  (SearchNotes, continuity)"))

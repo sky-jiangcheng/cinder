@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"repotory/internal/aiclient"
 	"strings"
 	"testing"
 
@@ -44,7 +45,7 @@ func chatStubCapture(t *testing.T, content, finishReason string) (*httptest.Serv
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var req struct {
-			Messages []chatMessage `json:"messages"`
+			Messages []aiclient.Message `json:"messages"`
 		}
 		_ = json.Unmarshal(body, &req)
 		for _, m := range req.Messages {

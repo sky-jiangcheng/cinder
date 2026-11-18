@@ -34,6 +34,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -121,7 +122,7 @@ func runHandoffGate(dbPath string, k int) int {
 	// ---- B. retrieval probe, on the production search path -----------------
 	lexical := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "0")
-		return noteIDs(svc.SearchAll(q))
+		return noteIDs(svc.SearchAll(context.Background(), q))
 	}
 	hybridAvailable := true
 	if err := db.SetConfig(database, "semantic_search", "1"); err != nil {
@@ -142,7 +143,7 @@ func runHandoffGate(dbPath string, k int) int {
 	}
 	hybrid := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "1")
-		return noteIDs(svc.SearchAll(q))
+		return noteIDs(svc.SearchAll(context.Background(), q))
 	}
 
 	cases := make([]abeval.Case[int64], 0, len(probes))

@@ -1,9 +1,9 @@
 package httpapi
 
 import (
-	"net"
 	"net/http"
 	"net/url"
+	"repotory/internal/aiclient"
 )
 
 // loopbackGuard pins the API to requests that actually name the local
@@ -39,14 +39,6 @@ func loopbackGuard(next http.Handler) http.Handler {
 // isLoopbackHost reports whether a Host/Origin authority ("host:port" or bare
 // host) resolves to this machine. An empty authority (HTTP/1.0 without Host)
 // is rejected: every legitimate client sends one.
-func isLoopbackHost(hostport string) bool {
-	host := hostport
-	if h, _, err := net.SplitHostPort(hostport); err == nil {
-		host = h
-	}
-	// A bare IPv6 literal like "::1" fails SplitHostPort and stays whole.
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback()
-	}
-	return host == "localhost"
-}
+// isLoopbackHost delegates to the single definition in internal/aiclient; the
+// copy that used to live here is gone (ADR-0064).
+func isLoopbackHost(hostport string) bool { return aiclient.IsLoopbackHost(hostport) }

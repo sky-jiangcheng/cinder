@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"repotory/internal/aiclient"
+	"repotory/internal/aitools"
 	"strings"
 	"time"
 
@@ -132,7 +134,7 @@ type Evidence struct {
 // interleaves them under the budget. It never errors: an empty result is a
 // legitimate answer (the caller then falls back to the plain project context), and
 // a retrieval failure must not turn into "AI 问答不可用".
-func (s *Service) GatherEvidence(projectID int64, query string, budget EvidenceBudget) *Evidence {
+func (s *Service) GatherEvidence(ctx context.Context, projectID int64, query string, budget EvidenceBudget) *Evidence {
 	budget = budget.withDefaults()
 	start := time.Now()
 	ev := &Evidence{Items: []EvidenceItem{}}
@@ -143,7 +145,7 @@ func (s *Service) GatherEvidence(projectID int64, query string, budget EvidenceB
 	lim := budget.MaxItems * over
 
 	pages := s.evidencePages(query, projectID, lim, budget.Deadline)
-	notes := s.evidenceNotes(query, projectID, lim, start, budget.Deadline)
+	notes := s.evidenceNotes(ctx, query, projectID, lim, start, budget.Deadline)
 	// Handoff records ride their own channel (ADR-0040 决策 2): they are what
 	// the previous session left behind, and keyword search cannot find them
 	// reliably (English titles, a fixed template body). They lead the note
@@ -503,7 +505,7 @@ func mergeHandoffNotes(handoffs, notes []EvidenceItem, limit int) []EvidenceItem
 // evidenceNotes ranks notes through the existing search path, which already
 // carries the optional semantic RRF fusion (ADR-0012). Reusing it rather than
 // re-implementing means enabling semantic search also improves Q&A evidence.
-func (s *Service) evidenceNotes(query string, projectID int64, limit int, start time.Time, budget time.Duration) []EvidenceItem {
+func (s *Service) evidenceNotes(ctx context.Context, query string, projectID int64, limit int, start time.Time, budget time.Duration) []EvidenceItem {
 	if time.Since(start) > budget {
 		return nil // the deadline covers the embedding round trip, not just SQL
 	}
@@ -515,7 +517,7 @@ func (s *Service) evidenceNotes(query string, projectID int64, limit int, start 
 	// trigram). No lexical ratio can separate that from a genuine CJK match,
 	// so the evidence channel simply does not relax. An empty set is honest;
 	// the answer path already prefers a tool call for facts like commit counts.
-	hits, err := s.SearchNotesStrict(query)
+	hits, err := s.SearchNotesStrict(ctx, query)
 	if err != nil {
 		log.Printf("evidenceNotes: %v", err)
 		return nil
@@ -698,8 +700,8 @@ type EvidenceAnswer struct {
 // the question. Shared by the sync and streaming paths so the answer content
 // cannot drift between transports (the streaming claim is "same answer,
 // delivered sooner", which requires identical prompts).
-func (s *Service) evidenceMessages(projectID int64, question, ev string) []chatMessage {
-	messages := []chatMessage{}
+func (s *Service) evidenceMessages(ctx context.Context, projectID int64, question, ev string) []aiclient.Message {
+	messages := []aiclient.Message{}
 	// Orientation is assembled for EVERY scope (ADR-0040 决策 1) — it now lives
 	// in contextBlock alongside the pre-L2 fallback; the unscoped case used to
 	// skip the assembly entirely, which left the model with the retrieved
@@ -714,8 +716,8 @@ func (s *Service) evidenceMessages(projectID int64, question, ev string) []chatM
 	// contract matters as much as the list: some providers train models to
 	// emit calls as inline text, which only reaches execution when the model
 	// understands the call→result→continue round-trip.
-	messages = append(messages, chatMessage{Role: "system", Content: s.toolHeader() + s.contextBlock(projectID, ev)})
-	messages = append(messages, chatMessage{Role: "user", Content: question})
+	messages = append(messages, aiclient.Message{Role: "system", Content: s.toolHeader() + s.contextBlock(ctx, projectID, ev)})
+	messages = append(messages, aiclient.Message{Role: "user", Content: question})
 	return messages
 }
 
@@ -725,7 +727,7 @@ func (s *Service) toolHeader() string {
 	var b strings.Builder
 	b.WriteString("Environment: today is " + s.git.GetTodayDate() + ". ")
 	b.WriteString("Relative dates (today / yesterday / last week) resolve against it.\n\n")
-	if tools := s.toolRegistry.definitions(); len(tools) > 0 {
+	if tools := s.toolRegistry.Definitions(); len(tools) > 0 {
 		b.WriteString("You can call tools, and this is a loop: name one, it runs, the ")
 		b.WriteString("result comes back to you as a message, and you continue — until you can ")
 		b.WriteString("answer in words. Prefer a tool over guessing whenever one fits; facts ")
@@ -744,8 +746,8 @@ func (s *Service) toolHeader() string {
 
 // contextBlock is the memory half, unchanged in content: layered orientation,
 // the pre-L2 fallback, then the retrieved evidence.
-func (s *Service) contextBlock(projectID int64, ev string) string {
-	lay := s.BuildLayeredMemory(projectID, "", LayerBudget{}, false)
+func (s *Service) contextBlock(ctx context.Context, projectID int64, ev string) string {
+	lay := s.BuildLayeredMemory(ctx, projectID, "", LayerBudget{}, false)
 	base := lay.Render()
 	if base == "" && projectID > 0 {
 		// The pre-L2 fallback: when the layered assembly found nothing for this
@@ -765,7 +767,7 @@ func (s *Service) contextBlock(projectID int64, ev string) string {
 	}
 }
 
-func (s *Service) AskAIWithEvidence(projectID int64, question string, budget EvidenceBudget) (*EvidenceAnswer, error) {
+func (s *Service) AskAIWithEvidence(ctx context.Context, projectID int64, question string, budget EvidenceBudget) (*EvidenceAnswer, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return nil, fmt.Errorf("question is required")
@@ -774,10 +776,10 @@ func (s *Service) AskAIWithEvidence(projectID int64, question string, budget Evi
 	if err != nil {
 		return nil, err
 	}
-	ev := s.GatherEvidence(projectID, question, budget)
-	messages := s.evidenceMessages(projectID, question, ev.Render())
+	ev := s.GatherEvidence(ctx, projectID, question, budget)
+	messages := s.evidenceMessages(ctx, projectID, question, ev.Render())
 
-	reply, finishReason, err := s.askWithTools(cfg, messages, s.toolRegistry.definitions(), aiAskTimeout)
+	reply, finishReason, err := aitools.Ask(ctx, cfg.provider(), messages, s.toolRegistry.Definitions(), s.toolRegistry, aiAskTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -796,6 +798,7 @@ func (s *Service) AskAIWithEvidence(projectID int64, question string, budget Evi
 // onToolResult so the UI can render "querying yesterday's code volume" etc.
 // It still returns the fully received answer.
 func (s *Service) AskAIWithEvidenceStream(
+	ctx context.Context,
 	projectID int64,
 	question string,
 	budget EvidenceBudget,
@@ -811,10 +814,10 @@ func (s *Service) AskAIWithEvidenceStream(
 	if err != nil {
 		return nil, err
 	}
-	ev := s.GatherEvidence(projectID, question, budget)
-	messages := s.evidenceMessages(projectID, question, ev.Render())
+	ev := s.GatherEvidence(ctx, projectID, question, budget)
+	messages := s.evidenceMessages(ctx, projectID, question, ev.Render())
 
-	reply, reason, err := s.streamAskWithTools(cfg, messages, s.toolRegistry.definitions(), onDelta, onToolCall, onToolResult, aiAskTimeout)
+	reply, reason, err := aitools.AskStream(ctx, cfg.provider(), messages, s.toolRegistry.Definitions(), s.toolRegistry, onDelta, onToolCall, onToolResult, aiAskTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -859,7 +862,7 @@ func (s *Service) StartAskStream(ctx context.Context, projectID int64, question 
 			return
 		}
 		ans, err := s.AskAIWithEvidenceStream(
-			projectID, question, DefaultEvidenceBudget,
+			streamCtx, projectID, question, DefaultEvidenceBudget,
 			func(delta string) {
 				send(map[string]any{"type": "delta", "delta": delta})
 			},

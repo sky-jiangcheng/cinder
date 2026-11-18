@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 )
@@ -27,7 +28,7 @@ func TestInitDB_FTSMigrationSmoke(t *testing.T) {
 		t.Fatalf("CreateNoteEx: %v", err)
 	}
 	// Search should work via the FTS index created by the migration.
-	hits, err := SearchNotes(db1, "登录模块")
+	hits, err := SearchNotes(context.Background(), db1, "登录模块")
 	if err != nil {
 		t.Fatalf("SearchNotes after fresh init: %v", err)
 	}
@@ -43,7 +44,7 @@ func TestInitDB_FTSMigrationSmoke(t *testing.T) {
 		t.Fatalf("InitDB (reopen): %v", err)
 	}
 	defer db2.Close()
-	hits, err = SearchNotes(db2, "登录模块")
+	hits, err = SearchNotes(context.Background(), db2, "登录模块")
 	if err != nil {
 		t.Fatalf("SearchNotes after reopen: %v", err)
 	}
@@ -59,7 +60,7 @@ func TestInitDB_FTSMigrationSmoke(t *testing.T) {
 	if err := upgradeSchema(db2); err != nil {
 		t.Fatalf("upgradeSchema re-run: %v", err)
 	}
-	hits, err = SearchNotes(db2, "登录模块")
+	hits, err = SearchNotes(context.Background(), db2, "登录模块")
 	if err != nil {
 		t.Fatalf("SearchNotes after backfill re-run: %v", err)
 	}

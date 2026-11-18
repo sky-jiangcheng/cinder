@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -64,7 +65,7 @@ func legacyNoteIDs(t *testing.T, svc *Service, projectID int64) []int64 {
 
 func evidenceIDs(t *testing.T, svc *Service, projectID int64, query string) []abeval.DocID {
 	t.Helper()
-	ev := svc.GatherEvidence(projectID, query, EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), projectID, query, EvidenceBudget{})
 	out := make([]abeval.DocID, 0, len(ev.Items))
 	for _, it := range ev.Items {
 		out = append(out, encodedRef(it))
@@ -201,7 +202,7 @@ func TestEvidenceRetrievalGate_BeatsLegacyStuffing(t *testing.T) {
 	}
 	// Pages must be what carries the win: if evidence only ever returns notes, the
 	// wiki layer is decorative.
-	all := svc.GatherEvidence(projectID, "release checklist migration dry run rollback", EvidenceBudget{})
+	all := svc.GatherEvidence(context.Background(), projectID, "release checklist migration dry run rollback", EvidenceBudget{})
 	var sawPage, sawNote bool
 	for _, it := range all.Items {
 		if it.Type == "page" {
@@ -225,8 +226,8 @@ func TestEvidenceBudgetCaps(t *testing.T) {
 	_, _, _ = buildGateCorpus(t, svc)
 	query := "payment gateway retry idempotency backoff"
 
-	capped := svc.GatherEvidence(0, query, EvidenceBudget{MaxItems: 2})
-	uncapped := svc.GatherEvidence(0, query, EvidenceBudget{MaxItems: 20})
+	capped := svc.GatherEvidence(context.Background(), 0, query, EvidenceBudget{MaxItems: 2})
+	uncapped := svc.GatherEvidence(context.Background(), 0, query, EvidenceBudget{MaxItems: 20})
 	if len(capped.Items) > 2 {
 		t.Errorf("MaxItems 2 produced %d items", len(capped.Items))
 	}
@@ -238,7 +239,7 @@ func TestEvidenceBudgetCaps(t *testing.T) {
 	}
 	// A character quota smaller than one long snippet must still return something
 	// rather than looping or returning nothing: it is a ceiling, not a filter.
-	tight := svc.GatherEvidence(0, query, EvidenceBudget{MaxItems: 12, MaxChars: 40})
+	tight := svc.GatherEvidence(context.Background(), 0, query, EvidenceBudget{MaxItems: 12, MaxChars: 40})
 	if len(tight.Items) == 0 {
 		t.Error("a 40-char budget returned nothing; the first item must always fit or the cap is a mute button")
 	}
@@ -252,11 +253,11 @@ func TestEvidenceBudgetCaps(t *testing.T) {
 		t.Errorf("a 40-char budget produced %d items, want exactly 1 (chars=%d)", len(tight.Items), chars)
 	}
 	// An empty or whitespace query must not flood the prompt with "everything".
-	if ev := svc.GatherEvidence(0, "   ", EvidenceBudget{}); len(ev.Items) != 0 {
+	if ev := svc.GatherEvidence(context.Background(), 0, "   ", EvidenceBudget{}); len(ev.Items) != 0 {
 		t.Errorf("blank query returned %d items, want 0", len(ev.Items))
 	}
 	// Rendered refs must be unique and sequential per type, else citations collide.
-	ev := svc.GatherEvidence(0, query, EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), 0, query, EvidenceBudget{})
 	seen := map[string]bool{}
 	for _, it := range ev.Items {
 		if it.Ref == "" {
@@ -287,7 +288,7 @@ func TestEvidenceRespectsProjectScoping(t *testing.T) {
 		home, "nothing to do with payments at all"); err != nil {
 		t.Fatal(err)
 	}
-	ev := svc.GatherEvidence(home, "invoice idempotency retry policy", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), home, "invoice idempotency retry policy", EvidenceBudget{})
 	for _, it := range ev.Items {
 		if it.Type == "page" && strings.Contains(it.Title, "Secret Of Other") {
 			t.Fatalf("another project's page leaked into evidence: %+v", it)
@@ -300,7 +301,7 @@ func TestEvidenceRespectsProjectScoping(t *testing.T) {
 		t.Fatal(err)
 	}
 	found := false
-	for _, it := range svc.GatherEvidence(home, "invoice idempotency conventions", EvidenceBudget{}).Items {
+	for _, it := range svc.GatherEvidence(context.Background(), home, "invoice idempotency conventions", EvidenceBudget{}).Items {
 		if it.Type == "page" && it.ID == glob.ID {
 			found = true
 		}
@@ -317,13 +318,13 @@ func TestFileAnswerAsPageClosesTheLoop(t *testing.T) {
 	projectID, _, pageIDs := buildGateCorpus(t, svc)
 
 	refs := []string{"P1", "P2"}
-	ev := svc.GatherEvidence(projectID, "release checklist migration dry run rollback", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), projectID, "release checklist migration dry run rollback", EvidenceBudget{})
 	for _, it := range ev.Items {
 		if it.Type == "page" {
 			refs = append(refs, it.Ref)
 		}
 	}
-	evForFiling := svc.GatherEvidence(projectID, "release checklist migration dry run rollback", EvidenceBudget{})
+	evForFiling := svc.GatherEvidence(context.Background(), projectID, "release checklist migration dry run rollback", EvidenceBudget{})
 	id, err := svc.FileAnswerAsPage(projectID, "release checklist migration dry run rollback",
 		"Always dry-run the migration, then fill the sha256 manifest, then write the rollback note.",
 		evForFiling, refs)
@@ -380,7 +381,7 @@ func TestFileAnswerAsPageClosesTheLoop(t *testing.T) {
 		"sqlite-vec note keeps vector storage local and zero CGO.", "gate", "knowledge", "manual"); err != nil {
 		t.Fatal(err)
 	}
-	noteEv := svc.GatherEvidence(projectID, loopQuery, EvidenceBudget{})
+	noteEv := svc.GatherEvidence(context.Background(), projectID, loopQuery, EvidenceBudget{})
 	var noteRef string
 	var noteID int64
 	for _, it := range noteEv.Items {
@@ -437,7 +438,7 @@ func TestEvidenceL0L1Packing(t *testing.T) {
 		}
 	}
 
-	ev := svc.GatherEvidence(projectID, "深度主题", EvidenceBudget{MaxChars: 4000})
+	ev := svc.GatherEvidence(context.Background(), projectID, "深度主题", EvidenceBudget{MaxChars: 4000})
 
 	if len(ev.Items) != n {
 		t.Fatalf("L0 admission produced %d items; want all %d distinct candidates", len(ev.Items), n)
@@ -488,7 +489,7 @@ func TestEvidenceReinforcesAccess(t *testing.T) {
 		before[id] = c
 	}
 
-	svc.GatherEvidence(projectID, "payment gateway retry idempotency backoff", EvidenceBudget{})
+	svc.GatherEvidence(context.Background(), projectID, "payment gateway retry idempotency backoff", EvidenceBudget{})
 
 	touched := 0
 	for _, id := range pageIDs {
@@ -544,7 +545,7 @@ func TestEvidenceProjectNamesCoverSyntheticBuckets(t *testing.T) {
 		}
 	}
 
-	ev := svc.GatherEvidence(0, "invoice idempotency retry policy", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), 0, "invoice idempotency retry policy", EvidenceBudget{})
 	if len(ev.Items) == 0 {
 		t.Fatal("no evidence at all; the fixture did not reach the retriever")
 	}
@@ -578,7 +579,7 @@ func TestGatherEvidenceSurvivesProjectLookupFailure(t *testing.T) {
 	if err := svc.db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	ev := svc.GatherEvidence(projectID, "release checklist migration dry run rollback", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), projectID, "release checklist migration dry run rollback", EvidenceBudget{})
 	if ev == nil {
 		t.Fatal("GatherEvidence returned nil on a closed db; it must degrade, not break")
 	}
@@ -610,7 +611,7 @@ func TestEvidenceMessages_UnscopedCarriesContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msgs := svc.evidenceMessages(0, "我有哪些项目", "EVIDENCE-BLOCK")
+	msgs := svc.evidenceMessages(context.Background(), 0, "我有哪些项目", "EVIDENCE-BLOCK")
 	if len(msgs) != 2 {
 		t.Fatalf("expected a system message plus the question, got %d messages", len(msgs))
 	}
@@ -632,7 +633,7 @@ func TestEvidenceMessages_UnscopedCarriesContext(t *testing.T) {
 // the empty one — a library with no memory and no hits still has tools.
 func TestEvidenceMessages_HeaderNamesDateAndTools(t *testing.T) {
 	svc, git := setupService(t)
-	registered := svc.toolRegistry.definitions()
+	registered := svc.toolRegistry.Definitions()
 	if len(registered) == 0 {
 		t.Fatal("the registry is empty; the tool guide can never render")
 	}
@@ -647,7 +648,7 @@ func TestEvidenceMessages_HeaderNamesDateAndTools(t *testing.T) {
 		{"bare", -1, ""},            // nothing but the header must survive
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			msgs := svc.evidenceMessages(tc.projectID, "q", tc.ev)
+			msgs := svc.evidenceMessages(context.Background(), tc.projectID, "q", tc.ev)
 			if len(msgs) != 2 || msgs[0].Role != "system" {
 				t.Fatalf("messages = %+v", msgs)
 			}
@@ -684,7 +685,7 @@ func TestGatherEvidence_HandoffEntersEvidence(t *testing.T) {
 	id := handoffCorpus(t, svc, pid, "Session Handoff 2026-10-26 18:34",
 		"# Session Handoff\n\n## Summary\n把探针的目录解析修好了。\n")
 
-	ev := svc.GatherEvidence(0, "最近有哪些会话交接记录", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), 0, "最近有哪些会话交接记录", EvidenceBudget{})
 	var found *EvidenceItem
 	for i := range ev.Items {
 		if ev.Items[i].ID == id {
@@ -714,7 +715,7 @@ func TestGatherEvidence_HandoffRespectsScope(t *testing.T) {
 	alphaID := handoffCorpus(t, svc, alpha, "Session Handoff alpha", "# Session Handoff\n\n## Summary\nalpha 的交接。\n")
 	bravoID := handoffCorpus(t, svc, bravo, "Session Handoff bravo", "# Session Handoff\n\n## Summary\nbravo 的交接。\n")
 
-	ev := svc.GatherEvidence(alpha, "交接", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), alpha, "交接", EvidenceBudget{})
 	seen := map[int64]bool{}
 	for _, it := range ev.Items {
 		seen[it.ID] = true
@@ -736,7 +737,7 @@ func TestGatherEvidence_HandoffIsNotDuplicated(t *testing.T) {
 	id := handoffCorpus(t, svc, pid, "Session Handoff zephyrine",
 		"# Session Handoff\n\n## Summary\nzephyrine 通道的交接记录。\n")
 
-	ev := svc.GatherEvidence(pid, "zephyrine", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), pid, "zephyrine", EvidenceBudget{})
 	count := 0
 	for _, it := range ev.Items {
 		if it.ID == id {
@@ -762,7 +763,7 @@ func TestGatherEvidence_ExcludesSessionLogs(t *testing.T) {
 	knowledgeID := evidenceNote(t, svc, pid, "zephyrine design", "zephyrine 的架构决策记录", "knowledge", "manual")
 	logID := evidenceNote(t, svc, pid, "zephyrine session log", "zephyrine hello 会话逐字稿", "log", "codex")
 
-	ev := svc.GatherEvidence(pid, "zephyrine", EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), pid, "zephyrine", EvidenceBudget{})
 	seen := map[int64]bool{}
 	for _, it := range ev.Items {
 		seen[it.ID] = true
@@ -776,7 +777,7 @@ func TestGatherEvidence_ExcludesSessionLogs(t *testing.T) {
 
 	// The filter is the evidence layer's, not the retriever's: the search
 	// path the product uses must still find the log.
-	hits, err := svc.SearchNotes("zephyrine")
+	hits, err := svc.SearchNotes(context.Background(), "zephyrine")
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}

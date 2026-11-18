@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -135,7 +136,7 @@ func TestWikiCompile_PendingPagesAreInvisibleUntilApproved(t *testing.T) {
 	if hits := mustSearchPages(t, svc, query); len(hits) != 0 {
 		t.Fatalf("pending pages answered a query before review: %v", hits)
 	}
-	ev := svc.GatherEvidence(projectID, query, EvidenceBudget{})
+	ev := svc.GatherEvidence(context.Background(), projectID, query, EvidenceBudget{})
 	for _, it := range ev.Items {
 		if it.Type == "page" && it.Kind != "" {
 			if it.Slug == "payment-gateway" || it.Slug == "idempotency-key" {

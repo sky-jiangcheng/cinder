@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sort"
@@ -161,7 +162,7 @@ type LayeredMemory struct {
 //
 // includeTranscripts is explicit: raw session records are the noisiest, largest
 // stratum, and ADR-0014's privacy stance is that they are not touched by default.
-func (s *Service) BuildLayeredMemory(projectID int64, query string, budget LayerBudget, includeTranscripts bool) *LayeredMemory {
+func (s *Service) BuildLayeredMemory(ctx context.Context, projectID int64, query string, budget LayerBudget, includeTranscripts bool) *LayeredMemory {
 	b := budget.withDefaults()
 	out := &LayeredMemory{ProjectID: projectID, Query: strings.TrimSpace(query)}
 
@@ -185,11 +186,11 @@ func (s *Service) BuildLayeredMemory(projectID int64, query string, budget Layer
 
 	if out.Query != "" {
 		out.FellBack = true
-		if blk := s.layerNotes(projectID, out.Query, b); blk.Items > 0 {
+		if blk := s.layerNotes(ctx, projectID, out.Query, b); blk.Items > 0 {
 			out.Blocks = append(out.Blocks, blk)
 		}
 		if includeTranscripts {
-			if blk := s.layerTranscripts(projectID, out.Query, b); blk.Items > 0 {
+			if blk := s.layerTranscripts(ctx, projectID, out.Query, b); blk.Items > 0 {
 				out.Blocks = append(out.Blocks, blk)
 			}
 		}
@@ -359,8 +360,8 @@ func (s *Service) layerProjectCatalog(charCap int) LayerBlock {
 // layerNotes is L1: curated knowledge, matched by relevance. It goes through the
 // existing evidence retrieval so semantic search (when enabled) keeps improving it,
 // and transcripts are filtered out by classification rather than by a second query.
-func (s *Service) layerNotes(projectID int64, query string, b LayerBudget) LayerBlock {
-	items, omitted := s.layerFacts(projectID, query, b.NotesItems, LayerNotes)
+func (s *Service) layerNotes(ctx context.Context, projectID int64, query string, b LayerBudget) LayerBlock {
+	items, omitted := s.layerFacts(ctx, projectID, query, b.NotesItems, LayerNotes)
 	text, rendered, capped := renderFacts(items, b.NotesChars)
 	return LayerBlock{
 		Layer: LayerNotes, Text: text,
@@ -373,8 +374,8 @@ func (s *Service) layerNotes(projectID int64, query string, b LayerBudget) Layer
 }
 
 // layerTranscripts is L0, and only reached when a caller asked for it.
-func (s *Service) layerTranscripts(projectID int64, query string, b LayerBudget) LayerBlock {
-	items, omitted := s.layerFacts(projectID, query, b.TranscriptItems, LayerTranscripts)
+func (s *Service) layerTranscripts(ctx context.Context, projectID int64, query string, b LayerBudget) LayerBlock {
+	items, omitted := s.layerFacts(ctx, projectID, query, b.TranscriptItems, LayerTranscripts)
 	text, rendered, capped := renderFacts(items, b.TranscriptChars)
 	return LayerBlock{
 		Layer: LayerTranscripts, Text: text,
@@ -386,8 +387,8 @@ func (s *Service) layerTranscripts(projectID int64, query string, b LayerBudget)
 // wanted layer. Retrieval is one shared path on purpose: classifying after a
 // project-scoped search means the two layers compete on the same ranking rather
 // than each having its own (worse) query.
-func (s *Service) layerFacts(projectID int64, query string, limit int, want MemoryLayer) ([]EvidenceItem, int) {
-	hits, err := s.SearchNotes(query)
+func (s *Service) layerFacts(ctx context.Context, projectID int64, query string, limit int, want MemoryLayer) ([]EvidenceItem, int) {
+	hits, err := s.SearchNotes(ctx, query)
 	if err != nil {
 		log.Printf("layerFacts: %v", err)
 		return nil, 0

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"repotory/internal/aiclient"
 	"time"
 
 	"repotory/internal/review"
@@ -31,7 +32,7 @@ func (r reviewRefiner) Verdicts(ctx context.Context, path, content string, chunk
 		return nil, fmt.Errorf("%w: %v", reviewrun.ErrUnavailable, err)
 	}
 	system, user := reviewrun.Prompt(path, content, chunk)
-	res, err := r.s.chatWithAudit(cfg, []chatMessage{
+	res, err := r.s.chatWithAudit(cfg, []aiclient.Message{
 		{Role: "system", Content: system},
 		{Role: "user", Content: user},
 	}, reviewAITimeout)

@@ -162,7 +162,7 @@ func (h *handler) aiAskStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 
-	ans, err := h.svc.AskAIWithEvidenceStream(req.ProjectID, req.Question, service.DefaultEvidenceBudget, func(delta string) {
+	ans, err := h.svc.AskAIWithEvidenceStream(r.Context(), req.ProjectID, req.Question, service.DefaultEvidenceBudget, func(delta string) {
 		_ = writeEvent(map[string]any{"delta": delta})
 	}, func(_id, _name string) {}, func(_id string, _result any) {})
 	if err != nil {
@@ -206,9 +206,9 @@ func (h *handler) search(w http.ResponseWriter, r *http.Request) {
 	var hits []domain.SearchHit
 	var err error
 	if r.URL.Query().Get("all") == "1" {
-		hits, err = h.svc.SearchAll(q)
+		hits, err = h.svc.SearchAll(r.Context(), q)
 	} else {
-		hits, err = h.svc.SearchNotes(q)
+		hits, err = h.svc.SearchNotes(r.Context(), q)
 	}
 	if err != nil {
 		log.Printf("search failed: %v", err)

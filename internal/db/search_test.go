@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -21,7 +22,7 @@ func TestSearchNotes_FTS_MatchesContent(t *testing.T) {
 	}
 
 	// 3-char CJK term is FTS-usable: should match only the first note.
-	hits, err := SearchNotes(db, "登录模块")
+	hits, err := SearchNotes(context.Background(), db, "登录模块")
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestSearchNotes_FTS_MultiTermIsAND(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, err := SearchNotes(db, "login flow")
+	hits, err := SearchNotes(context.Background(), db, "login flow")
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestSearchNotes_FTS_RanksByRelevance(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, err := SearchNotes(db, "login")
+	hits, err := SearchNotes(context.Background(), db, "login")
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestSearchNotes_FTS_SpecialCharsNoError(t *testing.T) {
 	}
 	// A query with FTS special characters must not error; it is escaped to a
 	// literal phrase. 'quotes' is >=3 chars so the FTS path is taken.
-	hits, err := SearchNotes(db, `"quotes"`)
+	hits, err := SearchNotes(context.Background(), db, `"quotes"`)
 	if err != nil {
 		t.Fatalf("SearchNotes with special chars errored: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestSearchNotes_LIKEFallbackForShortQuery(t *testing.T) {
 	if _, err := CreateNoteEx(db, pid, "登录模块修复", "修复登录模块的若干Bug", "", "other", "manual"); err != nil {
 		t.Fatal(err)
 	}
-	hits, err := SearchNotes(db, "登录")
+	hits, err := SearchNotes(context.Background(), db, "登录")
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestSearchNotes_FTS_IndexStaysInSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := SearchNotes(db, "networking"); err != nil || len(got) != 1 {
+	if got, err := SearchNotes(context.Background(), db, "networking"); err != nil || len(got) != 1 {
 		t.Fatalf("before update: expected 1 hit, got %d err=%v", len(got), err)
 	}
 
@@ -137,12 +138,12 @@ func TestSearchNotes_FTS_IndexStaysInSync(t *testing.T) {
 	if err := UpdateNote(db, n.ID, "rewritten content about database"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := SearchNotes(db, "networking"); err != nil {
+	if got, err := SearchNotes(context.Background(), db, "networking"); err != nil {
 		t.Fatalf("after update: %v", err)
 	} else if len(got) != 0 {
 		t.Errorf("old term 'networking' should no longer match after update, got %d", len(got))
 	}
-	if got, err := SearchNotes(db, "database"); err != nil {
+	if got, err := SearchNotes(context.Background(), db, "database"); err != nil {
 		t.Fatalf("after update (new term): %v", err)
 	} else if len(got) != 1 {
 		t.Errorf("new term 'database' should match after update, got %d", len(got))
@@ -152,7 +153,7 @@ func TestSearchNotes_FTS_IndexStaysInSync(t *testing.T) {
 	if err := DeleteNote(db, n.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := SearchNotes(db, "database"); err != nil {
+	if got, err := SearchNotes(context.Background(), db, "database"); err != nil {
 		t.Fatalf("after delete: %v", err)
 	} else if len(got) != 0 {
 		t.Errorf("term should not match after delete, got %d", len(got))
@@ -174,7 +175,7 @@ func TestSearchAll_NotesAndTodos(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, err := SearchAll(db, "login")
+	hits, err := SearchAll(context.Background(), db, "login")
 	if err != nil {
 		t.Fatalf("SearchAll: %v", err)
 	}
@@ -254,11 +255,11 @@ func TestSearchNotes_ORRelaxationWhenANDEmpty(t *testing.T) {
 	}
 
 	// Sanity: AND of both terms alone would be empty.
-	if h, _ := searchNotesFTS(db, "kubernetes terraform", escapeFTS("kubernetes terraform")); len(h) != 0 {
+	if h, _ := searchNotesFTS(context.Background(), db, "kubernetes terraform", escapeFTS("kubernetes terraform")); len(h) != 0 {
 		t.Fatalf("expected strict AND to yield 0, got %d", len(h))
 	}
 
-	hits, err := SearchNotes(db, "kubernetes terraform")
+	hits, err := SearchNotes(context.Background(), db, "kubernetes terraform")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +286,7 @@ func TestSearchNotes_NoRelaxationWhenANDMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	// AND matches "both" -> relaxation must NOT fire (would wrongly add "partial").
-	hits, err := SearchNotes(db, "login flow")
+	hits, err := SearchNotes(context.Background(), db, "login flow")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +391,7 @@ func TestSearchNotes_LongCJKQuestionFindsNote(t *testing.T) {
 	// A realistic Chinese question: no spaces, far longer than any note's
 	// contiguous run. Pre-fix this returned 0 rows via BOTH the strict AND and
 	// the escapeFTSOR bail-out.
-	hits, err := SearchNotes(db, "看板页面的中英文切换按钮会切换哪些文案")
+	hits, err := SearchNotes(context.Background(), db, "看板页面的中英文切换按钮会切换哪些文案")
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}
@@ -414,7 +415,7 @@ func TestSearchNotes_PunctuatedCJKQuestionFindsNote(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, err := SearchNotes(db, "时态图是什么？")
+	hits, err := SearchNotes(context.Background(), db, "时态图是什么？")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,7 +437,7 @@ func TestSearchNotes_MixedQueryWithShortTermFindsNote(t *testing.T) {
 	}
 	// '里' is 1 rune -> ftsUsable false -> the LIKE fallback, which pre-fix
 	// matched the whole query as ONE substring and so never matched anything.
-	hits, err := SearchNotes(db, "FastAPI 里 health 探测不到")
+	hits, err := SearchNotes(context.Background(), db, "FastAPI 里 health 探测不到")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +462,7 @@ func TestSearchNotes_LikeFallbackUnchangedWhenMatchExists(t *testing.T) {
 	}
 	// The whole query matches doc 1, so OR-relaxation must NOT fire and pull
 	// in doc 2 — same "never displace a working answer" rule as the FTS path.
-	hits, err := SearchNotes(db, "prefix suffix")
+	hits, err := SearchNotes(context.Background(), db, "prefix suffix")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +494,7 @@ func TestSearchNotes_EmptyTimestampDoesNotKillQuery(t *testing.T) {
 	// '里' forces the LIKE path, whose OR-relaxation surfaces BOTH notes — so
 	// the bad-timestamp row is actually scanned. Pre-fix that scan failed and
 	// SearchNotes reported ZERO results for the whole query.
-	hits, err := SearchNotes(db, "里 health 探测不到")
+	hits, err := SearchNotes(context.Background(), db, "里 health 探测不到")
 	if err != nil {
 		t.Fatalf("SearchNotes must not error on an empty timestamp: %v", err)
 	}
@@ -574,7 +575,7 @@ func TestSearchNotesStrictRejectsSingleTrigramCoincidence(t *testing.T) {
 
 	// The search surface may still surface the coincidence (a hint the user
 	// can dismiss); strict must not.
-	strict, err := SearchNotesStrict(db, question)
+	strict, err := SearchNotesStrict(context.Background(), db, question)
 	if err != nil {
 		t.Fatalf("SearchNotesStrict: %v", err)
 	}
@@ -584,7 +585,7 @@ func TestSearchNotesStrictRejectsSingleTrigramCoincidence(t *testing.T) {
 		}
 	}
 	// The relaxed surface still offers both — the hint behaviour is unchanged.
-	relaxed, err := SearchNotes(db, question)
+	relaxed, err := SearchNotes(context.Background(), db, question)
 	if err != nil {
 		t.Fatalf("SearchNotes: %v", err)
 	}

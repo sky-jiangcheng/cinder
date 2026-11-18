@@ -38,6 +38,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -155,11 +156,11 @@ func runEvidenceGate(casesPath, dbPath string, k int, minRecall float64) int {
 
 	baseline := func(q string) []abeval.DocID {
 		_ = db.SetConfig(database, graphSearchKey, "0")
-		return evidenceDocIDs(svc.GatherEvidence(0, q, evidenceBudget))
+		return evidenceDocIDs(svc.GatherEvidence(context.Background(), 0, q, evidenceBudget))
 	}
 	candidate := func(q string) []abeval.DocID {
 		_ = db.SetConfig(database, graphSearchKey, "1")
-		return evidenceDocIDs(svc.GatherEvidence(0, q, evidenceBudget))
+		return evidenceDocIDs(svc.GatherEvidence(context.Background(), 0, q, evidenceBudget))
 	}
 
 	base, cand, dRecall, dNDCG := abeval.Compare(cases, k, baseline, candidate)
