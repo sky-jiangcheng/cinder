@@ -157,7 +157,7 @@ class E2eGateCTest {
                 serverUrl, "CreateNoteWithMeta",
                 listOf(
                     1, "Retry policy on 503",
-                    "The gateway retries a 503 because the upstream pod may still be rolling out. See pay-gateway.",
+                    "Why do we retry on 503? The gateway retries because the upstream pod may still be rolling out. See pay-gateway.",
                     "retry,gateway", "knowledge", "manual",
                 ),
             ) as? com.google.gson.JsonObject ?: error("seed note was not created")

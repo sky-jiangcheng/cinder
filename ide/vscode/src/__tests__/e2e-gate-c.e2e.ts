@@ -173,7 +173,7 @@ before(async () => {
   const created = (await rpc("CreateNoteWithMeta", [
     1,
     "Retry policy on 503",
-    "The gateway retries a 503 because the upstream pod may still be rolling out. See pay-gateway.",
+    "Why do we retry on 503? The gateway retries because the upstream pod may still be rolling out. See pay-gateway.",
     "retry,gateway",
     "knowledge",
     "manual",
@@ -255,6 +255,11 @@ test("journey 2: a deep link opens the SPA route, and an API-only server is refu
   session.dispose();
 });
 
+// The note's body contains the question verbatim, and that is deliberate: the
+// evidence channel matches STRICTLY (no OR relaxation — a coincidence rendered
+// as "sources for this answer" is a false citation). A fixture whose body only
+// shares a few words with the question would pass yesterday and fail the moment
+// the strict path stops being bypassed.
 test("journey 3: a question comes back as an answer with its sources", async () => {
   const session = new ChatSession(realTransport(), m => posted.push(m));
   await session.run("why do we retry on 503?", "ask");
