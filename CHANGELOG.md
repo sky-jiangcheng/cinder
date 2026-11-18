@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.40.1] - 2026-11-18
+
+### 变更
+- **AI 调用层拆成三个独立包，行为与对外契约不变（ADR-0064，2026-11-18）**：`ai.go` 里曾同时住着三件事——SSE 解析、JSON 往返、业务编排，任何一处改动都要先读懂另外两处。这一版按「这半块有没有自己的状态」切开：`internal/aiclient` 收传输（20 个不碰 db、不读配置的函数，加 `Request.Tools` / `Response.ToolCalls` / `ParseSSEStream` / `PostJSONToolStream`），`internal/aitools` 收工具注册表与两条循环（seam 只有一个 `Provider`，`MaxRounds=5`），`internal/aiaudit` 收审计策略与落行（`Recorder` + `Policy`，替掉 Service 上 `auditSurface` / `auditForwarder` 两个散字段）。规模：`ai.go` 1042 → 367、`ai.go`/`aitools.go` 合计 1073 → 520、`ai_audit.go` 309 → 0。**等价性不是「跑一遍看着对」**：传输层用 `aiclient/testdata/aiclient_golden.json` 逐字节钉住请求体，工具循环用搬之前抓的两个真实请求体重放比对（`internal/service/tools_golden_test.go`）。审计侧保留三个易被「顺手统一」改掉的行为——空 surface 仍读作 `unknown`、未开启审查时 verdict 仍是空串（空串才代表「根本没查」）、落行失败只记日志绝不打断模型调用。代价：`aiclient` 的两个入口收 ctx，于是 `SearchNotes` / `SearchAll` / `GatherEvidence` / `chatWithAudit` 连同 cmd 调用点一起显式传 ctx（不新增超时语义，只是把藏起来的 `context.Background()` 换成调用方的）。`go build ./...`、`go vet ./...`、`gofmt -l` 干净，`go test ./...` 50 包全绿。
+- **知识库四个 0% 入口补上测试：社区归纳、合并候选、Markdown 导出、页面检索（2026-11-18）**：这几个入口覆盖率一直是 0，不是因为没人测，是写不出图——社区归纳要一张页图，合并候选要两页共享信号，导出要一棵页树。这一版把夹具补齐，测的是签名里看不出来的属性：`SearchWikiPages` 的 approved-only 过滤（FTS 表没有 status 列，过滤是一次 join）、空 query 返回空切片而不是全量；`ExportWikiTree` 的 manifest 最后落盘、受管 `wiki/` 子树可重写但根目录有外来文件必须拒绝（`ErrWikiExportNotEmpty`）；`FindMergeCandidates` 的 blocking（共享 token/前缀的页成对、无关页不配对、单页返回空切片）；`RunCommunitySummary` 的四条出口——同意开关关闭时**零模型调用零写入**、首次建档、二次原地更新（slug 即身份，不会又建一张）、已批准页只记 revision todo 且正文一字不动。实测：`wikipage` 23.3% → 66.7%、`wikigen` 27.5% → 59.9%，Service 侧四个薄委托全部 100%。
+
 ## [2.40.0] - 2026-11-17
 
 ### 新增
