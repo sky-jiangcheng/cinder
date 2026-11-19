@@ -15,13 +15,13 @@ class RepotoryCapture < Formula
 
   if OS.mac? && Hardware::CPU.arm?
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-capture-#{version}-darwin-arm64.tar.gz"
-    sha256 "dea1ddb51859d3137da235d8354c0784ee373c064c07f471352ece6ddf68cd5e"
+    sha256 "6e7c5ae17ccf5a27295c7c8b8488c39d6b01d271c58abb3e47b4203373c741e8"
   elsif OS.mac? && Hardware::CPU.is_64_bit?
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-capture-#{version}-darwin-amd64.tar.gz"
-    sha256 "bfed9bd421a8d8eb0145a29969a7e391fcbb2274217793862e984a57d7483c0f"
+    sha256 "b18b7433545bff457edeca4099d9736a0ac554410f24a41ecfa758668c69e148"
   else
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-capture-#{version}-linux-amd64.tar.gz"
-    sha256 "74fecf4678f53266184ce0346c3212e9144fed4fa9c31f01aafdb3cfefba335c"
+    sha256 "8bb7d462a593f2337c3e9fe1919c3eb5bbd479c018e2099a4f39dec98386481e"
   end
 
   def install

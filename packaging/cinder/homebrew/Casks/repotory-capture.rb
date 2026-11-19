@@ -19,12 +19,12 @@ cask "repotory-capture" do
 
   on_arm do
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-capture-#{version}-darwin-arm64.tar.gz"
-    sha256 "dea1ddb51859d3137da235d8354c0784ee373c064c07f471352ece6ddf68cd5e"
+    sha256 "6e7c5ae17ccf5a27295c7c8b8488c39d6b01d271c58abb3e47b4203373c741e8"
   end
 
   on_intel do
     url "https://github.com/sky-jiangcheng/cinder/releases/download/v#{version}/cinder-capture-#{version}-darwin-amd64.tar.gz"
-    sha256 "bfed9bd421a8d8eb0145a29969a7e391fcbb2274217793862e984a57d7483c0f"
+    sha256 "b18b7433545bff457edeca4099d9736a0ac554410f24a41ecfa758668c69e148"
   end
 
   # The tarball stages `cinder-capture` plus a `repotory-capture` symlink;
