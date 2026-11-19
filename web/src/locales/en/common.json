@@ -56,6 +56,7 @@
     "fallbackNotice": "AI chat model not configured. Showing direct matches from local knowledge index. Configure in Settings for full LLM answers.",
     "goToSettings": "Configure AI",
     "thinking": "Thinking",
+    "emptyReply": "(No reply content)",
     "sourceGraph": "Graph",
     "sourceSemantic": "Vector",
     "sourceFact": "Fact",

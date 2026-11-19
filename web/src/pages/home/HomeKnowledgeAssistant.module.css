@@ -598,6 +598,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A completed stream with no answer: stop the dots, say so explicitly. */
+.emptyReplyNotice {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
 .typingDot {
   width: 6px;
   height: 6px;

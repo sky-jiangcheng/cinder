@@ -173,7 +173,11 @@ func AskStream(
 	round := 0
 	for {
 		round++
-		body, err := json.Marshal(aiclient.Request{Model: p.Model, Messages: messages, Tools: tools})
+		// StreamRequest, not Request: the flag is what makes the endpoint
+		// answer in SSE. Without it OpenAI-compatible providers return a
+		// single JSON body that parseSSE skips line by line, yielding an
+		// empty reply with no error — the UI then spins forever.
+		body, err := json.Marshal(aiclient.StreamRequest{Model: p.Model, Messages: messages, Tools: tools, Stream: true})
 		if err != nil {
 			return "", "", err
 		}

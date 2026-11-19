@@ -112,3 +112,41 @@ func TestChatStreamRequestCarriesStreamFlag(t *testing.T) {
 		t.Fatalf("model missing from request body: %s", raw)
 	}
 }
+
+// The tool loop's streaming request is a StreamRequest too: tools and the
+// flag travel together. A Request (no stream field) in that path is the
+// 2026-11-19 bug that made every commit-count question hang.
+func TestToolStreamRequestCarriesStreamFlagAndTools(t *testing.T) {
+	tool := ToolDefinition{}
+	tool.Function.Name = "list_projects"
+	raw, err := json.Marshal(StreamRequest{
+		Model:    "m",
+		Messages: []Message{{Role: "user", Content: "q"}},
+		Tools:    []ToolDefinition{tool},
+		Stream:   true,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, want := range []string{`"stream":true`, `"name":"list_projects"`} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("request body missing %s: %s", want, raw)
+		}
+	}
+}
+
+// A 200 with a JSON body is what an endpoint answers when stream:true was
+// omitted. The parser must reject it rather than report a successful empty
+// answer — that empty answer is what left the UI's dots spinning forever.
+func TestParseSSEStreamRejectsNonSSEJSONBody(t *testing.T) {
+	in := `{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}`
+	_, err := ParseSSEStream(strings.NewReader(in), func(d string) {
+		t.Fatalf("unexpected delta from non-SSE body: %q", d)
+	})
+	if err == nil {
+		t.Fatal("expected an error for a non-SSE JSON body, got nil")
+	}
+	if !strings.Contains(err.Error(), "no SSE data frames") {
+		t.Fatalf("error = %v, want the non-SSE diagnostic", err)
+	}
+}

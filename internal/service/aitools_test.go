@@ -131,17 +131,19 @@ func TestAskWithToolsEchoesToolCallsBackToTheProvider(t *testing.T) {
 
 func TestStreamAskWithToolsReassemblesFragmentsAndEchoesThem(t *testing.T) {
 	requests := 0
-	var followUp map[string]any
+	var firstBody, followUp map[string]any
 	var gotCalls [][2]string
 	var gotResults []string
 	var gotDeltas strings.Builder
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		requests++
-		if requests > 1 {
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode request: %v", err)
-			}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if requests == 1 {
+			firstBody = body
+		} else {
 			followUp = body
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -206,6 +208,16 @@ func TestStreamAskWithToolsReassemblesFragmentsAndEchoesThem(t *testing.T) {
 	}
 	if gotDeltas.String() != "done" {
 		t.Fatalf("streamed deltas = %q, want only the final round's text", gotDeltas.String())
+	}
+
+	// The flag is what makes a provider answer in SSE. A plain Request used
+	// here silently produced a JSON body that the SSE parser skipped, leaving
+	// the UI on an empty reply with the dots spinning (2026-11-19).
+	if firstBody["stream"] != true {
+		t.Fatalf("first request has no stream:true: %v", firstBody["stream"])
+	}
+	if tools, ok := firstBody["tools"].([]any); !ok || len(tools) == 0 {
+		t.Fatalf("first request carries no tools: %v", firstBody["tools"])
 	}
 
 	// The reassembled call echoes with the id the UI was shown.

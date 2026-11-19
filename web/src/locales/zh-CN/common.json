@@ -56,6 +56,7 @@
     "fallbackNotice": "未配置大模型端点，当前通过本地知识库全量索引进行匹配检索。可在「设置」中配置 AI 服务以获得智能总结。",
     "goToSettings": "前往配置 AI",
     "thinking": "思考中",
+    "emptyReply": "（无回复内容）",
     "sourceGraph": "图谱",
     "sourceSemantic": "向量",
     "sourceFact": "事实",

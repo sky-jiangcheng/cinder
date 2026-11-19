@@ -1090,13 +1090,16 @@ export default function HomeKnowledgeAssistant({
                       </div>
                     ) : (
                       <div className={s.bubbleAssistant}>
-                        {/* Markdown Answer or typing indicator */}
+                        {/* Markdown Answer, typing indicator, or an explicit
+                            empty-reply notice. A finished stream with no text
+                            must NOT keep the dots spinning — that is what made
+                            a silent backend failure look like a hang. */}
                         {msg.content ? (
                           <div
                             className={s.markdownText}
                             dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
                           />
-                        ) : (
+                        ) : msg.isStreaming ? (
                           <div className={s.typingIndicator}>
                             <span className={s.typingDot} />
                             <span className={s.typingDot} />
@@ -1106,6 +1109,10 @@ export default function HomeKnowledgeAssistant({
                                 {t('home.thinking')} · {askElapsed}s
                               </span>
                             )}
+                          </div>
+                        ) : (
+                          <div className={s.emptyReplyNotice}>
+                            {t('home.emptyReply', { defaultValue: '（无回复内容）' })}
                           </div>
                         )}
 

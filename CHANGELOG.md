@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [2.40.2] - 2026-11-19
+
+### 修复
+- **桌面助手问「昨日提交量」一直转圈：流式请求漏了 `stream:true`，端点回 JSON 却被按 SSE 读（2026-11-19）**：用户反馈在证据面板问代码提交量会卡死，空回复配打字点看着像卡住，实际是模型一次都没答。根因在 `internal/aitools/loop.go` 的 `AskStream`——它用 `aiclient.Request` 发流式请求，而那个结构体只描述非流式形状、没有 `Stream` 字段，所以 body 里没有 `"stream":true`；实测同一 key 同一模型，不带这个标志端点回 `application/json`、带它才回 `text/event-stream`。`aiclient.parseSSE` 只认 `data:` 前缀行，JSON 响应被整段跳过，`acc`/`calls` 全空，函数返回空串加 nil error——测试一直是绿的，因为 `internal/aitools/testdata/tool_loop_golden.json` 把这个错误形状钉成了期望值。**修法分三层**：① 传输层新增 `StreamRequest`（带 `Tools` 与 `Stream`），`AskStream` 改用它并显式置 `Stream:true`；`Ask` 仍用 `Request`，`omitempty` 保证非流式 body 一字不变。② `parseSSE` 一旦整个流没有一行 `data:` 帧就报错，不再把非 SSE 的 200 响应当成功——同类缺标志或错端点从此是明确失败而非静默空答。③ 前端 `HomeKnowledgeAssistant` 的回复气泡按 `isStreaming` 决定显示打字点还是空回复提示，新增 `home.emptyReply` 中英键，后端任何静默失败都不再伪装成「卡死」。**回归**：`TestToolStreamRequestCarriesStreamFlagAndTools` 钉住 `stream:true` 与 tools 同时在 body 里、`TestParseSSEStreamRejectsNonSSEJSONBody` 钉住非 SSE 必须报错、`TestStreamAskWithToolsReassemblesFragmentsAndEchoesThem` 断言每轮请求都带标志，三个负例此前都能让测试红。`go test ./...`、`go vet ./...`、前端 417 例、`npm run build`、i18n 与版本漂移门全绿。**注意**：桌面安装包需重新构建才生效，v2.40.1 及更早版本仍带此问题。
+- **顺带复核 Warden：同款三个入口都有防御，无需改动（2026-11-19）**：`llm.rs:552` 是唯一流式构造点且显式带 `stream:true`（全仓非流式的 `chat()` 与本地探测各自明确为 `false`），SSE 主循环严格按 `data:` 解析、非 JSON 直接报错、`[DONE]` 是唯一终止信号、空 delta 不终止、无 `finish_reason` 报 `"ended before completion"`，前端 `chat.ts:525` 空回复直接抛错、`finally` 一定清 `busy`，Rust 侧末尾 `ChatChunk.error` 回传。`cargo test` 7 + 8 例全绿。两个非同类边界如实记：60s 无 chunk 触发超时（reasoning 长思考可能误伤，但会报错不挂起）、`parse_stream_line` 只读 `delta.content` / `text` 不读 `reasoning_content`（纯推理无正文报「无回复」，有提示）。
+
 ## [2.40.1] - 2026-11-18
 
 ### 变更

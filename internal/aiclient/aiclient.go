@@ -91,13 +91,17 @@ type ErrorEnvelope struct {
 	} `json:"metadata"`
 }
 
-// StreamRequest is Request plus stream:true. The body is identical to
-// the non-streaming shape except for the flag — anything else would risk an
-// endpoint applying different prompt handling to the two modes.
+// StreamRequest is Request plus stream:true. Other than the flag and the
+// optional tools array, the body keeps the non-streaming shape — anything else
+// would risk an endpoint applying different prompt handling to the two modes.
+// A tool-enabled stream MUST use this type: a plain Request has no stream flag,
+// and an endpoint answering a tool loop with JSON instead of SSE leaves the
+// UI spinning on an empty reply (the 2026-11-19 "commit count hangs" bug).
 type StreamRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream"`
+	Model    string           `json:"model"`
+	Messages []Message        `json:"messages"`
+	Tools    []ToolDefinition `json:"tools,omitempty"`
+	Stream   bool             `json:"stream"`
 }
 
 // StreamDelta is one SSE data: payload of a streaming /chat/completions
@@ -382,6 +386,7 @@ func parseSSE(r io.Reader, onChunk func(StreamDelta)) (FinishReasons, error) {
 
 	var reason FinishReasons
 	var streamErr error
+	sawFrame := false
 	for sc.Scan() {
 		line := sc.Text()
 		if !strings.HasPrefix(line, "data:") {
@@ -391,6 +396,7 @@ func parseSSE(r io.Reader, onChunk func(StreamDelta)) (FinishReasons, error) {
 		if payload == "" {
 			continue
 		}
+		sawFrame = true
 		if payload == "[DONE]" {
 			break
 		}
@@ -417,6 +423,13 @@ func parseSSE(r io.Reader, onChunk func(StreamDelta)) (FinishReasons, error) {
 	}
 	if streamErr != nil {
 		return reason, streamErr
+	}
+	// A 200 with a non-SSE body (typically a single JSON completion, which
+	// happens when the request omitted stream:true) used to slip through as
+	// an empty, successful reply — indistinguishable from "model said
+	// nothing" and rendered as an endless typing indicator. Fail loudly.
+	if !sawFrame {
+		return reason, fmt.Errorf("endpoint returned no SSE data frames (expected stream:true in the request)")
 	}
 	return reason, nil
 }
