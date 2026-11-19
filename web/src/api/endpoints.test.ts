@@ -11,12 +11,17 @@ vi.mock('./transport', () => ({
 import {
   askAIWithEvidence,
   captureClaudeHandoff,
+  checkComponentUpdates,
   checkUpdate,
+  getCommitDiff,
+  getCommitFile,
+  searchCommits,
   fileAnswerAsPage,
   getAppVersion,
   getProjectDetail,
   getProjects,
   openBrowserURL,
+  runComponentUpdate,
   searchAll,
   searchNotes,
   toggleStar,
@@ -165,6 +170,41 @@ describe('update endpoints', () => {
     const got = await checkUpdate()
     expect(callMock).toHaveBeenCalledWith({ method: 'CheckUpdate', args: [] })
     expect(got).toBe(info)
+  })
+
+  it('searchCommits passes scope, term and paging through to the binding', async () => {
+    const page = { items: [], total: 7, offset: 20, limit: 20 }
+    callMock.mockResolvedValueOnce(page)
+    expect(await searchCommits(137, 0, 'fix', 20, 20)).toBe(page)
+    expect(callMock).toHaveBeenCalledWith({
+      method: 'SearchCommits',
+      args: [137, 0, 'fix', 20, 20],
+    })
+  })
+
+  it('getCommitDiff and getCommitFile route to their bindings', async () => {
+    callMock.mockResolvedValueOnce({ sha: 'abc1234', files: [] })
+    await getCommitDiff(9, 'abc1234')
+    expect(callMock).toHaveBeenCalledWith({ method: 'GetCommitDiff', args: [9, 'abc1234'] })
+
+    callMock.mockResolvedValueOnce({ path: 'a.go', content: 'x', exists: true })
+    await getCommitFile(9, 'abc1234', 'a.go', true)
+    expect(callMock).toHaveBeenCalledWith({ method: 'GetCommitFile', args: [9, 'abc1234', 'a.go', true] })
+  })
+
+  it('checkComponentUpdates degrades to an empty list', async () => {
+    callMock.mockResolvedValueOnce([{ id: 'mcp', installed: '2.40.1' }])
+    expect(await checkComponentUpdates()).toEqual([{ id: 'mcp', installed: '2.40.1' }])
+    expect(callMock).toHaveBeenCalledWith({ method: 'CheckComponentUpdates', args: [] })
+    callMock.mockResolvedValueOnce(null)
+    expect(await checkComponentUpdates()).toEqual([])
+  })
+
+  it('runComponentUpdate passes only the component id, never a command', async () => {
+    const res = { command: 'brew upgrade --cask repotory-mcp', output: 'ok' }
+    callMock.mockResolvedValueOnce(res)
+    expect(await runComponentUpdate('mcp')).toBe(res)
+    expect(callMock).toHaveBeenCalledWith({ method: 'RunComponentUpdate', args: ['mcp'] })
   })
 
   it('getAppVersion reads the version out of Health and degrades to empty', async () => {

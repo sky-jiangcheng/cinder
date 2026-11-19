@@ -6,7 +6,7 @@
 #   - web/package.json           (version field)
 #   - ide/vscode/package.json    (the extension follows the app version — 2b)
 #   - ide/jetbrains/build.gradle.kts (the plugin follows the app version — 2c)
-#   - internal/version/version.go                     (const Version, also overridable via ldflags at CI build time)
+#   - internal/version/version.go                     (var Version, overridden via ldflags at CI build time)
 #   - TODO.md                     (the "current state" version line — 3c)
 #
 # TODO.md is the one copy that used to drift: it carried a hand-written version
@@ -133,9 +133,11 @@ if [ -f ide/jetbrains/build.gradle.kts ]; then
     "version = \"$VERSION\""
 fi
 
-# 3. internal/version/version.go  ->  const Version = "..."  (SSOT for app/CLI/MCP)
+# 3. internal/version/version.go  ->  var Version = "..."  (SSOT for app/CLI/MCP)
+#    Keep this a var: CI injects the release version with -X, which cannot
+#    rewrite a const (it silently links the source value instead).
 update_file "internal/version/version.go" \
-  '(const Version[[:space:]]*=[[:space:]]*)"[^"]+"' \
+  '(var Version[[:space:]]*=[[:space:]]*)"[^"]+"' \
   "\1\"$VERSION\""
 
 # 3. web/package-lock.json  ->  the two root "version" fields.

@@ -30,9 +30,11 @@ export interface TrendDataset {
 interface Props {
   labels: string[]
   datasets: TrendDataset[]
+  /** Pixel height; the overview embeds a shorter version of the same chart. */
+  height?: number
 }
 
-function TrendChart({ labels, datasets }: Props) {
+function TrendChart({ labels, datasets, height = 220 }: Props) {
   const { t } = useTranslation()
   // Canvas paints with resolved values, not CSS — so a theme flip needs a
   // re-render to repaint the axes, grid and tooltip in the new palette.
@@ -151,7 +153,7 @@ function TrendChart({ labels, datasets }: Props) {
   }, [labels, datasets, t])
 
   return (
-    <div className={s.container} style={{ height: 220 }}>
+    <div className={s.container} style={{ height }}>
       <Line data={data} options={options} className="chart-simple" />
     </div>
   )

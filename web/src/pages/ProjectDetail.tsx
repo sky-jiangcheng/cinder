@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import TrendChart from '../components/TrendChart'
 import StatusBar from '../components/StatusBar'
-import ScopeToggle from '../components/ScopeToggle'
 import ProjectOverviewSection from './project/ProjectOverviewSection'
 import ProjectCommitLog from './project/ProjectCommitLog'
 import ErrorBanner from '../components/ErrorBanner'
@@ -16,10 +14,6 @@ import { copyText } from '../utils/clipboard'
 import { getAgentInstructionsStatus, installAgentInstructions } from '../api/endpoints'
 import type { AgentInstructionsStatus as AgentInstructionsStatusData } from '../api/types'
 import s from './ProjectDetail.module.css'
-import trendCss from '../components/TrendChart.module.css'
-
-// 预留钩子类：`commits-trend` —— 目前全站没有对应样式定义（P35 复核确认），
-// 保留在 markup 里作为将来挂样式的锚点，删留都不影响行为。
 
 const TAB_KEYS = ['overview', 'commits', 'notes', 'todos'] as const
 type DetailTab = typeof TAB_KEYS[number]
@@ -373,63 +367,22 @@ function ProjectDetailPage() {
       footer={<StatusBar />}
     >
       <div role="tabpanel" id={`project-panel-${tab}`} aria-labelledby={`project-tab-${tab}`}>
-        {tab === 'overview' && overview && <ProjectOverviewSection overview={overview} />}
+        {tab === 'overview' && overview && (
+          <ProjectOverviewSection
+            overview={overview}
+            trend={trendData}
+            scope={scope}
+            onScopeChange={setScope}
+            totals={totals}
+          />
+        )}
 
         {tab === 'commits' && (
-          /* Two cards, two questions: the trend card answers "how much,
-             when" (chart plus the activity metrics folded into its header),
-             the log card answers "what exactly happened" (one timeline with
-             a repo filter). The heatmap card that used to hold half the top
-             band duplicated the dashboard's heatmap and pushed both
-             answers below the fold. */
+          /* One card, one question: "what exactly happened". The trend chart
+             and activity metrics now live in the Overview tab, where they sit
+             next to the languages/README that explain the shape. */
           <div className={s.commitsTab}>
-            <div className="detail-section commits-trend">
-              <div className="section-header">
-                <h2>{t('project.trendTitle')}</h2>
-                {overview?.activity && (
-                  <div className={trendCss.metrics}>
-                    <span className={trendCss.metric}>
-                      <span className={trendCss.metricLabel}>{t('project.totalCommits')}</span>
-                      <span className={trendCss.metricValue}>{overview.activity.total_commits}</span>
-                    </span>
-                    <span className={trendCss.metric}>
-                      <span className={trendCss.metricLabel}>{t('project.last30d')}</span>
-                      <span className={trendCss.metricValue}>{overview.activity.commit_rate_30d}</span>
-                    </span>
-                    <span className={trendCss.metric}>
-                      <span className={trendCss.metricLabel}>{t('project.activeDays90')}</span>
-                      <span className={trendCss.metricValue}>{overview.activity.active_days}</span>
-                    </span>
-                    <span className={trendCss.metric}>
-                      <span className={trendCss.metricLabel}>{t('project.activeMonths')}</span>
-                      <span className={trendCss.metricValue}>{overview.activity.active_months}</span>
-                    </span>
-                  </div>
-                )}
-                <ScopeToggle scope={scope} onChange={setScope} />
-              </div>
-              {trendData.labels.length > 0 ? (
-                <TrendChart labels={trendData.labels} datasets={trendData.datasets} />
-              ) : (
-                <div className={s.emptySection}>
-                  {t('project.noDataInRange')}
-                  {scope !== 'all' && (
-                    <div className="empty-actions">
-                      {scope === 'week' && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => setScope('month')}>
-                          {t('heatmap.show30d')}
-                        </button>
-                      )}
-                      <button className="btn btn-secondary btn-sm" onClick={() => setScope('all')}>
-                        {t('heatmap.showAll')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="detail-section">
+            <div className="detail-section commit-log-section">
               <div className="section-header">
                 <h2>{t('project.commitLog')}</h2>
               </div>

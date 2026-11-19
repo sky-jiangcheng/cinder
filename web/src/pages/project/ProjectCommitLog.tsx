@@ -1,9 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Icon from '../../components/Icon'
 import s from './ProjectCommitLog.module.css'
 import { useToast } from '../../hooks/useToast'
-import { getProjectCommits, getRepoCommits, type RepoCommit, type RepoInfo } from '../../api/client'
+import {
+  getCommitDiff,
+  searchCommits,
+  type CommitDiff,
+  type CommitDiffFile,
+  type CommitPage,
+  type RepoCommit,
+  type RepoInfo,
+} from '../../api/client'
+import CommitFileCompare from './CommitFileCompare'
 
 // 预留钩子类：`commit-log` —— 目前全站没有对应样式定义（P35 复核确认），
 // 保留在 markup 里作为将来挂样式的锚点，删留都不影响行为。
@@ -13,77 +22,119 @@ interface Props {
   repos: RepoInfo[]
 }
 
-const LIMIT = 50
-
+const PAGE_SIZES = [20, 50, 100]
 const shortPath = (p: string) => p.split('/').slice(-2).join('/')
 
+interface Selection {
+  scope: string
+  repoId: number
+  commit: RepoCommit
+}
+
 /**
- * The commits tab's single log: one repo filter row over one timeline.
+ * The commit log is now the useful half of the detail page: an open book with
+ * the (searchable, paged) timeline on the left and the selected commit's patch
+ * on the right. Repository choice is still a chip row so a merged, multi-repo
+ * timeline can be narrowed to one history without losing the search term.
  *
- * Replaces the per-repo expander rows, where every repo was a closed drawer
- * and reading history meant opening them one at a time. "全部" merges all
- * repositories by time (the shape that answers "what happened lately"), and a
- * chip narrows to one repo's log with its totals and hand-off tools.
- *
- * Read from git on demand: daily_stats carries no message or SHA, so a commit
- * list cannot be assembled from the database, and this also works for a repo
- * with no forge remote.
+ * Git is read on demand: daily_stats carries no message or SHA, so none of
+ * this can be assembled from the database.
  */
 export default function ProjectCommitLog({ projectId, repos }: Props) {
   const { t } = useTranslation()
   const toast = useToast()
-  // 'all' = merged cross-repo timeline; number = one repo's log. Tagged with the
-  // project it was picked under: /project/:id reuses this instance across
-  // projects, and a repo id selected in one project must not filter another's
-  // log. Tagging beats the previous "reset in an effect", which also trips the
-  // repo's react-hooks rule about synchronous setState inside an effect.
+  // Tagged with the project it was picked under: /project/:id reuses this
+  // instance across projects, and a repo id selected in one project must not
+  // filter another's log.
   const [picked, setPicked] = useState<{ projectId: number; repo: number | 'all' }>({ projectId: 0, repo: 'all' })
   const selected: number | 'all' = picked.projectId === projectId ? picked.repo : 'all'
-  const choose = (repo: number | 'all') => setPicked({ projectId, repo })
+  const choose = (repo: number | 'all') => {
+    setPicked({ projectId, repo })
+    setPage(0)
+    setSelection(null)
+  }
   const [copiedHash, setCopiedHash] = useState<string | null>(null)
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
 
-  // A single-repo project has nothing to filter; show that repo's log and bar
-  // directly rather than a one-chip filter row.
   const isSingle = repos.length === 1
-  // Primitive, not a derived object — the fetch effect keys off it.
   const fetchRepoId = isSingle
     ? repos[0].id
     : typeof selected === 'number' ? selected : null
 
-  // Result is stored per request key, so a response can never paint a view that
-  // is no longer asking for it, and no reset is needed when the key changes —
-  // that is what lets the effect below do nothing but fetch.
-  const requestKey = `${projectId}|${fetchRepoId ?? 'all'}`
-  const [result, setResult] = useState<{ key: string; commits: RepoCommit[]; error: string } | null>(null)
+  const [query, setQuery] = useState('')
+  const [term, setTerm] = useState('')
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0])
+  const debounce = useRef<number | null>(null)
+  useEffect(() => () => { if (debounce.current) window.clearTimeout(debounce.current) }, [])
+  const changeQuery = (v: string) => {
+    setQuery(v)
+    if (debounce.current) window.clearTimeout(debounce.current)
+    debounce.current = window.setTimeout(() => {
+      setTerm(v)
+      setPage(0)
+      setSelection(null)
+    }, 250)
+  }
+
+  const requestKey = `${projectId}|${fetchRepoId ?? 'all'}|${term}|${page}|${pageSize}`
+  const [result, setResult] = useState<{ key: string; page: CommitPage | null; error: string } | null>(null)
   const shown = result && result.key === requestKey ? result : null
-  const commits = shown ? shown.commits : null
-  const error = shown ? shown.error : ''
+  const commits = shown?.page?.items ?? null
+  const total = shown?.page?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
 
   useEffect(() => {
     let cancelled = false
     const key = requestKey
-    const req = fetchRepoId === null
-      ? getProjectCommits(projectId, LIMIT)
-      : getRepoCommits(fetchRepoId, LIMIT)
-    req
-      .then(list => { if (!cancelled) setResult({ key, commits: list, error: '' }) })
+    searchCommits(projectId, fetchRepoId ?? 0, term, page * pageSize, pageSize)
+      .then(data => { if (!cancelled) setResult({ key, page: data, error: '' }) })
       .catch((e: unknown) => {
         if (cancelled) return
-        setResult({ key, commits: [], error: e instanceof Error ? e.message : t('common.failed') })
+        setResult({ key, page: null, error: e instanceof Error ? e.message : t('common.failed') })
       })
     return () => { cancelled = true }
-  }, [requestKey, fetchRepoId, projectId, t])
+  }, [requestKey, projectId, fetchRepoId, term, page, pageSize, t])
+
+  // --- right page: selected commit's patch ---------------------------------
+  const scopeKey = `${projectId}|${fetchRepoId ?? 'all'}`
+  const [selection, setSelection] = useState<Selection | null>(null)
+  const liveSelection = selection && selection.scope === scopeKey ? selection : null
+  const selectionKey = liveSelection ? `${liveSelection.repoId}|${liveSelection.commit.hash}` : ''
+  const [patch, setPatch] = useState<{ key: string; diff: CommitDiff | null; error: string } | null>(null)
+  const livePatch = patch && patch.key === selectionKey ? patch : null
+  // Loading is derived from the request key, not stored in an effect: the
+  // selected commit changes identity before the fetch resolves, and a stale
+  // "loaded" flag would otherwise flash the previous commit's patch.
+  const patchLoading = !!liveSelection && !livePatch
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [compare, setCompare] = useState<{ repoId: number; sha: string; file: CommitDiffFile } | null>(null)
+
+  useEffect(() => {
+    if (!liveSelection) return
+    let cancelled = false
+    const key = selectionKey
+    getCommitDiff(liveSelection.repoId, liveSelection.commit.hash)
+      .then(diff => { if (!cancelled) setPatch({ key, diff, error: '' }) })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setPatch({ key, diff: null, error: e instanceof Error ? e.message : t('common.failed') })
+      })
+    return () => { cancelled = true }
+  }, [selectionKey, liveSelection, t])
+
+  const repoIdFor = (commit: RepoCommit): number => {
+    const repo = repos.find(r => r.path === commit.repo)
+    return repo ? repo.id : (typeof fetchRepoId === 'number' ? fetchRepoId : 0)
+  }
 
   const activeRepo = fetchRepoId === null ? null : repos.find(r => r.id === fetchRepoId) ?? null
   const repoTotals = activeRepo
     ? (activeRepo.stats || []).reduce(
-        (acc, s) => ({ added: acc.added + s.lines_added, deleted: acc.deleted + s.lines_deleted }),
+        (acc, stat) => ({ added: acc.added + stat.lines_added, deleted: acc.deleted + stat.lines_deleted }),
         { added: 0, deleted: 0 },
       )
     : null
-  // In a merged list every row needs its repo named; in a filtered list the
-  // label would repeat the active chip on every row.
   const showRepo = fetchRepoId === null
 
   const copyHash = async (hash: string) => {
@@ -105,6 +156,13 @@ export default function ProjectCommitLog({ projectId, repos }: Props) {
     } catch {
       toast({ kind: 'error', title: t('project.copyFailed') })
     }
+  }
+
+  const selectCommit = (commit: RepoCommit) => {
+    const repoId = repoIdFor(commit)
+    if (!repoId) return
+    setSelection({ scope: scopeKey, repoId, commit })
+    setCompare(null)
   }
 
   return (
@@ -167,8 +225,6 @@ export default function ProjectCommitLog({ projectId, repos }: Props) {
               </a>
             )}
             <div className={s.totals}>
-              {/* Sign only when non-zero: "+0"/"-0" on every idle repo turns
-                  the bar into visual noise. */}
               <span className={repoTotals.added > 0 ? 'green' : 'muted-num'}>
                 {repoTotals.added > 0 ? `+${repoTotals.added}` : '0'}
               </span>
@@ -180,60 +236,175 @@ export default function ProjectCommitLog({ projectId, repos }: Props) {
         </div>
       )}
 
-      {commits === null && <div className={s.status}>{t('common.loading')}</div>}
-      {error && <div className={`${s.status} ${s.statusError}`}>{error}</div>}
-      {commits !== null && !error && commits.length === 0 && (
+      <div className={s.searchRow}>
+        <div className={s.searchBox}>
+          <Icon name="search" size={14} />
+          <input
+            type="search"
+            value={query}
+            placeholder={t('project.searchCommits')}
+            aria-label={t('project.searchCommits')}
+            onChange={e => changeQuery(e.target.value)}
+          />
+          {query && (
+            <button type="button" className={s.clearSearch} onClick={() => changeQuery('')} aria-label={t('project.clearSearch')}>
+              <Icon name="close" size={12} />
+            </button>
+          )}
+        </div>
+        <label className={s.pageSize}>
+          {t('project.pageSize')}
+          <select
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
+          >
+            {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <span className={s.resultCount}>{t('project.commitCount', { count: total })}</span>
+      </div>
+
+      {commits === null && !shown?.error && <div className={s.status}>{t('common.loading')}</div>}
+      {shown?.error && <div className={`${s.status} ${s.statusError}`}>{shown.error}</div>}
+      {commits !== null && !shown?.error && commits.length === 0 && (
         <div className={s.status}>{t('project.noCommits')}</div>
       )}
+
       {commits !== null && commits.length > 0 && (
-        <>
-          <ul className={s.feed}>
-            {commits.map((c, i) => {
-              // In the merged view the repo label doubles as the way into
-              // that repo's log — a click narrows the timeline instead of
-              // sending the reader back up to the filter row.
-              const repo = showRepo ? repos.find(r => r.path === c.repo) : undefined
-              return (
-                <li key={c.hash || `${c.time}-${i}`} className={s.feedItem}>
-                  <span className={s.dot} />
-                  <div className={s.feedBody}>
-                    <div className={s.feedMessage} title={c.message}>{c.message}</div>
-                    <div className={s.feedMeta}>
-                      <span>{c.time}</span>
-                      {showRepo && (repo ? (
+        <div className={s.book}>
+          <section className={`${s.page} ${s.leftPage}`} aria-label={t('project.logPageTitle')}>
+            <div className={s.pageHead}>{t('project.logPageTitle')}</div>
+            <ul className={s.feed}>
+              {commits.map((c, i) => {
+                const repo = showRepo ? repos.find(r => r.path === c.repo) : undefined
+                const active = liveSelection?.commit.hash === c.hash && liveSelection.commit.repo === c.repo
+                return (
+                  <li
+                    key={c.hash || `${c.time}-${i}`}
+                    className={`${s.feedItem} ${active ? s.feedItemActive : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={active}
+                    onClick={() => selectCommit(c)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectCommit(c) } }}
+                  >
+                    <span className={s.dot} />
+                    <div className={s.feedBody}>
+                      <div className={s.feedMessage} title={c.message}>{c.message}</div>
+                      <div className={s.feedMeta}>
+                        <span>{c.time}</span>
+                        {showRepo && (repo ? (
+                          <button
+                            className={`${s.repo} ${s.repoButton}`}
+                            title={`${c.repo} · ${t('project.filterRepoHint')}`}
+                            onClick={e => { e.stopPropagation(); choose(repo.id) }}
+                          >
+                            {shortPath(c.repo)}
+                          </button>
+                        ) : (
+                          <span className={s.repo} title={c.repo}>{shortPath(c.repo)}</span>
+                        ))}
+                        {c.branch && <span className={s.branch}>{c.branch}</span>}
+                        <span className={s.author}>{c.author}</span>
                         <button
-                          className={`${s.repo} ${s.repoButton}`}
-                          title={`${c.repo} · ${t('project.filterRepoHint')}`}
-                          onClick={() => choose(repo.id)}
+                          className={`${s.hash} ${copiedHash === c.hash ? s.hashCopied : ''}`}
+                          onClick={e => { e.stopPropagation(); copyHash(c.hash) }}
+                          title={t('project.copyHash')}
                         >
-                          {shortPath(c.repo)}
+                          <Icon name={copiedHash === c.hash ? 'check' : 'file-text'} size={10} />
+                          {c.hash.slice(0, 7)}
                         </button>
-                      ) : (
-                        <span className={s.repo} title={c.repo}>{shortPath(c.repo)}</span>
-                      ))}
-                      {c.branch && <span className={s.branch}>{c.branch}</span>}
-                      <span className={s.author}>{c.author}</span>
-                      <button
-                        className={`${s.hash} ${copiedHash === c.hash ? s.hashCopied : ''}`}
-                        onClick={() => copyHash(c.hash)}
-                        title={t('project.copyHash')}
-                      >
-                        <Icon name={copiedHash === c.hash ? 'check' : 'file-text'} size={10} />
-                        {c.hash.slice(0, 7)}
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-          <div className={s.footer}>
-            <span>{t('project.commitCount', { count: commits.length })}</span>
-            {commits.length >= LIMIT && (
-              <span className={s.cap}>{t('project.commitsCapped', { limit: LIMIT })}</span>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className={s.pager}>
+              <button className="btn btn-secondary btn-sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+                {t('project.prevPage')}
+              </button>
+              <span>{t('project.pageIndicator', { page: page + 1, pages: pageCount })}</span>
+              <button className="btn btn-secondary btn-sm" disabled={page + 1 >= pageCount} onClick={() => setPage(p => p + 1)}>
+                {t('project.nextPage')}
+              </button>
+            </div>
+          </section>
+
+          <section className={`${s.page} ${s.rightPage}`} aria-label={t('project.diffPageTitle')}>
+            <div className={s.pageHead}>
+              {liveSelection
+                ? `${t('project.diffPageTitle')} · ${liveSelection.commit.hash.slice(0, 7)}`
+                : t('project.diffPageTitle')}
+            </div>
+            {!liveSelection && <div className={s.diffPlaceholder}>{t('project.diffEmpty')}</div>}
+            {patchLoading && <div className={s.status}>{t('common.loading')}</div>}
+            {liveSelection && livePatch?.error && <div className={`${s.status} ${s.statusError}`}>{livePatch.error}</div>}
+            {liveSelection && livePatch?.diff && (
+              <div className={s.diffBody}>
+                {livePatch.diff.files.length === 0 && <div className={s.diffPlaceholder}>{t('project.noDiff')}</div>}
+                {livePatch.diff.files.map(file => (
+                  <article key={file.path} className={s.diffFile}>
+                    <div className={s.fileHead}>
+                      <button
+                        type="button"
+                        className={s.fileToggle}
+                        aria-label={collapsed[file.path] ? t('project.expandFile') : t('project.collapseFile')}
+                        onClick={() => setCollapsed(prev => ({ ...prev, [file.path]: !prev[file.path] }))}
+                      >
+                        {collapsed[file.path] ? '▸' : '▾'}
+                      </button>
+                      <button
+                        type="button"
+                        className={s.fileName}
+                        title={t('project.compareFile')}
+                        onClick={() => setCompare({ repoId: liveSelection.repoId, sha: liveSelection.commit.hash, file })}
+                      >
+                        {file.path}
+                      </button>
+                      <span className={`${s.fileStatus} ${s[`status_${file.status}`] ?? ''}`}>
+                        {t(`project.diffStatus_${file.status}`, { defaultValue: file.status })}
+                      </span>
+                      <span className={s.fileCounts}>
+                        <span className="green">+{file.added}</span>
+                        <span className="red">-{file.deleted}</span>
+                      </span>
+                    </div>
+                    {!collapsed[file.path] && (
+                      file.binary ? (
+                        <div className={s.diffPlaceholder}>{t('project.binaryFile')}</div>
+                      ) : (
+                        <div className={s.hunks}>
+                          {file.hunks.map((hunk, hi) => (
+                            <div key={hi} className={s.hunk}>
+                              {hunk.header && <div className={s.hunkHeader}>@@ -{hunk.old_start} +{hunk.new_start} @@ {hunk.header}</div>}
+                              {hunk.lines.map((line, li) => (
+                                <div key={li} className={`${s.diffLine} ${line.kind === 'add' ? s.lineAdd : line.kind === 'del' ? s.lineDel : ''}`}>
+                                  <span className={s.lineNo}>{line.old_no || ''}</span>
+                                  <span className={s.lineNo}>{line.new_no || ''}</span>
+                                  <code>{line.text || ' '}</code>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    )}
+                  </article>
+                ))}
+              </div>
             )}
-          </div>
-        </>
+          </section>
+        </div>
+      )}
+
+      {compare && (
+        <CommitFileCompare
+          repoId={compare.repoId}
+          sha={compare.sha}
+          file={compare.file}
+          onClose={() => setCompare(null)}
+        />
       )}
     </div>
   )

@@ -18,11 +18,12 @@
 // It collapses to a handle on the right edge and stays that way until the
 // user opens it again; the state is remembered per machine.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import Icon from './Icon'
-import { browseWikiPages, listPendingWikiPages, type WikiPageSummary } from '../api/client'
+import { browseWikiPages, listPendingWikiPages, type WikiPageSummary, type EvidenceItem } from '../api/client'
+import { getAssistantCards, subscribeAssistantCards } from '../hooks/assistantCards'
 import s from './ContextRail.module.css'
 
 /**
@@ -42,6 +43,15 @@ function load<T>(run: () => Promise<T>, onValue: (value: T) => void, onFailure: 
   }
 }
 
+/** Same landing rule as the inline knowledge cards in HomeKnowledgeAssistant. */
+function cardHref(item: EvidenceItem): string {
+  if (item.type === 'page') return `/wiki/${item.id}`
+  const pid = item.project_id && item.project_id > 0 ? item.project_id : 0
+  return item.type === 'todo'
+    ? `/project/${pid}?tab=todos`
+    : `/project/${pid}?tab=notes&noteId=${item.id}`
+}
+
 
 interface Props {
   /** True when the rail is folded away to its handle. */
@@ -54,6 +64,9 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
   const navigate = useNavigate()
   const [pending, setPending] = useState<{ id: number; title: string }[] | null>(null)
   const [recent, setRecent] = useState<WikiPageSummary[] | null>(null)
+  // A stable snapshot function is required by useSyncExternalStore; the store
+  // returns a stable object until a new answer lands, so no re-render loop.
+  const cards = useSyncExternalStore(subscribeAssistantCards, getAssistantCards, getAssistantCards)
 
   useEffect(() => {
     let cancelled = false
@@ -103,6 +116,54 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
           <Icon name="panel-right" size={15} />
         </button>
       </header>
+
+      {/* The newest answer's evidence, lifted out of the chat stream so the
+          rail is one place for "what this conversation touched". Each card is
+          a link, so a citation stays actionable without scrolling back. */}
+      <section className={s.block}>
+        <h3 className={s.blockTitle}>
+          <span>{t('shell.answerProjects')}</span>
+          {cards.projectCards.length > 0 && <span className={s.count}>{cards.projectCards.length}</span>}
+        </h3>
+        {cards.projectCards.length === 0 ? (
+          <p className={s.empty}>{t('shell.answerEmpty')}</p>
+        ) : (
+          <ul className={s.list}>
+            {cards.projectCards.map(p => (
+              <li key={p.id}>
+                <button type="button" className={s.item} onClick={() => navigate(`/project/${p.id}`)}>
+                  <span className={s.itemTitle}>{p.name}</span>
+                  <span className={s.itemMeta}>{p.root_path}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className={s.block}>
+        <h3 className={s.blockTitle}>
+          <span>{t('shell.answerKnowledge')}</span>
+          {cards.knowledgeCards.length > 0 && <span className={s.count}>{cards.knowledgeCards.length}</span>}
+        </h3>
+        {cards.knowledgeCards.length === 0 ? (
+          <p className={s.empty}>{t('shell.answerEmpty')}</p>
+        ) : (
+          <ul className={s.list}>
+            {cards.knowledgeCards.map(item => (
+              <li key={`${item.ref || item.id}-${item.id}`}>
+                <button type="button" className={s.item} onClick={() => navigate(cardHref(item))}>
+                  <span className={s.itemTitle}>
+                    {item.ref && <span className={s.itemRef}>[{item.ref}]</span>}
+                    {item.title}
+                  </span>
+                  {item.project_name && <span className={s.itemMeta}>{item.project_name}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className={s.block}>
         <h3 className={s.blockTitle}>

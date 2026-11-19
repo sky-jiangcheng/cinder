@@ -98,6 +98,50 @@ export interface RepoCommit {
   branch: string
 }
 
+/** One page of the searchable commit log; total counts all matches. */
+export interface CommitPage {
+  items: RepoCommit[]
+  total: number
+  offset: number
+  limit: number
+}
+
+export interface CommitDiffLine {
+  kind: 'add' | 'del' | 'context'
+  text: string
+  old_no?: number
+  new_no?: number
+}
+
+export interface CommitDiffHunk {
+  header: string
+  old_start: number
+  new_start: number
+  lines: CommitDiffLine[]
+}
+
+export interface CommitDiffFile {
+  path: string
+  old_path?: string
+  status: string
+  binary: boolean
+  added: number
+  deleted: number
+  hunks: CommitDiffHunk[]
+}
+
+export interface CommitDiff {
+  sha: string
+  repo: string
+  files: CommitDiffFile[]
+}
+
+export interface FileSnapshot {
+  path: string
+  content: string
+  exists: boolean
+}
+
 export interface DailyStat {
   id: number
   repository_id: number
@@ -732,6 +776,30 @@ export interface UpdateInfo {
  * Mirrors internal/service.DownloadState: the progress of the in-app update
  * download.
  */
+/**
+ * Mirrors internal/service.ComponentUpdate: one row of the component update
+ * table (MCP server, capture CLI, headless server, IDE plugins).
+ */
+export interface ComponentUpdate {
+  id: string
+  name: string
+  installed: string
+  build_tag: string
+  latest: string
+  outdated: boolean
+  missing: boolean
+  path: string
+  method: string
+  command: string
+  hint: string
+}
+
+/** Mirrors internal/service.ComponentUpdateResult. */
+export interface ComponentUpdateResult {
+  command: string
+  output: string
+}
+
 export type DownloadPhase =
   /** No download has started. */
   | 'idle'

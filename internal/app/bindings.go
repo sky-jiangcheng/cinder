@@ -151,6 +151,22 @@ func (a *App) GetProjectCommits(projectID int64, limit int) ([]stats.RecentCommi
 	return a.svc.GetProjectCommits(projectID, limit)
 }
 
+// SearchCommits backs the searchable, paginated commit log on the project page.
+// repoID=0 means the whole project; any other value narrows to one repository.
+func (a *App) SearchCommits(projectID, repoID int64, query string, offset, limit int) (*service.CommitPage, error) {
+	return a.svc.SearchCommits(projectID, repoID, query, offset, limit)
+}
+
+// GetCommitDiff returns one commit's patch split by file for the two-pane view.
+func (a *App) GetCommitDiff(repoID int64, sha string) (*service.CommitDiff, error) {
+	return a.svc.GetCommitDiff(repoID, sha)
+}
+
+// GetCommitFile reads one side of a file's before/after comparison.
+func (a *App) GetCommitFile(repoID int64, sha, filePath string, before bool) (*service.FileSnapshot, error) {
+	return a.svc.GetCommitFile(repoID, sha, filePath, before)
+}
+
 // PreviewProjectMergeUp is the read-only half of the destructive "merge up" action:
 // it reports which sibling projects would be absorbed and deleted, with their
 // repository/note/todo counts. The UI shows this before it is allowed to ask for
@@ -1074,6 +1090,20 @@ func (a *App) ListAIModelsConfigured() (*aiclient.ModelListResult, error) {
 // deployment channel.
 func (a *App) CheckUpdate() (*service.UpdateInfo, error) {
 	return a.svc.CheckUpdate()
+}
+
+// CheckComponentUpdates reports every shipping component's installed version
+// against the latest release, together with the upgrade command matching its
+// install method. Read-only: it runs no installer and changes no file.
+func (a *App) CheckComponentUpdates() ([]service.ComponentUpdate, error) {
+	return a.svc.CheckComponentUpdates()
+}
+
+// RunComponentUpdate executes the upgrade command this app generated for one
+// component. The command is re-derived from the current install state, never
+// accepted from the caller. Desktop-only and human-gated (see surface.go).
+func (a *App) RunComponentUpdate(id string) (*service.ComponentUpdateResult, error) {
+	return a.svc.RunComponentUpdate(id)
 }
 
 // StartUpdateDownload fetches the release bundle for this platform into a

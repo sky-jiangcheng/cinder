@@ -130,24 +130,23 @@ func GetRecentCommit(repoPaths []string, filterAuthor string) (*RecentCommit, er
 	return best, nil
 }
 
-// GetRecentCommits returns the most recent commits across the given repositories,
-// merged and sorted by time descending, capped at limit. The author filter is
-// optional; an empty filter returns commits from all authors.
-func GetRecentCommits(repoPaths []string, filterAuthor string, limit int) ([]RecentCommit, error) {
-	if err := ValidateAuthor(filterAuthor); err != nil {
-		return nil, err
-	}
-	if limit <= 0 {
-		limit = 10
-	}
+// maxCommitScan bounds a full-history search. Pagination needs the true total,
+// so a search cannot stop at the requested page size; 20k commits per repo is
+// far beyond any checkout this product has seen while keeping a runaway
+// history from turning one keystroke into an unbounded git read.
+const maxCommitScan = 20000
 
+// readCommits reads at most maxPerRepo newest commits from each repository.
+// Kept separate from the sorting/pagination so both the fixed-size "recent"
+// feed and the searchable, paginated log parse git output exactly once.
+func readCommits(repoPaths []string, filterAuthor string, maxPerRepo int) []RecentCommit {
 	var all []RecentCommit
 	// Field separator: NUL byte, which cannot appear inside git's text fields.
 	const sep = "\x00"
 
 	for _, repoPath := range repoPaths {
 		args := []string{
-			"log", "-" + strconv.Itoa(limit),
+			"log", "-" + strconv.Itoa(maxPerRepo),
 			// The NUL separator must reach git as the FORMAT SPECIFIER %x00 —
 			// a literal NUL byte inside an argv string fails at execve (POSIX
 			// argv is NUL-terminated), so every command errored and the commit
@@ -195,7 +194,20 @@ func GetRecentCommits(repoPaths []string, filterAuthor string, limit int) ([]Rec
 			})
 		}
 	}
+	return all
+}
 
+// GetRecentCommits returns the most recent commits across the given repositories,
+// merged and sorted by time descending, capped at limit. The author filter is
+// optional; an empty filter returns commits from all authors.
+func GetRecentCommits(repoPaths []string, filterAuthor string, limit int) ([]RecentCommit, error) {
+	if err := ValidateAuthor(filterAuthor); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	all := readCommits(repoPaths, filterAuthor, limit)
 	sort.Slice(all, func(i, j int) bool {
 		return parseTimestamp(all[i].Time) > parseTimestamp(all[j].Time)
 	})
@@ -203,4 +215,48 @@ func GetRecentCommits(repoPaths []string, filterAuthor string, limit int) ([]Rec
 		all = all[:limit]
 	}
 	return all, nil
+}
+
+// SearchCommits filters commit subjects, authors, hashes and repository paths
+// by a case-insensitive substring, then returns one page and the full match
+// count. Filtering happens here rather than with `git log --grep` because --grep
+// only sees the subject: an author name or a 7-character hash must be searchable
+// too, and OR-ing --grep/--author in git is not possible.
+func SearchCommits(repoPaths []string, query string, offset, limit int) ([]RecentCommit, int, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > maxCommitScan {
+		limit = maxCommitScan
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	all := readCommits(repoPaths, "", maxCommitScan)
+	if q != "" {
+		matched := make([]RecentCommit, 0, len(all))
+		for _, c := range all {
+			if strings.Contains(strings.ToLower(c.Message), q) ||
+				strings.Contains(strings.ToLower(c.Author), q) ||
+				strings.Contains(strings.ToLower(c.Hash), q) ||
+				strings.Contains(strings.ToLower(c.Repo), q) ||
+				strings.Contains(strings.ToLower(c.Branch), q) {
+				matched = append(matched, c)
+			}
+		}
+		all = matched
+	}
+	sort.Slice(all, func(i, j int) bool {
+		return parseTimestamp(all[i].Time) > parseTimestamp(all[j].Time)
+	})
+	total := len(all)
+	if offset >= total {
+		return []RecentCommit{}, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return all[offset:end], total, nil
 }

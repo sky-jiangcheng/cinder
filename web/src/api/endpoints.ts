@@ -12,9 +12,14 @@ import type {
   AppConfig,
   BackupCopyTargetReport,
   CompileJob,
+  CommitDiff,
+  CommitPage,
+  ComponentUpdate,
+  ComponentUpdateResult,
   DailyStat,
   Evidence,
   EvidenceAnswer,
+  FileSnapshot,
   HeatmapResponse,
   ImportResult,
   ImportRun,
@@ -112,6 +117,30 @@ export function getRepoCommits(repoId: number, limit = 50): Promise<RepoCommit[]
  */
 export function getProjectCommits(projectId: number, limit = 50): Promise<RepoCommit[]> {
   return call<RepoCommit[]>({ method: 'GetProjectCommits', args: [projectId, limit], path: `/projects/${projectId}/commits` })
+}
+
+/** Search commits by subject/author/hash/repo, newest first, with real paging. */
+export function searchCommits(
+  projectId: number,
+  repoId: number,
+  query: string,
+  offset: number,
+  limit: number,
+): Promise<CommitPage> {
+  return call<CommitPage>({
+    method: 'SearchCommits',
+    args: [projectId, repoId, query, offset, limit],
+  })
+}
+
+/** One commit's patch, split into per-file hunks for the two-pane log view. */
+export function getCommitDiff(repoId: number, sha: string): Promise<CommitDiff> {
+  return call<CommitDiff>({ method: 'GetCommitDiff', args: [repoId, sha] })
+}
+
+/** One side (before/after) of a file comparison inside a commit. */
+export function getCommitFile(repoId: number, sha: string, filePath: string, before: boolean): Promise<FileSnapshot> {
+  return call<FileSnapshot>({ method: 'GetCommitFile', args: [repoId, sha, filePath, before] })
 }
 
 export function getProjectStats(id: number, date?: string): Promise<DailyStat[]> {
@@ -977,6 +1006,20 @@ export function diffWikiPageVersion(pageId: number, versionId: number): Promise<
  */
 export function checkUpdate(): Promise<UpdateInfo> {
   return call<UpdateInfo>({ method: 'CheckUpdate', args: [] })
+}
+
+/**
+ * Check every shipping component against the latest release. The backend
+ * reads installed binaries' build info and package-manager listings; nothing
+ * is installed by this call.
+ */
+export function checkComponentUpdates(): Promise<ComponentUpdate[]> {
+  return call<ComponentUpdate[]>({ method: 'CheckComponentUpdates', args: [] }).then(d => d ?? [])
+}
+
+/** Run the upgrade command the backend generated for one component. */
+export function runComponentUpdate(id: string): Promise<ComponentUpdateResult> {
+  return call<ComponentUpdateResult>({ method: 'RunComponentUpdate', args: [id] })
 }
 
 /**

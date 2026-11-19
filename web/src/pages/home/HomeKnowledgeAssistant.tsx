@@ -17,6 +17,7 @@ import {
 } from '../../api/client'
 import { renderMarkdown } from '../../utils/markdown'
 import type { PushToast } from '../../hooks/useToast'
+import { publishAssistantCards } from '../../hooks/assistantCards'
 import s from './HomeKnowledgeAssistant.module.css'
 
 // 首页对话台（ADR-0038 决策 2、3）。
@@ -127,6 +128,34 @@ export function knowledgeHref(item: EvidenceItem, fallbackProjectId: number): st
   return item.type === 'todo'
     ? `/project/${pid}?tab=todos`
     : `/project/${pid}?tab=notes&noteId=${item.id}`
+}
+
+/**
+ * 把一条问答归到「涉及项目」：只看用户主动选的 scope，以及问题/答案里
+ * 明确写出的项目名。刻意不从 evidence 命中的 project_id 反推——一篇讲
+ * Midplatform 的笔记若归在 Script 项目下，用户问 Midplatform 就会看到
+ * 无关的 Script 项目卡。证据所属项目已写在知识卡片角标上，不再冒充。
+ */
+export function matchProjects(
+  qText: string,
+  ansText: string,
+  projects: Project[],
+  scopeProjectId: number,
+): Project[] {
+  const matched = new Map<number, Project>()
+  if (scopeProjectId > 0) {
+    const p = projects.find(x => x.id === scopeProjectId)
+    if (p) matched.set(p.id, p)
+  }
+  const qLower = qText.toLowerCase()
+  const ansLower = ansText.toLowerCase()
+  for (const p of projects) {
+    const name = p.name.toLowerCase()
+    if (name.length >= 2 && (qLower.includes(name) || ansLower.includes(name))) {
+      matched.set(p.id, p)
+    }
+  }
+  return Array.from(matched.values()).slice(0, 6)
 }
 
 /** 一条检索命中的落点：笔记直接定位到那篇笔记，待办落到待办页签。 */
@@ -280,6 +309,18 @@ export default function HomeKnowledgeAssistant({
       }
     }, 200)
     return () => window.clearTimeout(timer)
+  }, [messages])
+
+  // Mirror the newest settled answer into the shell's right rail. Only cards
+  // from a finished message go out: a streaming draft's partial cards would
+  // make the rail flicker. Clearing the chat clears the rail too.
+  useEffect(() => {
+    const latest = [...messages].reverse().find(m => m.role === 'assistant' && !m.isStreaming)
+    publishAssistantCards({
+      projectCards: latest?.projectCards ?? [],
+      knowledgeCards: latest?.knowledgeCards ?? [],
+      messageId: latest?.id ?? '',
+    })
   }, [messages])
 
   const streamRef = useRef<HTMLDivElement>(null)
@@ -485,35 +526,6 @@ export default function HomeKnowledgeAssistant({
     try { localStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
   }
 
-  // Find relevant projects based on text matches and evidence item project IDs
-  const matchProjects = (qText: string, ansText: string, evidenceItems: EvidenceItem[] = []): Project[] => {
-    const matched = new Map<number, Project>()
-    if (scopeProjectId > 0) {
-      const p = projects.find(x => x.id === scopeProjectId)
-      if (p) matched.set(p.id, p)
-    }
-
-    // Projects directly cited in evidence
-    evidenceItems.forEach(it => {
-      if (it.project_id && it.project_id > 0) {
-        const p = projects.find(x => x.id === it.project_id)
-        if (p) matched.set(p.id, p)
-      }
-    })
-
-    // Projects mentioned by name in question or answer
-    const qLower = qText.toLowerCase()
-    const ansLower = ansText.toLowerCase()
-    projects.forEach(p => {
-      const pNameLower = p.name.toLowerCase()
-      if (pNameLower.length >= 2 && (qLower.includes(pNameLower) || ansLower.includes(pNameLower))) {
-        matched.set(p.id, p)
-      }
-    })
-
-    return Array.from(matched.values()).slice(0, 6)
-  }
-
   // Ask the knowledge base. Reuses the existing streaming contract.
   const handleAsk = async (overridePrompt?: string) => {
     const promptText = (overridePrompt ?? input).trim()
@@ -581,7 +593,7 @@ export default function HomeKnowledgeAssistant({
             return it
           })
 
-          const matchedProjs = matchProjects(promptText, res.reply || '', enrichedItems)
+          const matchedProjs = matchProjects(promptText, res.reply || '', projects, scopeProjectId)
 
           setMessages(prev =>
             prev.map(m =>
@@ -641,7 +653,7 @@ export default function HomeKnowledgeAssistant({
           cardFromSearchHit(h, i, projects.find(proj => proj.id === h.project_id)?.name),
         )
 
-        const matchedProjs = matchProjects(promptText, '', kCards)
+        const matchedProjs = matchProjects(promptText, '', projects, scopeProjectId)
 
         let replyText = t('home.fallbackNotice', {
           defaultValue: '未配置大模型端点，当前通过本地知识库全量索引进行匹配检索。可在「设置」中配置 AI 服务以获得智能总结。',

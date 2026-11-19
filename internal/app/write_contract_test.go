@@ -50,6 +50,11 @@ func TestBindingWritesAreComplete(t *testing.T) {
 		// One GET against GitHub; persists nothing (state is only written when
 		// a download starts).
 		"CheckUpdate": "pure read",
+		// Reads installed binaries and brew/scoop listings; no DB write.
+		"CheckComponentUpdates": "pure read",
+		// Spawns a package manager. Writes to the installation, not the DB;
+		// no single-writer contract applies.
+		"RunComponentUpdate": "external package manager, no DB write",
 		// Assembles a string from the DB; no write.
 		"GenerateLLMsTxt": "pure read",
 		// Inspects a candidate backup directory; no write.

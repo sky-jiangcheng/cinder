@@ -4,16 +4,20 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import {
   beginUpdateDownload,
+  checkComponentUpdates,
   getAppVersion,
   getInstallInfo,
   getUpdateState,
   openBrowserURL,
+  runComponentUpdate,
   runUpdateCheck,
   subscribeUpdateState,
   updateConfig,
+  type ComponentUpdate,
   type InstallInfo,
   type UpdateState,
 } from '../../api/client'
+import { copyText } from '../../utils/clipboard'
 import s from './UpdatesTab.module.css'
 
 interface Props {
@@ -60,6 +64,12 @@ export default function UpdatesTab({ initialConfig, showMessage }: Props) {
   // Where this build is installed and where update bundles are written.
   // Both questions used to have no answer inside the app.
   const [installInfo, setInstallInfo] = useState<InstallInfo | null>(null)
+  // Component rows are checked on demand: the probe runs brew/scoop and
+  // reads binaries, so it must never be part of app startup.
+  const [components, setComponents] = useState<ComponentUpdate[]>([])
+  const [checkingComponents, setCheckingComponents] = useState(false)
+  const [componentError, setComponentError] = useState('')
+  const [runningId, setRunningId] = useState('')
 
   useEffect(() => subscribeUpdateState(setState), [])
   useEffect(() => {
@@ -72,6 +82,42 @@ export default function UpdatesTab({ initialConfig, showMessage }: Props) {
   const checking = state.phase === 'checking'
   const info = state.info
   const error = state.phase === 'error' ? state.error : ''
+
+  // ---- component rows ------------------------------------------------------
+  const handleCheckComponents = async () => {
+    setCheckingComponents(true)
+    setComponentError('')
+    try {
+      setComponents(await checkComponentUpdates())
+    } catch (e: unknown) {
+      setComponentError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCheckingComponents(false)
+    }
+  }
+
+  const handleCopyCommand = async (row: ComponentUpdate) => {
+    try {
+      await copyText(row.command)
+      showMessage(t('settings.updates.componentCopied'))
+    } catch (e: unknown) {
+      showMessage(t('settings.updates.componentCopyFailed', { msg: e instanceof Error ? e.message : String(e) }))
+    }
+  }
+
+  const handleRunComponent = async (row: ComponentUpdate) => {
+    setRunningId(row.id)
+    try {
+      const res = await runComponentUpdate(row.id)
+      showMessage(t('settings.updates.componentRunDone', { name: row.name, msg: res.output }))
+      // Re-check: the command may have changed the installed version.
+      await handleCheckComponents()
+    } catch (e: unknown) {
+      showMessage(t('settings.updates.componentRunFailed', { name: row.name, msg: e instanceof Error ? e.message : String(e) }))
+    } finally {
+      setRunningId('')
+    }
+  }
 
   const handleCheck = async () => {
     try {
@@ -209,6 +255,65 @@ export default function UpdatesTab({ initialConfig, showMessage }: Props) {
         )}
       </section>
 
+      {/* Every other shipping component has its own channel. Reinstalling
+          the app does not touch them — the table makes that visible and
+          offers the exact command for how each one was installed. */}
+      <section className="settings-group">
+        <h2 className="settings-group-title">{t('settings.updates.componentsTitle')}</h2>
+        <p className="section-desc">{t('settings.updates.componentsDesc')}</p>
+        <div className={s.actionRow}>
+          <button className="btn btn-secondary" onClick={handleCheckComponents} disabled={checkingComponents}>
+            {checkingComponents ? t('settings.updates.componentChecking') : t('settings.updates.componentCheck')}
+          </button>
+        </div>
+
+        {componentError && (
+          <p className={s.error} role="alert">{t('settings.updates.componentCheckFailed', { msg: componentError })}</p>
+        )}
+
+        {components.length > 0 && (
+          <div className={s.componentList}>
+            {components.map(row => (
+              <div className={s.componentRow} key={row.id}>
+                <div className={s.componentHead}>
+                  <span className={s.componentName}>{row.name}</span>
+                  <span className={`${s.componentBadge} ${row.outdated ? s.badgeStale : row.missing ? s.badgeMissing : s.badgeCurrent}`}>
+                    {row.missing ? t('settings.updates.componentMissing')
+                      : row.outdated ? t('settings.updates.componentOutdated')
+                      : t('settings.updates.componentUpToDate')}
+                  </span>
+                </div>
+                <div className={s.componentMeta}>
+                  <span>{t('settings.updates.componentVersion')}: {row.installed || row.build_tag || '—'}</span>
+                  <span>{t('settings.updates.componentLatest')}: {row.latest}</span>
+                  <span>{t('settings.updates.componentMethod')}: {t(`settings.updates.method${methodKey(row.method)}`)}</span>
+                </div>
+                {row.path && <div className={s.componentPath}>{row.path}</div>}
+                {row.hint && <div className={s.componentHint}>{row.hint}</div>}
+                {row.command && (
+                  <>
+                    <code className={s.componentCommand}>{row.command}</code>
+                    <div className={s.actionRow}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => handleCopyCommand(row)}>
+                        {t('settings.updates.componentCopy')}
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => handleRunComponent(row)}
+                        disabled={runningId !== ''}
+                      >
+                        {runningId === row.id ? t('settings.updates.componentRunning') : t('settings.updates.componentRun')}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {!row.command && <div className={s.componentHint}>{t('settings.updates.componentNoCommand')}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section className="settings-group">
         <h2 className="settings-group-title">{t('settings.updates.prefsTitle')}</h2>
         <div className="form-group">
@@ -266,6 +371,18 @@ export default function UpdatesTab({ initialConfig, showMessage }: Props) {
       </section>
     </div>
   )
+}
+
+/** Install-method value -> i18n key suffix. */
+function methodKey(method: string): string {
+  switch (method) {
+    case 'brew-cask': return 'BrewCask'
+    case 'brew-formula': return 'BrewFormula'
+    case 'scoop': return 'Scoop'
+    case 'script': return 'Script'
+    case 'unknown': return 'Unknown'
+    default: return 'Missing'
+  }
 }
 
 /** RFC 3339 timestamp -> YYYY-MM-DD. Falls back to the raw string. */

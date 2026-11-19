@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"repotory/internal/aitools"
+	"repotory/internal/scanner"
 
 	"repotory/internal/db"
 	"repotory/internal/stats"
@@ -14,11 +17,11 @@ import (
 func (s *Service) registerDashboardTools(reg *aitools.Registry) {
 	reg.Register(
 		"query_daily_stats",
-		"Query daily code-change stats for one repository on a given date. Returns files_changed, lines_added, lines_deleted and commits.",
+		"Query daily code-change stats for one repository or every repository under a directory on a given date. Returns per-repo and totalled files_changed, lines_added, lines_deleted and commits.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"repo_path": map[string]any{"type": "string", "description": "Absolute path to a Git repository"},
+				"repo_path": map[string]any{"type": "string", "description": "Absolute path to a Git repository, or a directory: all Git repositories beneath it are discovered, de-duplicated and summed"},
 				"date":      map[string]any{"type": "string", "description": "Date in YYYY-MM-DD format"},
 				"author":    map[string]any{"type": "string", "description": "Optional Git author filter"},
 			},
@@ -60,6 +63,11 @@ func (s *Service) registerDashboardTools(reg *aitools.Registry) {
 	)
 }
 
+// dailyStatsScanDepth bounds directory expansion. A project root usually holds
+// repos one or two levels down; four is deep enough for nested monorepos while
+// scanner.MaxEntries still caps the walk.
+const dailyStatsScanDepth = 4
+
 func (s *Service) toolQueryDailyStats(ctx context.Context, args map[string]any) (any, error) {
 	repoPath, _ := args["repo_path"].(string)
 	date, _ := args["date"].(string)
@@ -73,22 +81,84 @@ func (s *Service) toolQueryDailyStats(ctx context.Context, args map[string]any) 
 	if err := s.git.ValidateDate(date); err != nil {
 		return nil, fmt.Errorf("invalid date %q: %w", date, err)
 	}
-	res, err := stats.QueryStats(repoPath, date, author)
+
+	paths, err := resolveStatsRepoPaths(ctx, repoPath)
 	if err != nil {
 		return nil, err
 	}
-	if res == nil {
-		return map[string]any{"repo_path": repoPath, "date": date, "author": author, "note": "no git data"}, nil
+
+	perRepo := make([]map[string]any, 0, len(paths))
+	total := &stats.Result{}
+	for _, p := range paths {
+		res, err := stats.QueryStats(p, date, author)
+		if err != nil {
+			return nil, fmt.Errorf("query %s: %w", p, err)
+		}
+		if res == nil {
+			continue
+		}
+		total.FilesChanged += res.FilesChanged
+		total.LinesAdded += res.LinesAdded
+		total.LinesDeleted += res.LinesDeleted
+		total.Commits += res.Commits
+		perRepo = append(perRepo, map[string]any{
+			"repo_path":     p,
+			"files_changed": res.FilesChanged,
+			"lines_added":   res.LinesAdded,
+			"lines_deleted": res.LinesDeleted,
+			"commits":       res.Commits,
+		})
 	}
+
 	return map[string]any{
 		"repo_path":     repoPath,
 		"date":          date,
 		"author":        author,
-		"files_changed": res.FilesChanged,
-		"lines_added":   res.LinesAdded,
-		"lines_deleted": res.LinesDeleted,
-		"commits":       res.Commits,
+		"repo_count":    len(perRepo),
+		"repos":         perRepo,
+		"files_changed": total.FilesChanged,
+		"lines_added":   total.LinesAdded,
+		"lines_deleted": total.LinesDeleted,
+		"commits":       total.Commits,
 	}, nil
+}
+
+// resolveStatsRepoPaths turns repo_path into a de-duplicated list of actual
+// git repositories. A path that is itself a repo stays a single-element list
+// (exact old behaviour); a directory expands to every git repo beneath it.
+// 找不到任何仓库时返回明确 error —— 不能让工具把「范围里没有仓库」伪装成
+// 「这些仓库今天 0 提交」。
+func resolveStatsRepoPaths(ctx context.Context, repoPath string) ([]string, error) {
+	abs, err := filepath.Abs(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid repo_path %q: %w", repoPath, err)
+	}
+	if info, statErr := os.Stat(filepath.Join(abs, ".git")); statErr == nil && info.IsDir() {
+		return []string{abs}, nil
+	}
+
+	found, err := scanner.ScanRepositories(ctx, []string{abs}, dailyStatsScanDepth)
+	if err != nil {
+		return nil, fmt.Errorf("scan repositories under %q: %w", repoPath, err)
+	}
+	if len(found) == 0 {
+		return nil, fmt.Errorf("no git repository found at or under %q — pass a repository path or a directory containing one", repoPath)
+	}
+
+	// scanner walks one root so paths are unique by construction, but de-dup
+	// anyway: overlapping roots or symlinked trees must never double-count a
+	// repo's commits in the aggregate.
+	seen := make(map[string]bool, len(found))
+	paths := make([]string, 0, len(found))
+	for _, r := range found {
+		clean := filepath.Clean(r.Path)
+		if seen[clean] {
+			continue
+		}
+		seen[clean] = true
+		paths = append(paths, clean)
+	}
+	return paths, nil
 }
 
 func (s *Service) toolListProjects(ctx context.Context, _ map[string]any) (any, error) {

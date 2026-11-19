@@ -90,6 +90,9 @@ var bindingSurfaces = map[string]BindingSurface{
 	"GetProjectOverview":     {SurfaceMCPBacked, "repotory_context", "mined project knowledge; context is the agent-facing render of it"},
 	"GetRepoCommits":         {SurfaceDesktopOnly, "", "commit table for the detail page"},
 	"GetProjectCommits":      {SurfaceDesktopOnly, "", "commit table for the detail page"},
+	"SearchCommits":          {SurfaceDesktopOnly, "", "interactive search/paging over the commit log; agents search git directly"},
+	"GetCommitDiff":          {SurfaceDesktopOnly, "", "interactive patch pane for the commit log; agents read git directly"},
+	"GetCommitFile":          {SurfaceDesktopOnly, "", "before/after file popup; agents read git directly"},
 	"UpdateProjectLevel":     {SurfaceDesktopOnly, "", "project grouping is a human organising act"},
 	"PreviewProjectMergeUp":  {SurfaceDesktopOnly, "", "read-only half of the destructive merge-up confirmation flow; grouping is human-only, so its preview has no MCP twin either"},
 	"QueryProjectStatsBatch": {SurfaceDesktopOnly, "", "batch view behind the tool-calling project picker; per-project facts are repotory_projects_stats"},
@@ -159,6 +162,8 @@ var bindingSurfaces = map[string]BindingSurface{
 
 	// ---- update check ----------------------------------------------------------
 	"CheckUpdate":            {SurfaceDesktopOnly, "", "desktop-app self-maintenance; headless and MCP users update through their own deployment channel"},
+	"CheckComponentUpdates":  {SurfaceDesktopOnly, "", "reads the user's installed binaries and package managers to report component versions; an agent has no business inspecting or upgrading the human's installation"},
+	"RunComponentUpdate":     {SurfaceDesktopOnly, "", "spawns a package-manager upgrade on the user's machine; a desktop-maintenance act requiring explicit human consent, never an agent call"},
 	"OpenBrowserURL":         {SurfaceDesktopOnly, "", "opens the system browser for the update card's download button; an agent has no browser to open and no install to perform"},
 	"StartUpdateDownload":    {SurfaceDesktopOnly, "", "fetches a release bundle to a local file and verifies its digest; an agent has no installer to hand it to, and downloading on a user's behalf is a desktop-maintenance act"},
 	"UpdateDownloadState":    {SurfaceDesktopOnly, "", "progress of the desktop app's own update download; it is UI state for a download the agent cannot start"},

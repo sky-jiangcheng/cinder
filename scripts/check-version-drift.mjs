@@ -71,7 +71,9 @@ const versionSites = [
   ],
   [
     'internal/version/version.go',
-    (t) => ({ 'const Version': t.match(/const Version\s*=\s*"([^"]+)"/)?.[1] }),
+    // Must stay `var`: CI's -X ldflags can only rewrite string variables,
+    // never a const. A regression to const breaks every CLI's version stamp.
+    (t) => ({ 'var Version': t.match(/var Version\s*=\s*"([^"]+)"/)?.[1] }),
   ],
   [
     'ide/vscode/package.json',

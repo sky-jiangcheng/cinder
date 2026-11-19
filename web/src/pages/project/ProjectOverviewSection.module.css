@@ -5,6 +5,54 @@
   gap: 14px;
 }
 
+/* Trend + activity folded in here from the Commits tab. One card, one header:
+   the metrics sit above the chart so the numbers and the shape share a scope. */
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.activityHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.activityHead .subTitle {
+  margin-bottom: 0;
+}
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.metricLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.metricValue {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
 .cacheHint {
   font-size: 11px;
   color: var(--text-muted);

@@ -2,11 +2,43 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   cardFromSearchHit,
   knowledgeHref,
+  matchProjects,
   serializeDialogue,
   loadDialogue,
   type DialogueMessage,
 } from './HomeKnowledgeAssistant'
+import type { Project } from '../../api/types'
 import type { EvidenceItem, SearchHit } from '../../api/client'
+
+function project(id: number, name: string): Project {
+  return {
+    id, name, root_path: `/workspace/${name}`, level_override: 0,
+    is_auto_grouped: false, is_starred: false, created_at: '',
+    repo_count: 0, total_added: 0, total_deleted: 0,
+    my_added: 0, my_deleted: 0, my_files: 0,
+    my_added_7d: 0, is_workday: true, below_standard: false,
+  }
+}
+
+describe('matchProjects', () => {
+  const projects = [project(137, 'MiddlePlatform'), project(9, 'Script')]
+
+  it('does not pull in the project a cited note belongs to', () => {
+    // The answer names Midplatform; the retrieved note lives under Script.
+    // Script must not surface as an "involved project" — its badge on the
+    // knowledge card already carries that provenance.
+    expect(matchProjects('Midplatform 今日提交量', '', projects, 0).map(p => p.id)).toEqual([])
+  })
+
+  it('matches a project named explicitly in the question or answer', () => {
+    expect(matchProjects('Script 项目最近做了什么', '', projects, 0).map(p => p.id)).toEqual([9])
+    expect(matchProjects('统计呢', 'MiddlePlatform 今日 0 提交', projects, 0).map(p => p.id)).toEqual([137])
+  })
+
+  it('keeps the scoped project even when the question names another', () => {
+    expect(matchProjects('Midplatform 呢', '', projects, 9).map(p => p.id)).toEqual([9])
+  })
+})
 
 function hit(over: Partial<SearchHit>): SearchHit {
   return {

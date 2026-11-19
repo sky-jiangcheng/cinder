@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next'
+import TrendChart, { type TrendDataset } from '../../components/TrendChart'
+import ScopeToggle from '../../components/ScopeToggle'
 import type { ProjectOverview } from '../../api/client'
 import { renderMarkdown } from '../../utils/markdown'
 import s from './ProjectOverviewSection.module.css'
@@ -12,25 +14,41 @@ const TECH_CLASS: Record<string, string | undefined> = {
   tool: s.techTool,
 }
 
+export type TrendScope = 'week' | 'month' | 'all'
+
+export interface OverviewTotals {
+  added: number
+  deleted: number
+  files: number
+  active: number
+}
+
 interface Props {
   overview: ProjectOverview
+  trend?: { labels: string[]; datasets: TrendDataset[] }
+  scope?: TrendScope
+  onScopeChange?: (scope: TrendScope) => void
+  totals?: OverviewTotals
 }
 
 /**
- * The mined-knowledge panel of the project detail page: tech stack, language
- * breakdown, README excerpt, dependencies, contributors, activity and the
- * recent commit feed. Hidden entirely when nothing was mined yet.
+ * The project's single summary page. The trend chart used to live in the
+ * Commits tab with four more metrics and almost no context; it is folded into
+ * the overview here so "how active is this project" is answered in one place,
+ * next to the tech stack, languages and contributors that explain the shape.
  */
-export default function ProjectOverviewSection({ overview }: Props) {
+export default function ProjectOverviewSection({ overview, trend, scope, onScopeChange, totals }: Props) {
   const { t } = useTranslation()
 
-  // Activity metrics and the recent-commit feed live in the Commits tab —
-  // rendering them here too made Overview and Commits largely the same page.
+  const activity = overview.activity
+  const hasTrend = !!trend && trend.labels.length > 0
   const hasContent =
     overview.readme_excerpt ||
     (overview.tech_stack?.length ?? 0) > 0 ||
     (overview.dependencies?.length ?? 0) > 0 ||
-    (overview.top_contributors?.length ?? 0) > 0
+    (overview.top_contributors?.length ?? 0) > 0 ||
+    hasTrend
+
   if (!hasContent) {
     return (
       <div className="detail-section overview-empty">
@@ -44,11 +62,43 @@ export default function ProjectOverviewSection({ overview }: Props) {
   }
 
   return (
-      <div className={`detail-section ${s.section}`}>
+    <div className={`detail-section ${s.section}`}>
       <div className="section-header">
         <h2>{t('project.overview')}</h2>
         <span className={s.cacheHint}>{overview.cached ? t('project.fromCache') : t('project.realtimeMining')}</span>
       </div>
+
+      {(activity || hasTrend) && (
+        <div className={s.activity}>
+          <div className={s.activityHead}>
+            <h3 className={s.subTitle}>{t('project.activityTitle')}</h3>
+            {scope && onScopeChange && <ScopeToggle scope={scope} onChange={onScopeChange} />}
+          </div>
+          {activity && (
+            <div className={s.metrics}>
+              <span className={s.metric}><span className={s.metricLabel}>{t('project.totalCommits')}</span><span className={s.metricValue}>{activity.total_commits}</span></span>
+              <span className={s.metric}><span className={s.metricLabel}>{t('project.last30d')}</span><span className={s.metricValue}>{activity.commit_rate_30d}</span></span>
+              <span className={s.metric}><span className={s.metricLabel}>{t('project.activeDays90')}</span><span className={s.metricValue}>{activity.active_days}</span></span>
+              <span className={s.metric}><span className={s.metricLabel}>{t('project.activeMonths')}</span><span className={s.metricValue}>{activity.active_months}</span></span>
+              {totals && (
+                <>
+                  <span className={s.metric}><span className={s.metricLabel}>{t('project.fileChanges')}</span><span className={s.metricValue}>{totals.files}</span></span>
+                  <span className={s.metric}><span className={s.metricLabel}>{t('project.added')}</span><span className={`${s.metricValue} green`}>+{totals.added}</span></span>
+                  <span className={s.metric}><span className={s.metricLabel}>{t('project.deleted')}</span><span className={`${s.metricValue} red`}>-{totals.deleted}</span></span>
+                </>
+              )}
+              {activity.last_commit_date && (
+                <span className={s.metric}><span className={s.metricLabel}>{t('project.lastCommit')}</span><span className={s.metricValue}>{activity.last_commit_date}</span></span>
+              )}
+            </div>
+          )}
+          {hasTrend ? (
+            <TrendChart labels={trend!.labels} datasets={trend!.datasets} height={170} />
+          ) : (
+            <p className="empty-hint">{t('project.noDataInRange')}</p>
+          )}
+        </div>
+      )}
 
       {(overview.tech_stack?.length ?? 0) > 0 && (
         <div className={s.tech}>

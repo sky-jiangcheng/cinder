@@ -12,8 +12,8 @@
 // The real i18n instance is used (like Wiki.test.tsx) so the assertions read
 // the wording a user reads, not translation keys.
 
-import { describe, expect, it, vi, beforeEach, beforeAll } from 'vitest'
-import { screen, waitFor, render, fireEvent } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach, beforeAll, afterEach } from 'vitest'
+import { screen, waitFor, render, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import i18n from '../i18n' // real i18next instance — otherwise t() returns raw keys
 import { lagged } from '../test/renderReady' // ADR-0026 probe: REPO_TEST_LAG_MS re-opens the window
@@ -34,6 +34,8 @@ import {
   type WikiPendingPage,
 } from '../api/client'
 import ContextRail from './ContextRail'
+import { publishAssistantCards } from '../hooks/assistantCards'
+import type { Project, EvidenceItem } from '../api/client'
 
 const mockBrowse = vi.mocked(browseWikiPages)
 const mockPending = vi.mocked(listPendingWikiPages)
@@ -83,6 +85,13 @@ beforeEach(() => {
   vi.clearAllMocks()
   mockBrowse.mockImplementation(() => lagged([]))
   mockPending.mockImplementation(() => lagged([]))
+  act(() => publishAssistantCards({ projectCards: [], knowledgeCards: [], messageId: '' }))
+})
+
+// The module store outlives a test; leaving cards behind would make unrelated
+// tests render stale names.
+afterEach(() => {
+  act(() => publishAssistantCards({ projectCards: [], knowledgeCards: [], messageId: '' }))
 })
 
 describe('ContextRail (ADR-0038 decision 6 — the global search box is gone)', () => {
@@ -108,6 +117,30 @@ describe('ContextRail (ADR-0038 decision 6 — the global search box is gone)', 
     // The page title comes from the fetched list, so it waits for the data
     // instead of relying on the findBy above to have flushed the render.
     expect(await screen.findByText('网关设计')).toBeTruthy()
+  })
+
+  it('shows the newest answer\'s project and knowledge cards', () => {
+    const project: Project = {
+      id: 137, name: 'MiddlePlatform', root_path: '/workspace/MiddlePlatform',
+      level_override: 0, is_auto_grouped: false, is_starred: false,
+      created_at: '', repo_count: 1, total_added: 0, total_deleted: 0,
+      my_added: 0, my_deleted: 0, my_files: 0,
+      my_added_7d: 0, is_workday: true, below_standard: false,
+    }
+    const knowledge: EvidenceItem = {
+      ref: 'N1', type: 'note', id: 8, title: '交接记录',
+      kind: 'knowledge', snippet: '…', rank: 1, project_name: 'MiddlePlatform',
+    }
+    act(() => publishAssistantCards({
+      projectCards: [project], knowledgeCards: [knowledge], messageId: 'ai-1',
+    }))
+    renderRail()
+
+    expect(screen.getByText('本轮涉及项目')).toBeTruthy()
+    expect(screen.getAllByText('MiddlePlatform').length).toBeGreaterThan(0)
+    expect(screen.getByText('本轮引用知识')).toBeTruthy()
+    expect(screen.getByText(/交接记录/)).toBeTruthy()
+    expect(screen.getByText(/\[N1\]/)).toBeTruthy()
   })
 
   it('keeps the collapsed handle working', async () => {

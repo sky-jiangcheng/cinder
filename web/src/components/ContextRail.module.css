@@ -177,6 +177,14 @@
   color: var(--text-muted);
 }
 
+/* A citation marker like [N1] — keep it compact so the title still fits. */
+.itemRef {
+  margin-right: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
 .more {
   padding: 7px 8px;
   min-height: 28px;

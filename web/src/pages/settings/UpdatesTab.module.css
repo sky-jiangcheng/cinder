@@ -172,3 +172,91 @@
   transform: translateX(18px);
   background: #fff;
 }
+
+/* ---- component update table ---- */
+
+/* One card per component. Each is independent: a stale MCP server must not
+   make a current IDE plugin look broken, so the state badge sits on the row. */
+.componentList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  max-width: 720px;
+}
+
+.componentRow {
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.componentHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.componentName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.componentBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.badgeCurrent {
+  color: var(--success);
+  background: var(--bg-secondary);
+}
+
+.badgeStale {
+  color: var(--danger);
+  background: var(--bg-secondary);
+}
+
+.badgeMissing {
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+}
+
+.componentMeta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.componentPath,
+.componentHint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  word-break: break-all;
+  user-select: text;
+}
+
+/* The command is the whole point of the row: mono, selectable, never cut. */
+.componentCommand {
+  display: block;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
