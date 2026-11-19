@@ -15,7 +15,7 @@ A single-binary **Wails v2** desktop app: Go backend + React SPA (`web/dist` emb
 
 ```mermaid
 flowchart TB
-    ENTRY[/"Three entry points<br/>Wails · MCP · headless HTTP"/]
+    ENTRY[/"Four entry points<br/>Wails · MCP · HTTP · capture CLI"/]
     MAIN["main.go · Wails entry<br/>DB init · scan seeds<br/>security headers"]
     APP["internal/app · bindings<br/>1-3 lines per method"]
     SVC["internal/service · core<br/>notes / search / context"]
@@ -26,11 +26,38 @@ flowchart TB
     SVC --> GIT
 ```
 
-How to read it: the arrows show call direction, and the layers **thin out** as you go down — `main.go` only does startup initialization, `internal/app` is pure delegation at 1-3 lines per method, and all logic converges in `internal/service`. Below that it splits into two data outlets: writes go to `internal/db`, git reads go through the Provider abstraction in `internal/core/git` (the local implementation is the CLI; swapping it never affects the layers above). The `Three entry points` node at the top is one entry seen from three sides — Wails desktop, MCP, and headless HTTP, none of them a special case (see below).
+How to read it: the arrows show call direction, and the layers **thin out** as you go down — `main.go` only does startup initialization, `internal/app` is pure delegation at 1-3 lines per method, and all logic converges in `internal/service`. Below that it splits into two data outlets: writes go to `internal/db`, git reads go through the Provider abstraction in `internal/core/git` (the local implementation is the CLI; swapping it never affects the layers above). The `Four entry points` node at the top is one service seen from four sides — Wails desktop, MCP, headless HTTP, and the one-shot capture CLI, none of them a special case (see below).
 
-**All three entry points — the Wails desktop app, MCP (`cmd/mcp`), and headless HTTP (`cmd/server`) — share the same service implementation**, so behavior is always consistent and every new feature is implemented only once. Two exceptions talk to db directly: `internal/core/plugin/runtime` (the upsert pipeline for plugin knowledge imports) and `internal/importers/claude` (Claude memory reads) — both are pre-existing conventions outside the service.
+**All four entry points — the Wails desktop app, MCP (`cmd/mcp`), headless HTTP (`cmd/server`), and the one-shot capture CLI (`cmd/repotory-capture`, the SessionEnd hook target and per-agent transcript capture) — share the same service implementation**, so behavior is always consistent and every new feature is implemented only once. Two exceptions talk to db directly: `internal/core/plugin/runtime` (the upsert pipeline for plugin knowledge imports) and `internal/importers/claude` (Claude memory reads) — both are pre-existing conventions outside the service.
 
-Supporting packages: `internal/domain` (cross-layer row types), `internal/version` (version SSOT), `internal/diff` (line-level note diffs), `internal/stats` (git log parsing), `internal/knowledge` (repository knowledge mining), `internal/scanner` + `internal/grouper` (scanning and grouping), `internal/platform` (OS differences), `internal/core/plugin` (knowledge-source SPI), `internal/integrity` (data trustworthiness audit: 6 read-only checks including FTS drift, orphan rows, and cache freshness), `internal/httpapi` (headless HTTP JSON API, the HTTP shell over the service), `internal/importers/claude` (idempotent Claude memory imports).
+Supporting packages:
+
+| Package | Role |
+|---|---|
+| `internal/domain` | Cross-layer row types |
+| `internal/version` | Version SSOT |
+| `internal/diff` | Line-level note diffs |
+| `internal/stats` | git log parsing |
+| `internal/knowledge` | Repository knowledge mining |
+| `internal/scanner` + `internal/grouper` | Scanning and grouping |
+| `internal/platform` | OS differences |
+| `internal/core/plugin` | Knowledge-source SPI |
+| `internal/integrity` | Data trustworthiness audit: read-only checks including FTS drift, orphan rows, and cache freshness |
+| `internal/httpapi` | Headless HTTP JSON API, the HTTP shell over the service |
+| `internal/importers/claude` | Idempotent Claude memory imports |
+| `internal/importers/agents` | One-shot transcript parsers for WorkBuddy / Qoder / Trae CN / DSH (used by cmd/repotory-capture) |
+| `internal/agentinit` | Writes MCP registration and handoff instruction blocks into agent instruction files |
+| `internal/graph` | Knowledge-graph algorithms (Label Propagation for community synthesis, edge structure lint) |
+| `internal/search` | Retrieval orchestration |
+| `internal/review` | Incremental commit review (ADR-0053) |
+| `internal/aiclient` | HTTP/SSE transport for OpenAI-compatible endpoints (ADR-0064) |
+| `internal/aitools` | Tool loop and Function Calling contract (ADR-0064) |
+| `internal/aiaudit` | AI call audit and content review (ADR-0030) |
+| `internal/writer` + `internal/writerapi` | Cross-process single-writer contract and write catalogue (ADR-0058) |
+| `internal/errcode` | Unified classification of storage and transport errors |
+| `internal/bounds` | Input-size limits shared by every consumer surface |
+| `internal/conformance` | Three-surface behaviour fixture |
+| `internal/vecprobe` | Build-time capability regression for the vector extension |
 
 ## Key data flows
 

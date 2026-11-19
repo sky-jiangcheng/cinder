@@ -15,7 +15,7 @@ order: 20
 
 ```mermaid
 flowchart TB
-    ENTRY[/"三端入口<br/>Wails · MCP · headless HTTP"/]
+    ENTRY[/"四端入口<br/>Wails · MCP · HTTP · capture CLI"/]
     MAIN["main.go · Wails 入口<br/>建库 · 播种扫描根<br/>窗口与安全头"]
     APP["internal/app · 绑定层<br/>每方法 1-3 行委托"]
     SVC["internal/service · 业务核心<br/>笔记 / 搜索 / 上下文 / 交接"]
@@ -26,11 +26,38 @@ flowchart TB
     SVC --> GIT
 ```
 
-读图：箭头是调用方向，自上而下**逐层变薄**——`main.go` 只做启动期初始化，`internal/app` 每个方法 1-3 行纯委托，逻辑全部收敛到 `internal/service`；再往下分成两条数据出口，写库走 `internal/db`，读 git 走 `internal/core/git` 的 Provider 抽象（本地实现是 CLI，换成别的实现不影响上层）。最上方的 `三端入口` 是同一个入口的三个面——Wails 桌面、MCP、headless HTTP，谁都不是特例，见下段。
+读图：箭头是调用方向，自上而下**逐层变薄**——`main.go` 只做启动期初始化，`internal/app` 每个方法 1-3 行纯委托，逻辑全部收敛到 `internal/service`；再往下分成两条数据出口，写库走 `internal/db`，读 git 走 `internal/core/git` 的 Provider 抽象（本地实现是 CLI，换成别的实现不影响上层）。最上方的 `四端入口` 是同一套 service 的四个面——Wails 桌面、MCP、headless HTTP、一次性捕获 CLI，谁都不是特例，见下段。
 
-**Wails 桌面、MCP（cmd/mcp）与 headless HTTP（cmd/server）三种入口共享同一 service 实现**——行为永远一致，新功能只需实现一次。两个例外直连 db：`internal/core/plugin/runtime`（插件知识导入的 upsert 管线）与 `internal/importers/claude`（Claude 记忆读取），均为 service 之外的既有约定。
+**Wails 桌面、MCP（cmd/mcp）、headless HTTP（cmd/server）与一次性捕获 CLI（cmd/repotory-capture，SessionEnd hook 与各 agent 的一次性转录捕获）四种入口共享同一 service 实现**——行为永远一致，新功能只需实现一次。两个例外直连 db：`internal/core/plugin/runtime`（插件知识导入的 upsert 管线）与 `internal/importers/claude`（Claude 记忆读取），均为 service 之外的既有约定。
 
-支撑包：`internal/domain`（跨层行类型）、`internal/version`（版本 SSOT）、`internal/diff`（笔记行级 diff）、`internal/stats`（git log 解析）、`internal/knowledge`（仓库知识挖掘）、`internal/scanner` + `internal/grouper`（扫描与分组）、`internal/platform`（OS 差异）、`internal/core/plugin`（知识源 SPI）、`internal/integrity`（数据可信度审计：FTS 漂移/孤儿行/缓存新鲜度等 6 项只读检查）、`internal/httpapi`（headless HTTP JSON API，service 的 HTTP 壳）、`internal/importers/claude`（Claude 记忆幂等导入）。
+支撑包：
+
+| 包 | 职责 |
+|---|---|
+| `internal/domain` | 跨层行类型 |
+| `internal/version` | 版本 SSOT |
+| `internal/diff` | 笔记行级 diff |
+| `internal/stats` | git log 解析 |
+| `internal/knowledge` | 仓库知识挖掘 |
+| `internal/scanner` + `internal/grouper` | 扫描与分组 |
+| `internal/platform` | OS 差异 |
+| `internal/core/plugin` | 知识源 SPI |
+| `internal/integrity` | 数据可信度审计：FTS 漂移/孤儿行/缓存新鲜度等只读检查 |
+| `internal/httpapi` | headless HTTP JSON API，service 的 HTTP 壳 |
+| `internal/importers/claude` | Claude 记忆幂等导入 |
+| `internal/importers/agents` | WorkBuddy / Qoder / Trae CN / DSH 的一次性转录解析（cmd/repotory-capture 用） |
+| `internal/agentinit` | 把 MCP 注册与交接指令块写进各 agent 的指令文件 |
+| `internal/graph` | 知识图的图算法（社区综述的 Label Propagation、边结构体检） |
+| `internal/search` | 检索编排 |
+| `internal/review` | 增量提交自检（ADR-0053） |
+| `internal/aiclient` | OpenAI 兼容端点的 HTTP/SSE 传输（ADR-0064） |
+| `internal/aitools` | 工具循环与 Function Calling 契约（ADR-0064） |
+| `internal/aiaudit` | AI 调用审计与内容审查（ADR-0030） |
+| `internal/writer` + `internal/writerapi` | 跨进程单写者契约与写目录（ADR-0058） |
+| `internal/errcode` | 存储与传输错误的统一分类 |
+| `internal/bounds` | 各消费端共享的输入尺寸上限 |
+| `internal/conformance` | 三端行为一致性夹具 |
+| `internal/vecprobe` | 向量扩展的构建期能力回归 |
 
 ## 关键数据流
 
