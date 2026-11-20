@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+## [2.41.1] - 2026-11-20
+
+### 修复
+- **问「昨日提交量」仍可能翻笔记猜数字：系统提示词与工具描述双向钉死统计类问题的路由（2026-11-20）**：v2.41.0 修的是工具本身——传项目根目录给 `query_daily_stats` 不再静默报 0；但 agent 面对「昨天多少提交」这类数值问题时，未必会选中这些工具。根因在路由层：`repotory:begin` 托管块只教 context / handoff，没有统计问题的指引；`search_notes` 描述是宽泛的「relevant content」，对数值问题同样构成吸引；三个 stats 工具描述也没有明确的触发条件。实测 agent 走知识检索、从笔记/记忆里猜出 0，而 Cinder 已收藏项目当日实际有 15 commits。本次不改任何工具行为，只收紧路由：① 托管块加一条规则——带数值/时间答案的事实问题（提交数、增删行、「昨天的提交」、日期、仓库活跃度）先调 stats 工具，`search_notes` 与 memory 禁用于数字，无工具结果就如实说明；② 四个工具描述加触发词——`query_daily_stats` / `list_projects` / `get_project_stats` 正向命中，`search_notes` 反向排除数值类；③ Go 实现与两份 mjs 副本（CLI + VSIX）的托管块字节一致，两个 golden fixture（`contract.json`、`tool_loop_golden.json`）同步。**回归**：`GOTOOLCHAIN=local go test ./...` 全绿、`node scripts/check-agent-init-contract.mjs` 通过（双实现产物一致）。**边界**：这是提示词层的软引导，不是入口硬拦截——`AskAI` 仍把工具选择权交给模型；真正的强制需要在客户端拦截，不在本次范围。插件无功能变化：VSCode `repotory-init` 仅随托管块同步 5 行，JetBrains 插件未改；两者版本号按 SSOT 统一到 2.41.1，无独立功能条目。
+
 ## [2.41.0] - 2026-11-19
 
 ### 修复

@@ -17,7 +17,7 @@ import (
 func (s *Service) registerDashboardTools(reg *aitools.Registry) {
 	reg.Register(
 		"query_daily_stats",
-		"Query daily code-change stats for one repository or every repository under a directory on a given date. Returns per-repo and totalled files_changed, lines_added, lines_deleted and commits.",
+		"Query daily code-change stats (commits, files changed, lines added/deleted) for a repository or all repositories under a directory on a given date. CALL THIS for any question about commit counts, lines changed, 'yesterday's commits', or activity on a date — do NOT use notes or memory for numeric questions. Returns per-repo and totalled stats.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -31,13 +31,13 @@ func (s *Service) registerDashboardTools(reg *aitools.Registry) {
 	)
 	reg.Register(
 		"list_projects",
-		"List all known projects in Cinder, with names, root paths and repository counts.",
+		"List all known projects in Cinder, with names, root paths and repository counts. CALL THIS FIRST when a stats question names a project but not its ID, to resolve project_id for get_project_stats / get_recent_commits / get_heatmap.",
 		map[string]any{"type": "object", "properties": map[string]any{}},
 		s.toolListProjects,
 	)
 	reg.Register(
 		"get_project_stats",
-		"Get aggregated daily code-change stats for one project on a given date.",
+		"Get aggregated daily code-change stats (commits, lines) for one project on a given date. CALL THIS for numeric questions about a specific project's activity — resolve project_id with list_projects first. Do not answer from notes or memory.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -50,7 +50,7 @@ func (s *Service) registerDashboardTools(reg *aitools.Registry) {
 	)
 	reg.Register(
 		"search_notes",
-		"Search the local knowledge base (notes and pages) for relevant content.",
+		"Search the local knowledge base (notes and pages) for qualitative context: decisions, rationale, past discussions. Do NOT use for numeric or date questions (commits, lines, counts) — those need the stats tools; notes do not contain commit data.",
 		map[string]any{
 			"type": "object",
 			"properties": map[string]any{

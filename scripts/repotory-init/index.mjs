@@ -320,6 +320,11 @@ with.
   "cinder-capture --agent auto --cwd ." before you finish. It reads this
   session's transcript and writes the handoff with no model call, so the memory
   still closes without any per-client setup.
+- For factual questions with a numeric or time answer (commit counts, lines
+  changed, "yesterday's commits", dates, repo stats), call the stats tools
+  first (query_daily_stats / get_project_stats / repotory_projects_stats), not
+  search_notes or memory. Notes are prose; they do not carry commit data.
+  Never guess a number from memory — without a tool result, say so instead.
 
 Installed by Cinder into every project it collects, and refreshed on each scan.
 To remove, delete everything between the repotory:begin and repotory:end
