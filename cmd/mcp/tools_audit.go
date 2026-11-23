@@ -58,7 +58,8 @@ func registerAuditTools(mcpServer *server.MCPServer, svc *service.Service) {
 		Name: "repotory_ai_review_rules",
 		Description: "Show the local AI review rules and whether input/output review is enabled. " +
 			"The rules are the user's own regular expressions (one per line, '#' for comments), matched case-insensitively against prompts before they leave and against replies as they arrive. " +
-			"Cinder ships no built-in blocklist — a keyword list is a weak control — so this returns exactly what is configured, or an empty list if there are none.",
+			"Cinder ships no built-in KEYWORD blocklist — a keyword list is a weak control. An opt-in preset library of structured credential/PII patterns (API keys, private keys, connection strings, ID/card numbers) can be appended via ai_review_presets, and memory_redact masks the same patterns at note-write time; both are off by default. " +
+			"Returns the gate states and rule counts (rule_count includes preset_count when presets are active).",
 		InputSchema: mcp.ToolInputSchema{
 			Type:       "object",
 			Properties: map[string]any{},
@@ -69,11 +70,14 @@ func registerAuditTools(mcpServer *server.MCPServer, svc *service.Service) {
 			return makeErrorResult(err), nil
 		}
 		return makeJSONResult(map[string]any{
-			"audit_enabled": status.AuditEnabled,
-			"review_input":  status.ReviewInput,
-			"review_output": status.ReviewOutput,
-			"rule_count":    status.RuleCount,
-			"retention":     status.Retention,
+			"audit_enabled":   status.AuditEnabled,
+			"review_input":    status.ReviewInput,
+			"review_output":   status.ReviewOutput,
+			"rule_count":      status.RuleCount,
+			"presets_enabled": status.PresetsEnabled,
+			"preset_count":    status.PresetCount,
+			"redact_enabled":  status.RedactEnabled,
+			"retention":       status.Retention,
 		})
 	})
 }

@@ -141,7 +141,7 @@ sequenceDiagram
 
 ### 谁执行这次写：跨进程单写者契约（ADR-0058）
 
-桌面端、`cinder-mcp` 与 SessionEnd 钩子可以同时打开同一个 `repotory.db`。**同一时刻只有一个 Cinder 进程写库**：谁持有数据目录里的 `repotory.writer.lock`（OS 文件锁，进程被杀即释放）谁是写者，其余进程的写操作经本机回环 HTTP 转给写者执行。对 agent 的可见差别只有三条，都不改工具签名：
+桌面端、`cinder-mcp` 与会话钩子可以同时打开同一个 `repotory.db`。**同一时刻只有一个 Cinder 进程写库**：谁持有数据目录里的 `repotory.writer.lock`（OS 文件锁，进程被杀即释放）谁是写者，其余进程的写操作经本机回环 HTTP 转给写者执行。对 agent 的可见差别只有三条，都不改工具签名：
 
 - **长写不再炸出 `database is locked`**：备份、批量编译这类长事务占锁时，你的写排在写者的队列里等它，而不是 5 秒后失败。
 - **「无需桌面」仍然是真的**：机器上没有别的 Cinder 在跑时，`cinder-mcp` 自己当选写者；桌面一启动就收回写权（有界请求，agent 正忙则桌面暂时继续转发）。
@@ -154,7 +154,7 @@ sequenceDiagram
 | 工具 | 说明 | 读写 |
 |------|------|------|
 | `repotory_scan` | 冷启动：播种默认扫描根目录并同步扫描，发现本地 Git 仓库（纯 MCP 安装可用，无需桌面应用） | 写 |
-| `repotory_context` | 会话开始一次注入项目全上下文（技术栈 / README / 待办 / 高相关笔记，交接笔记置顶）。可选 `path`（绝对目录 / cwd）解析归属项目，见「工作区路径解析」 | 读 |
+| `repotory_context` | 会话开始一次注入项目全上下文（技术栈 / README / 待办 / 高相关笔记，交接笔记置顶）。已批准页磁盘镜像存在时头部附目录指引（ADR-0069，`pages_projection=0` 关闭）。可选 `path`（绝对目录 / cwd）解析归属项目，见「工作区路径解析」 | 读 |
 | `repotory_workspace_resolve` | 把绝对目录解析成归属项目（及目录所在的扫描仓库），返回与 `ResolveWorkspacePath` 绑定逐字段同构的解析结果，无匹配时给候选项目目录（[ADR-0062](../adr/0062-ide-project-lock-over-mcp.md)）。**agent 常规不需要它**：`repotory_context` 的 `path` 已在服务端完成同一份解析；它是给需要**显示**解析结果的人侧客户端（IDE 面板的项目锁）用的。纯读 | 读 |
 | `repotory_config_get` | 读全部配置（每个可设键的当前值 + 扫描根目录）。密钥掩码为 `************`——响应只说「已配置」，绝不外泄凭据。IDE 面板的 provider 设置经它读取（[ADR-0063](../adr/0063-repotory-server-consumer-list.md)） | 读 |
 | `repotory_config_update` | 写单个配置键（键名须在服务端白名单内，数值键拒绝非数值值）。**配置写自 2026-11-16 起为目录写**（ADR-0063：所有者把配置写从 human-gate 重新分类为 catalogue-covered），经单写者契约路由——IDE 面板的 provider 设置（`ai_chat_base_url` / `ai_chat_model` / `ai_chat_api_key`）经它保存，无本地服务也能配置 | 写 |
@@ -173,7 +173,7 @@ sequenceDiagram
 | `repotory_agent_score` | 检查本地 AI 就绪度（DB/笔记/搜索/MCP/llms.txt/SKILL.md/i18n） | 读 |
 | `repotory_integrity` | 审计数据可信度（FTS 索引漂移 / 孤儿行 / 缓存新鲜度 / 覆盖率） | 读 |
 | `repotory_ai_audit` | 查看本机最近向 AI 发了什么：时间 / 端点 / 模型 / 发起面（mcp/http/desktop）/ 字符数 / 是否被本地规则拦截。**不含提示词与回复原文**（审计只存哈希与长度） | 读 |
-| `repotory_ai_review_rules` | 查看本地 AI 审阅规则与输入/输出审阅开关。规则是用户自己的正则（每行一条，`#` 注释），命中即在发出前拦截/返回时标记；不内置黑名单 | 读 |
+| `repotory_ai_review_rules` | 查看本地 AI 审阅规则与输入/输出审阅开关。规则是用户自己的正则（每行一条，`#` 注释），命中即在发出前拦截/返回时标记；不内置关键词词表。可选内置凭证/PII 预设（`ai_review_presets`，20 条高精度格式规则，追加在用户规则之后）与入口侧落库前脱敏（`memory_redact`，替换为 `[redacted:名称]`），均默认关（ADR-0068） | 读 |
 | `repotory_chat` | 跨端**共享会话**（Warden 与 IDE 插件之间同步主题与已完成的消息）：`operation` ∈ `list` / `create` / `read` / `append` / `rename` / `set_path`。id 由客户端生成 UUID；同 id 同载荷重放**幂等**，同 id 不同载荷直接报错、**绝不覆盖**；`reply_to` 只能指向本主题内的 user 消息。与知识笔记、检索、审批**完全隔离**，不共享一张表 | 写 |
 | `repotory_metrics` | 读**已存库**的量化概览（仓库数 / 代码行 / 今日提交与增删 / 笔记数 / 待人工审批数）。不扫盘、不跑 git、不刷新缓存；`path` 空 = 全库，未知路径返回空计数而不是全库总量；`since` / `until`（`YYYY-MM-DD`，含端点，最长 366 天）给日期窗口的提交与增删——窗口超出最后一次扫描时计数为 `null` 且 `stale: true`，**不是 0**（没人扫过的日期在缓存里是缺席，不是没干活）；缓存语言 LOC 覆盖不完整时 `totalLines` 为 `null`（宁可少给，不给假总数） | 读 |
 
@@ -219,7 +219,7 @@ repository 层（1、2）压过 project 层（3、4），因为命中 repository
 
 ### 桌面端一键接入（不用开终端）
 
-装了桌面 App 的人不必去终端跑脚本：**设置 → 操作 → 接入 AI 客户端**（见[设置](settings.md)）里选一个项目、勾选要接的客户端、点一次「接入」，桌面端就会写好 `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`，可选装上 Claude Code 的 SessionEnd hook，**可选把「开局读 / 收尾写」那两句写进项目的 `AGENTS.md` 与 `CLAUDE.md`**（[ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)），并顺手触发一次扫描。装完直接开 Claude Code，`repotory_context` 就有内容可返回，不用再手动 rescan。
+装了桌面 App 的人不必去终端跑脚本：**设置 → 操作 → 接入 AI 客户端**（见[设置](settings.md)）里选一个项目、勾选要接的客户端、点一次「接入」，桌面端就会写好 `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`，可选装上 Claude Code 的会话钩子（SessionEnd 交接 + SessionStart 记忆简报），**可选把「开局读 / 收尾写」那两句写进项目的 `AGENTS.md` 与 `CLAUDE.md`**（[ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)），并顺手触发一次扫描。装完直接开 Claude Code，`repotory_context` 就有内容可返回，不用再手动 rescan。
 
 装 hook 时同一个表单里还有第三个勾选：**「开启会话捕捉」**（`claude_session_capture`，[ADR-0010](../adr/0010-session-auto-capture.md)）。它和 hook 是**同一个决定**——hook 装上了但捕捉没开，主路径（读转录落库、零 credit）就是死的，每次会话结束都退回「调模型写交接」并消耗 credit；这正是 2.1 时间盒量到的「装了但静默」的形状。勾选**默认不选**：它扩大的是 Cinder 可以读的东西（会话逐字稿），所以开关必须由用户来拨，接入报告会如实写明开启后的门状态；这个入口只能把门**打开**，关闭仍在设置 → AI 集成那一处。
 
@@ -231,10 +231,10 @@ repository 层（1、2）压过 project 层（3、4），因为命中 repository
 
 | 实现 | 形态 | 谁在用 |
 |------|------|--------|
-| `internal/agentinit` | Go，桌面二进制自带 | 桌面端那个按钮 |
+| `internal/agentinit` | Go，桌面二进制自带 | 桌面端那个按钮 + `cinder-capture init` / `uninstall` 子命令（ADR-0067） |
 | `scripts/repotory-init/index.mjs` | node 脚本，零依赖 | 终端与 VS Code 扩展 |
 
-两份实现写出的文件被**同一份 fixture**（`internal/agentinit/testdata/contract.json`）钉住：`go test ./internal/agentinit` 验 Go 那一侧，`node scripts/check-agent-init-contract.mjs` 验脚本那一侧（并且**两份脚本副本都验**——事实源是 `scripts/repotory-init/index.mjs`，VSIX 里带的那份由 `ide/vscode/scripts/sync-init.mjs` 生成）。只改一边，另一边立刻红：这种漂移从两边看都是「已注册」，而 Claude Code 什么也没收到。
+两份实现写出的文件被**同一份 fixture**（`internal/agentinit/testdata/contract.json`）钉住：`go test ./internal/agentinit` 验 Go 那一侧，`node scripts/check-agent-init-contract.mjs` 验脚本那一侧（并且**两份脚本副本都验**——事实源是 `scripts/repotory-init/index.mjs`，VSIX 里带的那份由 `ide/vscode/scripts/sync-init.mjs` 生成）。只改一边，另一边立刻红：这种漂移从两边看都是「已注册」，而 Claude Code 什么也没收到。**卸载后状态同样被钉住**（ADR-0067）：第二份 fixture `contract-uninstall.json` 记录精确卸载后的残留（`null` = 该文件必须不存在），两侧检查都先比安装产物、再跑卸载比残留。
 
 有几件事按钮**不会**替你做（都明确拒绝，而不是猜）：
 
@@ -250,15 +250,21 @@ repository 层（1、2）压过 project 层（3、4），因为命中 repository
 [ADR-0009](../adr/0009-ide-presence.md) 的第一步：一条命令完成二进制探测与客户端注册，幂等可重复执行：
 
 ```bash
+# 推荐：装在机器上的 cinder-capture 自带子命令（ADR-0067），任意目录可跑
+cinder-capture init --all        # 全部客户端 + 双会话钩子 + 指令块
+cinder-capture uninstall         # 精确移除上述接线，其他内容不动
+
+# 等价的 node 脚本入口（需要 node）
 node scripts/repotory-init/index.mjs --with-hook
 ```
 
-**在任意项目里都能跑**：VS Code 扩展的 `Cinder: Register MCP Server` 命令用的是随扩展打包的那份 `repotory-init`（事实源仍是 `scripts/repotory-init/index.mjs`，由 `compile` 拷入 VSIX，CI 用 `git diff --exit-code` 钉住两者一致），所以不必先克隆本仓库；执行时也不弹终端——扩展在宿主进程内静默跑完安装器（仅 `ENOENT`/`EACCES` 时才回退到 `node`）。上面的裸命令则需要你在本仓库目录内执行。
+**在任意项目里都能跑**：VS Code 扩展的 `Cinder: Register MCP Server` 命令用的是随扩展打包的那份 `repotory-init`（事实源仍是 `scripts/repotory-init/index.mjs`，由 `compile` 拷入 VSIX，CI 用 `git diff --exit-code` 钉住两者一致），所以不必先克隆本仓库；执行时也不弹终端——扩展在宿主进程内静默跑完安装器（仅 `ENOENT`/`EACCES` 时才回退到 `node`）。上面的 node 脚本入口则需要你在本仓库目录内执行。
 
 - 自动探测 `cinder-mcp`（`--bin` 可显式指定），向 Claude Code（`.mcp.json`）、Cursor（`.cursor/mcp.json`）、VS Code（`.vscode/mcp.json`）、Windsurf 写入注册（配置只落在对应客户端目录已存在的地方），JetBrains 打印手动指引
-- `--with-hook` 同时安装下方的 SessionEnd hook（脚本 + `settings.json` 合并，改前备份）
+- `--with-hook` 同时安装下方的两个会话钩子：SessionEnd 交接 + SessionStart 记忆简报（脚本 + `settings.json` 合并，改前备份；ADR-0066）
 - `--with-instructions` 同时把交接指令写进项目的 `AGENTS.md` 与 `CLAUDE.md`（ADR-0043；已有同名区块则原地替换，**区块之外的内容一律不动**，改前备份）
 - `--dry-run` 预览全部写入动作；找不到二进制时给出安装引导，`--yes` 以裸命令名 `cinder-mcp` 写入配置（装好即生效）
+- **精确卸载**（ADR-0067）：`cinder-capture uninstall`（或 `repotory-init --uninstall`）只移除我们写入的东西——其他 server / hook / 文件内容逐字节保留；被改过的 hook 脚本留在原地并警告；只含指令块的文件删除；每次覆写先备份；二次卸载是无声 no-op。子命令全程不开数据库，`claude_session_capture` 保持默认关闭（装 hook ≠ 启用转录读取）
 
 ### 手动接入 Claude Code（备选）
 
@@ -332,6 +338,32 @@ claude -p --mcp-config .mcp.json \
 - **协议保护**：交接笔记带 `handoff` 标签，`repotory_notes_update` 拒绝覆盖它们（防误覆盖），下一次会话由 `repotory_context` 置顶完整渲染。
 - hook 的事件名与配置字段随 Claude Code 版本演进，接入前以 `claude --help` 和官方 hooks 文档为准。
 
+### 会话开局记忆简报（SessionStart hook）
+
+SessionEnd 保证「记忆写进去」，[ADR-0066](../adr/0066-session-start-brief-injection.md) 补上另一半：「记忆在开局自动到场」。Claude Code 的 **SessionStart hook** 在每次会话开始时运行 `repotory-capture --brief`，其 stdout 由 Claude Code 注入新会话的上下文——agent 不做任何动作，就已经带着上一次会话的出口记录开局。
+
+`--with-hook` 一次装齐两个钩子；只装过 SessionEnd 的旧项目重跑一次即可补上 SessionStart 条目，`settings.json` 里原有内容一律不动。写入的条目：
+
+```json
+"SessionStart": [
+  { "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/repotory-brief.sh" }] }
+]
+```
+
+简报内容（`BuildSessionBrief`，预算 4000 字符，超预算从尾部整节丢弃）：
+
+- 最新一条交接（人工交接优先于 auto-captured；Gotchas / Next Steps 置顶，超长从尾部截断）
+- 更早交接的一行时间线（≤3 条）
+- 未完成待办（≤5 条）
+- **已批准**知识页标题 + 一行摘要（≤6 页；pending 页永不出现——注入是读面，同样受人审闸门约束，ADR-0015）
+
+设计要点与代价：
+
+- **零模型、只读**：`--brief` 以 `mode=ro` 打开数据库（`db.OpenReadOnly`），不迁移、不建表、不参与写者契约（ADR-0058）、不留 pending 记录。没有 SessionEnd 那样的 `claude -p` 兜底——开局烧 credit 或阻塞启动都不可接受。
+- **失败即无声**：数据库不存在、cwd 匹配不到已收藏项目、二进制不在 PATH，一律 exit 0 且 stdout 为空。往未收藏目录的每次开局注入错误信息是噪音，不是记忆。
+- **不是缩水的 `repotory_context`**：简报不做仓库挖掘（git / README），是纯数据库读，每次开局都跑得起；完整上下文仍由 agent 按需调 `repotory_context`。
+- **卸载**：`cinder-capture uninstall` 一并移除两个钩子脚本与 `settings.json` 里对应条目（ADR-0067）；手动卸载则删 `.claude/hooks/repotory-brief.sh` 与对应的 SessionStart 条目。
+
 ### 交接指令进项目指令文件（受管区块，ADR-0043）
 
 SessionEnd hook 只存在于 Claude Code。**换任何一个别的 agent，那条路就断了**——而本产品立的正是「跨 agent 的持久记忆」，所以补上另一条不挑客户端的路：把那两句指令写进项目自己就有的指令文件。
@@ -355,7 +387,7 @@ SessionEnd hook 只存在于 Claude Code。**换任何一个别的 agent，那�
 
 **诚实的边界**：指令文件让「收尾记一笔」从一个**必定发生**的事件（hook）变成一个**大概率发生**的事件（模型读到了，但服从不保证）。所以两条路**并存、不互斥**：hook 兜住「用户忘了收尾」，指令文件兜住「用户根本不用 Claude Code」，而两条路都走同一个 `repotory_handoff` 落库路径，**交接记录不会出现两种形状**。
 
-卸载就是删掉那两行标记之间的内容——区块对用户是一段可读可改的纯文本，不是一个需要产品代管的隐藏状态，所以不提供 `--remove` 开关。
+卸载可以手动删掉那两行标记之间的内容——区块对用户是一段可读可改的纯文本，不是一个需要产品代管的隐藏状态；`cinder-capture uninstall`（或 `repotory-init --uninstall`）也会精确移除区块：只含区块的文件删除（回到安装前的「没有文件」），其余内容逐字节保留（ADR-0067）。
 
 ### 接入 Cursor / 其他 MCP 客户端
 

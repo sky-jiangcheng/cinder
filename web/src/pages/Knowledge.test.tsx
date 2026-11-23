@@ -40,6 +40,7 @@ vi.mock('../api/client', async (importOriginal) => {
     searchWikiPages: vi.fn(),
     listOrganizeGroups: vi.fn(),
     getScanStatus: vi.fn(),
+    getConfig: vi.fn(),
   }
 })
 
@@ -55,7 +56,7 @@ vi.mock('react-i18next', () => ({
 
 import {
   listAllNotes, listAllTags, searchAll, getProjects,
-  browseWikiPages, searchWikiPages, listOrganizeGroups,
+  browseWikiPages, searchWikiPages, listOrganizeGroups, getConfig,
   type NoteWithProject, type Project, type WikiPageSummary, type OrganizeGroup,
 } from '../api/client'
 import Knowledge from './Knowledge'
@@ -67,6 +68,7 @@ const mockProjects = vi.mocked(getProjects)
 const mockBrowse = vi.mocked(browseWikiPages)
 const mockSearchWiki = vi.mocked(searchWikiPages)
 const mockGroups = vi.mocked(listOrganizeGroups)
+const mockConfig = vi.mocked(getConfig)
 
 const project = (over: Partial<Project> = {}): Project => ({
   id: 7,
@@ -175,6 +177,7 @@ beforeEach(() => {
   // No backlog by default: the organize tab must not take up room when
   // there is nothing to file.
   mockGroups.mockResolvedValue([])
+  mockConfig.mockResolvedValue({ config: { semantic_search: '1' }, scan_roots: [] })
 })
 
 describe('the knowledge page (ADR-0038 decision 4)', () => {
@@ -186,6 +189,37 @@ describe('the knowledge page (ADR-0038 decision 4)', () => {
     // The notes body is up, and it reported its count to the shared count
     // bar — one count bar for the tab, whatever the body underneath is.
     expect(await screen.findByText('knowledge.resultCount')).toBeTruthy()
+  })
+
+  it('shows recall badges, the semantic state and source filters (ADR-0072)', async () => {
+    mockSearchAll.mockResolvedValue([
+      {
+        type: 'note', id: 11, project_id: 7, project_name: 'repotory',
+        title: 'agent note', snippet: 's', tags: '', updated_at: '',
+        recall: ['semantic'], source_type: 'agent-import',
+      },
+      {
+        type: 'note', id: 12, project_id: 7, project_name: 'repotory',
+        title: 'manual note', snippet: 's', tags: '', updated_at: '',
+        recall: ['lexical', 'temporal'], source_type: 'manual',
+      },
+    ])
+    await renderKnowledge('/knowledge?q=zebra')
+
+    expect(await screen.findByText('agent note')).toBeTruthy()
+    // Recall badges: one per channel, labeled like the home assistant's.
+    expect(screen.getAllByText('home.sourceSemantic').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('home.sourceFts').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('home.sourceTemporal').length).toBeGreaterThan(0)
+    // The semantic state pill reflects the config, not a guess.
+    expect(screen.getByText('knowledge.semanticOn')).toBeTruthy()
+
+    // Filtering by source keeps only that bucket's hits.
+    fireEvent.click(screen.getByRole('button', { name: 'agent-import' }))
+    expect(screen.getByText('agent note')).toBeTruthy()
+    expect(screen.queryByText('manual note')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'knowledge.sourceFilterAll' }))
+    expect(screen.getByText('manual note')).toBeTruthy()
   })
 
   it('deep-links into the pages view with ?view=pages', async () => {

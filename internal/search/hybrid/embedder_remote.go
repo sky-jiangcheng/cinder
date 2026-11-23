@@ -28,7 +28,9 @@ type RemoteEmbedder struct {
 	Model   string
 	// Dim is the expected vector length; 0 means "trust the server's output".
 	Dim int
-	// HTTP client; if nil a 30s-timeout default is used.
+	// HTTP client; if nil a 120s-timeout default is used. Remote endpoints can
+	// spend ~15s of fixed overhead per request before streaming a multi-MB
+	// vector payload; 30s and even 60s proved too tight in practice.
 	HTTP *http.Client
 }
 
@@ -73,14 +75,21 @@ func (e *RemoteEmbedder) Embed(texts []string) ([][]float32, error) {
 	}
 	client := e.HTTP
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{Timeout: 120 * time.Second}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("hybrid: embed request: %w", err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20)) // 8 MiB cap on a response
+	const respCap = 8 << 20
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, respCap+1))
+	if err != nil {
+		return nil, fmt.Errorf("hybrid: read embed response: %w", err)
+	}
+	if len(raw) > respCap {
+		return nil, fmt.Errorf("hybrid: embed response exceeds %d MiB cap; reduce the batch size", respCap>>20)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("hybrid: embed endpoint %s: %s", resp.Status, firstLine(string(raw)))
 	}

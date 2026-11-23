@@ -1,5 +1,5 @@
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { stripMarkdown } from '../utils/markdown'
 import DOMPurify from 'dompurify'
@@ -11,7 +11,7 @@ import PageShell from '../components/PageShell'
 import TabStrip, { type TabItem } from '../components/TabStrip'
 import { useKnowledgePage } from '../hooks/useKnowledgePage'
 import WikiPagesView from './Wiki'
-import { getProjects, type Project } from '../api/client'
+import { getConfig, getProjects, type Project } from '../api/client'
 import s from './Knowledge.module.css'
 
 // The knowledge tab: ONE object, two states (ADR-0038 decision 4).
@@ -109,6 +109,9 @@ export default function Knowledge() {
   const [query, setQuery] = useState(urlQuery)
   const [scope, setScope] = useState(urlScope)
   const [projects, setProjects] = useState<Project[]>([])
+  // null = config not loaded (or unreadable): the status pill stays hidden
+  // rather than claiming a state it does not know.
+  const [semanticOn, setSemanticOn] = useState<boolean | null>(null)
 
   // What WE put into the URL. react-router may render an intermediate
   // location while our own write is in flight, and adopting that as an
@@ -136,6 +139,14 @@ export default function Knowledge() {
     getProjects()
       .then(ps => { if (!cancelled) setProjects(ps) })
       .catch(() => { /* the scope degrades to "all projects" */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getConfig()
+      .then(c => { if (!cancelled) setSemanticOn(c.config.semantic_search === '1') })
+      .catch(() => { /* the status pill degrades to hidden */ })
     return () => { cancelled = true }
   }, [])
 
@@ -262,6 +273,15 @@ export default function Knowledge() {
                 autoFocus
               />
             </div>
+
+            {/* ADR-0072: the semantic switch lives deep in settings, so the
+                search field itself says whether vector recall is active —
+                otherwise "why did this match?" has no visible answer. */}
+            {view === 'notes' && semanticOn !== null && (
+              <span className={s.semanticState} title={t('knowledge.semanticStateHint')}>
+                {semanticOn ? t('knowledge.semanticOn') : t('knowledge.semanticOff')}
+              </span>
+            )}
 
             {/* The scope selector used to live only on the pages view, even
                 though the notes search was cross-project all along — the uneven
@@ -390,6 +410,28 @@ function NotesBody({
     setQuery, handlePin, handleExport, handleImport, fetchAll, flashMessage,
   } = useKnowledgePage({ projects, scopeProjectId: scope })
 
+  // ADR-0072 provenance transparency: recall badges say WHICH arm surfaced
+  // each hit (the home assistant already shows them; this surface used to
+  // hide them), and the source chips filter notes by where they came from
+  // (ADR-0022 pending item 2).
+  const [sourceFilter, setSourceFilter] = useState('')
+  const recallLabel = (ch: string) =>
+    ch === 'semantic' ? t('home.sourceSemantic')
+      : ch === 'temporal' ? t('home.sourceTemporal')
+        : t('home.sourceFts')
+  const sourceTypesPresent = useMemo(
+    () => hits
+      ? [...new Set(hits.filter(h => h.type === 'note' && h.source_type).map(h => h.source_type as string))]
+      : [],
+    [hits],
+  )
+  // A filter whose bucket vanished from the new result set degrades to "all"
+  // at render time — no effect, no cascading re-render.
+  const activeSourceFilter = sourceTypesPresent.includes(sourceFilter) ? sourceFilter : ''
+  const shownHits = hits === null ? []
+    : activeSourceFilter ? hits.filter(h => h.type === 'note' && h.source_type === activeSourceFilter)
+      : hits
+
   // The query is the skeleton's (one field for both views); the hook's
   // search follows it. The hook keeps its own copy so that it still owns
   // "what is being searched for" — but the field the user types in is the
@@ -474,31 +516,68 @@ function NotesBody({
               ) : hits !== null ? (
                 <div className="knowledge-section">
                   <div className="section-header">
-                    <h2>{t('knowledge.searchResults')} ({hits.length})</h2>
+                    <h2>{t('knowledge.searchResults')} ({shownHits.length})</h2>
                   </div>
                   {hits.length === 0 ? (
                     <p className="empty-hint">{t('knowledge.noResults')}</p>
                   ) : (
-                    <div className={s.hitList}>
-                      {hits.map(h => (
-                        <Link
-                          key={`${h.type}-${h.id}`}
-                          to={
-                            h.type === 'note'
-                              ? `/project/${h.project_id}?tab=notes&noteId=${h.id}`
-                              : `/project/${h.project_id}?tab=todos`
-                          }
-                          className={s.hitItem}
-                        >
-                          <div className={s.hitHead}>
-                            <span className={`${s.hitType} hit-type-${h.type}`}>{h.type === 'note' ? t('dashboard.noteType') : t('summaryBar.todos')}</span>
-                            <span className={s.hitProject}>{h.project_name}</span>
-                          </div>
-                          <div className={s.hitTitle}>{h.title}</div>
-                          <div className={s.hitSnippet} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(h.snippet) }} />
-                        </Link>
-                      ))}
-                    </div>
+                    <>
+                      {sourceTypesPresent.length > 1 && (
+                        <div className={s.sourceFilterRow} role="group" aria-label={t('knowledge.sourceFilterLabel')}>
+                          <button
+                            type="button"
+                            className={`${s.sourceChip} ${activeSourceFilter === '' ? s.sourceChipActive : ''}`}
+                            aria-pressed={activeSourceFilter === ''}
+                            onClick={() => setSourceFilter('')}
+                          >
+                            {t('knowledge.sourceFilterAll')}
+                          </button>
+                          {sourceTypesPresent.map(st => (
+                            <button
+                              key={st}
+                              type="button"
+                              className={`${s.sourceChip} ${activeSourceFilter === st ? s.sourceChipActive : ''}`}
+                              aria-pressed={activeSourceFilter === st}
+                              onClick={() => setSourceFilter(st)}
+                            >
+                              {t(`settings.sourceTypes.${st}`, { defaultValue: st })}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {shownHits.length === 0 ? (
+                        <p className="empty-hint">{t('knowledge.noResults')}</p>
+                      ) : (
+                        <div className={s.hitList}>
+                          {shownHits.map(h => (
+                            <Link
+                              key={`${h.type}-${h.id}`}
+                              to={
+                                h.type === 'note'
+                                  ? `/project/${h.project_id}?tab=notes&noteId=${h.id}`
+                                  : `/project/${h.project_id}?tab=todos`
+                              }
+                              className={s.hitItem}
+                            >
+                              <div className={s.hitHead}>
+                                <span className={`${s.hitType} hit-type-${h.type}`}>{h.type === 'note' ? t('dashboard.noteType') : t('summaryBar.todos')}</span>
+                                <span className={s.hitProject}>{h.project_name}</span>
+                                {h.recall?.map(ch => (
+                                  <span key={ch} className={s.hitRecall} title={t('home.recallSource', { source: recallLabel(ch) })}>
+                                    {recallLabel(ch)}
+                                  </span>
+                                ))}
+                                {h.type === 'note' && h.source_type && (
+                                  <span className={s.hitSource}>{t(`settings.sourceTypes.${h.source_type}`, { defaultValue: h.source_type })}</span>
+                                )}
+                              </div>
+                              <div className={s.hitTitle}>{h.title}</div>
+                              <div className={s.hitSnippet} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(h.snippet) }} />
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (

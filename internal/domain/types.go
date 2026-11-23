@@ -220,6 +220,16 @@ type SearchHit struct {
 	// imported session logs without a second query — the search surfaces
 	// themselves do not filter on it.
 	Kind string `json:"kind,omitempty"`
+	// Recall lists the channels that surfaced this hit, in fusion-stage order:
+	// lexical | semantic | temporal (a hit recalled by several arms carries
+	// several). Empty when the producer did not annotate provenance. Additive
+	// optional field, CoreVersion 2.4.0 (ADR-0072).
+	Recall []string `json:"recall,omitempty"`
+	// SourceType is the derived source bucket of note hits (agent-import |
+	// user-conversation | project-extract | manual), the same presentation
+	// semantics as Note.SourceType (ADR-0022). Empty for todo hits. It lets
+	// the search surfaces filter by provenance without a second query.
+	SourceType string `json:"source_type,omitempty"`
 }
 
 // RepoMeta represents a row in the repo_meta table.

@@ -14,7 +14,7 @@ The desktop **home page is a console**: one input box that can either ask for an
 | Mode | What it does | Backend |
 |------|---------------|---------|
 | **Ask** (default) | Streams an answer plus a `Sources:` list, interruptible | `AskAIWithEvidence` — the same retrieval and prompt assembly the MCP `repotory_ask` tool uses |
-| **Search** | Lists hits (notes / todos / project names) | `SearchAll` (FTS5 full-text search) |
+| **Search** | Lists hits (notes / todos / project names) | `SearchAll` (FTS5 full-text + temporal window + optional vector fusion) |
 
 The mode is switched **explicitly** (the "Ask / Search" segmented control in the header) — it is never guessed from "Enter vs the button". Both modes share **one input box** and **one project-scope selector**; that is their only coupling point.
 
@@ -40,6 +40,7 @@ With no conversation yet, the recommendation area merges three sources that used
 - Hits are **grouped by project**, each group with its own count; project-name matches get their own group
 - Every hit carries an **"Ask about this"** action: it prefills the hit's title into the input and switches to the "Ask" mode for you to edit and send. It is the only coupling point between search and ask (the backend has no "answer about this hit" parameter, so the backend semantics are untouched)
 - The query is mirrored into `?q=`, so it can be bookmarked, shared and deep-linked
+- **Date questions take the temporal channel** ([ADR-0070](../adr/0070-temporal-recall-channel.md)): the date in "what was it solving on Nov 17" / "last Friday's handoff" is parsed into a creation-time window and fused as a third recall arm beside lexical/vector — a Chinese date shares zero trigrams with the ISO date in a title, and embeddings carry no calendar semantics, so those two arms cannot answer date questions in principle. Pure local computation, always on; queries without a date behave exactly as before
 
 ## How it relates to the other search entries
 

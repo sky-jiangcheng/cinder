@@ -22,15 +22,25 @@ import (
 // the outside, and which is exactly the difference between "we checked and
 // found nothing" and "we never checked".
 type AIAuditStatus struct {
-	AuditEnabled bool   `json:"audit_enabled"`
-	ReviewInput  bool   `json:"review_input"`
-	ReviewOutput bool   `json:"review_output"`
+	AuditEnabled bool `json:"audit_enabled"`
+	ReviewInput  bool `json:"review_input"`
+	ReviewOutput bool `json:"review_output"`
+	// RuleCount is the TOTAL active rule count (user rules + presets when
+	// enabled); PresetCount says how many of them are the built-in library,
+	// so the UI can show the user's own count as the difference.
 	RuleCount    int    `json:"rule_count"`
+	PresetCount  int    `json:"preset_count"`
 	CallCount    int    `json:"call_count"`
 	BlockedCount int    `json:"blocked_count"`
 	FlaggedCount int    `json:"flagged_count"`
 	Surface      string `json:"surface"`
 	TableExists  bool   `json:"table_exists"`
+	// PresetsEnabled / RedactEnabled are the two ADR-0068 gates: the
+	// built-in credential/PII library on the exit side, and write-time
+	// masking on the entry side. Independent of each other and of the
+	// ADR-0030 gates.
+	PresetsEnabled bool `json:"presets_enabled"`
+	RedactEnabled  bool `json:"redact_enabled"`
 	// Retention names the retention POLICY as a machine-readable token, not as
 	// a sentence. There is no retention policy on purpose (ADR-0030): an
 	// audit trail that can be quietly pruned is not one. The token lets the UI
@@ -48,14 +58,20 @@ const AIRetentionAppendOnly = "append_only"
 // recorded calls.
 func (s *Service) GetAIAuditStatus() (*AIAuditStatus, error) {
 	cfg := s.Audit.Resolve()
+	redact, _ := db.GetConfig(s.db, "memory_redact")
 	status := &AIAuditStatus{
-		AuditEnabled: cfg.Enabled,
-		ReviewInput:  cfg.ReviewInput,
-		ReviewOutput: cfg.ReviewOutput,
-		RuleCount:    len(cfg.Rules),
-		Surface:      s.Audit.Surface(),
-		TableExists:  db.AICallLogTableExists(s.db),
-		Retention:    AIRetentionAppendOnly,
+		AuditEnabled:   cfg.Enabled,
+		ReviewInput:    cfg.ReviewInput,
+		ReviewOutput:   cfg.ReviewOutput,
+		RuleCount:      len(cfg.Rules),
+		PresetsEnabled: cfg.PresetsEnabled,
+		RedactEnabled:  redact == "1",
+		Surface:        s.Audit.Surface(),
+		TableExists:    db.AICallLogTableExists(s.db),
+		Retention:      AIRetentionAppendOnly,
+	}
+	if cfg.PresetsEnabled && (cfg.ReviewInput || cfg.ReviewOutput) {
+		status.PresetCount = len(aiaudit.Presets)
 	}
 	if !status.TableExists {
 		return status, nil

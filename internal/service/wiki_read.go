@@ -78,15 +78,24 @@ func (s *Service) ListApprovedWikiPages(projectID int64) ([]WikiPendingPage, err
 // PromoteWikiPageToGlobal moves an approved page into the global tier. It is
 // the only path there, and nothing automated may call it (ADR-0015).
 func (s *Service) PromoteWikiPageToGlobal(pageID int64) error {
-	return wikipage.PromoteWikiPageToGlobal(s.db, pageID)
+	if err := wikipage.PromoteWikiPageToGlobal(s.db, pageID); err != nil {
+		return err
+	}
+	s.refreshPagesProjection() // ADR-0069: the page moves between mirror tiers
+	return nil
 }
 
 // AssignWikiPageProject moves a page back into a project tier.
 func (s *Service) AssignWikiPageProject(pageID int64, projectID int64) error {
-	return wikipage.AssignWikiPageProject(s.db, pageID, projectID)
+	if err := wikipage.AssignWikiPageProject(s.db, pageID, projectID); err != nil {
+		return err
+	}
+	s.refreshPagesProjection() // ADR-0069: the page moves between mirror tiers
+	return nil
 }
 
-// ExportWikiTree writes the approved pages as a Markdown tree on disk.
+// ExportWikiTree writes the wiki layer (all statuses, tagged) as a Markdown
+// tree on disk — the review surface, distinct from the approved-only mirror.
 func (s *Service) ExportWikiTree(rootDir string, projectID int64, force bool) (*WikiExportReport, error) {
 	return wikipage.ExportWikiTree(s.db, rootDir, projectID, force)
 }

@@ -124,12 +124,25 @@ var allowedConfigKeys = map[string]bool{
 	// screens the reply as it arrives (streaming output review can only
 	// withhold the tail — the head is already on screen).
 	// ai_review_rules holds the user's own patterns, one regex per line;
-	// Cinder ships no built-in blocklist, because a keyword list is a weak
-	// control and a false promise of coverage.
-	"ai_audit_enabled": true,
-	"ai_review_input":  true,
-	"ai_review_output": true,
-	"ai_review_rules":  true,
+	// Cinder ships no built-in KEYWORD blocklist, because a keyword list is
+	// a weak control and a false promise of coverage.
+	//
+	// ADR-0068 adds two more default-OFF gates for STRUCTURED credentials:
+	// ai_review_presets appends the built-in credential/PII preset library
+	// to the exit-side rules; memory_redact masks those patterns at note
+	// write time (entry side) before anything reaches the database.
+	"ai_audit_enabled":  true,
+	"ai_review_input":   true,
+	"ai_review_output":  true,
+	"ai_review_rules":   true,
+	"ai_review_presets": true,
+	"memory_redact":     true,
+	// Approved-page disk projection (ADR-0069). Default ON — an absent row
+	// reads as enabled, and "0" is the kill switch. Unlike the audit gates
+	// this is a local derived artifact of already-approved content in
+	// Cinder's own data directory: nothing leaves the machine, so the human
+	// approval gate is the authorization (same as retrieval / the brief).
+	"pages_projection": true,
 }
 
 // stringConfigKeys are exempt from the numeric-value check: they carry free-text

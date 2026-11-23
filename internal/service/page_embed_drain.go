@@ -75,7 +75,8 @@ func (s *Service) RebuildPageEmbeddings() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	embedded, bailed := 0, false
+	embedded := 0
+	var bailErr error
 	for start := 0; start < len(pages); start += embedBatch {
 		end := start + embedBatch
 		if end > len(pages) {
@@ -90,7 +91,7 @@ func (s *Service) RebuildPageEmbeddings() (int, error) {
 		vecs, err := emb.Embed(texts)
 		if err != nil {
 			log.Printf("page semantic rebuild: embed batch %d: %v", start, err)
-			bailed = true
+			bailErr = err
 			break
 		}
 		for i, vec := range vecs {
@@ -109,7 +110,7 @@ func (s *Service) RebuildPageEmbeddings() (int, error) {
 	}
 	// Only a completed rebuild may clear the queue: everything still queued after
 	// a bailed run provably has NOT been embedded.
-	if !bailed {
+	if bailErr == nil {
 		if err := db.TruncateDirtyPageIDs(s.db); err != nil {
 			log.Printf("page semantic rebuild: could not clear the incremental queue: %v", err)
 		}
@@ -121,6 +122,9 @@ func (s *Service) RebuildPageEmbeddings() (int, error) {
 		}
 	}
 	log.Printf("page semantic rebuild: %d page(s) embedded at dim %d", embedded, dim)
+	if bailErr != nil {
+		return embedded, fmt.Errorf("page semantic rebuild: stopped after %d/%d pages: %w", embedded, len(pages), bailErr)
+	}
 	return embedded, nil
 }
 

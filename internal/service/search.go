@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
+	pluginruntime "repotory/internal/core/plugin/runtime"
 	"repotory/internal/db"
 	"repotory/internal/domain"
 )
@@ -28,8 +30,12 @@ func (s *Service) SearchNotes(ctx context.Context, query string) ([]domain.Searc
 	if results == nil {
 		results = []domain.SearchHit{}
 	}
+	markLexicalRecall(results)
 	// M3-A: optionally fuse vector recall (default off; a no-op bypass when off).
-	return s.fuseSemantic(results, query), nil
+	// ADR-0070: the temporal arm applies regardless of the semantic switch.
+	fused := s.fuseTemporal(ctx, s.fuseSemantic(results, query), query)
+	s.annotateSourceTypes(fused)
+	return fused, nil
 }
 
 // SearchNotesStrict is SearchNotes without the lexical OR relaxation, for
@@ -38,7 +44,9 @@ func (s *Service) SearchNotes(ctx context.Context, query string) ([]domain.Searc
 //
 // The semantic fusion still applies: a vector hit is a genuine near-match in
 // embedding space, not a shared trigram, so it does not carry the false-positive
-// risk the relaxation does.
+// risk the relaxation does. The temporal arm (ADR-0070) deliberately does NOT
+// apply here: a date window pulls in notes by creation time, not by content
+// match, which is exactly the coincidence-as-citation risk this path avoids.
 func (s *Service) SearchNotesStrict(ctx context.Context, query string) ([]domain.SearchHit, error) {
 	if strings.TrimSpace(query) == "" {
 		return []domain.SearchHit{}, nil
@@ -50,7 +58,10 @@ func (s *Service) SearchNotesStrict(ctx context.Context, query string) ([]domain
 	if results == nil {
 		results = []domain.SearchHit{}
 	}
-	return s.fuseSemantic(results, query), nil
+	markLexicalRecall(results)
+	fused := s.fuseSemantic(results, query)
+	s.annotateSourceTypes(fused)
+	return fused, nil
 }
 
 // SearchAll searches notes and todos together, returning ranked unified hits.
@@ -79,6 +90,7 @@ func (s *Service) SearchAll(ctx context.Context, query string) ([]domain.SearchH
 	if results == nil {
 		results = []domain.SearchHit{}
 	}
+	markLexicalRecall(results)
 	notes := make([]domain.SearchHit, 0, len(results))
 	todos := make([]domain.SearchHit, 0, len(results))
 	for _, h := range results {
@@ -90,8 +102,60 @@ func (s *Service) SearchAll(ctx context.Context, query string) ([]domain.SearchH
 	}
 	// Notes first (fused), then todos — the same shape db.SearchAll returns,
 	// so a lexical-only run keeps byte-identical ordering.
-	fused := s.fuseSemantic(notes, query)
-	return append(fused, todos...), nil
+	fused := s.fuseTemporal(ctx, s.fuseSemantic(notes, query), query)
+	combined := append(fused, todos...)
+	s.annotateSourceTypes(combined)
+	return combined, nil
+}
+
+// markLexicalRecall stamps the base (FTS/LIKE) channel on every hit before
+// fusion. The fusion arms append their own channels, so a hit's Recall ends up
+// telling exactly which arms surfaced it (ADR-0072 search transparency).
+func markLexicalRecall(hits []domain.SearchHit) {
+	for i := range hits {
+		hits[i].Recall = []string{"lexical"}
+	}
+}
+
+// appendRecallChannel adds a fusion channel to a hit's provenance, deduped,
+// preserving stage order (lexical first, then semantic, then temporal).
+func appendRecallChannel(h domain.SearchHit, channel string) domain.SearchHit {
+	for _, c := range h.Recall {
+		if c == channel {
+			return h
+		}
+	}
+	h.Recall = append(h.Recall, channel)
+	return h
+}
+
+// annotateSourceTypes fills the derived source bucket on note hits so the
+// search surfaces can filter by provenance (ADR-0022 pending item 2). It is
+// presentation-only: a lookup failure leaves the field empty and never fails
+// the search.
+func (s *Service) annotateSourceTypes(hits []domain.SearchHit) {
+	ids := make([]int64, 0, len(hits))
+	for _, h := range hits {
+		if h.Type == "note" {
+			ids = append(ids, h.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	sources, err := db.NoteSourcesByIDs(s.db, ids)
+	if err != nil {
+		log.Printf("search: source-type annotation failed: %v", err)
+		return
+	}
+	for i := range hits {
+		if hits[i].Type != "note" {
+			continue
+		}
+		if src, ok := sources[hits[i].ID]; ok {
+			hits[i].SourceType = string(pluginruntime.SourceTypeFor(src))
+		}
+	}
 }
 
 // FormatSearchAnswer renders up to limit search hits in the shared

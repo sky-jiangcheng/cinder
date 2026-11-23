@@ -1,0 +1,43 @@
+# ADR-0069: Approved-page disk projection — a read-surface mirror, not a second export
+
+- **Status**: Accepted (2026-11-23)
+- **Date**: 2026-11-23
+- **Related**: [ADR-0065](0065-hindsight-absorb-not-replace.md) (the Hindsight absorption route, second P1 item), [ADR-0014](0014-llm-wiki-knowledge-compiler.md) (decision 2: SQLite is the only SSOT, the file tree is a read-only derivation — this ADR inherits and refines it), [ADR-0015](0015-w3-minimal-compile-loop.md) (the human approval gate: only approved pages enter retrieval; this ADR extends the same gate to disk), [ADR-0012](0012-semantic-search.md) (the default-off privacy authorization stance — this ADR explains why default-on here does not violate it)
+
+## Context
+
+ADR-0065's gap list (the "no approved-page disk projection" item): Hindsight `fs mount`s its memory pages into the filesystem, so any agent can read them with its own file tools — no MCP round trip. Cinder's wiki layer is locked inside SQLite: an MCP client like Warden can query it, but Claude Code / Cursor "glancing at a knowledge page" mid-session costs a tool call. The existing `repotory-wiki-export` is a **manually triggered review surface** — every status lands on disk, the user picks the target, a non-empty directory needs `--force`, and stale files are reported but never deleted. It answers "what shape is this knowledge?", not "what can an agent read right now?".
+
+Those two questions need a different artifact: **a disk mirror of approved pages only that Cinder maintains itself and keeps current**.
+
+## Decision
+
+1. **Projection ≠ export; both surfaces coexist.** The export (`ExportWikiTree`) stays as it is: a review surface, every status tagged in `status` frontmatter, user-chosen target, `--force` guard, never deletes. The projection (`ProjectApprovedPages`) is a read surface: approved pages only (no `status` field — everything here is approved by construction, and keeping the field would imply other statuses might appear), the target lives in Cinder's own data directory, and stale files **are** pruned. Retrofitting the export with flags was rejected: ownership, deletion semantics and trigger model are opposite on the two surfaces, and one function would blur both contracts.
+2. **Default on; `pages_projection=0` is the kill switch.** This does not conflict with the default-off stance of ADR-0012 / 0030: those gates govern **data leaving the machine** or **unreviewed content taking effect**. The projection is a derived copy of already-approved content inside the local data directory — nothing leaves the machine, nothing unreviewed is published, and the human approval (ADR-0015) is the authorization, the same chain as retrieval and the session brief. Defaulting off would turn "extreme experience" into "read the docs, then flip a switch".
+3. **The mirror directory follows the database file.** `<database dir>/pages`, derived from `PRAGMA database_list` (reusing `liveDatabaseFile`), not a platform default. Test stores therefore project into their own tempdirs and an evaluation copy never touches the real user's mirror; an in-memory database has no file and thus no mirror (silent skip; the explicit refresh errors). Layout: `pages/global/<kind>/<slug>.md` (cross-project pages) or `pages/p<id>-<name-slug>/<kind>/<slug>.md`, one `index.md` per tier, and `PROJECTION-MANIFEST.json` at the root written last (a half-done refresh leaves a manifest that does not match the tree — the "re-run rather than trust" signal, the same crash-consistency philosophy as the export manifest).
+4. **Pruning trusts only the previous manifest.** Every refresh is a full rebuild (the page count is human-scale, the trigger is a human action, and a full rebuild is trivially idempotent; an incremental diff would have to chase renames, merges and tier moves — not worth the complexity). After the rebuild, **only paths the previous manifest listed and this run did not rewrite** may be deleted; each path must also pass `safeManagedPath` (relative, no `..`, no backslash, unchanged by cleaning) — a tampered manifest must not turn the pruner into an arbitrary deleter. A file the user dropped into the tree is never touched; directories are removed with `os.Remove` only (a non-empty dir fails and stays), never `RemoveAll`.
+5. **Five mutation hooks plus a CLI catch-all.** Every human action that can change the approved set refreshes once: approve (enters the set), merge (the loser becomes a tombstone and leaves, the winner's edges change), promote-to-global / assign-to-project (tier moves), and the update branch of file-answer-as-page (may overwrite an approved query page). Reject/delete already refuse approved pages, so they need no hook. A failed refresh is non-fatal — the database write already succeeded, and a broken mirror must not make the approval look failed; the next mutation or the CLI catches up. **Boundary**: a project deletion cascades pages away without a page-level hook, and a backup restore is the same shape — `cinder-capture project-pages [-db] [-out]` is the catch-all: opens the database read-only, calls no model, and ignores the kill switch (running the command IS the explicit intent; the switch governs automation only).
+6. **Content boundaries and tool surface.** Outgoing/back links are filtered to approved targets — a backlink from a pending page would leak its title into the mirror; the source-notes section is dropped (the mirror is the page layer; notes stay reachable through the tools). The `repotory_context` header adds one directory-pointer line when the mirror exists and the switch is on, so an agent knows it can read with its own file tools. No new MCP tool; CoreVersion stays put.
+
+## Rejected alternatives
+
+- **A per-repository `.cinder/pages/` directory**: knowledge pages next to the code sounds convenient, but it is gitignore noise plus granting filesystem scope to automation — ADR-0063 already pinned "granting filesystem scope is a separate decision, kept human-gated" (the `UpdateScanRoots` precedent). A derived artifact inside the data directory needs no new authorization surface.
+- **Extending `ExportWikiTree` with `--approved-only --prune` flags**: see decision 1. The two surfaces have opposite ownership and deletion semantics; merging the implementations discounts both contracts.
+- **Incremental refresh (write only changed pages)**: merges, renames and tier moves would make the incremental logic chase edges and paths; at human-scale page counts a full rebuild is milliseconds and idempotency comes free.
+
+## Costs (accepted)
+
+- Every human page action pays one extra full rebuild plus disk writes; at thousands of pages this starts to be felt (incremental becomes worth discussing then — see reversal triggers).
+- A millisecond-scale window exists between the database write and the refresh; manifest-last plus non-fatal refresh limits the consequence to "an old mirror", never "a lying mirror".
+- Default-on means an upgrade adds a `pages/` directory to the data directory — deliberate visibility, not a side effect.
+
+## Reversal triggers
+
+- Page growth makes the full rebuild felt (north star: complaints about human-action latency) → incremental refresh, with the manifest as the diff baseline.
+- A real signal of "users edit the mirror in Obsidian and expect it to flow back" → return to ADR-0014 decision 2's separate-ADR clause; bidirectional sync gets its own decision, this ADR does not pre-spend it.
+
+## Landing record (2026-11-23)
+
+- Code: `internal/service/wikipage/projection.go` (core + manifest-scoped pruning + safe-path validation), `internal/service/wiki_projection.go` (switch / directory derivation / non-fatal refresh / explicit refresh), five hooks (`wiki_compile.go` / `wiki_merge.go` / `wiki_read.go`×2 / `wiki_evidence.go`), `config.go` (the `pages_projection` key), `context.go` (header pointer line), `cmd/repotory-capture/projection.go` (the `project-pages` subcommand).
+- Tests: 7 in wikipage (approved-only with tiers, edge filtering, manifest-scoped pruning + user-file survival, hostile manifest cannot delete outside, deterministic hashes, `safeManagedPath` / path-guard table tests) + 6 in service (approve builds the mirror, kill switch, merge prunes the loser, promote/assign move tiers, in-memory store has no mirror, context header pointer) + 3 for the CLI (explicit `-out`, default directory, missing-database exit code); the merge-guard test whitelists the new test file. Full `go build` / `go vet` / `go test` green.
+- Frontend: no UI this round — the kill switch is a config key, documented; a settings toggle waits for a real user request.

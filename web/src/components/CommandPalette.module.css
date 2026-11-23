@@ -121,6 +121,16 @@
   text-overflow: ellipsis;
 }
 
+.cmdkRecall {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
 .cmdkFoot {
   display: flex;
   gap: 16px;

@@ -16,18 +16,16 @@ package version
 //
 // The value is pinned next to the tool list in cmd/mcp/main_test.go, and
 // scripts/check-version-drift.mjs fails if the two drift apart.
-const CoreVersion = "2.3.0"
+const CoreVersion = "2.4.0"
 
 // CoreVersionPrevious / CoreVersionChange make the bump itself checkable.
 // The old gate only compared two copies of the number, so "deleted a tool but
 // only bumped minor" passed. scripts/check-version-drift.mjs now validates
 // that the declared change kind matches the actual distance between the two
-// versions. The previous bump was a minor (ADR-0063: the new
-// repotory_config_get / repotory_config_update tools are additive, and the
-// config-write reclassification changes which process executes the write, not
-// the existing tool surface); the current one is a minor too: repotory_chat
-// gains an optional set_path operation (re-attach a thread to a repository,
-// or clear it back to unscoped) — additive, and every existing operation's
-// shape stays untouched.
-const CoreVersionPrevious = "2.2.0"
+// versions. The previous bump was a minor (repotory_chat gained an optional
+// set_path operation); the current one is a minor too: search hits gain two
+// optional fields — recall (which channels surfaced the hit) and source_type
+// (the derived provenance bucket) — additive, and every existing field's
+// shape and meaning stays untouched (ADR-0072).
+const CoreVersionPrevious = "2.3.0"
 const CoreVersionChange = "minor" // major | minor | patch

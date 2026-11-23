@@ -55,6 +55,39 @@ func TestFuseRRFDeterministicAcrossCalls(t *testing.T) {
 	}
 }
 
+func TestFuseRRFWeightedScalesContributions(t *testing.T) {
+	a := RankList{1, 2}
+	b := RankList{2, 1}
+	// Equal weights tie (1 and 3 symmetric) -> first appearance wins (1 first).
+	equal := FuseRRFWeighted(10, WeightedRankList{IDs: a, Weight: 1}, WeightedRankList{IDs: b, Weight: 1})
+	if !reflect.DeepEqual(equal, []int64{1, 2}) {
+		t.Fatalf("equal weights = %v, want [1 2] (appearance tie-break)", equal)
+	}
+	// Doubling b's weight lifts id 2 (b's rank-1 hit) above id 1.
+	weighted := FuseRRFWeighted(10, WeightedRankList{IDs: a, Weight: 1}, WeightedRankList{IDs: b, Weight: 2})
+	if !reflect.DeepEqual(weighted, []int64{2, 1}) {
+		t.Fatalf("weighted = %v, want [2 1] (heavier list's top hit wins)", weighted)
+	}
+}
+
+func TestFuseRRFWeightedNonPositiveWeightIsOne(t *testing.T) {
+	a, b := RankList{1, 2, 3}, RankList{3, 4, 1}
+	want := FuseRRF(60, a, b)
+	got := FuseRRFWeighted(60, WeightedRankList{IDs: a, Weight: 0}, WeightedRankList{IDs: b, Weight: -1})
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("weight<=0 must equal weight 1: got %v want %v", got, want)
+	}
+}
+
+func TestFuseRRFEqualsUnitWeighted(t *testing.T) {
+	a, b := RankList{10, 20, 30}, RankList{30, 99, 10}
+	plain := FuseRRF(60, a, b)
+	weighted := FuseRRFWeighted(60, WeightedRankList{IDs: a, Weight: 1}, WeightedRankList{IDs: b, Weight: 1})
+	if !reflect.DeepEqual(plain, weighted) {
+		t.Fatalf("FuseRRF must equal unit-weight FuseRRFWeighted: %v vs %v", plain, weighted)
+	}
+}
+
 // fakeEmbedder proves the Embedder seam is implementable with a trivial,
 // deterministic strategy (NOT a production embedding).
 type fakeEmbedder struct{}

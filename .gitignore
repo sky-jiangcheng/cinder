@@ -120,3 +120,7 @@ outputs/vscode-reader-preview-*.png
 # a writable cache without touching ~/.cache do this). 2314 object files once
 # landed in a commit because nothing here said "no".
 .gocache/
+
+# Hindsight 对标扩集（2026-11-23，同 queries.jsonl 口径：含用户笔记 id 映射，不入版本库）
+/queries.ext.jsonl
+/queries.v2.jsonl

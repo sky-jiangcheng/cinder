@@ -29,11 +29,14 @@ const baseStatus = {
   review_input: false,
   review_output: false,
   rule_count: 0,
+  preset_count: 0,
   call_count: 0,
   blocked_count: 0,
   flagged_count: 0,
   surface: 'desktop',
   table_exists: true,
+  presets_enabled: false,
+  redact_enabled: false,
   retention: 'append_only',
 }
 
@@ -57,19 +60,25 @@ describe('AiAuditSection defaults', () => {
     const audit = screen.getByLabelText('记录调用审计') as HTMLInputElement
     const input = screen.getByLabelText('发出前审查提示词') as HTMLInputElement
     const output = screen.getByLabelText('到达时审查回复') as HTMLInputElement
+    const presets = screen.getByLabelText('启用内置凭证/PII 预设规则') as HTMLInputElement
+    const redact = screen.getByLabelText('写入记忆前脱敏') as HTMLInputElement
 
     expect(audit.checked).toBe(false)
     expect(input.checked).toBe(false)
     expect(output.checked).toBe(false)
+    expect(presets.checked).toBe(false)
+    expect(redact.checked).toBe(false)
   })
 
   it('reflects the stored config when the audit is already on', async () => {
-    renderSection({ ai_audit_enabled: '1', ai_review_input: '1' })
+    renderSection({ ai_audit_enabled: '1', ai_review_input: '1', ai_review_presets: '1', memory_redact: '1' })
     await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
 
     expect((screen.getByLabelText('记录调用审计') as HTMLInputElement).checked).toBe(true)
     expect((screen.getByLabelText('发出前审查提示词') as HTMLInputElement).checked).toBe(true)
     expect((screen.getByLabelText('到达时审查回复') as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByLabelText('启用内置凭证/PII 预设规则') as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText('写入记忆前脱敏') as HTMLInputElement).checked).toBe(true)
   })
 })
 
@@ -95,6 +104,22 @@ describe('AiAuditSection saving', () => {
 
     await waitFor(() => {
       expect(updateConfig).toHaveBeenCalledWith('ai_review_rules', '身份证\n-----BEGIN')
+    })
+  })
+
+  it('writes 1/0 for the preset and redact gates independently', async () => {
+    renderSection()
+    await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByLabelText('启用内置凭证/PII 预设规则'))
+    await waitFor(() => {
+      expect(updateConfig).toHaveBeenCalledWith('ai_review_presets', '1')
+    })
+    expect(updateConfig).not.toHaveBeenCalledWith('memory_redact', expect.anything())
+
+    fireEvent.click(screen.getByLabelText('写入记忆前脱敏'))
+    await waitFor(() => {
+      expect(updateConfig).toHaveBeenCalledWith('memory_redact', '1')
     })
   })
 })
@@ -237,11 +262,30 @@ describe('AiAuditSection the honest-limits copy', () => {
     expect(screen.getByText(/无法撤回/)).toBeTruthy()
   })
 
-  it('states that Cinder ships no built-in blocklist', async () => {
+  it('states that Cinder ships no built-in keyword blocklist', async () => {
     renderSection()
     await waitFor(() => expect(getAIAuditStatus).toHaveBeenCalled())
 
-    expect(screen.getByText(/不内置任何词表/)).toBeTruthy()
+    expect(screen.getByText(/不内置关键词词表/)).toBeTruthy()
+  })
+
+  it('shows the preset count only while presets are active', async () => {
+    vi.mocked(getAIAuditStatus).mockResolvedValue({
+      ...baseStatus,
+      review_input: true,
+      presets_enabled: true,
+      preset_count: 20,
+      rule_count: 20,
+    })
+    renderSection()
+    const stats = await screen.findByTestId('ai-audit-stats', undefined, { timeout: 2000 })
+    expect(within(stats).getByText(/内置预设: 20/)).toBeTruthy()
+  })
+
+  it('hides the preset count when presets are off', async () => {
+    renderSection()
+    const stats = await screen.findByTestId('ai-audit-stats', undefined, { timeout: 2000 })
+    expect(within(stats).queryByText(/内置预设/)).toBeNull()
   })
 
   it('renders the retention policy from the token, not from a backend sentence', async () => {

@@ -471,9 +471,10 @@ func TestSuggestMerges_RefusesUntrustedReplies(t *testing.T) {
 // an automated way to destroy knowledge.
 func TestMergeHasNoAutoPath(t *testing.T) {
 	allowed := map[string]bool{
-		"wiki_merge.go":      true, // the service entry point and its own definition
-		"bindings.go":        true, // desktop binding, called from a click
-		"wiki_merge_test.go": true,
+		"wiki_merge.go":           true, // the service entry point and its own definition
+		"bindings.go":             true, // desktop binding, called from a click
+		"wiki_merge_test.go":      true,
+		"wiki_projection_test.go": true, // ADR-0069: asserts the mirror after a human merge
 	}
 	entries, err := os.ReadDir(".")
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"repotory/internal/aiaudit"
 	pluginruntime "repotory/internal/core/plugin/runtime"
 	"repotory/internal/db"
 	"repotory/internal/domain"
@@ -17,6 +18,21 @@ import (
 // message before a raw DB error surfaces.
 func validateNoteBounds(title, content, tags string) error {
 	return db.ValidateNoteBounds(title, content, tags)
+}
+
+// redactForStore masks structured credentials/PII before a note write when
+// memory_redact is on (ADR-0068) — the entry-side complement to the exit-side
+// review presets. Default OFF: the bytes are stored exactly as given. Bounds
+// are validated AFTER masking, because a marker can be longer than the span
+// it replaces and the stored text is what must fit.
+func (s *Service) redactForStore(title, content, tags string) (string, string, string) {
+	title, n1 := aiaudit.RedactIfEnabled(s.db, title)
+	content, n2 := aiaudit.RedactIfEnabled(s.db, content)
+	tags, n3 := aiaudit.RedactIfEnabled(s.db, tags)
+	if n := n1 + n2 + n3; n > 0 {
+		log.Printf("memory redact: masked %d credential/PII span(s) before note write", n)
+	}
+	return title, content, tags
 }
 
 // ListNotes returns all notes for a project.
@@ -62,6 +78,7 @@ func (s *Service) CreateNote(projectID int64, content string) (*domain.Note, err
 	if strings.TrimSpace(content) == "" {
 		return nil, fmt.Errorf("content is required")
 	}
+	_, content, _ = s.redactForStore("", content, "")
 	if err := validateNoteBounds("", content, ""); err != nil {
 		return nil, err
 	}
@@ -74,6 +91,7 @@ func (s *Service) CreateNoteWithMeta(projectID int64, title, content, tags, kind
 	if strings.TrimSpace(content) == "" {
 		return nil, fmt.Errorf("content is required")
 	}
+	title, content, tags = s.redactForStore(title, content, tags)
 	if err := validateNoteBounds(title, content, tags); err != nil {
 		return nil, err
 	}
@@ -90,6 +108,7 @@ func (s *Service) createNoteWithKey(projectID int64, title, content, tags, kind,
 	if strings.TrimSpace(content) == "" {
 		return nil, false, fmt.Errorf("content is required")
 	}
+	title, content, tags = s.redactForStore(title, content, tags)
 	if err := validateNoteBounds(title, content, tags); err != nil {
 		return nil, false, err
 	}

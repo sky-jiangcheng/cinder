@@ -39,6 +39,7 @@ const SCRIPTS = [
   { label: 'ide/vscode/repotory-init/index.mjs', path: resolve(ROOT, 'ide/vscode/repotory-init/index.mjs') },
 ];
 const FIXTURE = resolve(ROOT, 'internal/agentinit/testdata/contract.json');
+const UNINSTALL_FIXTURE = resolve(ROOT, 'internal/agentinit/testdata/contract-uninstall.json');
 
 // The files a registration produces, relative to the project directory.
 const PRODUCED = [
@@ -51,6 +52,7 @@ const PRODUCED = [
   'CLAUDE.md',
 ];
 const HOOK_SCRIPT = '.claude/hooks/repotory-handoff.sh';
+const BRIEF_HOOK_SCRIPT = '.claude/hooks/repotory-brief.sh';
 
 const errors = [];
 
@@ -113,11 +115,13 @@ function checkScript(script) {
         fail(`${script.label}: ${rel} is not valid JSON: ${err.message}`);
       }
     }
-    const hookFile = join(dir, HOOK_SCRIPT);
-    if (!existsSync(hookFile)) {
-      fail(`${script.label}: the script did not produce ${HOOK_SCRIPT}`);
-    } else {
-      actual[HOOK_SCRIPT] = readFileSync(hookFile, 'utf8');
+    for (const rel of [HOOK_SCRIPT, BRIEF_HOOK_SCRIPT]) {
+      const hookFile = join(dir, rel);
+      if (!existsSync(hookFile)) {
+        fail(`${script.label}: the script did not produce ${rel}`);
+      } else {
+        actual[rel] = readFileSync(hookFile, 'utf8');
+      }
     }
 
     if (!existsSync(FIXTURE)) {
@@ -138,6 +142,45 @@ function checkScript(script) {
     for (const key of Object.keys(actual)) {
       if (!(key in expected)) {
         fail(`${script.label}: ${key} is produced by the script but not in the contract fixture`);
+      }
+    }
+
+    // The uninstall half of the contract (ADR-0067): removing exactly what
+    // was installed must leave the same residue as the Go twin — empty server
+    // maps, no hooks key, and no scripts or instruction files. null in the
+    // fixture means "this file must not exist".
+    execFileSync(
+      process.execPath,
+      [script.path, '--uninstall', '--client', 'claude,cursor,vscode', '--yes'],
+      { cwd: dir, stdio: 'pipe' },
+    );
+    if (!existsSync(UNINSTALL_FIXTURE)) {
+      fail(`missing uninstall fixture: ${UNINSTALL_FIXTURE} (regenerate with: go test ./internal/agentinit -run TestContractFixture -update)`);
+      return;
+    }
+    const expectedUninstall = JSON.parse(readFileSync(UNINSTALL_FIXTURE, 'utf8'));
+    for (const [key, want] of Object.entries(expectedUninstall)) {
+      const file = join(dir, key);
+      if (want === null) {
+        if (existsSync(file)) {
+          fail(`${script.label}: ${key} survived uninstall but the contract says it must be gone`);
+        }
+        continue;
+      }
+      if (!existsSync(file)) {
+        fail(`${script.label}: ${key} is missing after uninstall`);
+        continue;
+      }
+      const got =
+        typeof want === 'string'
+          ? readFileSync(file, 'utf8')
+          : replaceBin(JSON.parse(readFileSync(file, 'utf8')), bin);
+      if (JSON.stringify(sorted(got)) !== JSON.stringify(sorted(want))) {
+        fail(
+          `${script.label}: ${key} after uninstall differs from the contract fixture\n` +
+            `  script:  ${JSON.stringify(got)}\n` +
+            `  fixture: ${JSON.stringify(want)}`,
+        );
       }
     }
   } catch (err) {

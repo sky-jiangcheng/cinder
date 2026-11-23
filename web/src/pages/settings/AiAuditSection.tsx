@@ -23,15 +23,18 @@ interface Props {
  *  - Everything is OFF by default, and the switches say so.
  *  - The trail stores a HASH and a SIZE, never the prompt or the reply. The
  *    table below shows the hash so the user can see that is what is kept.
- *  - The rules are the user's own regexes. Cinder ships no blocklist,
- *    because a keyword list is a weak control — the panel says so rather
- *    than implying coverage it does not have.
+ *  - The rules are the user's own regexes. Cinder ships no KEYWORD
+ *    blocklist, because a keyword list is a weak control. The opt-in
+ *    preset library (ADR-0068) covers structured credentials only, and
+ *    the panel says so rather than implying coverage it does not have.
  */
 export default function AiAuditSection({ config, showMessage }: Props) {
   const { t } = useTranslation()
   const [auditEnabled, setAuditEnabled] = useState(config.ai_audit_enabled === '1')
   const [reviewInput, setReviewInput] = useState(config.ai_review_input === '1')
   const [reviewOutput, setReviewOutput] = useState(config.ai_review_output === '1')
+  const [presetsEnabled, setPresetsEnabled] = useState(config.ai_review_presets === '1')
+  const [redactEnabled, setRedactEnabled] = useState(config.memory_redact === '1')
   const [rules, setRules] = useState(config.ai_review_rules || '')
   const [status, setStatus] = useState<AIAuditStatus | null>(null)
   const [calls, setCalls] = useState<AICallLogEntry[]>([])
@@ -95,6 +98,14 @@ export default function AiAuditSection({ config, showMessage }: Props) {
   const toggleOutput = (next: boolean) => {
     setReviewOutput(next)
     void save({ ai_review_output: next ? '1' : '0' })
+  }
+  const togglePresets = (next: boolean) => {
+    setPresetsEnabled(next)
+    void save({ ai_review_presets: next ? '1' : '0' })
+  }
+  const toggleRedact = (next: boolean) => {
+    setRedactEnabled(next)
+    void save({ memory_redact: next ? '1' : '0' })
   }
   const saveRules = () => {
     void save({ ai_review_rules: rules })
@@ -161,6 +172,44 @@ export default function AiAuditSection({ config, showMessage }: Props) {
         })}
       </p>
 
+      <div className={`toggle-row ${css.auditToggle}`}>
+        <label htmlFor="audit-presets">
+          {t('settings.audit.enablePresets', { defaultValue: '启用内置凭证/PII 预设规则' })}
+        </label>
+        <input
+          id="audit-presets"
+          type="checkbox"
+          checked={presetsEnabled}
+          disabled={saving}
+          onChange={(e) => togglePresets(e.target.checked)}
+        />
+      </div>
+      <p className={css.auditHint}>
+        {t('settings.audit.presetsHint', {
+          defaultValue:
+            '一组高精度格式规则（API Key、私钥块、带密码的连接串、身份证/手机号/银行卡号），追加在你的规则之后，需开启任一审查开关才生效。邮箱与人名刻意不收，避免误伤开发记忆。',
+        })}
+      </p>
+
+      <div className={`toggle-row ${css.auditToggle}`}>
+        <label htmlFor="memory-redact">
+          {t('settings.audit.enableRedact', { defaultValue: '写入记忆前脱敏' })}
+        </label>
+        <input
+          id="memory-redact"
+          type="checkbox"
+          checked={redactEnabled}
+          disabled={saving}
+          onChange={(e) => toggleRedact(e.target.checked)}
+        />
+      </div>
+      <p className={css.auditHint}>
+        {t('settings.audit.redactHint', {
+          defaultValue:
+            '开启后，笔记创建与知识导入在落库前把命中的凭证/PII 替换为 [redacted:名称] 标记；已有笔记与桌面端手动编辑不受影响。默认关闭。',
+        })}
+      </p>
+
       <div className="form-group">
         <label htmlFor="audit-rules">
           {t('settings.audit.rules', { defaultValue: '审查规则（每行一个正则，# 开头为注释）' })}
@@ -179,7 +228,7 @@ export default function AiAuditSection({ config, showMessage }: Props) {
       <p className={css.auditHint}>
         {t('settings.audit.rulesHint', {
           defaultValue:
-            '规则由你自己写，Cinder 不内置任何词表——关键词匹配是很弱的控制，容易被改写绕过，也会误伤正常内容。规则不区分大小写；写错的正则会被跳过并在日志中提示。',
+            '规则由你自己写，Cinder 不内置关键词词表——关键词匹配是很弱的控制，容易被改写绕过，也会误伤正常内容；结构化凭证可改用上方内置预设。规则不区分大小写；写错的正则会被跳过并在日志中提示。',
         })}
       </p>
 
@@ -210,6 +259,11 @@ export default function AiAuditSection({ config, showMessage }: Props) {
           <span>
             {t('settings.audit.statRules', { defaultValue: '规则数' })}: {status.rule_count}
           </span>
+          {status.presets_enabled && (
+            <span>
+              {t('settings.audit.statPresets', { defaultValue: '内置预设' })}: {status.preset_count}
+            </span>
+          )}
           <span>
             {t('settings.audit.statSurface', { defaultValue: '当前来源面' })}: {status.surface}
           </span>

@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"repotory/internal/aiaudit"
 	"repotory/internal/core/plugin"
 	"repotory/internal/db"
 )
@@ -500,6 +501,13 @@ func (r *Runtime) upsertDoc(doc plugin.ImportDoc, source string) (bool, error) {
 	if kind == "" {
 		kind = "knowledge"
 	}
+	// Entry-side redaction (ADR-0068), before ANY lookup or write: importers
+	// write straight to db, bypassing the service funnel, so this is their
+	// masking point. Masking first also keeps the content-hash skip and the
+	// idempotency key stable — both sides of every comparison are masked.
+	doc.Title, _ = aiaudit.RedactIfEnabled(r.db, doc.Title)
+	doc.Content, _ = aiaudit.RedactIfEnabled(r.db, doc.Content)
+	doc.Tags, _ = aiaudit.RedactIfEnabled(r.db, doc.Tags)
 	existing, err := db.GetNoteBySourceTitle(r.db, doc.ProjectID, source, doc.Title)
 	if errors.Is(err, sql.ErrNoRows) && len(doc.LegacyTitles) > 0 {
 		// The importer changed its title formula. The row the OLD formula

@@ -42,11 +42,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"repotory/internal/db"
 	"repotory/internal/domain"
 	"repotory/internal/platform"
 	"repotory/internal/search/abeval"
+	"repotory/internal/search/temporal"
 	"repotory/internal/service"
 )
 
@@ -63,7 +65,19 @@ func main() {
 	k := flag.Int("k", 10, "cutoff for recall@k / ndcg@k")
 	minRecall := flag.Float64("min-recall", 0.05, "required recall@k gain (candidate-baseline) to pass the gate")
 	dbPath := flag.String("db", "", "database path (default: the app's DB)")
+	anchor := flag.String("anchor", "", "pin 'today' for the temporal arm (YYYY-MM-DD, local); empty = time.Now()")
 	flag.Parse()
+
+	// Relative date expressions (上周五) only keep their labeled meaning under
+	// the annotation date, so a reproducible gate pins the anchor.
+	searchCtx := context.Background()
+	if *anchor != "" {
+		t, err := time.ParseInLocation("2006-01-02", *anchor, time.Local)
+		if err != nil {
+			log.Fatalf("abeval: bad -anchor %q (want YYYY-MM-DD): %v", *anchor, err)
+		}
+		searchCtx = temporal.WithAnchor(searchCtx, t)
+	}
 
 	// The handoff gate derives its own cases from the database, so it needs no
 	// -cases file. Dispatch it before the -cases requirement.
@@ -151,7 +165,7 @@ func main() {
 	// positives.
 	lexical := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "0")
-		return noteIDs(svc.SearchAll(context.Background(), q))
+		return noteIDs(svc.SearchAll(searchCtx, q))
 	}
 
 	// Hybrid arm: enable + rebuild the vector index once, then search with
@@ -166,7 +180,7 @@ func main() {
 	}
 	hybrid := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "1")
-		return noteIDs(svc.SearchAll(context.Background(), q))
+		return noteIDs(svc.SearchAll(searchCtx, q))
 	}
 
 	lex, hyb, dRecall, dNDCG := abeval.Compare(cases, *k, lexical, hybrid)
@@ -181,7 +195,7 @@ func main() {
 	// number is the one that needs re-measuring.
 	notesOnly := func(q string) []int64 {
 		_ = db.SetConfig(database, "semantic_search", "1")
-		return ids(svc.SearchNotes(context.Background(), q))
+		return ids(svc.SearchNotes(searchCtx, q))
 	}
 	_, hybNotes, dRecallNotes, dNDCGNotes := abeval.Compare(cases, *k, lexical, notesOnly)
 	fmt.Println(hybNotes.SummaryLine("hybrid  (SearchNotes, continuity)"))

@@ -36,10 +36,11 @@ func New(db *sql.DB) *Recorder {
 
 // Policy is the resolved audit/review policy for one call.
 type Policy struct {
-	Enabled      bool
-	ReviewInput  bool
-	ReviewOutput bool
-	Rules        []*regexp.Regexp
+	Enabled        bool
+	ReviewInput    bool
+	ReviewOutput   bool
+	PresetsEnabled bool
+	Rules          []*regexp.Regexp
 }
 
 // AI call audit and content review (ADR-0030).
@@ -69,10 +70,16 @@ type Policy struct {
 //   - ai_review_rules      → the patterns to look for
 //
 // The fourth deserves a note: the rules are the user's, not the product's.
-// Shipping a built-in blocklist would be a false promise — keyword matching
+// A built-in KEYWORD blocklist would be a false promise — keyword matching
 // is trivially bypassed and blocks legitimate work at the same time. What
 // Cinder provides is the MECHANISM; what it screens for is the user's
 // decision, expressed as regexes they write for their own organisation.
+//
+// ADR-0068 carves out one exception: STRUCTURED credentials (API key shapes,
+// private key blocks, connection strings with passwords, ID/card numbers)
+// are not keywords — their format is the signal, so a shipped preset library
+// can be precise where a keyword list cannot. It stays opt-in
+// (ai_review_presets), appended to the user's rules, never replacing them.
 
 // Review verdicts stored in ai_call_log. An empty verdict means the
 // corresponding review was disabled for that call.
@@ -145,6 +152,14 @@ func (r *Recorder) ReviewOutputEnabled() bool {
 	return err == nil && v == "1"
 }
 
+// PresetsEnabled reports whether the built-in credential/PII preset library
+// (ADR-0068) is appended to the user's rules. Default OFF, same as every
+// other gate here.
+func (r *Recorder) PresetsEnabled() bool {
+	v, err := db.GetConfig(r.db, "ai_review_presets")
+	return err == nil && v == "1"
+}
+
 // Rules parses the user's rule set.
 //
 // The rules live in one config key, one regex per line, because that is what
@@ -182,12 +197,16 @@ func (r *Recorder) Rules() []*regexp.Regexp {
 // Resolve assembles the policy for one call.
 func (r *Recorder) Resolve() Policy {
 	cfg := Policy{
-		Enabled:      r.Enabled(),
-		ReviewInput:  r.ReviewInputEnabled(),
-		ReviewOutput: r.ReviewOutputEnabled(),
+		Enabled:        r.Enabled(),
+		ReviewInput:    r.ReviewInputEnabled(),
+		ReviewOutput:   r.ReviewOutputEnabled(),
+		PresetsEnabled: r.PresetsEnabled(),
 	}
 	if cfg.ReviewInput || cfg.ReviewOutput {
 		cfg.Rules = r.Rules()
+		if cfg.PresetsEnabled {
+			cfg.Rules = append(cfg.Rules, PresetRules()...)
+		}
 	}
 	return cfg
 }

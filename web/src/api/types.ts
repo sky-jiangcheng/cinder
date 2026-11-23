@@ -198,12 +198,19 @@ export interface AIAuditStatus {
   audit_enabled: boolean
   review_input: boolean
   review_output: boolean
+  /** Total active rules: user rules + presets when enabled. */
   rule_count: number
+  /** How many of rule_count are the built-in preset library (ADR-0068). */
+  preset_count: number
   call_count: number
   blocked_count: number
   flagged_count: number
   surface: string
   table_exists: boolean
+  /** Built-in credential/PII presets appended to exit-side review (opt-in). */
+  presets_enabled: boolean
+  /** Entry-side masking of the same patterns at note-write time (opt-in). */
+  redact_enabled: boolean
   /**
    * The retention POLICY as a machine-readable token ("append_only"), not a
    * sentence. The UI renders it in the reader's own language.
@@ -387,6 +394,10 @@ export interface SearchHit {
   snippet: string
   tags?: string
   updated_at: string
+  /** Channels that surfaced this hit, in fusion-stage order (ADR-0072). */
+  recall?: ('lexical' | 'semantic' | 'temporal')[]
+  /** Derived source bucket of note hits (ADR-0022); empty for todos. */
+  source_type?: string
 }
 
 export interface TodoCount {
@@ -966,7 +977,9 @@ export interface AgentSetupReport {
   files: AgentFileResult[]
   /** The installed SessionEnd hook script, when the hook was asked for. */
   hook?: AgentFileResult
-  /** The .claude/settings.json entry pointing at the hook. */
+  /** The installed SessionStart brief hook script (ADR-0066), when asked for. */
+  brief_hook?: AgentFileResult
+  /** The .claude/settings.json entry pointing at the hooks. */
   hook_settings?: AgentFileResult
   /**
    * The project instruction files that received the managed repotory block

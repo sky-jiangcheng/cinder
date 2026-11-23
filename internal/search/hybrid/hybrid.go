@@ -22,6 +22,15 @@ type Embedder interface {
 // Elements are note (or document) ids.
 type RankList []int64
 
+// WeightedRankList is a ranked list carrying a fusion weight. A weight scales
+// every contribution the list makes to a document's RRF score, letting one arm
+// (e.g. vector recall) speak louder than another without changing its internal
+// order. A weight <= 0 is treated as 1.0.
+type WeightedRankList struct {
+	IDs    RankList
+	Weight float64
+}
+
 // DefaultRRFK is the conventional Reciprocal Rank Fusion constant; 60 damps the
 // influence of any single list's top hit and is robust across list lengths.
 const DefaultRRFK = 60
@@ -37,22 +46,40 @@ type entry struct {
 // A document's score is sum_i 1 / (k + rank_i) over the lists it appears in
 // (rank is 1-based). k <= 0 uses DefaultRRFK. Ordering is by score descending,
 // ties broken by earliest appearance so the result is deterministic.
+//
+// It is the equal-weight special case of FuseRRFWeighted; callers that need one
+// arm to outweigh another use that directly.
 func FuseRRF(k int, lists ...RankList) []int64 {
+	weighted := make([]WeightedRankList, len(lists))
+	for i, l := range lists {
+		weighted[i] = WeightedRankList{IDs: l, Weight: 1.0}
+	}
+	return FuseRRFWeighted(k, weighted...)
+}
+
+// FuseRRFWeighted is FuseRRF with per-list weights: a document's score is
+// sum_i weight_i / (k + rank_i). k <= 0 uses DefaultRRFK; a weight <= 0 is
+// treated as 1.0. Ordering and tie-breaking are identical to FuseRRF.
+func FuseRRFWeighted(k int, lists ...WeightedRankList) []int64 {
 	if k <= 0 {
 		k = DefaultRRFK
 	}
 	index := make(map[int64]int) // id -> position in entries
 	entries := make([]entry, 0)
 	for _, list := range lists {
-		for rank, id := range list {
+		w := list.Weight
+		if w <= 0 {
+			w = 1.0
+		}
+		for rank, id := range list.IDs {
 			if pos, ok := index[id]; ok {
-				entries[pos].score += 1.0 / float64(k+rank+1)
+				entries[pos].score += w / float64(k+rank+1)
 				continue
 			}
 			index[id] = len(entries)
 			entries = append(entries, entry{
 				id:    id,
-				score: 1.0 / float64(k+rank+1),
+				score: w / float64(k+rank+1),
 				seen:  len(entries),
 			})
 		}

@@ -260,7 +260,14 @@ export default function CommandPalette({ open, onClose }: Props) {
               <span className={`${s.cmdkType} ${h.type === 'note' ? s.cmdkTypeNote : s.cmdkTypeTodo}`}>{h.type === 'note' ? t('commandPalette.noteMark') : t('commandPalette.todoMark')}</span>
               <div className={s.cmdkItemBody}>
                 <div className={s.cmdkItemTitle}>{h.title}</div>
-                <div className={s.cmdkItemSub}>{h.project_name} · <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(h.snippet.slice(0, 60)) }} /></div>
+                <div className={s.cmdkItemSub}>
+                  {h.recall && h.recall.length > 0 && (
+                    <span className={s.cmdkRecall} title={t('home.recallSource', { source: h.recall.join(' + ') })}>
+                      {h.recall.map(ch => ch === 'semantic' ? t('home.sourceSemantic') : ch === 'temporal' ? t('home.sourceTemporal') : t('home.sourceFts')).join(' + ')}
+                    </span>
+                  )}
+                  {h.project_name} · <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(h.snippet.slice(0, 60)) }} />
+                </div>
               </div>
             </Link>
             )

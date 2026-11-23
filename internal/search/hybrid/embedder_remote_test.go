@@ -74,6 +74,16 @@ func TestRemoteEmbedderErrors(t *testing.T) {
 			t.Fatalf("empty input: out=%v err=%v", out, err)
 		}
 	})
+	t.Run("truncated response body", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Length", "1000")
+			_, _ = w.Write([]byte(`{"data":[`))
+		}))
+		defer srv.Close()
+		if _, err := (&RemoteEmbedder{BaseURL: srv.URL + "/v1", Model: "x"}).Embed([]string{"t"}); err == nil {
+			t.Fatal("a body cut mid-transfer must surface as an error, not a partial decode")
+		}
+	})
 }
 
 func TestRemoteEmbedderImplementsEmbedder(t *testing.T) {

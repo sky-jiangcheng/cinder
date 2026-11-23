@@ -24,9 +24,23 @@
 // through to its model-driven fallback. Without it the CLI keeps ADR-0010's
 // "never break session teardown" exit-0 behavior.
 //
+// --brief is the SessionStart counterpart (ADR-0066): print the compact
+// session brief (latest handoff, open todos, approved-page excerpts) to
+// stdout, which Claude Code injects into the new session's context. It opens
+// the database read-only, calls no model, writes nothing, and always exits 0
+// — a session START must never be broken or delayed by the memory layer.
+//
 // Hook config (via scripts/repotory-init or manually):
 //
-//	"SessionEnd": [{ "hooks": [{ "type": "command", "command": "repotory-capture" }] }]
+//	"SessionEnd":   [{ "hooks": [{ "type": "command", "command": "repotory-capture" }] }]
+//	"SessionStart": [{ "hooks": [{ "type": "command", "command": "repotory-capture --brief" }] }]
+//
+// Subcommands (ADR-0067): `repotory-capture init [-all]` registers the MCP
+// server with every AI client and, with -all, installs the session hooks and
+// the AGENTS.md/CLAUDE.md block; `repotory-capture uninstall` removes exactly
+// that wiring. Neither touches the database or the capture config gate.
+// `repotory-capture project-pages` (ADR-0069) rebuilds the approved-only
+// Markdown mirror read-only — the explicit twin of the automatic refresh.
 package main
 
 import (
@@ -55,25 +69,50 @@ func main() {
 // deferred writer/database cleanup always runs before the process exits with
 // the code this returns (os.Exit would skip the defers).
 func run(args []string) int {
+	// Setup subcommands (ADR-0067) dispatch before the capture flag set: they
+	// wire or unwire the AI clients and never open the database.
+	if len(args) > 0 {
+		switch args[0] {
+		case "init":
+			return runInit(args[1:])
+		case "uninstall":
+			return runUninstall(args[1:])
+		case "project-pages":
+			return runProjectPages(args[1:])
+		}
+	}
+
 	fs := flag.NewFlagSet("repotory-capture", flag.ExitOnError)
 	cwdFlag := fs.String("cwd", "", "session working directory (default: stdin .cwd, else os.Getwd)")
 	agentFlag := fs.String("agent", "claude", "agent session store to read: claude, workbuddy, qoder, trae, dsh, or auto (newest across all)")
 	dbPath := fs.String("db", "", "database path (default: the app's DB)")
 	strict := fs.Bool("strict", false, "exit non-zero when no handoff note was written (for the SessionEnd hook's fallback)")
+	brief := fs.Bool("brief", false, "print the session-start memory brief to stdout (read-only, zero model calls, always exit 0)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
 	cwd := resolveCwd(*cwdFlag)
+	path := *dbPath
+	if path == "" {
+		path = platform.GetDbPath()
+	}
+
+	// The brief path never writes — not even a pending-failure record — so it
+	// dispatches before the capture path's cwd fatal and InitDB (which would
+	// migrate the live database on a read-only mission).
+	if *brief {
+		if cwd == "" {
+			return 0
+		}
+		return runBrief(cwd, path)
+	}
+
 	if cwd == "" {
 		recordPending("", "cannot determine session cwd")
 		log.Fatalf("repotory-capture: cannot determine session cwd")
 	}
 
-	path := *dbPath
-	if path == "" {
-		path = platform.GetDbPath()
-	}
 	database, err := db.InitDB(path)
 	if err != nil {
 		recordPending(cwd, fmt.Sprintf("open db: %v", err))
@@ -121,6 +160,24 @@ func run(args []string) int {
 	}
 	platform.ClearCapturePending()
 	fmt.Printf("repotory-capture: wrote handoff note %d (%q)\n", report.NoteID, report.Title)
+	return 0
+}
+
+// runBrief is the SessionStart path (ADR-0066). Every failure degrades to a
+// silent exit 0 with a stderr trace: an uncollected folder, a missing database
+// or a locked file must cost the new session nothing. No writerapi election,
+// no audit forwarder, no pending record — there is no write to contract about.
+func runBrief(cwd, path string) int {
+	database, err := db.OpenReadOnly(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "repotory-capture: brief: %v\n", err)
+		return 0
+	}
+	defer database.Close()
+	svc := service.New(database, "session-brief")
+	if out := svc.BuildSessionBrief(svc.ResolveWorkspace("", cwd)); out != "" {
+		fmt.Print(out)
+	}
 	return 0
 }
 

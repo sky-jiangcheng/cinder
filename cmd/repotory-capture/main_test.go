@@ -1,12 +1,14 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"repotory/internal/db"
+	"repotory/internal/service"
 )
 
 // resolveCwd has a documented precedence: -cwd flag, then a {"cwd": "..."}
@@ -138,5 +140,108 @@ func TestRunStrictExitCodeObservesCaptureFailure(t *testing.T) {
 	}
 	if code := run(append(args, "-strict")); code != 1 {
 		t.Errorf("run(--strict) = %d, want 1 (the hook falls through to its model-driven fallback)", code)
+	}
+}
+
+// captureStdout swaps os.Stdout for a temp file around fn and returns what
+// was printed — the brief's whole output contract is stdout, because Claude
+// Code injects SessionStart stdout into the session context.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	f, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = f
+	defer func() { os.Stdout = orig }()
+	fn()
+	if _, err := f.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	return string(out)
+}
+
+// The SessionStart path (ADR-0066) must print the brief for the cwd's project
+// and leave the database file byte-identical: it opens read-only, joins no
+// writer contract, and writes no pending record.
+func TestRunBriefPrintsHandoffAndNeverWrites(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	root := t.TempDir()
+	dbPath := filepath.Join(t.TempDir(), "brief-test.db")
+	database, err := db.InitDB(dbPath)
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	svc := service.New(database, "test")
+	tx, err := database.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := db.SyncProjectTx(tx, "demo", root, 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateHandoffNote(service.HandoffInput{
+		ProjectID: pid, Summary: "brief cli test", Gotchas: []string{"BRIEF-CLI-MARK"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var code int
+	out := captureStdout(t, func() {
+		code = run([]string{"-brief", "-db", dbPath, "-cwd", root})
+	})
+	if code != 0 {
+		t.Errorf("run(--brief) = %d, want 0", code)
+	}
+	if !strings.Contains(out, "BRIEF-CLI-MARK") {
+		t.Errorf("brief stdout missing the handoff gotcha:\n%s", out)
+	}
+	after, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Error("the brief path modified the database file; it must be read-only")
+	}
+}
+
+// A machine with no database yet (fresh install, hook already wired) must get
+// a silent exit 0 — and the brief must NOT create the database: InitDB's
+// create-on-open behavior is exactly what the read-only opener exists to
+// avoid on a session-start path.
+func TestRunBriefMissingDBIsSilentAndCreatesNothing(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dbPath := filepath.Join(t.TempDir(), "does-not-exist.db")
+
+	var code int
+	out := captureStdout(t, func() {
+		code = run([]string{"-brief", "-db", dbPath, "-cwd", t.TempDir()})
+	})
+	if code != 0 {
+		t.Errorf("run(--brief) with missing db = %d, want 0 (session start is never broken)", code)
+	}
+	if out != "" {
+		t.Errorf("expected silent stdout, got:\n%s", out)
+	}
+	if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
+		t.Errorf("the brief path created the database file (stat err = %v)", err)
 	}
 }

@@ -1,7 +1,8 @@
 // Package agentinit registers Cinder's MCP server with the AI clients a
 // user actually runs — Claude Code, Cursor, VS Code, Windsurf — and installs
-// the Claude Code SessionEnd hook that writes the handoff note when a session
-// ends.
+// the Claude Code session hooks: SessionEnd writes the handoff note when a
+// session ends, SessionStart injects the memory brief when one begins
+// (ADR-0066).
 //
 // Why there is a Go twin of ide/vscode/repotory-init/index.mjs. That script is
 // the terminal path: it runs where node already is (the VS Code extension
@@ -42,6 +43,9 @@ const (
 	// produced backslashes on Windows — the one place the two
 	// implementations could disagree about the same file.
 	HookScriptRel = ".claude/hooks/repotory-handoff.sh"
+	// BriefHookScriptRel is the SessionStart brief hook (ADR-0066), same
+	// forward-slash rule as HookScriptRel.
+	BriefHookScriptRel = ".claude/hooks/repotory-brief.sh"
 	// HookSettingsRel is Claude Code's settings file, relative to the project
 	// directory.
 	HookSettingsRel = ".claude/settings.json"
@@ -104,7 +108,10 @@ type Report struct {
 	Files []FileResult `json:"files"`
 	// Hook is the installed SessionEnd hook script (nil when not requested).
 	Hook *FileResult `json:"hook,omitempty"`
-	// HookSettings is the .claude/settings.json entry that points at the hook.
+	// BriefHook is the installed SessionStart brief hook script (ADR-0066;
+	// nil when not requested).
+	BriefHook *FileResult `json:"brief_hook,omitempty"`
+	// HookSettings is the .claude/settings.json entry that points at the hooks.
 	HookSettings *FileResult `json:"hook_settings,omitempty"`
 	// Instructions lists the project instruction files the managed block was
 	// written to, one entry per file (ADR-0043). nil when not requested.
@@ -126,7 +133,9 @@ type Options struct {
 	BinPath string
 	// Clients selects which clients to register. Empty means all of them.
 	Clients []Client
-	// WithHook installs the Claude Code SessionEnd handoff hook.
+	// WithHook installs the Claude Code session hooks: the SessionEnd handoff
+	// capture and the SessionStart memory brief (ADR-0066). They are one
+	// decision — the closed memory loop — not two flags.
 	WithHook bool
 	// WithInstructions writes the managed repotory_* instruction block into the
 	// project's instruction files (AGENTS.md, CLAUDE.md) — ADR-0043. The zero
@@ -214,11 +223,17 @@ func Register(opts Options) (*Report, error) {
 		}
 
 		if opts.WithHook {
-			hook, settings, err := installHook(abs)
+			hook, brief, settings, err := installHook(abs)
 			if err != nil {
 				report.Warnings = append(report.Warnings, err.Error())
-			} else {
+			}
+			if hook.Path != "" {
 				report.Hook = &hook
+			}
+			if brief.Path != "" {
+				report.BriefHook = &brief
+			}
+			if settings.Path != "" {
 				report.HookSettings = &settings
 			}
 		}
@@ -403,55 +418,100 @@ claude -p --mcp-config .mcp.json \
   >/dev/null 2>&1 || true
 `
 
-// installHook writes the hook script and registers it in .claude/settings.json.
-func installHook(targetDir string) (FileResult, FileResult, error) {
-	scriptPath := filepath.Join(targetDir, filepath.FromSlash(HookScriptRel))
-	scriptRes := FileResult{Client: ClientClaude, Path: scriptPath}
+// briefHookScript is the SessionStart hook (ADR-0066): it prints the memory
+// brief — latest handoff, open todos, approved-page excerpts — and Claude
+// Code adds SessionStart stdout to the new session's context. Zero model
+// calls, read-only database access, and every failure path exits 0: the
+// start of a session must never be broken or delayed by the memory layer.
+// There is deliberately no model-driven fallback here (unlike SessionEnd):
+// a `claude -p` call at session start would burn credit and block startup.
+//
+// The bytes must match the mjs's BRIEF_HOOK_SCRIPT exactly; the contract
+// check compares the two files.
+const briefHookScript = `#!/bin/sh
+# Cinder SessionStart hook: inject the memory brief when a session starts.
+# Installed by repotory-init. Delete this file and the matching
+# .claude/settings.json entry to uninstall.
+# ADR-0066: zero-model, read-only; a failure never breaks session start.
+cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
 
-	if existing, err := os.ReadFile(scriptPath); err == nil {
-		if string(existing) == hookScript {
-			scriptRes.Status = StatusUnchanged
-		} else {
-			if err := os.WriteFile(scriptPath+BackupSuffix, existing, 0o600); err != nil {
-				scriptRes.Status = StatusFailed
-				scriptRes.Note = fmt.Sprintf("cannot back up %s: %v", scriptPath, err)
-			} else {
-				if err := writeExecutable(scriptPath, []byte(hookScript)); err != nil {
-					scriptRes.Status = StatusFailed
-					scriptRes.Note = fmt.Sprintf("cannot write %s: %v", scriptPath, err)
-				} else {
-					scriptRes.Status = StatusUpdated
-					scriptRes.Note = "backup: " + scriptPath + BackupSuffix
-				}
-			}
-		}
-	} else if !os.IsNotExist(err) {
-		scriptRes.Status = StatusFailed
-		scriptRes.Note = fmt.Sprintf("cannot read %s: %v", scriptPath, err)
-	} else {
-		if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
-			scriptRes.Status = StatusFailed
-			scriptRes.Note = fmt.Sprintf("cannot create %s: %v", filepath.Dir(scriptPath), err)
-		} else if err := writeExecutable(scriptPath, []byte(hookScript)); err != nil {
-			scriptRes.Status = StatusFailed
-			scriptRes.Note = fmt.Sprintf("cannot write %s: %v", scriptPath, err)
-		} else {
-			scriptRes.Status = StatusCreated
-		}
+# repotory-capture --brief prints the compact project brief (latest handoff,
+# open todos, approved-page excerpts). Claude Code adds SessionStart stdout
+# to the session context. No model call, no database write. Keep stderr
+# visible so a broken brief stays diagnosable; every failure exits 0.
+command -v repotory-capture >/dev/null 2>&1 || exit 0
+repotory-capture --brief || exit 0
+`
+
+// installHook writes both hook scripts and registers them in
+// .claude/settings.json: SessionEnd (handoff capture) and SessionStart
+// (memory brief). One flag, one closed loop.
+func installHook(targetDir string) (FileResult, FileResult, FileResult, error) {
+	hookRes := writeHookScriptFile(targetDir, HookScriptRel, hookScript)
+	if hookRes.Status == StatusFailed {
+		return hookRes, FileResult{}, FileResult{}, errors.New(hookRes.Note)
 	}
-	if scriptRes.Status == StatusFailed {
-		return scriptRes, FileResult{}, errors.New(scriptRes.Note)
+	briefRes := writeHookScriptFile(targetDir, BriefHookScriptRel, briefHookScript)
+	if briefRes.Status == StatusFailed {
+		return hookRes, briefRes, FileResult{}, errors.New(briefRes.Note)
 	}
 
 	settingsRes, err := writeHookSettings(targetDir)
 	if err != nil {
-		return scriptRes, settingsRes, err
+		return hookRes, briefRes, settingsRes, err
 	}
-	return scriptRes, settingsRes, nil
+	return hookRes, briefRes, settingsRes, nil
 }
 
-// writeHookSettings appends the SessionEnd entry to .claude/settings.json,
-// unless it is already there.
+// writeHookScriptFile writes one hook script, backing up a differing existing
+// file and reporting unchanged when the bytes already match.
+func writeHookScriptFile(targetDir, rel, content string) FileResult {
+	scriptPath := filepath.Join(targetDir, filepath.FromSlash(rel))
+	res := FileResult{Client: ClientClaude, Path: scriptPath}
+
+	if existing, err := os.ReadFile(scriptPath); err == nil {
+		if string(existing) == content {
+			res.Status = StatusUnchanged
+		} else {
+			if err := os.WriteFile(scriptPath+BackupSuffix, existing, 0o600); err != nil {
+				res.Status = StatusFailed
+				res.Note = fmt.Sprintf("cannot back up %s: %v", scriptPath, err)
+			} else {
+				if err := writeExecutable(scriptPath, []byte(content)); err != nil {
+					res.Status = StatusFailed
+					res.Note = fmt.Sprintf("cannot write %s: %v", scriptPath, err)
+				} else {
+					res.Status = StatusUpdated
+					res.Note = "backup: " + scriptPath + BackupSuffix
+				}
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		res.Status = StatusFailed
+		res.Note = fmt.Sprintf("cannot read %s: %v", scriptPath, err)
+	} else {
+		if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+			res.Status = StatusFailed
+			res.Note = fmt.Sprintf("cannot create %s: %v", filepath.Dir(scriptPath), err)
+		} else if err := writeExecutable(scriptPath, []byte(content)); err != nil {
+			res.Status = StatusFailed
+			res.Note = fmt.Sprintf("cannot write %s: %v", scriptPath, err)
+		} else {
+			res.Status = StatusCreated
+		}
+	}
+	return res
+}
+
+// hookEvents is the event→script wiring, in the order entries are appended.
+// Both implementations (Go and mjs) must register exactly these pairs.
+var hookEvents = []struct{ event, scriptRel string }{
+	{"SessionEnd", HookScriptRel},
+	{"SessionStart", BriefHookScriptRel},
+}
+
+// writeHookSettings appends the SessionEnd and SessionStart entries to
+// .claude/settings.json, skipping whichever is already there.
 func writeHookSettings(targetDir string) (FileResult, error) {
 	file := filepath.Join(targetDir, filepath.FromSlash(HookSettingsRel))
 	res := FileResult{Client: ClientClaude, Path: file}
@@ -473,7 +533,6 @@ func writeHookSettings(targetDir string) (FileResult, error) {
 		}
 	}
 
-	command := `"$CLAUDE_PROJECT_DIR"/` + HookScriptRel
 	hooks := map[string]json.RawMessage{}
 	if existing, ok := settings["hooks"]; ok {
 		if err := json.Unmarshal(existing, &hooks); err != nil {
@@ -481,39 +540,50 @@ func writeHookSettings(targetDir string) (FileResult, error) {
 		}
 	}
 
-	var entries []json.RawMessage
-	if existing, ok := hooks["SessionEnd"]; ok {
-		if err := json.Unmarshal(existing, &entries); err != nil {
-			entries = nil
-		}
-	}
-	for _, e := range entries {
-		var entry hookEntry
-		if err := json.Unmarshal(e, &entry); err != nil {
-			continue
-		}
-		for _, h := range entry.Hooks {
-			if strings.Contains(h.Command, HookScriptRel) {
-				res.Status = StatusUnchanged
-				return res, nil
+	changed := false
+	for _, ev := range hookEvents {
+		command := `"$CLAUDE_PROJECT_DIR"/` + ev.scriptRel
+		var entries []json.RawMessage
+		if existing, ok := hooks[ev.event]; ok {
+			if err := json.Unmarshal(existing, &entries); err != nil {
+				entries = nil
 			}
 		}
+		present := false
+		for _, e := range entries {
+			var entry hookEntry
+			if err := json.Unmarshal(e, &entry); err != nil {
+				continue
+			}
+			for _, h := range entry.Hooks {
+				if strings.Contains(h.Command, ev.scriptRel) {
+					present = true
+				}
+			}
+		}
+		if present {
+			continue
+		}
+		added, err := json.Marshal(hookEntry{Hooks: []hookCommand{{Type: "command", Command: command}}})
+		if err != nil {
+			res.Status = StatusFailed
+			res.Note = err.Error()
+			return res, err
+		}
+		entries = append(entries, added)
+		encodedEntries, err := json.Marshal(entries)
+		if err != nil {
+			res.Status = StatusFailed
+			res.Note = err.Error()
+			return res, err
+		}
+		hooks[ev.event] = encodedEntries
+		changed = true
 	}
-
-	added, err := json.Marshal(hookEntry{Hooks: []hookCommand{{Type: "command", Command: command}}})
-	if err != nil {
-		res.Status = StatusFailed
-		res.Note = err.Error()
-		return res, err
+	if !changed {
+		res.Status = StatusUnchanged
+		return res, nil
 	}
-	entries = append(entries, added)
-	encodedEntries, err := json.Marshal(entries)
-	if err != nil {
-		res.Status = StatusFailed
-		res.Note = err.Error()
-		return res, err
-	}
-	hooks["SessionEnd"] = encodedEntries
 	encodedHooks, err := json.Marshal(hooks)
 	if err != nil {
 		res.Status = StatusFailed

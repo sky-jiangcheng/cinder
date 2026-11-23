@@ -139,7 +139,7 @@ How to read it: the protocol has exactly **two entry calls** (`repotory_context`
 
 ### Who executes this write: the cross-process single-writer contract (ADR-0058)
 
-The desktop app, `cinder-mcp` and the SessionEnd hook can all open the same `repotory.db` at once. **Only one Cinder process writes the database at a time**: whoever holds `repotory.writer.lock` in the data directory (an OS file lock, released the moment a process dies) is the writer, and every other process forwards its writes to it over loopback HTTP. Three differences are visible to an agent, none of them a tool-signature change:
+The desktop app, `cinder-mcp` and the session hooks can all open the same `repotory.db` at once. **Only one Cinder process writes the database at a time**: whoever holds `repotory.writer.lock` in the data directory (an OS file lock, released the moment a process dies) is the writer, and every other process forwards its writes to it over loopback HTTP. Three differences are visible to an agent, none of them a tool-signature change:
 
 - **Long writes no longer explode with `database is locked`**: while a backup or a batch compile holds the lock, your write waits in the writer's queue instead of failing after five seconds.
 - **"No desktop app required" stays true**: when no other Cinder is running, `cinder-mcp` elects itself as the writer; the desktop reclaims the role as soon as it starts (bounded request — if the agent is mid-write, the desktop keeps forwarding for now).
@@ -152,7 +152,7 @@ A **fully offline local model** (ollama / LM Studio) speaks the same MCP; the wi
 | Tool | Description | Read/Write |
 |------|-------------|------------|
 | `repotory_scan` | Cold start: seeds the default scan roots and scans them synchronously, discovering local Git repositories (works with a pure MCP install, no desktop app needed) | Write |
-| `repotory_context` | Injects the full project context at session start (tech stack / README / todos / highly relevant notes, with handoff notes pinned to the top). Optional `path` (an absolute directory / cwd) resolves the owning project — see "Workspace path resolution" | Read |
+| `repotory_context` | Injects the full project context at session start (tech stack / README / todos / highly relevant notes, with handoff notes pinned to the top). When the approved-page disk mirror exists, the header carries a directory pointer (ADR-0069; `pages_projection=0` turns it off). Optional `path` (an absolute directory / cwd) resolves the owning project — see "Workspace path resolution" | Read |
 | `repotory_workspace_resolve` | Resolves an absolute directory to the project it belongs to (and to the scanned repository the directory sits inside), returning a result field-for-field identical to the `ResolveWorkspacePath` binding; when nothing matches it returns a candidate-project catalogue ([ADR-0062](../adr/0062-ide-project-lock-over-mcp.md)). **Agents do not normally need it**: `repotory_context`'s `path` already performs the same resolution server-side; it exists for the human-side client that needs to **display** the resolution (the IDE panels' project lock). Pure read | Read |
 | `repotory_config_get` | Reads the full configuration: every settable key's current value plus the scan roots. Secrets are masked to `************` — the response says a key is configured, never what it is. The IDE panels read their provider settings through it ([ADR-0063](../adr/0063-repotory-server-consumer-list.md)) | Read |
 | `repotory_config_update` | Updates a single configuration key (the key must be on the service's allow-list; numeric keys reject non-numeric values). **Configuration writes are catalogue-covered since 2026-11-16** (ADR-0063: the owner reclassified them from human-gate to catalogue-covered) and route through the single-writer contract — the IDE panels save provider settings (`ai_chat_base_url` / `ai_chat_model` / `ai_chat_api_key`) through it, with no local service required | Write |
@@ -171,7 +171,7 @@ A **fully offline local model** (ollama / LM Studio) speaks the same MCP; the wi
 | `repotory_agent_score` | Check local AI readiness (DB / notes / search / MCP / llms.txt / SKILL.md / i18n) | Read |
 | `repotory_integrity` | Audit data trustworthiness (FTS index drift / orphan rows / cache freshness / coverage) | Read |
 | `repotory_ai_audit` | Show what this machine sent to an AI recently: time / endpoint / model / surface (mcp/http/desktop) / characters / whether a local rule blocked it. **Prompts and replies are not included** — the audit trail stores a hash and a size | Read |
-| `repotory_ai_review_rules` | Show the local AI review rules and the input/output review switches. Rules are the user's own regexes (one per line, `#` for comments), matched before sending and on arrival; no built-in blocklist | Read |
+| `repotory_ai_review_rules` | Show the local AI review rules and the input/output review switches. Rules are the user's own regexes (one per line, `#` for comments), matched before sending and on arrival; no built-in KEYWORD blocklist. Optional built-in credential/PII presets (`ai_review_presets`, 20 precision-first format rules appended after the user's rules) and entry-side masking before storage (`memory_redact`, replaced with `[redacted:name]`), both default-off (ADR-0068) | Read |
 | `repotory_chat` | **Shared conversations** across clients (topics and completed messages sync between Warden and the IDE plugins): `operation` is one of `list` / `create` / `read` / `append` / `rename` / `set_path`. IDs are client-generated UUIDs; replaying the same id with the same payload is **idempotent**, the same id with a different payload errors out and **never overwrites**; `reply_to` may only point at a user message in this thread. Fully **isolated** from knowledge notes, retrieval and approvals — no shared table | Write |
 | `repotory_metrics` | Reads the **stored** quantitative overview (repositories / lines of code / today's commits and added-deleted lines / notes / pages awaiting human review). Does not scan disk, run git or refresh caches; an empty `path` means the whole library, and an unknown path returns empty counts rather than global totals; `since` / `until` (`YYYY-MM-DD`, inclusive, max 366 days) add a date-window sum — a window extending past the last scan returns `null` counts with `stale: true`, **not 0** (days nobody scanned are absent from the cache, not proof that nobody worked); `totalLines` is `null` unless the cached language LOC covers the scope completely (it would rather say nothing than invent a total) | Read |
 
@@ -217,7 +217,7 @@ This resolution lives **server-side** and is shared by the MCP tools and the VS 
 
 ### Desktop one-click connect (no terminal)
 
-If you installed the desktop app, you never need to open a terminal: under **Settings → Actions → Connect AI clients** (see [Settings](settings.md)) pick a project, tick the clients you want, and press "Connect" once. The desktop app then writes `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`, optionally installs the Claude Code SessionEnd hook, **optionally writes the "read at the start / hand off at the end" instructions into the project's `AGENTS.md` and `CLAUDE.md`** ([ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)), and kicks off a scan. Open Claude Code afterwards and `repotory_context` already has content to return — no manual rescan.
+If you installed the desktop app, you never need to open a terminal: under **Settings → Actions → Connect AI clients** (see [Settings](settings.md)) pick a project, tick the clients you want, and press "Connect" once. The desktop app then writes `.mcp.json` / `.cursor/mcp.json` / `.vscode/mcp.json`, optionally installs the Claude Code session hooks (SessionEnd handoff + SessionStart memory brief), **optionally writes the "read at the start / hand off at the end" instructions into the project's `AGENTS.md` and `CLAUDE.md`** ([ADR-0043](../adr/0043-handoff-instructions-in-agent-instruction-files.md)), and kicks off a scan. Open Claude Code afterwards and `repotory_context` already has content to return — no manual rescan.
 
 When the hook is selected, the same form carries a third checkbox: **enable session capture** (`claude_session_capture`, [ADR-0010](../adr/0010-session-auto-capture.md)). It is **one decision with the hook** — a hook installed with the gate off has a dead primary path (read the transcript, write the note, zero credit) and every session end falls back to a model call that costs credit; that is the exact "installed but silent" shape the 2.1 timebox measured. The checkbox defaults **off**: what it widens is what Cinder may read (session transcripts), so the user flips the switch, not the installer. The report states the gate state after the call, and this entry point can only turn the gate **on** — turning it off stays where it was set, under Settings → AI integration.
 
@@ -229,10 +229,10 @@ It and the terminal path below are **two implementations of one protocol**:
 
 | Implementation | Shape | Who uses it |
 |----------------|-------|--------------|
-| `internal/agentinit` | Go, shipped inside the desktop binary | The desktop button |
+| `internal/agentinit` | Go, shipped inside the desktop binary | The desktop button + the `cinder-capture init` / `uninstall` subcommands (ADR-0067) |
 | `scripts/repotory-init/index.mjs` | node script, zero dependencies | The terminal and the VS Code extension |
 
-The files both implementations produce are pinned to **one fixture** (`internal/agentinit/testdata/contract.json`): `go test ./internal/agentinit` checks the Go side, `node scripts/check-agent-init-contract.mjs` checks the script side (and it checks **both copies of the script** — the source of truth is `scripts/repotory-init/index.mjs`, and the copy bundled in the VSIX is generated by `ide/vscode/scripts/sync-init.mjs`). Change one side and the other goes red immediately: that kind of drift is invisible from either side — both report "registered" while Claude Code received nothing.
+The files both implementations produce are pinned to **one fixture** (`internal/agentinit/testdata/contract.json`): `go test ./internal/agentinit` checks the Go side, `node scripts/check-agent-init-contract.mjs` checks the script side (and it checks **both copies of the script** — the source of truth is `scripts/repotory-init/index.mjs`, and the copy bundled in the VSIX is generated by `ide/vscode/scripts/sync-init.mjs`). Change one side and the other goes red immediately: that kind of drift is invisible from either side — both report "registered" while Claude Code received nothing. **The post-uninstall state is pinned too** (ADR-0067): a second fixture, `contract-uninstall.json`, records the residue after a precise uninstall (`null` = the file must not exist), and both checks compare the install output first, then run the uninstall and compare the residue.
 
 A few things the button will **not** do for you (it refuses explicitly instead of guessing):
 
@@ -248,15 +248,21 @@ The button returns a **machine-readable reason** (`code`) and the interface rend
 Step one of [ADR-0009](../adr/0009-ide-presence.md): detect the binary and register every supported client with a single command; idempotent and safe to re-run:
 
 ```bash
+# Recommended: the installed cinder-capture carries the subcommands (ADR-0067), runs in any directory
+cinder-capture init --all        # every client + both session hooks + the instruction block
+cinder-capture uninstall         # removes exactly that wiring, nothing else
+
+# Equivalent node-script entry point (needs node)
 node scripts/repotory-init/index.mjs --with-hook
 ```
 
-**It runs in any project**: the extension's `Cinder: Register MCP Server` command uses the copy of `repotory-init` bundled inside the VSIX (the source of truth stays at `scripts/repotory-init/index.mjs`, copied in by `compile` and pinned to it by a CI `git diff --exit-code`), so cloning this repository first is not required; nor does it open a terminal — the extension runs the installer silently inside its host process (falling back to `node` only on `ENOENT`/`EACCES`). The bare command above does require you to be inside this repository.
+**It runs in any project**: the extension's `Cinder: Register MCP Server` command uses the copy of `repotory-init` bundled inside the VSIX (the source of truth stays at `scripts/repotory-init/index.mjs`, copied in by `compile` and pinned to it by a CI `git diff --exit-code`), so cloning this repository first is not required; nor does it open a terminal — the extension runs the installer silently inside its host process (falling back to `node` only on `ENOENT`/`EACCES`). The node-script entry point above does require you to be inside this repository.
 
 - Detects `cinder-mcp` (override with `--bin`) and registers it with Claude Code (`.mcp.json`), Cursor (`.cursor/mcp.json`), VS Code (`.vscode/mcp.json`) and Windsurf (configs land only where the client's directory exists); JetBrains gets printed manual guidance
-- `--with-hook` also installs the SessionEnd hook below (script + merged `settings.json`, backed up before changes)
+- `--with-hook` also installs both session hooks below: the SessionEnd handoff + the SessionStart memory brief (script + merged `settings.json`, backed up before changes; ADR-0066)
 - `--with-instructions` also writes the handoff instructions into the project's `AGENTS.md` and `CLAUDE.md` (ADR-0043; an existing block is replaced in place, **nothing outside the markers is touched**, and the file is backed up before changes)
 - `--dry-run` previews every write; when the binary is missing it prints install guidance, and `--yes` writes the bare command name `cinder-mcp` (works once installed)
+- **Precise uninstall** (ADR-0067): `cinder-capture uninstall` (or `repotory-init --uninstall`) removes only what we wrote — every other server / hook / file byte survives; a user-modified hook script is left in place with a warning; a file that held only the instruction block is deleted; every overwrite is backed up first; a second uninstall is a silent no-op. The subcommands never open the database, and `claude_session_capture` stays default-off (installing the hooks ≠ enabling transcript reading)
 
 ### Connect Claude Code manually (alternative)
 
@@ -330,6 +336,32 @@ Design points and costs (stated plainly, so the narrative doesn't oversell):
 - **Protocol protection**: handoff notes carry the `handoff` tag and `repotory_notes_update` refuses to overwrite them (guarding against accidental clobbering); in the next session, `repotory_context` renders them in full, pinned to the top.
 - The hook's event name and configuration fields evolve with Claude Code versions; before wiring it up, defer to `claude --help` and the official hooks documentation.
 
+### The session-start memory brief (SessionStart hook)
+
+SessionEnd guarantees "the memory gets written"; [ADR-0066](../adr/0066-session-start-brief-injection.md) supplies the other half: "the memory shows up at the start on its own". Claude Code's **SessionStart hook** runs `repotory-capture --brief` at the start of every session, and Claude Code injects its stdout into the new session's context — the agent does nothing and already opens with the previous session's exit record.
+
+`--with-hook` installs both hooks at once; a project that only has the SessionEnd hook gains the SessionStart entry by re-running it once, with every existing byte of `settings.json` left alone. The entry it writes:
+
+```json
+"SessionStart": [
+  { "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/repotory-brief.sh" }] }
+]
+```
+
+Brief content (`BuildSessionBrief`, 4000-character budget, whole sections dropped from the tail when over):
+
+- The latest handoff (a human handoff leads over auto-captured ones; Gotchas / Next Steps first, over-length cut from the tail)
+- A one-line timeline of earlier handoffs (≤3)
+- Open todos (≤5)
+- **Approved** page titles + one-line excerpts (≤6 pages; pending pages never appear — injection is a read surface under the same human approval gate, ADR-0015)
+
+Design points and costs:
+
+- **Zero model, read-only**: `--brief` opens the database with `mode=ro` (`db.OpenReadOnly`) — no migrations, no table creation, no writer-contract participation (ADR-0058), no pending record. There is deliberately no `claude -p` fallback like SessionEnd's: burning credit or blocking startup is not acceptable at session start.
+- **Failure is silence**: a missing database, a cwd that matches no collected project, or a binary off PATH all exit 0 with empty stdout. Injecting an error message into every session of an uncollected folder is noise, not memory.
+- **Not a shrunk `repotory_context`**: the brief does no repository mining (git / README); it is a pure database read, cheap enough to run on every session start. Full context remains one `repotory_context` call away.
+- **Uninstall**: `cinder-capture uninstall` removes both hook scripts and the matching `settings.json` entries together (ADR-0067); manually, delete `.claude/hooks/repotory-brief.sh` and the matching SessionStart entry.
+
 ### Handoff instructions in the project's instruction files (the managed block, ADR-0043)
 
 The SessionEnd hook exists only in Claude Code. **Switch to any other agent and that path is gone** — while this product's whole claim is a persistent memory across agents. So there is a second path that does not care which client you use: write the two instructions into the instruction files the project already has.
@@ -353,7 +385,7 @@ The SessionEnd hook exists only in Claude Code. **Switch to any other agent and 
 
 **The honest boundary**: the instruction file turns "write it down at the end" from an event that **must happen** (the hook) into one that **probably happens** — the model reads it, but obeying is not guaranteed. So the two paths **coexist and neither replaces the other**: the hook catches "the user forgot to wrap up", the instruction file catches "the user is not in Claude Code", and both write through the same `repotory_handoff` path, **so a handoff never comes in two shapes**.
 
-Uninstalling means deleting what sits between the two marker lines — the block is readable, editable plain text for the user, not hidden state the product has to babysit, which is why there is no `--remove` flag.
+Uninstalling can be done by hand — delete what sits between the two marker lines; the block is readable, editable plain text for the user, not hidden state the product has to babysit. `cinder-capture uninstall` (or `repotory-init --uninstall`) also removes the block precisely: a file that held only the block is deleted (back to the pre-install "no file"), and every other byte survives (ADR-0067).
 
 ### Connect Cursor / other MCP clients
 

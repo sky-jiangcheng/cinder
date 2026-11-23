@@ -57,6 +57,13 @@ func (s *Service) MergeWikiPagesInto(loserID, winnerID int64) (*db.MergeResult, 
 	if err != nil {
 		return nil, fmt.Errorf("merge: winner page: %w", err)
 	}
-	return db.MergeWikiPages(s.db, loserID, winnerID,
+	res, err := db.MergeWikiPages(s.db, loserID, winnerID,
 		fmt.Sprintf("已并入 [[%s]]（人工合并：原页面作为墓碑保留，以维持入链与审计记录）。", winner.Slug))
+	if err != nil {
+		return nil, err
+	}
+	// ADR-0069: the loser left the approved set (tombstoned) and the winner's
+	// edges changed — both are mirror changes.
+	s.refreshPagesProjection()
+	return res, nil
 }

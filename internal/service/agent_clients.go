@@ -83,7 +83,10 @@ type AgentSetupReport struct {
 	Files []agentinit.FileResult `json:"files"`
 	// Hook is the installed SessionEnd hook script, when the hook was asked for.
 	Hook *agentinit.FileResult `json:"hook,omitempty"`
-	// HookSettings is the .claude/settings.json entry pointing at the hook.
+	// BriefHook is the installed SessionStart brief hook script (ADR-0066),
+	// when the hook was asked for.
+	BriefHook *agentinit.FileResult `json:"brief_hook,omitempty"`
+	// HookSettings is the .claude/settings.json entry pointing at the hooks.
 	HookSettings *agentinit.FileResult `json:"hook_settings,omitempty"`
 	// Instructions lists the project instruction files that received the managed
 	// block, one entry per file (ADR-0043). nil when not requested.
@@ -118,8 +121,9 @@ func AgentClientNames() []string {
 //
 // projectID names the project whose directory receives the client-local
 // configuration. clients are the client names ("claude", "cursor", "vscode",
-// "windsurf"); withHook additionally installs the Claude Code SessionEnd hook
-// that writes the handoff note when a session ends; withInstructions writes the
+// "windsurf"); withHook additionally installs the Claude Code session hooks —
+// the SessionEnd handoff capture and the SessionStart memory brief (ADR-0066);
+// withInstructions writes the
 // managed repotory_* block into the project's instruction files (ADR-0043) —
 // the protocol-neutral half, since the hook only exists for Claude Code.
 //
@@ -199,6 +203,7 @@ func (s *Service) SetupAgentClients(projectID int64, clients []string, withHook,
 	report.Binary = res.Binary
 	report.Files = res.Files
 	report.Hook = res.Hook
+	report.BriefHook = res.BriefHook
 	report.HookSettings = res.HookSettings
 	report.Instructions = res.Instructions
 	report.Warnings = res.Warnings

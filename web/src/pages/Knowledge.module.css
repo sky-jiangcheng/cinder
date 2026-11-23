@@ -462,6 +462,60 @@
   color: var(--text-tertiary);
 }
 
+/* ADR-0072 provenance transparency: recall badges mirror the home
+   assistant's source badge; the state pill and chips reuse the same
+   tertiary surfaces as hitType so no new color semantics are introduced. */
+.semanticState {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  align-self: center;
+}
+
+.hitRecall {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 7px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.hitSource {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 7px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.sourceFilterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.sourceChip {
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sourceChipActive {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
 .hitTitle {
   font-size: 13px;
   font-weight: 600;

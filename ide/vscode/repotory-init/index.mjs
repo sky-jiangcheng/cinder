@@ -2,7 +2,8 @@
 // repotory-init — one-command MCP registration for Cinder.
 // ADR-0009 step one / TODO M4: detect the cinder-mcp binary, register it with
 // the MCP clients found in this project (Claude Code / Cursor / VS Code /
-// Windsurf), and optionally install the Claude Code SessionEnd handoff hook.
+// Windsurf), and optionally install the Claude Code session hooks
+// (SessionEnd handoff + SessionStart memory brief, ADR-0066).
 // Zero dependencies. Node >= 18.
 
 import fs from "node:fs";
@@ -17,6 +18,7 @@ const BINARY_NAMES =
   process.platform === "win32" ? ["cinder-mcp.exe", "repotory-mcp.exe"] : ["cinder-mcp", "repotory-mcp"];
 const BINARY_NAME = BINARY_NAMES[0];
 const HOOK_SCRIPT_REL = ".claude/hooks/repotory-handoff.sh";
+const BRIEF_HOOK_SCRIPT_REL = ".claude/hooks/repotory-brief.sh";
 // Forward slashes on every platform, deliberately: this path is written into a
 // shell command string, and path.join would produce backslashes on Windows —
 // the one place where this script and the Go twin (internal/agentinit) could
@@ -34,8 +36,10 @@ Options:
   --client <name>  Comma-separated subset of: claude,cursor,vscode,windsurf,jetbrains
                    Default: every supported client (config files land only where the client dir exists)
   --bin <path>     Explicit path to the repotory-mcp binary (skips detection)
-  --with-hook      Also install the Claude Code SessionEnd handoff hook
+  --with-hook      Also install the Claude Code session hooks (SessionEnd handoff + SessionStart brief)
   --with-instructions  Also write the repotory block into AGENTS.md / CLAUDE.md
+  --uninstall      Remove exactly what this script added (server entries, hook
+                   entries + scripts, managed block); everything else stays
   --yes            Non-interactive: assume yes where a prompt would appear
   --dry-run        Show what would be written, change nothing
   -h, --help       Show this help
@@ -221,63 +225,88 @@ claude -p --mcp-config .mcp.json \\
   >/dev/null 2>&1 || true
 `;
 
-function writeHookScript() {
-  const file = HOOK_SCRIPT_REL;
+// The SessionStart brief hook (ADR-0066). The bytes MUST match the Go twin's
+// briefHookScript exactly; scripts/check-agent-init-contract.mjs compares them.
+const BRIEF_HOOK_SCRIPT = `#!/bin/sh
+# Cinder SessionStart hook: inject the memory brief when a session starts.
+# Installed by repotory-init. Delete this file and the matching
+# .claude/settings.json entry to uninstall.
+# ADR-0066: zero-model, read-only; a failure never breaks session start.
+cd "\${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
+
+# repotory-capture --brief prints the compact project brief (latest handoff,
+# open todos, approved-page excerpts). Claude Code adds SessionStart stdout
+# to the session context. No model call, no database write. Keep stderr
+# visible so a broken brief stays diagnosable; every failure exits 0.
+command -v repotory-capture >/dev/null 2>&1 || exit 0
+repotory-capture --brief || exit 0
+`;
+
+function writeHookScript(file, content) {
   const existed = fs.existsSync(file);
-  if (existed && fs.readFileSync(file, "utf8") === HOOK_SCRIPT) return "unchanged";
+  if (existed && fs.readFileSync(file, "utf8") === content) return "unchanged";
   if (options.dryRun) return existed ? "would-update" : "would-create";
   fs.mkdirSync(path.dirname(file), { recursive: true });
   if (existed) fs.copyFileSync(file, file + BACKUP_SUFFIX);
-  fs.writeFileSync(file, HOOK_SCRIPT, { mode: 0o755 });
+  fs.writeFileSync(file, content, { mode: 0o755 });
   return existed ? "updated" : "created";
 }
 
-function settingsNeedsHook(settings) {
-  const entries = settings?.hooks?.SessionEnd;
+function settingsNeedsHook(settings, event, scriptRel) {
+  const entries = settings?.hooks?.[event];
   if (!Array.isArray(entries)) return true;
   return !entries.some((entry) =>
     (entry?.hooks ?? []).some(
-      (h) => typeof h?.command === "string" && h.command.includes(HOOK_SCRIPT_REL),
+      (h) => typeof h?.command === "string" && h.command.includes(scriptRel),
     ),
   );
 }
 
+// The event→script wiring, in append order. Must match the Go twin's
+// hookEvents exactly.
+const HOOK_EVENTS = [
+  ["SessionEnd", HOOK_SCRIPT_REL],
+  ["SessionStart", BRIEF_HOOK_SCRIPT_REL],
+];
+
 function writeHookSettings() {
   const file = path.join(".claude", "settings.json");
   const settings = readJsonOrNull(file) ?? {};
-  if (!settingsNeedsHook(settings)) return "unchanged";
-  const next = {
-    ...settings,
-    hooks: {
-      ...settings.hooks,
-      SessionEnd: [
-        ...(settings.hooks?.SessionEnd ?? []),
-        {
-          hooks: [
-            { type: "command", command: `"$CLAUDE_PROJECT_DIR"/${HOOK_SCRIPT_REL}` },
-          ],
-        },
-      ],
-    },
-  };
-  const result = writeJsonChanged(file, next);
-  return result;
+  const hooks = { ...settings.hooks };
+  let changed = false;
+  for (const [event, scriptRel] of HOOK_EVENTS) {
+    if (!settingsNeedsHook(settings, event, scriptRel)) continue;
+    hooks[event] = [
+      ...(settings.hooks?.[event] ?? []),
+      {
+        hooks: [{ type: "command", command: `"$CLAUDE_PROJECT_DIR"/${scriptRel}` }],
+      },
+    ];
+    changed = true;
+  }
+  if (!changed) return "unchanged";
+  return writeJsonChanged(file, { ...settings, hooks });
 }
 
 function installHook() {
-  const a = writeHookScript();
-  console.log(`  hook script: ${VERB[a].replace("<file>", HOOK_SCRIPT_REL)} -> ${HOOK_SCRIPT_REL}`);
-  const b = writeHookSettings();
-  console.log(
-    `  SessionEnd hook: ${VERB[b].replace("<file>", path.join(".claude", "settings.json"))}`,
-  );
-  if (!options.dryRun && a !== "unchanged" && process.platform !== "win32") {
-    try {
-      fs.chmodSync(HOOK_SCRIPT_REL, 0o755);
-    } catch {
-      /* mode best-effort */
+  for (const [rel, content] of [
+    [HOOK_SCRIPT_REL, HOOK_SCRIPT],
+    [BRIEF_HOOK_SCRIPT_REL, BRIEF_HOOK_SCRIPT],
+  ]) {
+    const a = writeHookScript(rel, content);
+    console.log(`  hook script: ${VERB[a].replace("<file>", rel)} -> ${rel}`);
+    if (!options.dryRun && a !== "unchanged" && process.platform !== "win32") {
+      try {
+        fs.chmodSync(rel, 0o755);
+      } catch {
+        /* mode best-effort */
+      }
     }
   }
+  const b = writeHookSettings();
+  console.log(
+    `  session hooks: ${VERB[b].replace("<file>", path.join(".claude", "settings.json"))}`,
+  );
 }
 
 // ------------------------------------------------- instructions (ADR-0043)
@@ -384,9 +413,157 @@ function installInstructions() {
   }
 }
 
+// ---------------------------------------------------- uninstall (ADR-0067)
+// Removes exactly what this script added, and nothing else. Semantics are
+// pinned to the Go twin (internal/agentinit/unregister.go):
+//   - other servers / hooks / file content are never touched;
+//   - a hook script whose bytes were edited after install is left in place
+//     with a warning (it is the user's edit, not ours to delete);
+//   - an instruction file that held nothing but the block is deleted;
+//   - missing files / entries are unchanged, so a second run is a no-op;
+//   - every overwrite backs up first, same as install.
+
+function removeMCPEntry({ label, file, key }) {
+  const current = readJsonOrNull(file);
+  if (!current || !current[key] || typeof current[key] !== "object" || !current[key][SERVER_NAME]) {
+    console.log(`  ${label}: not registered, no change`);
+    return;
+  }
+  const servers = { ...current[key] };
+  delete servers[SERVER_NAME];
+  const result = writeJsonChanged(file, { ...current, [key]: servers });
+  if (result.startsWith("would-")) {
+    console.log(`  ${label}: would remove the repotory entry (dry-run)`);
+    return;
+  }
+  console.log(`  ${label}: removed (backup: ${file}${BACKUP_SUFFIX}) -> ${file}`);
+}
+
+function removeHookSettings() {
+  const file = path.join(".claude", "settings.json");
+  const settings = readJsonOrNull(file);
+  if (!settings || !settings.hooks || typeof settings.hooks !== "object") {
+    console.log(`  session hooks: not installed, no change`);
+    return;
+  }
+  const hooks = { ...settings.hooks };
+  let changed = false;
+  for (const [event, scriptRel] of HOOK_EVENTS) {
+    const entries = hooks[event];
+    if (!Array.isArray(entries)) continue;
+    const kept = entries.filter(
+      (entry) =>
+        !(entry?.hooks ?? []).some(
+          (h) => typeof h?.command === "string" && h.command.includes(scriptRel),
+        ),
+    );
+    if (kept.length === entries.length) continue;
+    changed = true;
+    if (kept.length === 0) delete hooks[event];
+    else hooks[event] = kept;
+  }
+  if (!changed) {
+    console.log(`  session hooks: not installed, no change`);
+    return;
+  }
+  const next = { ...settings };
+  if (Object.keys(hooks).length === 0) delete next.hooks;
+  else next.hooks = hooks;
+  const result = writeJsonChanged(file, next);
+  if (result.startsWith("would-")) {
+    console.log(`  session hooks: would remove our entries (dry-run)`);
+    return;
+  }
+  console.log(`  session hooks: removed (backup: ${file}${BACKUP_SUFFIX})`);
+}
+
+function removeHookScript(rel, installed) {
+  if (!fs.existsSync(rel)) {
+    console.log(`  hook script: ${rel} not present, no change`);
+    return;
+  }
+  if (fs.readFileSync(rel, "utf8") !== installed) {
+    console.warn(
+      `  warning: ${rel} was modified after install; left in place (remove it manually if intended)`,
+    );
+    return;
+  }
+  if (options.dryRun) {
+    console.log(`  hook script: would remove ${rel} (dry-run)`);
+    return;
+  }
+  fs.unlinkSync(rel);
+  console.log(`  hook script: removed ${rel}`);
+}
+
+function uninstallInstructions() {
+  console.log("\nAgent instructions (ADR-0043):");
+  for (const rel of INSTRUCTION_FILES) {
+    if (!fs.existsSync(rel)) {
+      console.log(`  ${rel}: not present, no change`);
+      continue;
+    }
+    const raw = fs.readFileSync(rel, "utf8");
+    const begin = raw.indexOf(INSTRUCTIONS_BEGIN);
+    let end = raw.indexOf(INSTRUCTIONS_END);
+    if (begin < 0 || end <= begin) {
+      console.log(`  ${rel}: no repotory block, no change`);
+      continue;
+    }
+    end += INSTRUCTIONS_END.length;
+    const tail = raw.slice(end);
+    let nl = 0;
+    while (nl < tail.length && (tail[nl] === "\n" || tail[nl] === "\r")) nl += 1;
+    const next = raw.slice(0, begin) + tail.slice(nl);
+    if (next.trim() === "") {
+      if (options.dryRun) {
+        console.log(`  ${rel}: would remove, the file holds only the repotory block (dry-run)`);
+        continue;
+      }
+      fs.unlinkSync(rel);
+      console.log(`  ${rel}: removed (the file held only the repotory block)`);
+      continue;
+    }
+    if (options.dryRun) {
+      console.log(`  ${rel}: would remove the block (dry-run)`);
+      continue;
+    }
+    fs.copyFileSync(rel, rel + BACKUP_SUFFIX);
+    fs.writeFileSync(rel, next.replace(/\n+$/, "") + "\n");
+    console.log(`  ${rel}: block removed (backup: ${rel}${BACKUP_SUFFIX})`);
+  }
+}
+
+function uninstallAll() {
+  const requested = options.client ?? ALL_CLIENTS;
+  console.log("Removing MCP server entries:");
+  if (requested.includes("claude"))
+    removeMCPEntry({ label: "Claude Code (.mcp.json)", file: ".mcp.json", key: "mcpServers" });
+  if (requested.includes("cursor"))
+    removeMCPEntry({ label: "Cursor (.cursor/mcp.json)", file: path.join(".cursor", "mcp.json"), key: "mcpServers" });
+  if (requested.includes("vscode"))
+    removeMCPEntry({ label: "VS Code (.vscode/mcp.json)", file: path.join(".vscode", "mcp.json"), key: "servers" });
+  if (requested.includes("windsurf"))
+    removeMCPEntry({
+      label: "Windsurf (~/.codeium/windsurf/mcp_config.json)",
+      file: path.join(os.homedir(), ".codeium", "windsurf", "mcp_config.json"),
+      key: "mcpServers",
+    });
+  if (requested.includes("jetbrains")) registerJetBrains();
+
+  console.log("\nSession hooks (SessionEnd handoff + SessionStart brief):");
+  removeHookSettings();
+  removeHookScript(HOOK_SCRIPT_REL, HOOK_SCRIPT);
+  removeHookScript(BRIEF_HOOK_SCRIPT_REL, BRIEF_HOOK_SCRIPT);
+
+  uninstallInstructions();
+
+  console.log("\nDone. The database, notes and binaries are untouched — only the\nclient wiring this script installed was removed.");
+}
+
 // --------------------------------------------------------------------- main
 
-const options = { client: null, bin: null, withHook: false, withInstructions: false, yes: false, dryRun: false };
+const options = { client: null, bin: null, withHook: false, withInstructions: false, yes: false, dryRun: false, uninstall: false };
 
 function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
@@ -407,6 +584,9 @@ function parseArgs(argv) {
         break;
       case "--with-instructions":
         options.withInstructions = true;
+        break;
+      case "--uninstall":
+        options.uninstall = true;
         break;
       case "--yes":
         options.yes = true;
@@ -437,6 +617,11 @@ function main() {
 
   console.log("repotory-init — Cinder MCP registration (ADR-0009 / TODO M4)\n");
 
+  if (options.uninstall) {
+    uninstallAll();
+    return;
+  }
+
   // --with-hook only makes sense for Claude Code; keep it regardless of --client.
   let bin = findBinary();
   if (!bin) {
@@ -457,11 +642,11 @@ function main() {
   if (requested.includes("jetbrains")) registerJetBrains();
 
   if (options.withHook) {
-    console.log("\nSessionEnd handoff hook:");
+    console.log("\nSession hooks (SessionEnd handoff + SessionStart brief):");
     installHook();
   } else if (!options.yes && process.stdin.isTTY && requested.includes("claude")) {
     console.log(
-      "\nTip: also install the Claude Code SessionEnd hook so handoffs happen\nautomatically at session end. Re-run with --with-hook to install it.",
+      "\nTip: also install the Claude Code session hooks so every session starts\nwith the memory brief and ends with a handoff. Re-run with --with-hook to install them.",
     );
   }
 

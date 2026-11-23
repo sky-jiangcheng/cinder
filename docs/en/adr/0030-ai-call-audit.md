@@ -114,3 +114,7 @@ So this ADR positions the feature as **"self-attestation plus early warning"**, 
 2. **The prompt is hashed with SHA-256 rather than summarized.** A text summary would need the original text stored in order to compute it, which is storing the full text all over again. The hash answers "is this the same prompt" but not "what was in it" — exactly what the default tier wants.
 3. **The call surface is passed in explicitly through context.** The primitives themselves do not know whether the call came from MCP, HTTP or the desktop, so each surface sets it before entering the primitive. The default is `unknown` rather than a guess.
 4. **Streaming output review judges at chunk boundaries; a hit stops further delivery** (`onDelta` is not called again) and marks the already-delivered portion as incomplete — because at that point it can no longer be taken back.
+
+## Addendum (2026-11-23, ADR-0068)
+
+As of [ADR-0068](0068-builtin-credential-pii-presets.md), the "no built-in blocklist" stance narrows to "no built-in **KEYWORD** blocklist". For structured credentials (API key shapes, private key blocks, connection strings with passwords, ID/card numbers) the format itself is the signal and regexes can be precise — that class of target now ships as a **default-off** preset library (`ai_review_presets`) appended after the user's rules, with optional entry-side masking before storage (`memory_redact`). Every promise of this ADR is inherited verbatim: four default-off gates, hash-only trail, append-only, user rules first; presets never replace user rules.

@@ -1,0 +1,16 @@
+{
+  ".claude/hooks/repotory-brief.sh": null,
+  ".claude/hooks/repotory-handoff.sh": null,
+  ".claude/settings.json": {},
+  ".cursor/mcp.json": {
+    "mcpServers": {}
+  },
+  ".mcp.json": {
+    "mcpServers": {}
+  },
+  ".vscode/mcp.json": {
+    "servers": {}
+  },
+  "AGENTS.md": null,
+  "CLAUDE.md": null
+}

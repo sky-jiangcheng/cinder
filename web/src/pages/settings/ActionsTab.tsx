@@ -439,8 +439,9 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
 
       {/* The one-click AI client wiring. It writes into the user's own
           machine — MCP config files in the project directory they picked, and
-          optionally the Claude Code SessionEnd hook — so the project and the
-          clients are the user's choice, never defaults. */}
+          optionally the Claude Code session hooks (SessionEnd handoff +
+          SessionStart brief) — so the project and the clients are the user's
+          choice, never defaults. */}
       <section className="settings-group">
         <h2 className="settings-group-title">{t('settings.agentClientsTitle')}</h2>
         <p className="section-desc">{t('settings.agentClientsDesc')}</p>
@@ -539,6 +540,12 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
                   <li>
                     <span className={s.agentFileStatus}>{t(AGENT_STATUS_KEYS[agentReport.hook.status])}</span>
                     <code>{agentReport.hook.path}</code>
+                  </li>
+                )}
+                {agentReport.brief_hook && (
+                  <li>
+                    <span className={s.agentFileStatus}>{t(AGENT_STATUS_KEYS[agentReport.brief_hook.status])}</span>
+                    <code>{agentReport.brief_hook.path}</code>
                   </li>
                 )}
                 {agentReport.hook_settings && (

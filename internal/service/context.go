@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -194,6 +195,16 @@ func (s *Service) BuildProjectContext(res *ProjectResolution) string {
 	}
 	if line := workspaceScopeLine(res, len(near), len(other)); line != "" {
 		head.WriteString("\n" + line)
+	}
+	// The approved-pages mirror (ADR-0069) is plain Markdown an agent can read
+	// with its own file tools; pointing at it costs one line and only appears
+	// once something was actually projected.
+	if s.PagesProjectionEnabled() {
+		if dir := s.PagesProjectionDir(); dir != "" {
+			if _, err := os.Stat(dir); err == nil {
+				head.WriteString(fmt.Sprintf("- Approved pages mirror (read-only, derived): `%s`\n", dir))
+			}
+		}
 	}
 	todos := s.ListTodos(p.ID)
 	open := 0

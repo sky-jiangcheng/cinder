@@ -154,25 +154,33 @@ func TestRegisterInstallsHookOnce(t *testing.T) {
 	if report.Hook == nil || report.Hook.Status != StatusCreated {
 		t.Fatalf("hook was not installed: %+v", report.Hook)
 	}
+	if report.BriefHook == nil || report.BriefHook.Status != StatusCreated {
+		t.Fatalf("brief hook was not installed: %+v", report.BriefHook)
+	}
 	if report.HookSettings == nil || report.HookSettings.Status != StatusCreated {
 		t.Fatalf("hook settings were not written: %+v", report.HookSettings)
 	}
 
-	scriptPath := filepath.Join(dir, filepath.FromSlash(HookScriptRel))
-	content, err := os.ReadFile(scriptPath)
-	if err != nil {
-		t.Fatalf("no hook script: %v", err)
-	}
-	if string(content) != hookScript {
-		t.Errorf("hook script content differs:\n%s", content)
-	}
-	// The exec bit is how the hook is made runnable on POSIX; on Windows the
-	// script runs through the shell configured in settings.json, and the mode
-	// argument to WriteFile is ignored, so there is no bit to assert.
-	if info, err := os.Stat(scriptPath); err != nil {
-		t.Fatal(err)
-	} else if runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0 {
-		t.Errorf("hook script is not executable (mode %v)", info.Mode().Perm())
+	for _, tc := range []struct{ rel, want string }{
+		{HookScriptRel, hookScript},
+		{BriefHookScriptRel, briefHookScript},
+	} {
+		scriptPath := filepath.Join(dir, filepath.FromSlash(tc.rel))
+		content, err := os.ReadFile(scriptPath)
+		if err != nil {
+			t.Fatalf("no hook script %s: %v", tc.rel, err)
+		}
+		if string(content) != tc.want {
+			t.Errorf("hook script %s content differs:\n%s", tc.rel, content)
+		}
+		// The exec bit is how the hook is made runnable on POSIX; on Windows the
+		// script runs through the shell configured in settings.json, and the mode
+		// argument to WriteFile is ignored, so there is no bit to assert.
+		if info, err := os.Stat(scriptPath); err != nil {
+			t.Fatal(err)
+		} else if runtime.GOOS != "windows" && info.Mode().Perm()&0o100 == 0 {
+			t.Errorf("hook script %s is not executable (mode %v)", tc.rel, info.Mode().Perm())
+		}
 	}
 
 	settingsRaw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(HookSettingsRel)))
@@ -184,9 +192,11 @@ func TestRegisterInstallsHookOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	hooks, _ := settings["hooks"].(map[string]any)
-	entries, _ := hooks["SessionEnd"].([]any)
-	if len(entries) != 1 {
-		t.Fatalf("SessionEnd has %d entries, want 1: %s", len(entries), settingsRaw)
+	for _, event := range []string{"SessionEnd", "SessionStart"} {
+		entries, _ := hooks[event].([]any)
+		if len(entries) != 1 {
+			t.Fatalf("%s has %d entries, want 1: %s", event, len(entries), settingsRaw)
+		}
 	}
 
 	// Registering again must not add a second hook entry.
@@ -202,6 +212,9 @@ func TestRegisterInstallsHookOnce(t *testing.T) {
 	if report.HookSettings.Status != StatusUnchanged {
 		t.Errorf("second run rewrote the settings: %s", report.HookSettings.Status)
 	}
+	if report.Hook.Status != StatusUnchanged || report.BriefHook.Status != StatusUnchanged {
+		t.Errorf("second run rewrote a hook script: %s / %s", report.Hook.Status, report.BriefHook.Status)
+	}
 	settingsRaw, err = os.ReadFile(filepath.Join(dir, filepath.FromSlash(HookSettingsRel)))
 	if err != nil {
 		t.Fatal(err)
@@ -210,9 +223,78 @@ func TestRegisterInstallsHookOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	hooks, _ = settings["hooks"].(map[string]any)
-	entries, _ = hooks["SessionEnd"].([]any)
-	if len(entries) != 1 {
-		t.Fatalf("SessionEnd has %d entries after the second run, want 1: %s", len(entries), settingsRaw)
+	for _, event := range []string{"SessionEnd", "SessionStart"} {
+		entries, _ := hooks[event].([]any)
+		if len(entries) != 1 {
+			t.Fatalf("%s has %d entries after the second run, want 1: %s", event, len(entries), settingsRaw)
+		}
+	}
+}
+
+// A project that already has the SessionEnd hook (every pre-ADR-0066 install)
+// must gain ONLY the SessionStart entry on re-run — the existing entry is the
+// user's file content and stays byte-identical.
+func TestRegisterTopsUpBriefHookOnLegacyInstall(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "repotory-mcp")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{
+  "hooks": {
+    "SessionEnd": [
+      { "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/repotory-handoff.sh" }] }
+    ]
+  }
+}
+`
+	settingsPath := filepath.Join(dir, filepath.FromSlash(HookSettingsRel))
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := Register(Options{TargetDir: dir, BinPath: bin, Clients: []Client{ClientClaude}, WithHook: true})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if report.HookSettings.Status != StatusUpdated {
+		t.Fatalf("settings status = %s, want updated (brief entry added)", report.HookSettings.Status)
+	}
+	raw, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		t.Fatal(err)
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	for _, event := range []string{"SessionEnd", "SessionStart"} {
+		entries, _ := hooks[event].([]any)
+		if len(entries) != 1 {
+			t.Fatalf("%s has %d entries, want 1: %s", event, len(entries), raw)
+		}
+	}
+}
+
+// The SessionStart hook is the zero-model half of the loop (ADR-0066): it must
+// call --brief, must never invoke a model, and must leave stderr visible so a
+// broken brief is diagnosable instead of silently absent.
+func TestBriefHookScriptIsZeroModelAndNonBlocking(t *testing.T) {
+	if !strings.Contains(briefHookScript, "repotory-capture --brief") {
+		t.Errorf("brief hook must call --brief:\n%s", briefHookScript)
+	}
+	if strings.Contains(briefHookScript, "claude -p") {
+		t.Errorf("brief hook must never call a model:\n%s", briefHookScript)
+	}
+	if strings.Contains(briefHookScript, "2>/dev/null\nrepotory-capture") || strings.Contains(briefHookScript, "--brief 2>") {
+		t.Errorf("brief stderr must stay visible:\n%s", briefHookScript)
+	}
+	if !strings.Contains(briefHookScript, "repotory-capture --brief || exit 0") {
+		t.Errorf("a failed brief must exit 0, never block session start:\n%s", briefHookScript)
 	}
 }
 
@@ -387,9 +469,21 @@ func TestContractFixture(t *testing.T) {
 
 	got := canonicalize(t, dir, bin)
 	fixturePath := filepath.Join("testdata", "contract.json")
+
+	// The uninstall half of the contract (ADR-0067): after removing exactly
+	// what was installed, both implementations must leave the same residue —
+	// empty server maps, a settings file with no hooks key, and no scripts or
+	// instruction files at all.
+	if _, err := Unregister(Options{TargetDir: dir, Clients: []Client{ClientClaude, ClientCursor, ClientVSCode}}); err != nil {
+		t.Fatalf("Unregister: %v", err)
+	}
+	gotUninstall := canonicalizeAfterUninstall(t, dir, bin)
+	uninstallFixturePath := filepath.Join("testdata", "contract-uninstall.json")
+
 	if *update {
 		writeCanonical(t, fixturePath, got)
-		t.Logf("contract fixture updated: %s", fixturePath)
+		writeCanonical(t, uninstallFixturePath, gotUninstall)
+		t.Logf("contract fixtures updated: %s, %s", fixturePath, uninstallFixturePath)
 		return
 	}
 
@@ -401,6 +495,14 @@ func TestContractFixture(t *testing.T) {
 	if !jsonValueEqual(got, wantCanonical) {
 		t.Errorf("the produced files differ from the contract fixture:\ngot:  %s\nwant: %s", mustJSON(got), mustJSON(wantCanonical))
 		t.Errorf("if the change is intended, regenerate with -update and change ide/vscode/repotory-init/index.mjs in the same commit")
+	}
+
+	wantUninstall, err := os.ReadFile(uninstallFixturePath)
+	if err != nil {
+		t.Fatalf("read uninstall fixture: %v", err)
+	}
+	if !jsonValueEqual(gotUninstall, canonicalizeJSON(t, wantUninstall)) {
+		t.Errorf("the post-uninstall state differs from the contract fixture:\ngot:  %s\nwant: %s", mustJSON(gotUninstall), mustJSON(canonicalizeJSON(t, wantUninstall)))
 	}
 }
 
@@ -454,11 +556,57 @@ func canonicalize(t *testing.T, dir, bin string) map[string]any {
 		t.Fatalf("read hook script: %v", err)
 	}
 	out[HookScriptRel] = string(script)
+	brief, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(BriefHookScriptRel)))
+	if err != nil {
+		t.Fatalf("read brief hook script: %v", err)
+	}
+	out[BriefHookScriptRel] = string(brief)
 
 	// ADR-0043: the instruction files are Markdown, compared as exact text —
 	// a changed word in the block is a changed contract.
 	for _, rel := range InstructionFiles {
 		raw, err := os.ReadFile(filepath.Join(dir, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		out[rel] = string(raw)
+	}
+	return out
+}
+
+// canonicalizeAfterUninstall captures the post-uninstall residue: JSON files
+// by meaning, scripts and instruction files as exact text, and null for a
+// file that no longer exists (deletion is part of the contract).
+func canonicalizeAfterUninstall(t *testing.T, dir, bin string) map[string]any {
+	t.Helper()
+	out := map[string]any{}
+	for _, rel := range []string{
+		".mcp.json",
+		filepath.Join(".cursor", "mcp.json"),
+		filepath.Join(".vscode", "mcp.json"),
+		filepath.FromSlash(HookSettingsRel),
+	} {
+		raw, err := os.ReadFile(filepath.Join(dir, rel))
+		if os.IsNotExist(err) {
+			out[filepath.ToSlash(rel)] = nil
+			continue
+		}
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		var doc any
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("%s is not valid JSON after uninstall: %v", rel, err)
+		}
+		out[filepath.ToSlash(rel)] = replaceBin(doc, bin)
+	}
+	rels := append([]string{HookScriptRel, BriefHookScriptRel}, InstructionFiles...)
+	for _, rel := range rels {
+		raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if os.IsNotExist(err) {
+			out[rel] = nil
+			continue
+		}
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}

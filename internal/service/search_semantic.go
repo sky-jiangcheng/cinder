@@ -20,8 +20,20 @@ import (
 
 const (
 	semanticConfigKey = "semantic_search"
-	embedBatch        = 64 // texts per embedding request
-	embedRecallK      = 20 // vector ids fused with the lexical hits
+	// 16 texts per request: remote endpoints have a large fixed per-request
+	// overhead (~15s observed) plus per-token cost, and a 64-text batch of long
+	// notes blew a 60s client timeout in practice. Smaller batches trade a few
+	// more requests for staying inside the timeout on slow endpoints.
+	embedBatch   = 16
+	embedRecallK = 30 // vector ids fused with the lexical hits
+	// noteRRFK and vectorFuseWeight are the ADR-0071 fusion tuning, measured on
+	// the 70-case gate (split-half validated): a sharper k=10 plus a 1.5x vector
+	// weight lifts ndcg@10 ~0.81->0.87 with zero recall regression. k=60 (the
+	// generic DefaultRRFK) left the vector arm under-weighted; embedRecallK=30
+	// (not 20) is what keeps the higher vector weight from dropping a lexical
+	// hit out of the top-10. The temporal arm keeps weight 1.0 and the same k.
+	noteRRFK         = 10
+	vectorFuseWeight = 1.5
 )
 
 // semanticEnabled reports whether the (opt-in) semantic search is on.
@@ -134,7 +146,7 @@ func (s *Service) RebuildEmbeddings() (int, error) {
 		return 0, err
 	}
 	embedded := 0
-	bailed := false
+	var bailErr error
 	for start := 0; start < len(notes); start += embedBatch {
 		end := start + embedBatch
 		if end > len(notes) {
@@ -149,7 +161,7 @@ func (s *Service) RebuildEmbeddings() (int, error) {
 		vecs, err := emb.Embed(texts)
 		if err != nil {
 			log.Printf("semantic rebuild: embed batch %d: %v", start, err)
-			bailed = true
+			bailErr = err
 			break
 		}
 		for i, vec := range vecs {
@@ -166,12 +178,15 @@ func (s *Service) RebuildEmbeddings() (int, error) {
 	// Only a completed rebuild may clear the incremental queue: everything still
 	// in it after a bailed run has provably NOT been embedded, and dropping those
 	// rows would silently lose the user's pending writes.
-	if !bailed {
+	if bailErr == nil {
 		if err := db.TruncateDirtyNoteIDs(s.db); err != nil {
 			log.Printf("semantic rebuild: could not clear the incremental queue: %v", err)
 		}
+		return embedded, nil
 	}
-	return embedded, nil
+	// A bailed run must surface as an error: returning (partial, nil) let the UI
+	// report "rebuilt N" as success while the endpoint was actually down.
+	return embedded, fmt.Errorf("semantic rebuild: stopped after %d/%d notes: %w", embedded, len(notes), bailErr)
 }
 
 // fuseSemantic merges vector recall into the lexical hits via RRF. Returns the
@@ -207,15 +222,28 @@ func (s *Service) fuseSemantic(base []domain.SearchHit, query string) []domain.S
 	if len(ids) == 0 {
 		return base
 	}
+	return s.fuseRankList(base, ids, query, vectorFuseWeight, "semantic")
+}
+
+// fuseRankList merges a ranked id list into the base hits via weighted RRF,
+// fetching any ids the base does not already hold. Shared by the vector arm
+// (fuseSemantic, weight vectorFuseWeight) and the temporal arm (fuseTemporal,
+// weight 1.0) so both extend the result identically; the weight is the only
+// per-arm difference (ADR-0071). channel names the arm for the hit's Recall
+// provenance (ADR-0072): every id the arm surfaced gets the channel appended,
+// whether or not it already sat in the base list.
+func (s *Service) fuseRankList(base []domain.SearchHit, ids []int64, query string, weight float64, channel string) []domain.SearchHit {
 	baseIDs := make(hybrid.RankList, 0, len(base))
 	byID := make(map[int64]domain.SearchHit, len(base))
 	for _, h := range base {
 		baseIDs = append(baseIDs, h.ID)
 		byID[h.ID] = h
 	}
-	merged := hybrid.FuseRRF(0, baseIDs, hybrid.RankList(ids))
+	merged := hybrid.FuseRRFWeighted(noteRRFK,
+		hybrid.WeightedRankList{IDs: baseIDs, Weight: 1.0},
+		hybrid.WeightedRankList{IDs: hybrid.RankList(ids), Weight: weight})
 
-	// Fetch any vector-only ids we don't already hold.
+	// Fetch any ids we don't already hold.
 	var missing []int64
 	for _, id := range merged {
 		if _, have := byID[id]; !have {
@@ -228,6 +256,11 @@ func (s *Service) fuseSemantic(base []domain.SearchHit, query string) []domain.S
 			for _, h := range extra {
 				byID[h.ID] = h
 			}
+		}
+	}
+	for _, id := range ids {
+		if h, have := byID[id]; have {
+			byID[id] = appendRecallChannel(h, channel)
 		}
 	}
 	out := make([]domain.SearchHit, 0, len(merged))

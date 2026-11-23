@@ -81,6 +81,7 @@ highlight.js code highlighting, Mermaid diagrams, KaTeX math formulas, GFM callo
 - The search box at the top of the "Knowledge" tab is a **filter within the view**: it narrows notes / todos in the notes view, or approved pages in the pages view; the empty states and the count bar are shared by both
 - The home console's "search" mode is the **global retrieval** (notes / todos / project names, hits grouped by project), and its "ask" mode returns answer snippets ranked by relevance
 - FTS5 trigram + bm25 ranking, with snippets highlighting matched terms; short CJK queries automatically fall back to LIKE
+- **Temporal channel** ([ADR-0070](../adr/0070-temporal-recall-channel.md), always on): a date expression in the query (`2026-11-17` / `11月17号` / `上周五` / `昨天`) is parsed into a creation-time window and fused as a third RRF recall arm — a date question can share zero trigrams with its target note, so neither lexical nor vector can answer it; the window itself supplies the recall. Pure local computation, no switch; the citation path (ask evidence) deliberately excludes it — a window hit is a time coincidence, not a content match
 - Covers notes and todos; the `⌘/Ctrl+K` command palette works from anywhere
 
 ### Semantic search (optional, off by default)
@@ -281,6 +282,15 @@ It renders `vault/wiki/<entities|concepts|sources|synthesis|queries>/<slug>.md` 
 - **Nothing is deleted**: files left behind by deleted pages are reported as stale and are yours to clean. The export never claims ownership of that tree.
 
 `index.md` lists approved pages only, so an unreviewed page cannot be routed into; pending pages are still exported, tagged `status: pending`, which is exactly where review happens.
+
+### Approved-page disk projection (the read-surface mirror)
+
+Alongside the manual review export above, Cinder maintains its own read-surface mirror ([ADR-0069](../adr/0069-approved-pages-disk-projection.md)): an approved-only Markdown tree at `<database dir>/pages`, tiered into `global/` (cross-project pages) and `p<id>-<name-slug>/`, one `index.md` per tier and `PROJECTION-MANIFEST.json` at the root. Any agent can read it with its own file tools — no MCP round trip; the `repotory_context` header points at the directory.
+
+- **Default on**; `pages_projection=0` stops the automatic refresh. The mirror is a local derived copy of already-approved content — the human approval gate is the authorization, the same chain as retrieval.
+- A full rebuild follows the five human actions: approve, merge, promote-to-global / assign-to-project, and the file-answer update branch. Pruning deletes only files the previous manifest listed and this run did not rewrite; a file you dropped into the tree is never touched.
+- Catch-all refresh: `cinder-capture project-pages [-db path] [-out dir]` — opens the database read-only and covers the cases with no page-level hook (project-deletion cascades, backup restores); running it explicitly is not subject to the kill switch.
+- Equally **one-way**: the mirror is deletable at any time and rebuilt from the database on the next refresh. SQLite stays the only SSOT.
 
 ## Export
 

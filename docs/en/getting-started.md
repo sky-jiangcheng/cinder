@@ -23,12 +23,19 @@ If your daily development revolves around Claude Code, Cursor, or Windsurf in th
 # 1. Download and install cinder-mcp (macOS / Linux)
 curl -fsSL https://raw.githubusercontent.com/sky-jiangcheng/cinder/master/scripts/install.sh | bash
 
-# 2. Register MCP with the installed agents and write the
-#    "read context at the start / hand off at the end" instructions into the
-#    project's AGENTS.md and CLAUDE.md (any agent that reads them will follow);
-#    --with-hook additionally installs the Claude Code session-end hook (that
-#    mechanism exists in Claude Code only)
+# 2. Wire everything in one command: register MCP with the installed agents,
+#    install the Claude Code session hooks (session-start memory brief +
+#    session-end handoff), and write the "read context at the start / hand off
+#    at the end" instructions into the project's AGENTS.md and CLAUDE.md
+#    (any agent that reads them will follow). cinder-capture is installed
+#    alongside cinder-mcp by install.sh (ADR-0067)
+cinder-capture init --all
+
+# Equivalent node-script entry point (needs node, run inside this repo):
 node scripts/repotory-init/index.mjs --with-instructions --with-hook
+
+# Uninstall is equally precise (removes only the wiring; database and notes untouched):
+# cinder-capture uninstall
 
 # Or add manually to Claude Code:
 claude mcp add repotory -- "$(which cinder-mcp)"

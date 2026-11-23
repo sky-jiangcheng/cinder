@@ -250,6 +250,35 @@ func NoteHitsByIDs(db *sql.DB, ids []int64, query string) ([]SearchHit, error) {
 	return hits, rows.Err()
 }
 
+// NoteSourcesByIDs returns the raw source string per note id, for the
+// presentation-layer source-type derivation on search hits (ADR-0022).
+func NoteSourcesByIDs(db *sql.DB, ids []int64) (map[int64]string, error) {
+	if len(ids) == 0 {
+		return map[int64]string{}, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := db.Query(
+		"SELECT id, source FROM project_notes WHERE id IN ("+placeholders+")", args...)
+	if err != nil {
+		return nil, fmt.Errorf("db: note sources by ids: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[int64]string, len(ids))
+	for rows.Next() {
+		var id int64
+		var source string
+		if err := rows.Scan(&id, &source); err != nil {
+			return nil, err
+		}
+		out[id] = source
+	}
+	return out, rows.Err()
+}
+
 // encodeVector serialises a float32 vector to the JSON-array text form sqlite-vec
 // accepts for both insertion and MATCH queries (e.g. "[0.1,0.2]").
 func encodeVector(vec []float32) (string, error) {

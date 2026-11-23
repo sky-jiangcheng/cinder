@@ -625,6 +625,10 @@ func (s *Service) FileAnswerAsPage(projectID int64, question, answer string, ev 
 				return 0, err2
 			}
 			s.wireEvidenceLinks(existing.ID, items)
+			// ADR-0069: the re-run may have overwritten an APPROVED query
+			// page's body — the mirror must follow. (The create branch above
+			// lands pending, which never enters the mirror.)
+			s.refreshPagesProjection()
 			return existing.ID, nil
 		}
 		return 0, err

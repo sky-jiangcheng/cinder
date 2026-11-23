@@ -152,3 +152,7 @@ The samples also **keep the negative cases**: every source's sample directory ho
 4. ~~**P5 GUI smoke walkthrough**: four steps — source list detection → enable scheduled sync for a source → note badge → settings lastRun~~ — **closed (2026-10-22)**: the full hermes chain ran in an isolated environment, see the table and the screenshots above.
 
 All four closure items are closed, so "the source type is visible to the user" truly closes the loop. The ADR stays Proposed — the design itself is still up for review — but **nothing is left on the implementation side**: P1–P5 now match what this ADR describes, and the three deviations of P3/P4 were corrected against the measurements and recorded. (**Note 2026-10-23**: this was the pre-promotion closing statement; the design was promoted to Accepted by user review the same day — the status line is authoritative.)
+
+## Addendum (2026-11-23)
+
+Pending item 2 (source-type filtering on search/lists) was closed by [ADR-0072](0072-search-transparency-recall-provenance.md): SearchHit carries an optional `source_type` and the knowledge search surface filters client-side via chips; pending item 3 (materialized column) stays deferred with its trigger unchanged.

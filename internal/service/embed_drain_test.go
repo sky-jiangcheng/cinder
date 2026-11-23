@@ -259,16 +259,15 @@ func TestRebuildTruncatesQueueOnlyOnSuccess(t *testing.T) {
 	}
 	assertStillQueued(t, svc)
 
-	// A rebuild whose endpoint dies must leave that row behind. NOTE the
-	// pre-existing contract being relied on here: RebuildEmbeddings returns a
-	// count, not an error, when it bails mid-batch — so the durable queue, not the
-	// return value, is what keeps a half-finished rebuild from losing notes.
+	// A rebuild whose endpoint dies must leave that row behind AND surface the
+	// failure: returning (partial, nil) let callers report a half-finished
+	// rebuild as success. The durable queue is still what keeps the notes safe.
 	dead, _ := countedEmbedServer(t, true)
 	if err := svc.UpdateConfig("embedding_base_url", dead.URL+"/v1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RebuildEmbeddings(); err != nil {
-		t.Fatalf("bailed rebuild surfaced an error: %v", err)
+	if _, err := svc.RebuildEmbeddings(); err == nil {
+		t.Fatal("bailed rebuild returned nil error; the endpoint failure was swallowed")
 	}
 	assertStillQueued(t, svc)
 

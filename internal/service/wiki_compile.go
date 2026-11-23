@@ -95,6 +95,8 @@ func (s *Service) ApproveWikiPage(pageID int64) error {
 	// points at" is safe. Non-fatal: the page is published even if an edge cannot
 	// be written, so a link failure must not look like a failed approval.
 	s.extractMentions(p)
+	// ADR-0069: approval is the moment a page enters the disk mirror.
+	s.refreshPagesProjection()
 	return nil
 }
 
