@@ -187,7 +187,11 @@ func projectionRelPath(tier, kindDir, slug string) (string, bool) {
 // safeManagedPath validates a path from the PREVIOUS manifest before the
 // pruner may delete it: relative, no traversal, no absolute prefix.
 func safeManagedPath(rel string) bool {
-	if rel == "" || filepath.IsAbs(rel) || strings.Contains(rel, `\`) {
+	// filepath.IsAbs needs a drive letter on Windows, so a POSIX absolute
+	// path such as "/etc/passwd" slips through there. Reject the leading
+	// slash explicitly to keep the pruner's containment check identical on
+	// every platform.
+	if rel == "" || strings.HasPrefix(rel, "/") || filepath.IsAbs(rel) || strings.Contains(rel, `\`) {
 		return false
 	}
 	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(rel)))
