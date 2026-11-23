@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"mime"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -31,21 +32,31 @@ var errorType = reflect.TypeOf((*error)(nil)).Elem()
 // interface (which would panic the method on first ctx use).
 var contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
 
-// rpcBlockedMethods are Wails lifecycle hooks on App that the HTTP bridge must
-// never expose. MethodByName has no notion of "internal", and without this
-// filter a single POST {"method":"Shutdown"} would close the database — the
-// process stays up and listening, but every later request fails with
-// "database is closed" and there is no crash to investigate.
-var rpcBlockedMethods = map[string]bool{
-	"Startup":  true,
-	"Shutdown": true,
-	"Service":  true,
-	// StartAskStream is desktop-tailored: it replies over Wails runtime events,
-	// which an HTTP caller has no way to observe. The browser/standalone
-	// runtime uses the dedicated SSE endpoint (/api/ai/ask-stream) instead —
-	// exposing the binding over RPC would hand out a stream id nobody can read.
-	"StartAskStream": true,
-}
+// rpcBlockedMethods are App methods the HTTP bridge must never expose.
+// MethodByName has no notion of "internal", and without this filter a single
+// POST {"method":"Shutdown"} would close the database — the process stays up
+// and listening, but every later request fails with "database is closed" and
+// there is no crash to investigate.
+//
+// Lifecycle methods come from app.LifecycleBindings(), the same registry the
+// MCP registry test reads. Deriving the block instead of naming the three
+// current hooks by hand means a NEW lifecycle binding is unreachable over
+// RPC the moment it is added — the old hand-maintained list silently drifted
+// whenever a binding was renamed or added.
+var rpcBlockedMethods = func() map[string]bool {
+	blocked := map[string]bool{
+		// StartAskStream is desktop-tailored: it replies over Wails runtime
+		// events, which an HTTP caller has no way to observe. The
+		// browser/standalone runtime uses the dedicated SSE endpoint
+		// (/api/ai/ask-stream) instead — exposing the binding over RPC would
+		// hand out a stream id nobody can read.
+		"StartAskStream": true,
+	}
+	for _, name := range app.LifecycleBindings() {
+		blocked[name] = true
+	}
+	return blocked
+}()
 
 // maxRPCBodyBytes caps the request body. Args decode fully into memory, and
 // the largest legitimate payload (a handoff note) is bounded far below this by
@@ -61,6 +72,19 @@ type rpcRequest struct {
 func (h *handler) rpc(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	// CSRF: application/json is not a CORS "simple" content type, so a page on
+	// any other origin must send a preflight before it can even reach this
+	// handler. The server sends no Access-Control-Allow-* headers, so that
+	// preflight fails and the browser never issues the POST. Accepting
+	// text/plain here (the decoder does not care) would hand a remote page a
+	// simple-request path to every write binding despite the Host/Origin
+	// guard: a same-port dev tab or a rebinding page could call UpdateConfig
+	// with a form-shaped body. Non-browser callers already set this header.
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "Content-Type must be application/json"})
 		return
 	}
 	if r.ContentLength > maxRPCBodyBytes {

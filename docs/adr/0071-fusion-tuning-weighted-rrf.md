@@ -54,3 +54,12 @@ ADR-0070 落地后，70 案生产路径 hybrid+时间轴 **recall@10=0.986 / ndc
 - 测试：hybrid 包 +3（权重缩放贡献、weight≤0 视为 1、FuseRRF 与等权加权等价）；`go build` / `go vet` / `go test ./...` 52 包全绿；gofmt 干净。
 - 实验工具（gitignore）：`.annotation-prep/fusesweep/capture`（捕获三臂原始列表）、`sweep.py`（本地参数扫 + 分半 + kind 降权）。
 - kind 噪声降权否决与 RRF 调参证据见过程日志同日章节。
+
+## 补注：重排探针第一轮——OpenRouter 弱模型 LLM 重排，负结果（2026-11-23）
+
+- **背景**：用户指示探针改为后端可配置，不再硬依赖 SiliconFlow key。`.annotation-prep/rerank/probe.py`（gitignore）支持 `-backend openrouter|siliconflow`、`-model`、`-reasoning`。第一轮用活库已有 `ai_chat_*` 配置（OpenRouter `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`，零新增 key），对调参后融合回放的 top-40 候选做 LLM listwise 重排。agnes 核过：封闭平台 provider，无对外 base URL/key，不可借用。
+- **仪器校准**：该 nano 模型 reasoning 开着时 40 候选 prompt 烧 16k token / 170s 不收敛（finish=length，content 空）；关掉后 ~3s 出有效 top-10，故默认 `-reasoning off`。
+- **数字**（70 案；基线 = 同候选池的调参融合回放 recall@10=0.9857 / ndcg@10=0.8710，与 sweep 离线复现一致）：重排后 **recall@10=0.6857 / ndcg@10=0.569（−0.302）**；22 案 recall 回归、ndcg 9 升 30 降；10 案硬失败（empty ranking，诚实回落基线序计入）、2 案重试救回。逐类：untagged 51 案 −0.376、temporal-relative −0.500，仅 temporal-natural +0.369。
+- **门判定：FAIL**（零 recall 回归硬约束破）。按 ADR-0018 记负结果：**该后端不得接生产**。
+- **边界（重要）**：仪器弱——免费 nano LLM ≠ cross-encoder。本负结果只关闭「OpenRouter 弱模型 LLM 重排无增益」，**不否定重排天花板**（理论上限 +0.058 ndcg，7 个可修案全在 top-10）。SiliconFlow `BAAI/bge-reranker-v2-m3` 原生探针仍是可选仪器（`-backend siliconflow`，需 key）；重排线整体关闭与否待用户拍板。
+- 逐案数据：`.annotation-prep/rerank/rerank-openrouter.jsonl`（gitignore，含 summary 行）。

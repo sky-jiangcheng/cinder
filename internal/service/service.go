@@ -249,6 +249,12 @@ func (s *Service) Startup() {
 		// the first poll is one interval away for the same reason as lint.
 		s.startReviewTicker()
 
+		// AI-assisted page review: annotation, opt-in auto-approval and the
+		// human-review timeout. First poll is one interval away, and every
+		// setting is re-read on each tick, so a default-OFF install does no
+		// work beyond one config read every five minutes.
+		s.startWikiReviewTicker()
+
 		// Async compile jobs (ADR-0016). Recovery runs before the worker, so a job
 		// left 'running' by a dead process is marked failed and never picked up as
 		// if it knew where it stopped.

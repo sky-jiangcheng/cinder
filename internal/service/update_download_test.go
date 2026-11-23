@@ -85,6 +85,42 @@ func stubDownloadDir(t *testing.T) string {
 	return dir
 }
 
+// stubUpdateAssetURL lets a test use httptest's TLS server in place of a
+// GitHub release asset. The production validator is pinned by
+// TestCheckGitHubReleaseAssetURL.
+func stubUpdateAssetURL(t *testing.T) {
+	t.Helper()
+	prev := validateUpdateAssetURL
+	validateUpdateAssetURL = func(string) error { return nil }
+	t.Cleanup(func() { validateUpdateAssetURL = prev })
+}
+
+func TestCheckGitHubReleaseAssetURL(t *testing.T) {
+	valid := []string{
+		"https://github.com/sky-jiangcheng/cinder/releases/download/v2.42.0/Cinder-2.42.0-darwin-arm64.dmg",
+		"https://github.com/owner/repo/releases/download/tag/asset.zip?x=1",
+	}
+	for _, raw := range valid {
+		if err := checkGitHubReleaseAssetURL(raw); err != nil {
+			t.Errorf("valid asset %q rejected: %v", raw, err)
+		}
+	}
+	invalid := []string{
+		"http://example.com/x.dmg",
+		"https://evil.example/sky-jiangcheng/cinder/releases/download/v1/x.dmg",
+		"https://github.com.evil.example/sky-jiangcheng/cinder/releases/download/v1/x.dmg",
+		"https://evil.example@github.com/sky-jiangcheng/cinder/releases/download/v1/x.dmg",
+		"https://github.com:8443/sky-jiangcheng/cinder/releases/download/v1/x.dmg",
+		"https://github.com/sky-jiangcheng/cinder/blob/main/x.dmg",
+		"https://github.com/sky-jiangcheng/cinder/releases/download/../x.dmg",
+	}
+	for _, raw := range invalid {
+		if err := checkGitHubReleaseAssetURL(raw); err == nil {
+			t.Errorf("invalid asset %q accepted", raw)
+		}
+	}
+}
+
 func TestStartUpdateDownloadRejectsNonHTTPS(t *testing.T) {
 	svc, _ := setupService(t)
 	err := svc.StartUpdateDownload("http://example.com/x.dmg", "x.dmg", "", "")
@@ -98,6 +134,7 @@ func TestStartUpdateDownloadRejectsNonHTTPS(t *testing.T) {
 
 func TestStartUpdateDownloadRejectsSecondConcurrentDownload(t *testing.T) {
 	svc, _ := setupService(t)
+	stubUpdateAssetURL(t)
 	dir := stubDownloadDir(t)
 
 	// A server that never finishes, so the first download stays in flight.
@@ -140,6 +177,7 @@ func TestStartUpdateDownloadRejectsSecondConcurrentDownload(t *testing.T) {
 
 func TestDownloadUpdateVerifiesDigestAndKeepsFile(t *testing.T) {
 	svc, _ := setupService(t)
+	stubUpdateAssetURL(t)
 	dir := stubDownloadDir(t)
 
 	payload := []byte("repotory bundle bytes")
@@ -188,6 +226,7 @@ func TestDownloadUpdateVerifiesDigestAndKeepsFile(t *testing.T) {
 
 func TestDownloadUpdateDeletesFileOnDigestMismatch(t *testing.T) {
 	svc, _ := setupService(t)
+	stubUpdateAssetURL(t)
 	dir := stubDownloadDir(t)
 
 	payload := []byte("tampered bytes")
@@ -221,6 +260,7 @@ func TestDownloadUpdateDeletesFileOnDigestMismatch(t *testing.T) {
 
 func TestDownloadUpdateRejectsFileNameWithPathTraversal(t *testing.T) {
 	svc, _ := setupService(t)
+	stubUpdateAssetURL(t)
 	stubDownloadDir(t)
 
 	payload := []byte("x")
@@ -244,6 +284,7 @@ func TestDownloadUpdateRejectsFileNameWithPathTraversal(t *testing.T) {
 
 func TestCancelUpdateDownloadStopsIt(t *testing.T) {
 	svc, _ := setupService(t)
+	stubUpdateAssetURL(t)
 	stubDownloadDir(t)
 
 	block := make(chan struct{})

@@ -71,6 +71,12 @@ func TestVersionedFileName(t *testing.T) {
 		// would give "Cinder-2.33.0-2.33.0-darwin-arm64.dmg".
 		{"Cinder-2.33.0-darwin-arm64.dmg", "2.33.0", "Cinder-2.33.0-darwin-arm64.dmg"},
 		{"Cinder-2.33.0-windows-amd64.zip", "2.33.0", "Cinder-2.33.0-windows-amd64.zip"},
+		// A tag is interpolated into a file name: anything that is not a
+		// semver-shaped tag is ignored instead of reaching the path.
+		{"repotory-darwin-arm64.dmg", "../../../Library/LaunchAgents/pwn", "repotory-darwin-arm64.dmg"},
+		{"repotory-darwin-arm64.dmg", "2.25.0/../../pwn", "repotory-darwin-arm64.dmg"},
+		{"repotory-darwin-arm64.dmg", "2.25.0\\..\\..\\pwn", "repotory-darwin-arm64.dmg"},
+		{"repotory-darwin-arm64.dmg", "v2.25.0", "Cinder-v2.25.0-darwin-arm64.dmg"},
 		// A name that is not one of ours is never decorated.
 		{"cinder-mcp-2.33.0-darwin-arm64.tar.gz", "2.33.0", "cinder-mcp-2.33.0-darwin-arm64.tar.gz"},
 		{"repotory-mcp-darwin-arm64.tar.gz", "2.25.0", "repotory-mcp-darwin-arm64.tar.gz"},
@@ -88,6 +94,7 @@ func TestVersionedFileName(t *testing.T) {
 // the version the user is downloading.
 func TestDownloadWritesVersionedFileAndReportsVersion(t *testing.T) {
 	svc, _ := setupService(t)
+	stubUpdateAssetURL(t)
 	dir := stubDownloadDir(t)
 
 	payload := []byte("repotory bundle bytes")
@@ -125,6 +132,7 @@ func TestDownloadWritesVersionedFileAndReportsVersion(t *testing.T) {
 // user's data directory when a test swapped the location.
 func TestFinishedDownloadIsPersistedToDisk(t *testing.T) {
 	svc, _ := setupService(t)
+	stubUpdateAssetURL(t)
 	stubDownloadDir(t)
 	stateDir := t.TempDir()
 	statePath := filepath.Join(stateDir, "update-download.json")

@@ -91,6 +91,30 @@ func TestLoopbackGuardRejectsCrossOrigin(t *testing.T) {
 	}
 }
 
+// Browsers report the request's site in Sec-Fetch-Site. A remote page that
+// reaches the loopback address (or lies about Host via rebinding) still says
+// "cross-site", so the guard can refuse it even when the other headers are
+// forged. Non-browser clients omit the header and stay unaffected.
+func TestLoopbackGuardRejectsCrossSiteFetch(t *testing.T) {
+	h := newGuardTestHandler(t)
+	rec := httptest.NewRecorder()
+	req := newLocalRequest(http.MethodGet, "/health")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("cross-site fetch: status = %d, want 403", rec.Code)
+	}
+	for _, site := range []string{"same-origin", "same-site", "none"} {
+		rec := httptest.NewRecorder()
+		req := newLocalRequest(http.MethodGet, "/health")
+		req.Header.Set("Sec-Fetch-Site", site)
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("Sec-Fetch-Site %q: status = %d, want 200", site, rec.Code)
+		}
+	}
+}
+
 func TestLoopbackGuardPassesErrorsThrough(t *testing.T) {
 	// The guard must not swallow handler responses: a valid host keeps
 	// handler status codes (400 for missing query) untouched.

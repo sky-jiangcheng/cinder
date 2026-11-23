@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+## [2.43.0] - 2026-11-23
+
+### 新增
+- **AI 辅助审核：硬规则一票否决 + AI 结论放行 + 人工超时兜底（2026-11-23）**：此前知识页只能由人在 `/review` 点击批准，pending 页无人处理就永久留在队列。本次新增可选审核循环，三项开关默认全关（`wiki_review_ai` / `wiki_review_auto` / `wiki_review_timeout_hours`，超时按小时、0=关、上限一年），后台每 5 分钟扫一次 pending 页：确定性规则（空标题/slug、正文 <40 字、TODO/待补充占位符）命中即记 `rule/reject`，AI 与超时都覆盖不了；`wiki_review_ai` 开启时用现有 AI 端点取结构化结论与理由展示在审核卡片；`wiki_review_auto` 仅在规则通过且 AI 明确 approve 时走原 `ApproveWikiPage` 批准（与人工共用同一函数，mentions、版本快照、磁盘镜像行为一致），AI reject 或解析失败仍留人工；超时页在规则通过后自动批准，AI 不可用也不阻塞。schema v32 给 `wiki_pages` 加 `review_verdict/reason/source` 三列，人工编辑正文即清空旧结论避免张冠李戴；自动批准写 `auto/approve` 或 `timeout/approve` 来源标记，不改 `updated_at`。设置 → AI 新增开关区，中英文案齐备。新增测试覆盖规则、JSON 解析、AI 放行/拒绝、超时、去重、编辑失效与默认关闭；`go test ./...` 53 包全绿、vitest 432 例全绿。MCP 工具面 / schema / CoreVersion 不动。
+
+### 变更
+- **ADR-0071 补注：OpenRouter 弱模型 LLM 重排探针负结果（2026-11-23）**：把重排探针改为后端可配置（OpenRouter / SiliconFlow），首轮用活库已有 `ai_chat_*` 配置（nano 推理模型、零新增 key），对调参融合回放的 top-40 候选做 listwise 重排。70 案结果 recall@10=0.6857 / ndcg@10=0.569（基线 0.9857 / 0.8710，−0.302），22 案 recall 回归、10 案硬失败；门判定 FAIL，该后端不得接生产。仪器本身弱（免费 nano ≠ cross-encoder），此负结果只关闭「OpenRouter 弱模型重排无增益」，不否定重排天花板；SiliconFlow bge-reranker 原生探针仍为可选仪器。中英 ADR 同批补注，逐案数据在 gitignore 的过程目录。
+- **依赖安全升级：golang.org/x/net 升至 v0.62.0（2026-11-23）**：`govulncheck` 报 x/net v0.60.0 两个漏洞（GO-2026-6866 / GO-2026-6860），随 x/crypto v0.58.0、x/text v0.43.0 一并升级后复扫消失。残留两项非本次引入且未触达受影响路径：`mcp-go v1.5.0 GO-2026-6911`（无修复版本，仅用 server/mcp 类型）、`x/crypto GO-2026-5932`（openpgp 未使用）；12 条 stdlib 告警系本机 go1.26.7 与交付工具链 go1.26.11 的差异。npm 三处 `npm audit` 均为 0 漏洞，源码与 git 历史无硬编码凭证。
+
+### 修复
+- **本地 HTTP 桥跨站写操作拦截（2026-11-23）**：`/api/rpc` 原先仅校验 Host/Origin 的主机名（不校端口），且不限 `Content-Type`，远程页面可用 `text/plain` 简单请求无需预检即触发 `UpdateConfig` 等写绑定（已用 `Origin: http://localhost:3000` + `text/plain` 复现，HTTP 200）。现强制 `application/json`（否则 415），跨源 JSON 请求必须预检而服务端不发任何 CORS 头；新增 `Sec-Fetch-Site: cross-site` 拦截（403）。Host/Origin 刻意不校端口：Vite dev 的 5173 端口经 changeOrigin 代理，收紧会破坏本地开发，跨端口写由预检机制拦。新增全链路回归测试。
+- **更新包下载路径穿越与任意 URL 拦截（2026-11-23）**：`version` 原先未清洗即拼入文件名，`versionedFileName("repotory-darwin-arm64.dmg", "../../../Library/LaunchAgents/pwn")` 可写到下载目录外（仅 legacy 资产名路径受影响）；现限定 semver 字符并在落盘前用 `filepath.Rel` 二次确认目标位于下载目录内。`StartUpdateDownload` 原先只校验 `https://` 前缀，现按注释声称的口径限定 GitHub Release 资产 URL（github.com + `/owner/repo/releases/download/`，拒绝 userinfo、非 443 端口与点段），防止本地调用者指定任意下载地址与路径穿越组合写文件。
+- **RPC 生命周期方法黑名单漂移（2026-11-23）**：HTTP 桥原先手写四个禁用方法，新增生命周期绑定时不会自动阻断。现黑名单由 `app.LifecycleBindings()` 从 bindingSurfaces 注册表派生，新增生命周期方法即刻不可经 RPC 调用；`StartAskStream`（Wails 事件专属）继续显式封锁。
+
 ## [2.42.0] - 2026-11-23
 
 ### 新增

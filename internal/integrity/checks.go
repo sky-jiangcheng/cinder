@@ -72,7 +72,7 @@ const schemaVersionKey = "schema_version"
 // note_versions rows written before it hold post-edit content and keep
 // version = 0, which is why the check's shape expectations below still accept
 // rows it never backfilled.
-const ExpectedSchemaVersion = 31
+const ExpectedSchemaVersion = 32
 
 // StaleAfterDays is the age at which the repo_meta knowledge cache is reported
 // as stale. The cache feeds generated knowledge (tech stack, readme excerpt,

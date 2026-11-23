@@ -434,6 +434,17 @@
       "updates": "Check for a new version, read the release notes and download the installer",
       "review": "Look at yesterday's commits once a day, and report only the runtime risks this change introduced that no compiler catches."
     },
+    "wikiReview": {
+      "title": "AI-assisted knowledge page review",
+      "desc": "All off by default. Pending pages are checked every 5 minutes; hard rules (empty body, unfinished markers) always veto, including automatic paths.",
+      "ai": "AI annotations",
+      "aiHint": "Send pending pages to the configured AI chat endpoint for one verdict and reason, shown on the review page. Never approves by itself.",
+      "auto": "Auto-approve by rule",
+      "autoHint": "Publishes only when AI annotations are on, hard rules pass and the model explicitly approves. Everything else stays with the human.",
+      "timeout": "Human review timeout (hours)",
+      "timeoutHint": "0 disables it. A page older than this is auto-approved unless a hard rule vetoes, even if AI is unavailable or would keep it.",
+      "saved": "AI review settings saved"
+    },
     "ai": {
       "title": "AI Chat Endpoint",
       "desc": "Any OpenAI-compatible /chat/completions server works: a local LM Studio, vLLM, Ollama, or a remote provider. Used by the project AI Q&A panel.",
@@ -1163,6 +1174,9 @@
     "emptyPendingTitle": "Nothing to review",
     "emptyPendingMsg": "Pages compiled by the local model will queue here for approval.",
     "noteRef": "Note {{n}}",
+    "review_approve": "AI suggests approve",
+    "review_reject": "AI suggests human review",
+    "review_error": "AI review failed",
     "kind_entity": "entity",
     "kind_concept": "concept",
     "kind_synthesis": "synthesis",

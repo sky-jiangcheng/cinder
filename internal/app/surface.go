@@ -40,11 +40,14 @@ package app
 // app".
 //
 // The local threat model makes that acceptable on its own terms: the bridge is
-// loopback-only and guarded against DNS rebinding (httpapi/guard.go), and a
+// loopback-only, guarded against DNS rebinding and cross-site writes
+// (httpapi/guard.go and httpapi/rpc.go's application/json requirement), and a
 // local process that could call ApproveWikiPage could equally well open the
 // SQLite file and UPDATE it directly. The gate worth keeping is the one that
 // blocks a REMOTE page from reaching the knowledge base, and that is the
-// guard's job, not this table's.
+// guard's job, not this table's. Lifecycle entries are the exception: the RPC
+// bridge derives its blocklist from this registry, so a process-control
+// binding is never remotely callable even if the bridge forgets to name it.
 //
 // Two cross-surface checks keep the three views from drifting apart:
 // internal/app/frontend_contract_test.go asserts every method the frontend
@@ -350,3 +353,16 @@ func mcpBackedBindings() map[string]string {
 // BindingIsWrite reports whether the named App binding executes a database
 // write (see bindingWrites). Exported for the RPC bridge's contract gate.
 func BindingIsWrite(name string) bool { return bindingWrites[name] }
+
+// LifecycleBindings returns the process-control bindings. The HTTP RPC bridge
+// blocks exactly this set (plus its own transport-only entry), so a new
+// lifecycle binding is unreachable over the wire without a second edit.
+func LifecycleBindings() []string {
+	out := make([]string, 0, 3)
+	for name, s := range bindingSurfaces {
+		if s.Category == SurfaceLifecycle {
+			out = append(out, name)
+		}
+	}
+	return out
+}

@@ -862,6 +862,20 @@ function ReviewCard({
         <span className={s.cardProject}>{projectLabel(p.project_id)}</span>
       </div>
       <p className={s.slug}>{p.slug}</p>
+      {/* AI-assisted review is an annotation, never the decision itself: the
+          approve/reject buttons below stay with the human. A verdict is only
+          shown once the optional reviewer has actually run. */}
+      {p.review_verdict && (
+        <p className={s.reviewLine}>
+          <span className={`${s.reviewBadge} ${
+            p.review_verdict === 'approve' ? s.reviewBadgeApprove
+              : p.review_verdict === 'reject' ? s.reviewBadgeReject : s.reviewBadgeError
+          }`}>
+            {t(`review.review_${p.review_verdict}`)}
+          </span>
+          <span className={s.reviewReason}>{p.review_reason}</span>
+        </p>
+      )}
       {/* Render the body as markdown (the same pipeline the knowledge base
           uses): compiler output IS markdown — headings, lists, [[wikilinks]] —
           and a raw <pre> made every pending page read like a dump. The

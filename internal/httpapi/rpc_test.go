@@ -37,6 +37,7 @@ func newRPCHandler(t *testing.T) *handler {
 func rpc(t *testing.T, h *handler, body string) (int, map[string]any) {
 	t.Helper()
 	req := httptest.NewRequest("POST", "/api/rpc", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.rpc(rec, req)
 	var out map[string]any
@@ -99,6 +100,34 @@ func TestRPCBlocksLifecycleMethods(t *testing.T) {
 	// stops existing: delete the entry and nothing fails.
 	if code, out := rpc(t, h, `{"method":"StartAskStream","args":[1,"q",false]}`); code != 403 {
 		t.Fatalf("StartAskStream: code=%d out=%v, want 403 (it must not be reflexively callable)", code, out)
+	}
+}
+
+// A JSON body is not enough: the Content-Type must also be application/json.
+// Without it a remote page can POST a form-shaped body as a CORS "simple
+// request" and reach write bindings without a preflight. The decoder below
+// would happily accept it, so this gate is the only thing standing between a
+// cross-origin page and UpdateConfig.
+func TestRPCRejectsSimpleContentType(t *testing.T) {
+	h := newRPCHandler(t)
+	for _, ct := range []string{"", "text/plain", "application/x-www-form-urlencoded", "application/json; charset=bogus; x"} {
+		req := httptest.NewRequest("POST", "/api/rpc", strings.NewReader(`{"method":"Echo","args":["hi"]}`))
+		if ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		rec := httptest.NewRecorder()
+		h.rpc(rec, req)
+		if rec.Code != 415 {
+			t.Errorf("Content-Type %q: code=%d, want 415", ct, rec.Code)
+		}
+	}
+	// A charset suffix is legitimate (fetch clients sometimes add one).
+	req := httptest.NewRequest("POST", "/api/rpc", strings.NewReader(`{"method":"Echo","args":["hi"]}`))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	rec := httptest.NewRecorder()
+	h.rpc(rec, req)
+	if rec.Code != 200 {
+		t.Errorf("application/json with charset: code=%d, want 200", rec.Code)
 	}
 }
 
@@ -179,6 +208,45 @@ func TestRPCBlocklistIsExactlyTheReviewedSet(t *testing.T) {
 				"blocking a method breaks the browser runtime if the frontend calls it, "+
 				"and every extra entry needs a stated reason", name)
 		}
+	}
+}
+
+// Full-stack version of the audited PoC: a page on another loopback port
+// (Vite's dev server, or any local tab) posts a simple-request body to the
+// real handler. The Host/Origin guard alone lets it through — the
+// application/json gate is what stops it. A remote page reporting itself as
+// cross-site is refused even earlier.
+func TestRPCBridgeRejectsCrossOriginSimpleRequest(t *testing.T) {
+	database, err := db.InitDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	h := New(service.New(database, "me"), fakeBound{}, nil)
+
+	post := func(ct, site string) int {
+		req := httptest.NewRequest("POST", "/api/rpc", strings.NewReader(`{"method":"Echo","args":["hi"]}`))
+		req.Host = "127.0.0.1:18765"
+		req.Header.Set("Origin", "http://localhost:3000")
+		if ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		if site != "" {
+			req.Header.Set("Sec-Fetch-Site", site)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := post("text/plain", ""); code != 415 {
+		t.Errorf("cross-origin simple request: code=%d, want 415", code)
+	}
+	if code := post("application/json", "cross-site"); code != 403 {
+		t.Errorf("cross-site JSON request: code=%d, want 403", code)
+	}
+	// The frontend's own same-origin call still works.
+	if code := post("application/json", "same-origin"); code != 200 {
+		t.Errorf("same-origin JSON request: code=%d, want 200", code)
 	}
 }
 

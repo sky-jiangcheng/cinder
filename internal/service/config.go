@@ -71,6 +71,15 @@ var allowedConfigKeys = map[string]bool{
 	// independent of wiki_lint_llm (which only reads).
 	"wiki_compile":  true,
 	"wiki_lint_llm": true,
+	// AI-assisted page review (v32). All default OFF/ZERO: the human gate in
+	// /review stays exactly as it was until the user opts in.
+	// wiki_review_ai adds a model verdict to pending pages; wiki_review_auto
+	// publishes only when the deterministic rules pass AND the model says
+	// approve; wiki_review_timeout_hours (0 = off, capped at a year) publishes
+	// a pending page that outlived the human window unless a rule vetoes it.
+	"wiki_review_ai":            true,
+	"wiki_review_auto":          true,
+	"wiki_review_timeout_hours": true,
 	// M7/ADR-0019 merge suggestions: lets a model judge whether two pages are the
 	// same concept. Needs wiki_lint_llm too (it runs inside the lint model half),
 	// and its own key because judging similarity is separate consent from judging

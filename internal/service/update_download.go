@@ -36,6 +36,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -410,9 +411,15 @@ func userDownloadsDir() (string, error) {
 // Without it, "is this download the current version?" is unanswerable by
 // looking at the file — the name never changes, so an old bundle sitting in
 // Downloads looks exactly like a fresh one.
+// safeVersionPattern accepts only semver-shaped tags (optional v prefix).
+// version is interpolated into a FILE NAME, so a caller-supplied tag with a
+// separator or ".." must never reach the path. An unsafe tag is ignored —
+// the bundle keeps its release name rather than being written somewhere else.
+var safeVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
+
 func versionedFileName(base, version string) string {
 	version = strings.TrimSpace(version)
-	if version == "" {
+	if version == "" || !safeVersionPattern.MatchString(version) {
 		return base
 	}
 	// Asset names carry the version now, so a name CI publishes today needs
@@ -495,6 +502,14 @@ func (s *Service) downloadUpdate(ctx context.Context, d *updateDownloader, downl
 	// Downloads says which release it is.
 	safeName = versionedFileName(safeName, version)
 	finalPath := filepath.Join(downloadDir, safeName)
+	// Defence in depth: the version and the release asset name are both
+	// untrusted inputs. Re-verify that the joined path still lives directly
+	// inside the download directory before opening it for writing.
+	rel, relErr := filepath.Rel(downloadDir, finalPath)
+	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		d.finish(DownloadFailed, "下载文件名无效")
+		return
+	}
 	partPath := finalPath + ".part"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -622,14 +637,45 @@ func (s *Service) downloadUpdate(ctx context.Context, d *updateDownloader, downl
 	d.finish(DownloadDone, "")
 }
 
+// validateUpdateAssetURL is a var so the download tests can point the fetch
+// at a local TLS stub instead of GitHub. Production always uses the strict
+// checker below.
+var validateUpdateAssetURL = checkGitHubReleaseAssetURL
+
+// releaseAssetPathPattern matches /owner/repo/releases/download/... — the
+// only path shape browser_download_url has for a GitHub release asset.
+var releaseAssetPathPattern = regexp.MustCompile(`^/[^/]+/[^/]+/releases/download/`)
+
+// checkGitHubReleaseAssetURL refuses download URLs that are not GitHub
+// release assets. The binding is reachable over /api/rpc, so "https://"
+// alone would let any caller fetch arbitrary bytes into the user's Downloads
+// folder (and, before the filename fix, choose where they land).
+func checkGitHubReleaseAssetURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("下载地址无效：%q", raw)
+	}
+	if !strings.EqualFold(u.Scheme, "https") {
+		return fmt.Errorf("拒绝非 https 下载地址：%q", raw)
+	}
+	if u.User != nil || (u.Port() != "" && u.Port() != "443") || !strings.EqualFold(u.Hostname(), "github.com") {
+		return fmt.Errorf("下载地址不是 GitHub Release 资产：%q", raw)
+	}
+	assetPath := u.EscapedPath()
+	if !releaseAssetPathPattern.MatchString(assetPath) ||
+		strings.Contains(assetPath, "/../") || strings.Contains(assetPath, "/./") {
+		return fmt.Errorf("下载地址不是 GitHub Release 资产：%q", raw)
+	}
+	return nil
+}
+
 // StartUpdateDownload begins downloading a release bundle.
 //
 // The URL and the expected digest come from the release check the user just
 // did (the caller passes the asset's URL and digest straight out of
 // UpdateInfo), so the download always targets the bundle the app itself
-// picked for this platform. The URL must be https and must be one of the
-// assets GitHub's own release API reported; a caller cannot point it at an
-// arbitrary URL.
+// picked for this platform. The URL must be an https GitHub release asset;
+// a caller cannot point it at an arbitrary host.
 //
 // version is the release tag the bundle belongs to ("2.25.0"). It goes into
 // the file name, so the bundle the user finds in Downloads says which
@@ -641,8 +687,8 @@ func (s *Service) downloadUpdate(ctx context.Context, d *updateDownloader, downl
 // the same shape as the check itself (one HTTP call, one verdict) and avoids
 // a second transport for progress events.
 func (s *Service) StartUpdateDownload(url, fileName, sha256, version string) error {
-	if !strings.HasPrefix(url, "https://") {
-		return fmt.Errorf("拒绝非 https 下载地址：%q", url)
+	if err := validateUpdateAssetURL(url); err != nil {
+		return err
 	}
 	proxy, _ := db.GetConfig(s.db, "update_proxy")
 	if err := validateUpdateProxy(proxy); err != nil {

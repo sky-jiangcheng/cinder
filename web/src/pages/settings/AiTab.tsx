@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { listAIModels, rebuildEmbeddings, testAIChat, updateConfig } from '../../api/client'
 import AiAuditSection from './AiAuditSection'
+import WikiReviewSection from './WikiReviewSection'
 
 // 预留钩子类：`ai-url-row` —— 目前全站没有对应样式定义（P35 复核确认），
 // 保留在 markup 里作为将来挂样式的锚点，删留都不影响行为。
@@ -366,6 +367,8 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
           an add-on capability, and putting it on its own tab would present it
           as a peer of "scan" or "appearance" — which is exactly the product
           change ADR-0030 refused to make. */}
+      <WikiReviewSection config={config} showMessage={showMessage} />
+
       <AiAuditSection config={config} showMessage={showMessage} />
     </div>
   )

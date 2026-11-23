@@ -479,6 +479,16 @@ func upgradeSchema(db *sql.DB) error {
 		// three full table rewrites and three chances to leave a database
 		// half-migrated.
 		{id: 31, fn: EnsureNoteWriteContract},
+		// v32: AI-assisted review annotations (default-OFF feature). Three
+		// columns on wiki_pages hold the verdict, its reason and who decided.
+		// No backfill: an empty verdict means "never reviewed automatically",
+		// which is the truth for every pre-existing page and keeps the human
+		// gate unchanged. No timestamp: updated_at belongs to content edits.
+		{id: 32, sql: []string{
+			"ALTER TABLE wiki_pages ADD COLUMN review_verdict TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE wiki_pages ADD COLUMN review_reason TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE wiki_pages ADD COLUMN review_source TEXT NOT NULL DEFAULT ''",
+		}},
 	}
 
 	for _, m := range migrations {

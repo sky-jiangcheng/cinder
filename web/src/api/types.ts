@@ -574,6 +574,11 @@ export interface WikiPage {
   updated_at: string
   status: string
   source: string
+  // AI-assisted review annotation (absent on pre-v32 backends and until the
+  // optional reviewer runs; the UI treats missing and empty the same way).
+  review_verdict?: string
+  review_reason?: string
+  review_source?: string
 }
 
 export interface PageEdge {

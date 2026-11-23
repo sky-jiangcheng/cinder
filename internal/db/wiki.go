@@ -53,6 +53,13 @@ var wikiSchemaStatements = []string{
 		-- retrieval the moment the app is upgraded.
 		status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending','approved','rejected')),
 		source TEXT NOT NULL DEFAULT 'manual',
+		-- AI-assisted review decision (v32). Empty means no automatic review
+		-- has run yet; verdict/reason/source are the audit trail a reviewer
+		-- sees next to the pending body. No timestamps: updated_at already
+		-- tracks page edits and must stay independent of review metadata.
+		review_verdict TEXT NOT NULL DEFAULT '',
+		review_reason TEXT NOT NULL DEFAULT '',
+		review_source TEXT NOT NULL DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -227,6 +234,12 @@ type WikiPage struct {
 	// wiki-compile | import:<source>. It is what makes "the compiler may only
 	// touch its own pending output" a checkable property instead of a promise.
 	Source string `json:"source"`
+	// AI-assisted review decision (v32): verdict/reason/source. Empty on
+	// pages that never went through the automatic reviewer; the human gate
+	// is unchanged, these are annotations plus an audit trail.
+	ReviewVerdict string `json:"review_verdict"`
+	ReviewReason  string `json:"review_reason"`
+	ReviewSource  string `json:"review_source"`
 	// Access reinforcement signals (schema v26): how often the page has been
 	// surfaced into an answer's evidence and when that last happened. Pure
 	// telemetry today — no behaviour reads them yet.
@@ -240,24 +253,28 @@ type WikiPage struct {
 // this package already did once when updated_at went in.
 func scanPageFields(rows interface{ Scan(dest ...any) error }, p *WikiPage) error {
 	return rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Kind, &p.ProjectID, &p.Content,
-		&p.UpdatedAt, &p.Status, &p.Source, &p.AccessCount, &p.LastAccessedAt)
+		&p.UpdatedAt, &p.Status, &p.Source, &p.ReviewVerdict, &p.ReviewReason, &p.ReviewSource,
+		&p.AccessCount, &p.LastAccessedAt)
 }
 
 // pageColumns is the projection used by queries against wiki_pages directly.
 const pageColumns = "id, slug, title, kind, COALESCE(project_id, 0), content, " +
 	"COALESCE(updated_at, ''), COALESCE(status, 'approved'), COALESCE(source, 'manual'), " +
+	"COALESCE(review_verdict, ''), COALESCE(review_reason, ''), COALESCE(review_source, ''), " +
 	"COALESCE(access_count, 0), COALESCE(last_accessed_at, '')"
 
 // pageColumnsP is the same projection for queries that alias wiki_pages as p.
 const pageColumnsP = "p.id, p.slug, p.title, p.kind, COALESCE(p.project_id, 0), p.content, " +
 	"COALESCE(p.updated_at, ''), COALESCE(p.status, 'approved'), COALESCE(p.source, 'manual'), " +
+	"COALESCE(p.review_verdict, ''), COALESCE(p.review_reason, ''), COALESCE(p.review_source, ''), " +
 	"COALESCE(p.access_count, 0), COALESCE(p.last_accessed_at, '')"
 
 // scanPageFieldsWithRank is the rank-carrying variant, kept adjacent to
 // scanPageFields so the column order remains one fact rather than two.
 func scanPageFieldsWithRank(rows interface{ Scan(dest ...any) error }, p *WikiPage, rank *float64) error {
 	return rows.Scan(&p.ID, &p.Slug, &p.Title, &p.Kind, &p.ProjectID, &p.Content,
-		&p.UpdatedAt, &p.Status, &p.Source, &p.AccessCount, &p.LastAccessedAt, rank)
+		&p.UpdatedAt, &p.Status, &p.Source, &p.ReviewVerdict, &p.ReviewReason, &p.ReviewSource,
+		&p.AccessCount, &p.LastAccessedAt, rank)
 }
 
 // WikiPageStatus values (ADR-0015 决策 1).
@@ -454,6 +471,41 @@ func ListWikiPagesByStatus(db *sql.DB, status string, projectID int64) ([]WikiPa
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// ListStalePendingWikiPageIDs returns the pending pages created at or before
+// cutoff (SQLite UTC datetime text). The timeout is measured from creation,
+// not updated_at: a scope change or a review annotation must not restart the
+// human window, or a page could stay pending forever.
+func ListStalePendingWikiPageIDs(db *sql.DB, cutoff string) ([]int64, error) {
+	rows, err := db.Query(
+		"SELECT id FROM wiki_pages WHERE status = ? AND created_at <= ?",
+		WikiStatusPending, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("db: list stale pending wiki pages: %w", err)
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// UpdateWikiReview stores the automatic reviewer's decision. It never touches
+// status or updated_at: this is an annotation, not a page edit, and a review
+// must not reset the staleness clock used by the timeout.
+func UpdateWikiReview(db *sql.DB, id int64, verdict, reason, source string) error {
+	if _, err := db.Exec(
+		"UPDATE wiki_pages SET review_verdict = ?, review_reason = ?, review_source = ? WHERE id = ?",
+		verdict, reason, source, id); err != nil {
+		return fmt.Errorf("db: update wiki review: %w", err)
+	}
+	return nil
 }
 
 // wikiScopeClause renders the visibility predicate for a project scope.
@@ -871,8 +923,12 @@ func UpdateWikiPage(db *sql.DB, id int64, title, kind, content string) error {
 	if !ValidWikiKind(kind) {
 		return fmt.Errorf("db: invalid wiki kind %q", kind)
 	}
+	// An edit invalidates a previous AI verdict: the annotation describes the
+	// old body, and a reviewer must not see "AI suggests approve" above text
+	// the model never judged. Clearing it also lets the next review tick
+	// re-read the new content instead of treating it as already reviewed.
 	_, err := db.Exec(
-		`UPDATE wiki_pages SET title = ?, kind = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		`UPDATE wiki_pages SET title = ?, kind = ?, content = ?, review_verdict = '', review_reason = '', review_source = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		title, kind, content, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "CHECK") {

@@ -433,6 +433,17 @@
       "updates": "检查新版本、查看更新说明并下载安装包",
       "review": "每天自动看一眼昨日提交，只报本次变更引入、编译不会报错的运行时风险。"
     },
+    "wikiReview": {
+      "title": "知识页 AI 辅助审核",
+      "desc": "默认全部关闭。开启后每 5 分钟检查一次待审页；空正文、未完成标记等硬规则会一票否决，任何自动路径都不会放行。",
+      "ai": "AI 辅助标注",
+      "aiHint": "把待审页发给 AI 对话端点取一条结论与理由，显示在审核页。不会自动批准。",
+      "auto": "按规则自动通过",
+      "autoHint": "仅在 AI 辅助标注开启、硬规则通过且 AI 明确建议通过时自动批准；否则仍由人工决定。",
+      "timeout": "人工审核超时（小时）",
+      "timeoutHint": "0 表示关闭。超时且未命中硬规则时自动通过，即使 AI 不可用或建议保留。",
+      "saved": "AI 审核设置已保存"
+    },
     "ai": {
       "title": "AI 对话端点",
       "desc": "支持任何 OpenAI 兼容的 /chat/completions 服务:本地 LM Studio、vLLM、Ollama,或远程大模型。用于项目 AI 问答面板。",
@@ -1162,6 +1173,9 @@
     "emptyPendingTitle": "队列是空的",
     "emptyPendingMsg": "本地模型编译出的页面会在这里等待审核。",
     "noteRef": "笔记 {{n}}",
+    "review_approve": "AI 建议通过",
+    "review_reject": "AI 建议保留人工审核",
+    "review_error": "AI 审核失败",
     "kind_entity": "实体",
     "kind_concept": "概念",
     "kind_synthesis": "综合",

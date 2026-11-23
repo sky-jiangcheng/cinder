@@ -18,11 +18,26 @@ import (
 //
 // The Origin check is defence in depth: a rebinding page that has passed the
 // Host pin still announces its true origin on state-changing requests, and
-// any other cross-origin page gets no free read either.
+// any other cross-origin page gets no free read either. It deliberately
+// checks the HOST, not the port: the product's own Vite dev server runs on a
+// different loopback port and proxies /api here with changeOrigin:true, so
+// pinning the port would break local development. Cross-port browser writes
+// are stopped at the transport instead — /api/rpc requires application/json,
+// any cross-origin fetch then needs a CORS preflight, and this server grants
+// none (no Access-Control-Allow-* headers anywhere).
+//
+// Sec-Fetch-Site is a third, browser-supplied signal: a REMOTE page reaching
+// this loopback address directly reports "cross-site" even when it lies about
+// Host/Origin. Non-browser clients (curl, dsh-plugin, the IDE extension) do
+// not send the header and are unaffected.
 func loopbackGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackHost(r.Host) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden host"})
+			return
+		}
+		if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-site requests are not allowed"})
 			return
 		}
 		if origin := r.Header.Get("Origin"); origin != "" {
