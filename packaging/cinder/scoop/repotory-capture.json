@@ -4,7 +4,7 @@
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
   "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.44.0/cinder-capture-2.44.0-windows-amd64.zip",
-  "hash": "sha256:dbedc8f85f5c9416f1ef7ab9f347b98d418ae70a44a92d7282d5dfbeb1fb1779",
+  "hash": "sha256:057b7bb6e770bdd765e90cad241972d73967daa7bbd99688a276ac1c724954c7",
   "bin": ["cinder-capture.exe", ["cinder-capture.exe", "repotory-capture"]],
   "checkver": {
     "url": "https://api.github.com/repos/sky-jiangcheng/cinder/releases/latest",
