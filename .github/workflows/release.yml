@@ -103,6 +103,49 @@ jobs:
             sleep 20
           done
 
+  # IDE plugins are published only when their own sources changed since the
+  # previous release tag. Without this gate every Cinder release re-submits
+  # both plugins to the marketplaces, which saturates the JetBrains review
+  # queue (and its hasUnapprovedUpdate check) with byte-identical updates.
+  #
+  # A version bump alone is not a plugin change: -I ignores hunks whose only
+  # changed lines are the version field written by scripts/bump-version.sh.
+  detect-ide-changes:
+    name: Detect IDE plugin changes
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+    outputs:
+      vscode_changed: ${{ steps.diff.outputs.vscode_changed }}
+      jetbrains_changed: ${{ steps.diff.outputs.jetbrains_changed }}
+    steps:
+      - name: Checkout with tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Diff plugin paths against the previous release tag
+        id: diff
+        run: |
+          set -euo pipefail
+          CURRENT="${GITHUB_REF_NAME}"
+          PREV=$(git tag --merged HEAD --sort=-v:refname | grep -v "^${CURRENT}$" | head -n 1 || true)
+          if [ -z "$PREV" ]; then
+            echo "no previous release tag — publishing both IDE plugins"
+            echo "vscode_changed=true" >> "$GITHUB_OUTPUT"
+            echo "jetbrains_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "comparing ${PREV}...${CURRENT} for IDE plugin changes"
+          VS=$(git diff --numstat -I'"version"[[:space:]]*:' "$PREV" "$CURRENT" -- ide/vscode)
+          JB=$(git diff --numstat -I'^version[[:space:]]*=' "$PREV" "$CURRENT" -- ide/jetbrains)
+          [ -n "$VS" ] && echo "VS Code plugin changed:" && echo "$VS"
+          [ -n "$JB" ] && echo "JetBrains plugin changed:" && echo "$JB"
+          [ -n "$VS" ] && echo "vscode_changed=true" >> "$GITHUB_OUTPUT" || echo "vscode_changed=false" >> "$GITHUB_OUTPUT"
+          [ -n "$JB" ] && echo "jetbrains_changed=true" >> "$GITHUB_OUTPUT" || echo "jetbrains_changed=false" >> "$GITHUB_OUTPUT"
+
   build:
     name: ${{ matrix.target }}
     needs: ci-gate
@@ -587,9 +630,9 @@ jobs:
 
   vscode-extension:
     name: Package VS Code extension
-    needs: build
+    needs: [build, detect-ide-changes]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && needs.detect-ide-changes.outputs.vscode_changed == 'true'
 
     steps:
       - name: Checkout
@@ -625,9 +668,9 @@ jobs:
   # .github/workflows/ci.yml).
   jetbrains-plugin:
     name: Package JetBrains plugin
-    needs: build
+    needs: [build, detect-ide-changes]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && needs.detect-ide-changes.outputs.jetbrains_changed == 'true'
 
     steps:
       - name: Checkout
@@ -767,9 +810,12 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build, vscode-extension, jetbrains-plugin, skill-package, release-notes]
+    needs: [build, vscode-extension, jetbrains-plugin, skill-package, release-notes, detect-ide-changes]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    # An IDE packaging job is skipped when that plugin has no changes. GitHub
+    # skips any job whose `needs` were skipped, so opt back in explicitly while
+    # still refusing to publish on a real build/notes/skill failure.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success' && needs.skill-package.result == 'success' && needs.release-notes.result == 'success' && needs.vscode-extension.result != 'failure' && needs.jetbrains-plugin.result != 'failure' }}
     permissions:
       contents: write
 
@@ -794,6 +840,9 @@ jobs:
         run: ls -lh
 
       - name: Assert every expected asset is present
+        env:
+          VSCODE_CHANGED: ${{ needs.detect-ide-changes.outputs.vscode_changed }}
+          JETBRAINS_CHANGED: ${{ needs.detect-ide-changes.outputs.jetbrains_changed }}
         run: |
           set -euo pipefail
           VER="${GITHUB_REF#refs/tags/v}"
@@ -825,9 +874,11 @@ jobs:
               [ -f "$f" ] || missing+=("$f")
             done
           done
-          for f in "cinder-vscode-${VER}.vsix" "cinder-jetbrains-${VER}.zip" "cinder-${VER}.skill"; do
-            [ -f "$f" ] || missing+=("$f")
-          done
+          # IDE plugin archives are only expected when that plugin actually
+          # changed; an unchanged plugin is deliberately absent this release.
+          if [ "$VSCODE_CHANGED" = "true" ] && [ ! -f "cinder-vscode-${VER}.vsix" ]; then missing+=("cinder-vscode-${VER}.vsix"); fi
+          if [ "$JETBRAINS_CHANGED" = "true" ] && [ ! -f "cinder-jetbrains-${VER}.zip" ]; then missing+=("cinder-jetbrains-${VER}.zip"); fi
+          [ -f "cinder-${VER}.skill" ] || missing+=("cinder-${VER}.skill")
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::release assets are missing: ${missing[*]}"
             echo "refusing to publish a release that cannot be installed"
@@ -951,9 +1002,9 @@ jobs:
   # either way, so users can install manually.
   publish-marketplace:
     name: Publish to VS Code Marketplace
-    needs: create-release
+    needs: [create-release, detect-ide-changes]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && needs.create-release.result == 'success' && needs.detect-ide-changes.outputs.vscode_changed == 'true'
 
     steps:
       - name: Checkout
@@ -998,9 +1049,9 @@ jobs:
   # GitHub Release for manual install, mirroring publish-marketplace above.
   publish-jetbrains-marketplace:
     name: Publish to JetBrains Marketplace
-    needs: create-release
+    needs: [create-release, detect-ide-changes]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && needs.create-release.result == 'success' && needs.detect-ide-changes.outputs.jetbrains_changed == 'true'
 
     steps:
       - name: Checkout
