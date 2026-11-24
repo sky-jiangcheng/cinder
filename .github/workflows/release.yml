@@ -326,6 +326,18 @@ jobs:
             wails build -platform ${{ matrix.goos }}/${{ matrix.goarch }} -clean -ldflags "$LDFLAGS"
           fi
 
+      - name: Inject appearance-aware macOS app icon
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(ls -d build/bin/*.app 2>/dev/null | head -1 || true)"
+          if [ -z "$APP" ]; then
+            echo "::error::Wails produced no .app bundle — cannot inject the macOS app icon"
+            exit 1
+          fi
+          ./scripts/apply-macos-app-icon.sh "$APP"
+
       # cinder-mcp is the AI execution interface (MCP stdio server) and ships
       # as its own release asset so `claude mcp add repotory -- ...` works without
       # building from source. Pure Go / zero CGO, so the matrix target builds

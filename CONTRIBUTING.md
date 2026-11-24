@@ -57,13 +57,15 @@ node scripts/check-i18n-keys.mjs    # locale 词条覆盖守卫（key 缺失 / �
 | 域 | 产物 | 形状 |
 |---|---|---|
 | 品牌域 | favicon、商店图标、JetBrains 工具窗品牌标记 PNG、Marketplace 40px 对 | 母图原样，方边、纯色、token 可绑 |
-| OS 应用域 | `build/appicon.png`、`build/icons/` 阶梯、ico/icns、Warden 的 Tauri 全套 | squircle 容器 + `lift` 纸色渐变 + `press` 柔投影 |
+| OS 应用域 | `build/appicon.png`、`build/icons/` 阶梯、ico/icns、Warden 的 Tauri 全套 | squircle 容器 + `lift` 纸色渐变 + `press` 柔投影（Cinder 的本域底色为纯黑；Warden 不变） |
+| 现代 macOS 外观域 | `build/AppIcon.icon/` → 发版注入 `Assets.car` + `CFBundleIconName` | 浅色纸底墨结 / 深色纯黑纸结；外框、玻璃、阴影由 Icon Composer 管 |
 | 字形域 | VS Code 活动栏 24px、JetBrains 侧栏 16px（含 `_dark`）、macOS 托盘 22px | 单色字形、透明底 |
 | 小尺寸域 | 所有 ≤20px 的位图帧与 16px 条纹图标 | 实心剪影，同一条中心线、笔画 1.86× = 50.68u、不断口 |
 
 规则：
 
 - **单点改动**：只改母图（或用 `brand/marks/build-marks.mjs` 的参数重算），跑 `node scripts/generate-icons.mjs --agent-repo ../warden` 派生全部产物；CI 同步门（`--check --tracked-only`）拦任何半落地，先查后生成
+- **macOS 外观图标走后处理**：`build/AppIcon.icon/` 是生成器产物，不手改；发版在 `wails build` 后、签名前跑 `scripts/apply-macos-app-icon.sh`，它会断言深色位存在后再写 `Assets.car` / `CFBundleIconName`
 - **切域只有一处**：`renderPng()` 按渲染尺寸在 `SMALL_DOMAIN_MAX = 20` 处切小尺寸域，ICO / ICNS 的每一帧自动生效，不在调用点重复判断
 - **多 path 必须全局替色**：`extractBrandParts()` 出来的 `<g>` 内每段 path 都有自己的 fill；反白对与条纹图标用 `/g` 替换，漏掉就会花色
 - **遮罩槽位必须透明底**：alpha 形状就是标记本身；生成器对字形域断言「油墨覆盖率 < 75%」，否则报 `opaque slab`

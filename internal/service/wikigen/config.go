@@ -19,6 +19,10 @@ import (
 const (
 	// KeyCompile gates ingest-time compilation entirely.
 	KeyCompile = "wiki_compile"
+	// KeyCompileTriage gates the pre-model transcript filter (ADR-0065 gap 2.6).
+	// Unlike other gates this one is ON unless explicitly set to "0": it spends
+	// no tokens and writes nothing, so the safe state is also the useful one.
+	KeyCompileTriage = "wiki_compile_triage"
 	// KeyLintLLM gates ONLY the model-backed lint checks — the umbrella any
 	// model call inside lint sits behind, including merge-suggest.
 	KeyLintLLM = "wiki_lint_llm"
@@ -42,6 +46,15 @@ func enabled1(database *sql.DB, key string) bool {
 
 // CompileEnabled reports whether ingest-time compilation may run.
 func CompileEnabled(database *sql.DB) bool { return enabled1(database, KeyCompile) }
+
+// CompileTriageEnabled reports whether transcript notes are filtered before a
+// model call. The default is ON — only an explicit "0" restores the old path —
+// because routing spends no tokens, sends no text out and writes nothing; the
+// ADR-0012 privacy-authorization gates do not apply to it.
+func CompileTriageEnabled(database *sql.DB) bool {
+	v, err := db.GetConfig(database, KeyCompileTriage)
+	return err != nil || v != "0"
+}
 
 // LintLLMEnabled reports whether ANY model call inside lint may run. It is
 // read by merge-suggest below and by the lint pass itself, which still lives

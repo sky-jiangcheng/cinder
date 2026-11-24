@@ -2,6 +2,7 @@
 
 - Status: Accepted (schema v18 and the compiler are implemented and contract-tested; a real local-model run was reviewed page by page; the review tab and async dispatch landed via [ADR-0016](0016-async-batch-jobs.md). Promotion criteria 1-5 are met.)
 - Date: 2026-10-08
+- **Note (2026-11-24, [ADR-0073](0073-approval-gate-relaxed-optional-auto.md))**: Decisions 3 ("only a human can trigger") and 6 ("no scheduler") are narrowed **on the review chain** to "human by default, optional auto-approval" — v2.43.0 added three config keys, all off by default. The `wiki_compile` constraints on the compilation chain (no scheduler / no auto_import / no MCP tool) **remain verbatim in force**. The original text is preserved; read Decisions 3/6 together with ADR-0073.
 - Relates to: [ADR-0014](0014-llm-wiki-knowledge-compiler.md) (this realizes its Decisions 4 and 5a), [ADR-0012](0012-semantic-search.md), [ADR-0011](0011-multi-agent-memory-importers.md), [ADR-0007](0007-session-memory-protocol.md), TODO **M6-W3**; prerequisites W1 (schema v16), W1b (v17 page index) and W4 (lint) have landed. (Chinese original: `docs/adr/0015-*.md`.)
 
 ## Context

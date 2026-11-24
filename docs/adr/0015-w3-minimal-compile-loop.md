@@ -2,6 +2,7 @@
 
 - 状态：Accepted（schema v18 与编译器已实现并通过契约测试；真库副本用本地模型跑通编译并完成逐页人审；审核 tab 与长任务异步化已由 [ADR-0016](0016-async-batch-jobs.md) 落地。晋升条件 1-5 均已满足）
 - 日期：2026-10-08
+- **补注（2026-11-24，[ADR-0073](0073-approval-gate-relaxed-optional-auto.md)）**：决策 3「只有人能触发」与决策 6「不接定时器」在**审核链**上已收窄为「默认人审 + 可选自动放行」——v2.43.0 加了三个默认全关的配置键。`wiki_compile` 的编译链约束（不接定时器 / 不进 auto_import / 不进 MCP 工具面）**逐字继续有效**；本篇原文保留，阅读决策 3/6 时请连同 ADR-0073 一起看。
 - 关联：[ADR-0014](0014-llm-wiki-knowledge-compiler.md)（本方案实现其决策 4 与决策 5 的前半）、[ADR-0012](0012-semantic-search.md)、[ADR-0011](0011-multi-agent-memory-importers.md)、[ADR-0007](0007-session-memory-protocol.md)、TODO **M6-W3**；前置 W1（schema v16）、W1b（v17 页索引）、W4（lint）均已落地
 
 ## 背景

@@ -207,11 +207,16 @@ func (s *Service) runCompileJob(ctx context.Context, job *db.CompileJob) bool {
 	// Newest first: the freshest knowledge is what a compile should reach for
 	// first, and the list from db is oldest-first. Shared with the synchronous
 	// path (wikigen.CompileNoteTargets) so the two cannot disagree about "which
-	// notes".
-	targets := wikigen.CompileNoteTargets(notes, job.Requested)
+	// notes". Triage runs BEFORE the head is taken, on both paths, so a project
+	// whose newest notes are all transcripts does not burn its budget on them.
+	eligible, skipped := wikigen.TriageNotes(notes, wikigen.CompileTriageEnabled(s.db))
+	targets := wikigen.CompileNoteTargets(eligible, job.Requested)
 	agg := &WikiCompileReport{ProjectID: job.ProjectID}
 	agg.NotesScanned = len(targets)
 	agg.NotesRequested = len(targets)
+	if skipped > 0 {
+		agg.Stopped = fmt.Sprintf("分流跳过 %d 条流水账笔记（wiki_compile_triage=0 可关闭）", skipped)
+	}
 	failedNotes := 0
 
 	for i, n := range targets {

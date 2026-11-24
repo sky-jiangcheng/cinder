@@ -1,6 +1,7 @@
 # 0065 Benchmarking Hindsight — absorb selectively, do not replace the foundation; the experience-gap inventory lives in a separate research note
 
 - Status: **Accepted (2026-11-23, the owner picked route A "do not replace, absorb selectively" among A/B/C, and set the bar: "the product experience must be taken to the limit")**
+- **Note (2026-11-24, [ADR-0073](0073-approval-gate-relaxed-optional-auto.md))**: the "human approval gate" load-bearing boundary is redefined — from "humans only" to "human by default, explicit opt-in auto-approval" (three config keys, all off by default). Read the "three boundaries" wording below against the new definition; zero-model capture and single-file local distribution are unchanged.
 - Related: [ADR-0006](0006-scope-freeze.md) (scope freeze), [ADR-0012](0012-semantic-search.md) (vectors off by default = a privacy authorization), [ADR-0015](0015-w3-minimal-compile-loop.md) (the human approval gate), [ADR-0018](0018-knowledge-graph-foundation.md) (retrieval foundation, both lanes Accepted), [ADR-0047](0047-resident-agent-separate-host.md) (Warden's MCP-only division of labour), [ADR-0049](0049-brand-restructure-manus-style.md) (frozen identifiers)
 - Full gap inventory: [docs/product-review/2026-11-23-hindsight-experience-gap.md](../../product-review/2026-11-23-hindsight-experience-gap.md) (Chinese-only research note, outside the manual mirror)
 

@@ -1,7 +1,7 @@
 # VS Code 的 session 保存 / memory / handoff —— 与 Repotory handoff 的竞争关系调研
 
 日期：2026-11-02 ｜ 对象：VS Code 1.144（文档日期 2026-10-28）+ Copilot Memory + session sync (Experimental)
-参照系：Repotory 的 `repotory_handoff`（ADR-0007 会话记忆协议）与 ADR-0010（会话自动捕捉）
+参照系：Repotory 的 `repotory_handoff`（ADR-0007 会话记忆协议）与 ADR-0010（会话自动捕捉）；对标归口见 [ADR-0075](../adr/0075-vscode-hindsight-experience-positioning.md)
 材料：VS Code 官方文档（sessions / memory / session-history / manage-sessions / agents 五页）+ microsoft/vscode issue #318855 + 本仓源码实读。**未在真 IDE 实测**，所有 VS Code 侧表述均转引自官方文档，本文不背书。
 
 ## 0. 一句话结论

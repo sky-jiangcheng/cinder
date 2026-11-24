@@ -138,6 +138,16 @@ func CompileNote(ctx context.Context, database *sql.DB, chat Chat, noteID int64)
 	}
 	rep.ProjectID = note.ProjectID
 	rep.NotesScanned = 1
+	// A single-note compile is a human pointing at one note; triage still applies
+	// (the same judgement must not be bypassed by choosing another entry point),
+	// but the reason is surfaced instead of a silent "no ops".
+	if CompileTriageEnabled(database) {
+		if ok, reason := CompileTriage(note); !ok {
+			rep.LLMNote = "分流跳过：" + reason + "（wiki_compile_triage=0 可关闭）"
+			rep.ElapsedMS = time.Since(start).Milliseconds()
+			return rep, nil
+		}
+	}
 
 	ops, note2 := askCompilePlan(ctx, database, chat, note)
 	if note2 != "" {
@@ -175,9 +185,20 @@ func CompileProjectNotes(ctx context.Context, database *sql.DB, chat Chat, proje
 	if err != nil {
 		return nil, err
 	}
-	targets := CompileNoteTargets(notes, maxNotes)
-	if len(targets) < len(notes) {
-		rep.Stopped = fmt.Sprintf("本次覆盖 %d 条（共 %d 条笔记），其余未处理", len(targets), len(notes))
+	// Triage before truncation: the newest N notes might all be transcripts,
+	// and taking the head first would spend the whole budget on notes the
+	// filter would refuse. A skipped note is never a silent no-op — the count
+	// goes into Stopped (async jobs) or LLMNote (sync report).
+	eligible, skipped := TriageNotes(notes, CompileTriageEnabled(database))
+	targets := CompileNoteTargets(eligible, maxNotes)
+	if skipped > 0 {
+		rep.Stopped = fmt.Sprintf("分流跳过 %d 条流水账笔记（wiki_compile_triage=0 可关闭）", skipped)
+	}
+	if len(targets) < len(eligible) {
+		if rep.Stopped != "" {
+			rep.Stopped += "；"
+		}
+		rep.Stopped += fmt.Sprintf("本次覆盖 %d 条（符合条件 %d 条，共 %d 条笔记），其余未处理", len(targets), len(eligible), len(notes))
 	}
 	rep.NotesScanned = len(targets)
 	for i := range targets {

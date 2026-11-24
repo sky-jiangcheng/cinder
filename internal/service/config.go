@@ -71,6 +71,10 @@ var allowedConfigKeys = map[string]bool{
 	// independent of wiki_lint_llm (which only reads).
 	"wiki_compile":  true,
 	"wiki_lint_llm": true,
+	// ADR-0065 gap 2.6: pre-model transcript routing. Unlike the other gates
+	// this one defaults ON (only "0" disables) because it spends no tokens,
+	// sends no text out and writes nothing — it just avoids a compile call.
+	"wiki_compile_triage": true,
 	// AI-assisted page review (v32). All default OFF/ZERO: the human gate in
 	// /review stays exactly as it was until the user opts in.
 	// wiki_review_ai adds a model verdict to pending pages; wiki_review_auto

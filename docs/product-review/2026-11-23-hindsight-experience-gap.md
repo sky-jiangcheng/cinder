@@ -1,7 +1,7 @@
 # 对标 Hindsight：极致体验还缺什么（2026-11-23）
 
 > 仅中文研究稿，不进手册镜像（`product-review/` 整棵子树在 ZH_ONLY 白名单）。
-> 决策结论见 [ADR-0065](../adr/0065-hindsight-absorb-not-replace.md)：不替换底层，定向吸收。本篇是缺口清单全文，**所有条目均未排期**，逐项另行拍板。
+> 决策结论见 [ADR-0065](../adr/0065-hindsight-absorb-not-replace.md)：不替换底层，定向吸收；对标归因与布局结论见 [ADR-0075](../adr/0075-vscode-hindsight-experience-positioning.md)。本篇是缺口清单全文，**所有条目均未排期**，逐项另行拍板。
 
 ## 0. 体验的度量先换掉
 
@@ -58,6 +58,7 @@ Cinder 现状修正两处调研初判：**RRF 已有**（`internal/search/hybrid
 - **我方**：grep 零命中，纯空白。最接近的是消歧合并（ADR-0019，人触发）与 synthesis（ADR-0020）。而 wiki 层真问题是**供给不足 + 40% 拒绝率**（2026-10-29 停止扩产）——LLM 草稿质量不够，人审拒绝率高，批准页长不出来。
 - **吸收形态**：① 证据修订做成 pending 形态——consolidation 产物带证据引用与 proof count 进审核队列，人批后才生效（闸门不破）；② 小模型分流先于大模型编译：复述/闲聊在本地小模型层挡掉，只有「改变/新增」进 LLM 起草——**同时治成本与拒绝率**（草稿少了、准了，人审负担降）。③ proof count/证据引用在 Review 页可见，批准决策有据可查。
 - **为什么 P3**：依赖 LLM 端点与评测先行，且是供给链改造不是单点功能；但它是「知识自己长出来」的长期解，2.4 的投影面越有用，供给越要紧。
+- **落地记录（2026-11-24）**：② 的**分流目标**已由 [ADR-0074](../adr/0074-compile-triage-deterministic-routing.md) 落地，但形态改为**确定性结构规则**而非本地小模型——Cinder 单 AI 端点，加小模型破零 CGO 单文件，同端点分类反增调用；活库 58% 流水账带统一 `kind=log` + 标题形状，规则即可在模型调用前拦截（seam 断言 `chat.calls==0`）。① 证据修订（observations pending 形态 + proof count）仍未落地，是 ADR-0073 的翻转触发之一。
 
 ### 2.7 记忆可见性【P3】
 

@@ -1,6 +1,7 @@
 # 0065 对标 Hindsight——不替换底层，定向吸收；体验缺口清单另立研究稿
 
 - 状态：**Accepted（2026-11-23，用户在 A/B/C 三条路线里选 A「不替换，定向吸收」，并要求「产品体验要做到极致」）**
+- **补注（2026-11-24，[ADR-0073](0073-approval-gate-relaxed-optional-auto.md)）**：「人审闸门」这条承重边界的定义已变更——从「只有人能批准」改为「默认人审 + 显式 opt-in 自动放行」（三个配置键默认全关）。下列「不破坏三条承重边界」的措辞按新定义读；零模型捕获与本地单文件两条不变。
 - 相关：[ADR-0006](0006-scope-freeze.md)（范围冻结）、[ADR-0012](0012-semantic-search.md)（向量默认关 = 隐私授权）、[ADR-0015](0015-w3-minimal-compile-loop.md)（人审闸门）、[ADR-0018](0018-knowledge-graph-foundation.md)（检索底座，lane 1/2 均 Accepted）、[ADR-0047](0047-resident-agent-separate-host.md)（Warden 走 MCP 的分工）、[ADR-0049](0049-brand-restructure-manus-style.md)（标识层冻结）
 - 缺口清单全文：[docs/product-review/2026-11-23-hindsight-experience-gap.md](../product-review/2026-11-23-hindsight-experience-gap.md)（仅中文研究稿，不进手册镜像）
 
