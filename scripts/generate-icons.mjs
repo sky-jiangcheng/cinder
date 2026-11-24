@@ -50,6 +50,10 @@ import crypto from 'node:crypto'
 import sharp from 'sharp'
 
 const SIZES = [512, 256, 128, 64, 48, 32, 16]
+// librsvg/libvips anti-alias transparent edges differently across platforms;
+// compare decoded pixels with a small channel allowance, not PNG bytes.
+const PIXEL_CHANNEL_TOLERANCE = 24
+const PIXEL_DRIFT_LIMIT = 0.005
 
 // v6 / ADR-0052: at this rendered size and below the woven knot's cuts
 // are sub-pixel, so the solid-stroke small-domain master takes over.
@@ -474,28 +478,69 @@ async function letterFrame(parts) {
 }
 
 async function pixelDiff(bufA, bufB) {
-  // Both buffers are PNG encodings of the same dimensions from the same
-  // encoder family. Compare raw pixels; return the share of pixels whose
-  // channels differ beyond the allowance.
   const [a, b] = await Promise.all([
-    sharp(bufA).raw().toBuffer({ resolveWithObject: true }),
-    sharp(bufB).raw().toBuffer({ resolveWithObject: true }),
+    sharp(bufA).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
+    sharp(bufB).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
   ])
   if (a.info.width !== b.info.width || a.info.height !== b.info.height) {
-    return 1 // dimension drift = totally stale
+    return 1
   }
-  const ch = Math.min(a.info.channels, b.info.channels)
   let diff = 0
   const total = a.info.width * a.info.height
   for (let p = 0; p < total; p++) {
-    for (let c = 0; c < ch; c++) {
-      if (Math.abs(a.data[p * a.info.channels + c] - b.data[p * b.info.channels + c]) > 3) {
+    for (let c = 0; c < 4; c++) {
+      if (Math.abs(a.data[p * 4 + c] - b.data[p * 4 + c]) > PIXEL_CHANNEL_TOLERANCE) {
         diff++
         break
       }
     }
   }
   return diff / total
+}
+
+function iconFrames(buf) {
+  if (buf.length >= 6 && buf.readUInt16LE(0) === 0 && buf.readUInt16LE(2) === 1) {
+    const count = buf.readUInt16LE(4)
+    if (6 + count * 16 > buf.length) throw new Error('generate-icons: truncated ICO directory')
+    const frames = []
+    for (let i = 0; i < count; i++) {
+      const entry = 6 + i * 16
+      const size = buf.readUInt32LE(entry + 8)
+      const offset = buf.readUInt32LE(entry + 12)
+      if (offset + size > buf.length) throw new Error('generate-icons: truncated ICO image')
+      frames.push({ type: '', buf: buf.subarray(offset, offset + size) })
+    }
+    return { kind: 'ico', frames }
+  }
+  if (buf.length >= 8 && buf.toString('ascii', 0, 4) === 'icns') {
+    const end = buf.readUInt32BE(4)
+    if (end > buf.length || end < 8) throw new Error('generate-icons: invalid ICNS length')
+    const frames = []
+    let at = 8
+    while (at < end) {
+      if (at + 8 > end) throw new Error('generate-icons: truncated ICNS chunk')
+      const type = buf.toString('ascii', at, at + 4)
+      const size = buf.readUInt32BE(at + 4)
+      if (size < 8 || at + size > end) throw new Error('generate-icons: invalid ICNS chunk')
+      frames.push({ type, buf: buf.subarray(at + 8, at + size) })
+      at += size
+    }
+    return { kind: 'icns', frames }
+  }
+  return null
+}
+
+async function iconDiff(bufA, bufB) {
+  const a = iconFrames(bufA)
+  const b = iconFrames(bufB)
+  if (!a && !b) return pixelDiff(bufA, bufB)
+  if (!a || !b || a.kind !== b.kind || a.frames.length !== b.frames.length) return 1
+  let worst = 0
+  for (let i = 0; i < a.frames.length; i++) {
+    if (a.frames[i].type !== b.frames[i].type) return 1
+    worst = Math.max(worst, await pixelDiff(a.frames[i].buf, b.frames[i].buf))
+  }
+  return worst
 }
 
 async function main() {
@@ -554,7 +599,7 @@ async function main() {
       const file = path.join(outDir, `icon-${size}.png`)
       if (check) {
         if (!fs.existsSync(file)) stale.push(`${file} (missing)`)
-        else if ((await pixelDiff(png, fs.readFileSync(file))) > 0.005) stale.push(`${file} (pixel drift)`)
+        else if ((await pixelDiff(png, fs.readFileSync(file))) > PIXEL_DRIFT_LIMIT) stale.push(`${file} (pixel drift)`)
       } else {
         fs.writeFileSync(file, png)
         console.log(`  ✓ icon-${size}.png (app domain, squircle)`)
@@ -568,7 +613,7 @@ async function main() {
     // gitignored intermediate — nothing committed depends on it.
   } else if (check) {
     if (!fs.existsSync(appIcon)) stale.push(`${appIcon} (missing)`)
-    else if ((await pixelDiff(appPng, fs.readFileSync(appIcon))) > 0.005) stale.push(`${appIcon} (pixel drift)`)
+    else if ((await pixelDiff(appPng, fs.readFileSync(appIcon))) > PIXEL_DRIFT_LIMIT) stale.push(`${appIcon} (pixel drift)`)
   } else {
     fs.writeFileSync(appIcon, appPng)
     console.log('  ✓ appicon.png (512x512 for Wails, app domain, squircle)')
@@ -579,7 +624,8 @@ async function main() {
   if (trackedOnly) {
     // gitignored intermediate — nothing committed depends on it.
   } else if (check) {
-    if (!fs.existsSync(icoPath) || sha(ico) !== sha(fs.readFileSync(icoPath))) stale.push(`${icoPath} (stale)`)
+    if (!fs.existsSync(icoPath)) stale.push(`${icoPath} (missing)`)
+    else if ((await iconDiff(ico, fs.readFileSync(icoPath))) > PIXEL_DRIFT_LIMIT) stale.push(`${icoPath} (pixel drift)`)
   } else {
     fs.writeFileSync(icoPath, ico)
     console.log(`  ✓ icon.ico (6 sizes, app domain, squircle)`)
@@ -615,7 +661,11 @@ async function main() {
     const target = path.join(root, d.rel)
     if (check) {
       if (!fs.existsSync(target)) stale.push(`${target} (missing)`)
-      else if (sha(gen) !== sha(fs.readFileSync(target))) stale.push(`${target} (stale)`)
+      else if (d.rel.endsWith('.ico') && (await iconDiff(gen, fs.readFileSync(target))) > PIXEL_DRIFT_LIMIT) {
+        stale.push(`${target} (pixel drift)`)
+      } else if (!d.rel.endsWith('.ico') && sha(gen) !== sha(fs.readFileSync(target))) {
+        stale.push(`${target} (stale)`)
+      }
     } else {
       fs.mkdirSync(path.dirname(target), { recursive: true })
       fs.writeFileSync(target, gen)
@@ -700,14 +750,14 @@ async function main() {
     // Only the committed marketplace icon is verified here; the PNG in
     // build/icons/ is a gitignored intermediate.
     if (!fs.existsSync(vscodeIcon)) stale.push(`${vscodeIcon} (missing)`)
-    else if (sha(marketplacePng) !== sha(fs.readFileSync(vscodeIcon))) stale.push(`${vscodeIcon} (stale)`)
+    else if ((await pixelDiff(marketplacePng, fs.readFileSync(vscodeIcon))) > PIXEL_DRIFT_LIMIT) stale.push(`${vscodeIcon} (pixel drift)`)
   } else if (check) {
     if (!fs.existsSync(marketplaceIconPng)) stale.push(`${marketplaceIconPng} (missing)`)
-    else if ((await pixelDiff(marketplacePng, fs.readFileSync(marketplaceIconPng))) > 0.005) {
+    else if ((await pixelDiff(marketplacePng, fs.readFileSync(marketplaceIconPng))) > PIXEL_DRIFT_LIMIT) {
       stale.push(`${marketplaceIconPng} (pixel drift)`)
     }
     if (!fs.existsSync(vscodeIcon)) stale.push(`${vscodeIcon} (missing)`)
-    else if (sha(marketplacePng) !== sha(fs.readFileSync(vscodeIcon))) stale.push(`${vscodeIcon} (stale)`)
+    else if ((await pixelDiff(marketplacePng, fs.readFileSync(vscodeIcon))) > PIXEL_DRIFT_LIMIT) stale.push(`${vscodeIcon} (pixel drift)`)
   } else {
     fs.writeFileSync(marketplaceIconPng, marketplacePng)
     fs.writeFileSync(vscodeIcon, marketplacePng)
@@ -806,7 +856,7 @@ async function main() {
   const markFile = path.join(root, 'ide/jetbrains/src/main/resources/icons/repotory-mark.png')
   if (check) {
     if (!fs.existsSync(markFile)) stale.push(`${markFile} (missing)`)
-    else if ((await pixelDiff(markPng, fs.readFileSync(markFile))) > 0.005) stale.push(`${markFile} (pixel drift)`)
+    else if ((await pixelDiff(markPng, fs.readFileSync(markFile))) > PIXEL_DRIFT_LIMIT) stale.push(`${markFile} (pixel drift)`)
   } else {
     fs.mkdirSync(path.dirname(markFile), { recursive: true })
     fs.writeFileSync(markFile, markPng)
@@ -853,7 +903,7 @@ async function main() {
       const file = path.join(iconsDir, name)
       if (check) {
         if (!fs.existsSync(file)) stale.push(`${file} (missing)`)
-        else if ((await pixelDiff(png, fs.readFileSync(file))) > 0.005) stale.push(`${file} (pixel drift)`)
+        else if ((await pixelDiff(png, fs.readFileSync(file))) > PIXEL_DRIFT_LIMIT) stale.push(`${file} (pixel drift)`)
       } else {
         fs.mkdirSync(iconsDir, { recursive: true })
         fs.writeFileSync(file, png)
@@ -868,7 +918,7 @@ async function main() {
     const uiMarkPath = path.join(path.resolve(agentRepo), 'src/assets/warden.png')
     if (check) {
       if (!fs.existsSync(uiMarkPath)) stale.push(`${uiMarkPath} (missing)`)
-      else if ((await pixelDiff(uiMarkPng, fs.readFileSync(uiMarkPath))) > 0.005) stale.push(`${uiMarkPath} (pixel drift)`)
+      else if ((await pixelDiff(uiMarkPng, fs.readFileSync(uiMarkPath))) > PIXEL_DRIFT_LIMIT) stale.push(`${uiMarkPath} (pixel drift)`)
     } else {
       fs.mkdirSync(path.dirname(uiMarkPath), { recursive: true })
       fs.writeFileSync(uiMarkPath, uiMarkPng)
@@ -880,7 +930,7 @@ async function main() {
     const agentIcoPath = path.join(iconsDir, 'icon.ico')
     if (check) {
       if (!fs.existsSync(agentIcoPath)) stale.push(`${agentIcoPath} (missing)`)
-      else if (sha(agentIco) !== sha(fs.readFileSync(agentIcoPath))) stale.push(`${agentIcoPath} (stale)`)
+      else if ((await iconDiff(agentIco, fs.readFileSync(agentIcoPath))) > PIXEL_DRIFT_LIMIT) stale.push(`${agentIcoPath} (pixel drift)`)
     } else {
       fs.writeFileSync(agentIcoPath, agentIco)
       console.log('  ✓ agent icons: icon.ico (6 sizes, app domain, squircle)')
@@ -909,7 +959,7 @@ async function main() {
     const agentIcnPath = path.join(iconsDir, 'icon.icns')
     if (check) {
       if (!fs.existsSync(agentIcnPath)) stale.push(`${agentIcnPath} (missing)`)
-      else if (sha(agentIcn) !== sha(fs.readFileSync(agentIcnPath))) stale.push(`${agentIcnPath} (stale)`)
+      else if ((await iconDiff(agentIcn, fs.readFileSync(agentIcnPath))) > PIXEL_DRIFT_LIMIT) stale.push(`${agentIcnPath} (pixel drift)`)
     } else {
       fs.writeFileSync(agentIcnPath, agentIcn)
       console.log(`  ✓ agent icons: icon.icns (${ICNS_SLOTS.length} PNG chunks, app domain)`)
@@ -955,7 +1005,7 @@ async function main() {
     const trayPath = path.join(iconsDir, 'tray-22.png')
     if (check) {
       if (!fs.existsSync(trayPath)) stale.push(`${trayPath} (missing)`)
-      else if ((await pixelDiff(trayPng, fs.readFileSync(trayPath))) > 0.005) stale.push(`${trayPath} (pixel drift)`)
+      else if ((await pixelDiff(trayPng, fs.readFileSync(trayPath))) > PIXEL_DRIFT_LIMIT) stale.push(`${trayPath} (pixel drift)`)
     } else {
       fs.writeFileSync(trayPath, trayPng)
       console.log(`  ✓ agent icons: tray-22.png (${TRAY_SIZE}px glyph domain, menu-bar template)`)

@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+## [2.45.1] - 2026-11-25
+
+### 修复
+- **跨平台图标同步门不再把编码差异误报为图标过期（2026-11-24）**：v2.45.0 的 Linux CI 在 PNG/ICO 上逐字节比对，libvips/librsvg 的抗锯齿与透明边缘处理差异让 favicon、VS Code 图标和 JetBrains 标记误报 stale；现在统一解码为 RGBA 像素，按通道容差 24 与 0.5% 像素面积上限判断，ICO/ICNS 则先拆容器逐帧比较尺寸与画面，SVG/文本派生物仍保持逐字节校验。阈值用本机与 Linux 实测漂移校准，真正的尺寸、帧数或图形变化仍会失败；同步重生成受影响的栅格资产。本版只修发布门与派生资产，不改产品功能、MCP 工具面或 CoreVersion。
+
 ## [2.45.0] - 2026-11-24
 
 ### 新增
@@ -1246,7 +1251,8 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.45.0...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.45.1...HEAD
+[2.45.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.45.0...v2.45.1
 [2.45.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.44.0...v2.45.0
 [2.44.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.43.0...v2.44.0
 [2.43.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.42.0...v2.43.0
