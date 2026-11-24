@@ -119,16 +119,13 @@
   padding-left: 0;
 }
 
+/* The commit log is the only child and carries its own two panes (timeline /
+   patch), so this wrapper must not reserve a second column. The old
+   `1fr / 1.2fr` grid put the whole log in the narrow column and left ~40% of
+   the page empty, while the log's own grid split that remnant again — the
+   patch pane ended up 98px wide. */
 .commitsTab {
-  display: grid;
-  gap: 16px;
-}
-
-@media (min-width: 900px) {
-  .commitsTab {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-    align-items: start;
-  }
+  display: block;
 }
 
 /* ---- 从 features/project-detail.css 下沉（P35 第六轮）---- */

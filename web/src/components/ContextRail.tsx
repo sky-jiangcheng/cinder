@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import Icon from './Icon'
 import { browseWikiPages, listPendingWikiPages, type WikiPageSummary, type EvidenceItem } from '../api/client'
 import { getAssistantCards, subscribeAssistantCards } from '../hooks/assistantCards'
+import { stripDoubleClick, stripMouseDown } from '../utils/windowTitlebar'
 import s from './ContextRail.module.css'
 
 /**
@@ -46,10 +47,12 @@ function load<T>(run: () => Promise<T>, onValue: (value: T) => void, onFailure: 
 /** Same landing rule as the inline knowledge cards in HomeKnowledgeAssistant. */
 function cardHref(item: EvidenceItem): string {
   if (item.type === 'page') return `/wiki/${item.id}`
+  // A note reads on its own page (ADR-0078). A todo has no per-row address —
+  // ProjectDetail only focuses ?noteId= — so it keeps landing on the project's
+  // todos tab.
+  if (item.type === 'note') return `/note/${item.id}`
   const pid = item.project_id && item.project_id > 0 ? item.project_id : 0
-  return item.type === 'todo'
-    ? `/project/${pid}?tab=todos`
-    : `/project/${pid}?tab=notes&noteId=${item.id}`
+  return `/project/${pid}?tab=todos`
 }
 
 
@@ -104,7 +107,11 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
 
   return (
     <aside className={s.rail} aria-label={t('shell.contextTitle')}>
-      <header className={s.head}>
+      <header
+        className={s.head}
+        onMouseDown={stripMouseDown}
+        onDoubleClick={stripDoubleClick}
+      >
         <h2 className={s.headTitle}>{t('shell.contextTitle')}</h2>
         <button
           type="button"
@@ -119,76 +126,89 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
 
       {/* The newest answer's evidence, lifted out of the chat stream so the
           rail is one place for "what this conversation touched". Each card is
-          a link, so a citation stays actionable without scrolling back. */}
-      <section className={s.block}>
-        <h3 className={s.blockTitle}>
-          <span>{t('shell.answerProjects')}</span>
-          {cards.projectCards.length > 0 && <span className={s.count}>{cards.projectCards.length}</span>}
-        </h3>
-        {cards.projectCards.length === 0 ? (
-          <p className={s.empty}>{t('shell.answerEmpty')}</p>
-        ) : (
-          <ul className={s.list}>
-            {cards.projectCards.map(p => (
-              <li key={p.id}>
-                <button type="button" className={s.item} onClick={() => navigate(`/project/${p.id}`)}>
-                  <span className={s.itemTitle}>{p.name}</span>
-                  <span className={s.itemMeta}>{p.root_path}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          a link, so a citation stays actionable without scrolling back.
+
+          When nothing was cited, the two blocks share ONE line instead of two
+          titled blocks reading "暂无" — that was 140px of chrome on every page
+          saying nothing, and it pushed the one block that does have content
+          (recently updated) below the fold of the rail. */}
+      {cards.projectCards.length === 0 && cards.knowledgeCards.length === 0 ? (
+        <p className={s.empty}>{t('shell.contextEmpty')}</p>
+      ) : (
+        <>
+          {cards.projectCards.length > 0 && (
+            <section className={s.block}>
+              <h3 className={s.blockTitle}>
+                <span>{t('shell.answerProjects')}</span>
+                <span className={s.count}>{cards.projectCards.length}</span>
+              </h3>
+              <ul className={s.list}>
+                {cards.projectCards.map(p => (
+                  <li key={p.id}>
+                    <button type="button" className={s.item} onClick={() => navigate(`/project/${p.id}`)}>
+                      <span className={s.itemTitle}>{p.name}</span>
+                      <span className={s.itemMeta}>{p.root_path}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {cards.knowledgeCards.length > 0 && (
+            <section className={s.block}>
+              <h3 className={s.blockTitle}>
+                <span>{t('shell.answerKnowledge')}</span>
+                <span className={s.count}>{cards.knowledgeCards.length}</span>
+              </h3>
+              <ul className={s.list}>
+                {cards.knowledgeCards.map(item => (
+                  <li key={`${item.ref || item.id}-${item.id}`}>
+                    <button type="button" className={s.item} onClick={() => navigate(cardHref(item))}>
+                      <span className={s.itemTitle}>
+                        {item.ref && <span className={s.itemRef}>[{item.ref}]</span>}
+                        {item.title}
+                      </span>
+                      {item.project_name && <span className={s.itemMeta}>{item.project_name}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
+      )}
 
       <section className={s.block}>
-        <h3 className={s.blockTitle}>
-          <span>{t('shell.answerKnowledge')}</span>
-          {cards.knowledgeCards.length > 0 && <span className={s.count}>{cards.knowledgeCards.length}</span>}
-        </h3>
-        {cards.knowledgeCards.length === 0 ? (
-          <p className={s.empty}>{t('shell.answerEmpty')}</p>
+        {/* Same rule as the answer blocks: an empty queue is one muted line,
+            not a heading followed by a sentence that repeats it. */}
+        {pending && pending.length === 0 ? (
+          <p className={s.empty}>{t('shell.pendingNone')}</p>
         ) : (
-          <ul className={s.list}>
-            {cards.knowledgeCards.map(item => (
-              <li key={`${item.ref || item.id}-${item.id}`}>
-                <button type="button" className={s.item} onClick={() => navigate(cardHref(item))}>
-                  <span className={s.itemTitle}>
-                    {item.ref && <span className={s.itemRef}>[{item.ref}]</span>}
-                    {item.title}
-                  </span>
-                  {item.project_name && <span className={s.itemMeta}>{item.project_name}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className={s.block}>
-        <h3 className={s.blockTitle}>
-          <span>{t('shell.pendingTitle')}</span>
-          {pending && pending.length > 0 && <span className={s.count}>{pending.length}</span>}
-        </h3>
-        {pending === null ? null : pending.length === 0 ? (
-          <p className={s.empty}>{t('shell.pendingEmpty')}</p>
-        ) : (
-          <ul className={s.list}>
-            {pending.slice(0, 5).map(p => (
-              <li key={p.id}>
-                <button type="button" className={s.item} onClick={() => navigate('/review')}>
-                  <span className={s.itemTitle}>{p.title}</span>
-                </button>
-              </li>
-            ))}
-            {pending.length > 5 && (
-              <li>
-                <button type="button" className={s.more} onClick={() => navigate('/review')}>
-                  {t('shell.pendingMore', { count: pending.length - 5 })}
-                </button>
-              </li>
+          <>
+            <h3 className={s.blockTitle}>
+              <span>{t('shell.pendingTitle')}</span>
+              {pending && pending.length > 0 && <span className={s.count}>{pending.length}</span>}
+            </h3>
+            {pending === null ? null : (
+              <ul className={s.list}>
+                {pending.slice(0, 5).map(p => (
+                  <li key={p.id}>
+                    <button type="button" className={s.item} onClick={() => navigate('/review')}>
+                      <span className={s.itemTitle}>{p.title}</span>
+                    </button>
+                  </li>
+                ))}
+                {pending.length > 5 && (
+                  <li>
+                    <button type="button" className={s.more} onClick={() => navigate('/review')}>
+                      {t('shell.pendingMore', { count: pending.length - 5 })}
+                    </button>
+                  </li>
+                )}
+              </ul>
             )}
-          </ul>
+          </>
         )}
       </section>
 

@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+## [2.45.0] - 2026-11-24
+
+### 新增
+- **跨项目 Handoff 时间轴（2026-11-24）**：知识页新增独立「交接」时间轴，按天汇总所有项目的 handoff 笔记，新会话在前；支持项目 scope 与共享搜索框过滤、首批 50 条并按 50 条加载更多（服务端上限 200），卡片显示时间、项目、自动捕获标记与正文摘要，点开即在页内读完整 Markdown，也可跳转到 `/note/:id`。新增 DesktopOnly `ListHandoffTimeline` 绑定，agent 仍通过既有 `notes_list` / `notes_read` 读取同一批笔记，不新增工具面或 schema。时间轴与笔记网格分开，避免每次会话捕获都把普通笔记列表顶乱。
+- **统计类问答由服务端预取实时 git 数据（2026-11-24）**：模型不保证会调用统计工具，弱推理模型曾把「昨日代码提交量」答成澄清问题或引用记忆里的旧快照。现在对提交量、代码行数、活跃度等明确统计问句，在调用模型前直接查询今天与昨天的 git 数据，并把结果作为权威测量块写进 system prompt；选中项目时只查该项目，未选时跨已知项目汇总。扫描有 12 项目 / 10 仓库 / 总计 30 仓库上限，截断会明确告知模型；单仓查询失败只标 unavailable，不拖垮整次回答；「怎么写提交信息」等非数值问句通过负向词表排除，工具注册表仍保留给具名作者、更长窗口等追问。新增意图识别、scoped/unscoped、失败降级与总量用例；MCP 工具面 / schema / CoreVersion 不变。
+- **笔记有了自己的地址 `/note/:id`（2026-11-24，ADR-0078）**：同一个「点一条知识记录」的动作，知识页有 `slug` 和 `/wiki/:id` 详情页，笔记却只能落 `/project/<pid>?tab=notes&noteId=<n>` 这对参数——地址带着笔记当时所属的项目走，`MoveNote` 换项目后旧链接即失效；读一条笔记还要穿过项目详情页、切到「笔记」tab、在整页卡片里滚到它。新增 `/note/:id` 详情页：正文按整页阅读面（820px、serif 16px/1.7，与 `/wiki/:id` 同一套度量），头部给 kind / 项目 / 主题 / 来源徽标与创建更新时间，正文下方是 编辑 / 历史 / 在项目中打开 / 删除。**数据模型不动**：`project_notes.project_id` 仍是 `NOT NULL`，笔记仍属于项目，只是地址不必经过项目（`GetNote` 已在绑定面上，笔记自己带 `project_id`）。跨页跳转统一改指笔记页共 8 处：知识库网格卡、知识库搜索结果、右栏证据卡、首页问答证据卡、首页搜模式命中、仪表盘交接环、审核页与知识页的「来源笔记」chip；待办不动（没有行级地址，继续落 `/project/:pid?tab=todos`）。`?noteId=` 保留为「管理入口」（老链接与「在项目中打开」照旧定位高亮）。返回来源走 `state.from`：列表把自身 URL 传过去，直接打开的深链回落到 `/knowledge?view=notes`。项目内笔记卡同时改为「标题即链接 + 正文折叠」（超长时折到约 168px，弱化遮罩 + 「展开全文」），项目「笔记」tab 回到批量管理。前端新增 5 例（按 id 取单条、在项目中打开、`state.from` 返回、深链回落、笔记不存在不空白），`NoteSection` 三个测试文件补路由上下文，`Dashboard` / `HomeKnowledgeAssistant` 的落点断言随规则更新；vitest 440 例、tsc、eslint、web build 全绿。绑定面 / schema / MCP 工具面 / CoreVersion 不变。
+
+### 变更
+- **桌面 App 图标二修：恢复品牌墨色并校准 Icon Composer 画布（2026-11-24）**：v2.44.0 的「纯黑背景 + 0.8 缩放」在真机反馈里偏大、图案偏小且不适配，本版回退为品牌墨色 `#34322D` 深色底与满幅结形；随后修正 Icon Composer 图层仍按 512 画布摆放、被系统放到 1024pt 画布上再裁切造成的二次缩小。`knot.svg` 改为 1024 画布、512 网格 `scale(2)`，用 macOS `NSWorkspace` 按明暗外观渲 bundle 图标并量测 squircle / 字形 bbox，实测字结占方块宽 72.8%，与经典 512px PNG 的 72.7% 对齐。经典 PNG / ICO / ICNS 回退同步重生成，`Assets.car` 明暗适配与发版前注入脚本保留；生成器同步门、品牌门、双语文档镜像与 `assetutil` 深色位断言全过。
+- **搜索改渐进式：本地命中即刻返回，语义召回走异步 job 轮询（2026-11-24，ADR-0077）**：定位到用户感知的「搜索 2–8 秒无反应」不是索引慢，而是把两段成本合成一个同步响应——本地词法实测 **3 ms**，查询嵌入是远程端点往返 **4–12 s**（活库 162 条笔记）。`SearchAll` 拆为 `searchLexical`（同步返回词法命中，带 recall / source_type）+ `fuseHits`（时间轴 / 语义两臂），`SearchAll = 两者之和`，签名与结果不变（agent、CLI、MCP 工具、首页问答证据链继续一次拿全）。UI 改走 `StartSearchJob` / `GetSearchJob` 两个 DesktopOnly 绑定：提交即拿到本地命中，`state=refining` 时前端每 400 ms 轮询，语义命中到达后替换；语义关闭（默认）时 job 直接 done、**前端从不轮询**。job 存内存不落库（TTL 2 min、上限 32、同 query 复用进行中的 job，避免防抖抖动变成远程嵌入账单）。知识页与首页搜模式都改为先渲染本地命中并显示「正在补充语义结果…」，旧的「整列表压暗 0.45」陈旧态删除。MCP 工具面 / CoreVersion / schema 不变。真机：`StartSearchJob` 往返 **4.5 ms**（原 6–8 s），浏览器首批卡片 476 ms、语义 10.7 s 补入（20→44 条，30 条带 semantic 通道）；端点不可达时 job 仍以 done 收尾、只剩词法结果且无报错。新增后端 6 例（含门控端点下 refining→done、同 query 复用、容量淘汰、淘汰后 finish 丢弃，`-race` 绿），前端新增知识页 / 首页各 1 例渐进用例。
+
+### 修复
+- **首页 AI 对话跨 tab 保持连续（2026-11-24）**：此前用户发出消息、AI 尚未回复时切到其他 tab，Home 会被路由卸载，消息、流式草稿、asking 状态与取消函数全部丢失，返回后看起来像会话断开。现在首页首次访问后持续挂载，切页只用 `hidden` 隐藏；首页与目的地使用独立 Suspense，目的地懒加载不会回退已挂载首页。返回时保留进行中的 Wails/SSE 请求、单条用户消息、流式草稿和停止按钮，并主动刷新项目、AI 配置与标签，不重新发送请求。新增 3 例路由回归（流式跨页连续、初始深链不预加载首页、返回刷新数据），完整前端测试、lint、build 与浏览器慢流切页验证全绿。
+- **macOS 无边框标题条支持双击缩放（2026-11-24）**：桌面端隐藏原生标题栏后，顶部 WebView 拖拽条可以拖动窗口，但双击一直无动作。现同时监听双击窗口内的两次 mousedown 与浏览器 dblclick，调用 `WindowToggleMaximise` 在工作区缩放/还原，保留菜单栏与 Dock；按钮、链接、输入框等交互元素不触发窗口切换，两个检测路径带冷却避免二次触发。普通浏览器开发环境无 Wails runtime 时安全 no-op。新增时间窗、交互元素排除与 runtime 缺失回归。
+- **项目详情页三处布局缺陷（2026-11-24，同批）**：① 提交页的 `.commitsTab` 在 ≥900px 强制两列 `1fr / 1.2fr`，但它只有**一个**子元素（提交日志自己内部已经是时间线 / 补丁双栏）——整块被塞进 40% 宽、右侧 ~490px 全空，日志内部再分栏后补丁面板只剩 **98px**，占位文案被裁掉半句；改单列，日志按内容列全宽铺开。② 卡片里出现两次「提交记录」（外层 `section-header` 的 h2 + 左页头），删掉外层那一个。③ 卡中卡：`.detail-section` 已有边框，`.book` 又套一层边框与圆角，读起来像「一张卡里粘了个控件」；改为无框（靠左页底色 + 1px 分隔线区分两个面板）。同批修 `diff` 的横向滚动：原来每行 `code` 各自 `overflow-x: auto`，一条长行得拖它自己那截滚动条（一个补丁里 40 个滚条）；现按文件整体横向滚动，行宽 `max-content`、长行可整条读完。④ 概览页语言分布条的 `1fr` 在 1200px 卡上撑到 ~800px，41 行的 JSON 画出一条 2px 细线、计数离标签 800px；限宽 560px 并与「Top 贡献者」并排（`auto-fit`，缺一项时自动整行），右半幅空白消除。
+- **扫描反馈可见化（2026-11-24，同批）**：仪表盘扫描完成后只把「Scan complete」写进 `visually-hidden` 的 live region——屏幕阅读器能读到、人看不到，扫完与没开始长得一样。现完成后弹 toast「扫描完成」，失败走错误横幅（`useScanPolling` 的 `onFinish` 由无参改为 `ok bool`，失败分支也会回调）。同批修掉进度文案：按钮直接显示后端 `ScanStatus.message`，中文界面出现英文 "Scanning 12/12…"，改为前端用 `progress/total` 渲染「扫描中 12/12…」，仪表盘与设置页同批。
+- **首页模式开关语义化与快捷键提示去重（2026-11-24，同批）**：右上角「问 / 搜」两个单字按钮对新人无信息量且像筛选开关，改为图标 + 「问答」「搜索」两字自解释标签（解释仍留在 `title`，不加 aria-label——那会用长句替换可读文本，语音控制反而对不上）；「Enter 发送 / Shift+Enter 换行」原先在占位符与 footer 各出现一次、footer 左侧又重复一遍欢迎语的两种模式说明，现收敛为 footer 右侧一处，占位符只留「问点什么…」，footer 左侧仅在有告警时出现。
+
 ## [2.44.0] - 2026-11-24
 
 ### 变更
@@ -1228,7 +1246,19 @@
 
 > v1.15.1 及更早版本（v1.0.0 – v1.15.1，2026-03 – 2026-10）的变更历史见 [outputs/archive/CHANGELOG-v1.0-v1.15.md](outputs/archive/CHANGELOG-v1.0-v1.15.md)。
 
-[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.38.1...HEAD
+[Unreleased]: https://github.com/sky-jiangcheng/cinder/compare/v2.45.0...HEAD
+[2.45.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.44.0...v2.45.0
+[2.44.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.43.0...v2.44.0
+[2.43.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.42.0...v2.43.0
+[2.42.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.41.1...v2.42.0
+[2.41.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.41.0...v2.41.1
+[2.41.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.40.2...v2.41.0
+[2.40.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.40.1...v2.40.2
+[2.40.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.40.0...v2.40.1
+[2.40.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.39.2...v2.40.0
+[2.39.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.39.1...v2.39.2
+[2.39.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.39.0...v2.39.1
+[2.39.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.38.1...v2.39.0
 [2.38.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.38.0...v2.38.1
 [2.38.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.37.0...v2.38.0
 [2.37.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.36.0...v2.37.0
@@ -1248,6 +1278,9 @@
 [2.33.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.33.0...v2.33.1
 [2.33.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.5...v2.33.0
 [2.32.3]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.2...v2.32.3
+[2.32.2]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.1...v2.32.2
+[2.32.1]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.0...v2.32.1
+[2.32.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.31.1...v2.32.0
 [2.32.5]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.4...v2.32.5
 [2.32.4]: https://github.com/sky-jiangcheng/cinder/compare/v2.32.3...v2.32.4
 [2.29.0]: https://github.com/sky-jiangcheng/cinder/compare/v2.28.0...v2.29.0

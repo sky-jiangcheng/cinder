@@ -59,6 +59,24 @@ describe('useScanPolling', () => {
 
     expect(result.current.scanning).toBe(false)
     expect(onFinish).toHaveBeenCalledTimes(1)
+    // ok=true: the dashboard turns this into a "scan complete" toast.
+    expect(onFinish).toHaveBeenCalledWith(true)
+  })
+
+  // The other ending. It used to be indistinguishable from a crash for the
+  // caller, which is why the dashboard had no failure feedback at all.
+  it('reports a failed scan as ok=false', async () => {
+    const onFinish = vi.fn()
+    mockGetScanStatus.mockRejectedValue(new Error('backend down'))
+
+    const { result } = renderHook(() => useScanPolling(onFinish))
+    act(() => { result.current.start('Scanning…') })
+
+    // Five consecutive failures, each backing off further: 2s + 4s + 8s + 16s,
+    // then the 30s cap — the fifth lands at 60s.
+    await act(async () => { await vi.advanceTimersByTimeAsync(61000) })
+
+    expect(onFinish).toHaveBeenCalledWith(false)
   })
 
   it('auto-detects an already-running scan on mount', async () => {

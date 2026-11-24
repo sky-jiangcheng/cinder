@@ -302,6 +302,23 @@ export interface NoteWithProject extends Note {
   root_path: string
 }
 
+/**
+ * One card of the knowledge page's handoff timeline: the reader view over
+ * every handoff note in the knowledge base, newest first. The excerpt is the
+ * body collapsed to one line (the ring's cards stay content-free by design —
+ * this is the view that actually reads).
+ */
+export interface HandoffTimelineEntry {
+  note_id: number
+  project_id: number
+  project_name: string
+  title: string
+  excerpt: string
+  created_at: string
+  updated_at: string
+  auto_captured: boolean
+}
+
 export interface NoteVersion {
   id: number
   note_id: number

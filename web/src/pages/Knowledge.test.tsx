@@ -24,17 +24,25 @@
 //     regression.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { act, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { renderReady } from '../test/renderReady'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
+  const searchAllMock = vi.fn()
   return {
     ...actual,
     listAllNotes: vi.fn(),
     listAllTags: vi.fn(),
-    searchAll: vi.fn(),
+    searchAll: searchAllMock,
+    // ADR-0077: the pages search progressively now — local hits first, then a
+    // poll for the semantic ones. The runner is faked on top of the searchAll
+    // mock, so a test states its hits once and every search path sees them.
+    runProgressiveSearch: vi.fn((q: string, h: { onUpdate: (j: unknown) => void }) => {
+      void searchAllMock(q).then((hits: unknown[]) => h.onUpdate({ id: 'job', query: q, state: 'done', hits: hits as never[] }))
+      return { cancel: () => {} }
+    }),
     getProjects: vi.fn(),
     browseWikiPages: vi.fn(),
     searchWikiPages: vi.fn(),
@@ -60,6 +68,7 @@ import {
   type NoteWithProject, type Project, type WikiPageSummary, type OrganizeGroup,
 } from '../api/client'
 import Knowledge from './Knowledge'
+import { runProgressiveSearch } from '../api/client'
 
 const mockNotes = vi.mocked(listAllNotes)
 const mockTags = vi.mocked(listAllTags)
@@ -177,10 +186,55 @@ beforeEach(() => {
   // No backlog by default: the organize tab must not take up room when
   // there is nothing to file.
   mockGroups.mockResolvedValue([])
+  // The default runner (installed by the mock factory) is not a mock.resetAll
+  // away: one test overrides it, so every test reinstalls the delegating form.
+  vi.mocked(runProgressiveSearch).mockImplementation((q, h) => {
+    void mockSearchAll(q).then((hits: unknown[]) => h.onUpdate({ id: 'job', query: q, state: 'done', hits: hits as never[] }))
+    return { cancel: () => {} }
+  })
   mockConfig.mockResolvedValue({ config: { semantic_search: '1' }, scan_roots: [] })
 })
 
 describe('the knowledge page (ADR-0038 decision 4)', () => {
+  // ADR-0077: the list must be usable before the semantic arm answers. The
+  // first update carries the local hits and a "refining" line; the second one
+  // is final and the line goes away. Before this split the page sat empty for
+  // the whole embed round trip (4–12s on a remote endpoint).
+  it('renders local hits while the semantic arm is still running', async () => {
+    let push: ((job: unknown) => void) | null = null
+    vi.mocked(runProgressiveSearch).mockImplementation((query, handlers) => {
+      handlers.onUpdate({
+        id: 'job', query, state: 'refining',
+        hits: [{
+          type: 'note', id: 21, project_id: 7, project_name: 'repotory',
+          title: 'local only note', snippet: 's', tags: '', updated_at: '',
+          recall: ['lexical'],
+        }],
+      })
+      push = handlers.onUpdate as (job: unknown) => void
+      return { cancel: () => {} }
+    })
+
+    await renderKnowledge('/knowledge?q=zebra')
+
+    expect(await screen.findByText('local only note')).toBeTruthy()
+    expect(screen.getByText('knowledge.refining')).toBeTruthy()
+
+    // The refined answer lands: a semantic-only hit appears, the hint does not.
+    await act(async () => {
+      push?.({
+        id: 'job', query: 'zebra', state: 'done',
+        hits: [
+          { type: 'note', id: 22, project_id: 7, project_name: 'repotory', title: 'semantic only note', snippet: 's', tags: '', updated_at: '', recall: ['semantic'] },
+          { type: 'note', id: 21, project_id: 7, project_name: 'repotory', title: 'local only note', snippet: 's', tags: '', updated_at: '', recall: ['lexical', 'semantic'] },
+        ],
+      })
+    })
+
+    expect(await screen.findByText('semantic only note')).toBeTruthy()
+    expect(screen.queryByText('knowledge.refining')).toBeNull()
+  })
+
   it('opens on the notes view', async () => {
     await renderKnowledge()
 

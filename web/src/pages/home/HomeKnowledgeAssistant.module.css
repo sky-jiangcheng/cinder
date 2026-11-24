@@ -77,6 +77,9 @@
 }
 
 .modeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   border: none;
   background: transparent;
   border-radius: calc(var(--radius-md) - 2px);
@@ -423,6 +426,14 @@
   color: var(--text-muted);
 }
 
+/* The only shortcut hint in the composer. Slightly dimmer than the notice
+   beside it so a warning always wins the eye. */
+.keyHint {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 .fallbackNotice {
   display: flex;
   align-items: center;
@@ -589,6 +600,14 @@
   align-items: center;
   gap: 4px;
   padding: 4px 0;
+}
+
+/* Sits under a result list that is already usable: the hint reports that the
+   semantic arm is still running, so it must not read as an error or a block. */
+.searchRefining {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .typingElapsed {

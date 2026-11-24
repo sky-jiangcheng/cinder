@@ -889,13 +889,12 @@ function ReviewCard({
         <div className={s.metaRow}>
           <span className={s.metaLabel}>{t('review.sourceNotes')}</span>
           {item.source_note_ids.map(id => (
-            p.project_id === 0 ? (
-              <span key={id} className={s.chip}>{t('review.noteRef', { n: id })}</span>
-            ) : (
-              <Link key={id} to={`/project/${p.project_id}?tab=notes&noteId=${id}`} className={s.chip}>
-                {t('review.noteRef', { n: id })}
-              </Link>
-            )
+            /* A note is addressed by its own id (ADR-0078), so a source note of
+               a global page (project_id 0) is just as linkable as a scoped one
+               — the page's project is no longer part of a note's address. */
+            <Link key={id} to={`/note/${id}`} state={{ from: '/review' }} className={s.chip}>
+              {t('review.noteRef', { n: id })}
+            </Link>
           ))}
         </div>
       )}

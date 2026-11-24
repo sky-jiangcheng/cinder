@@ -380,12 +380,12 @@ function ProjectDetailPage() {
         {tab === 'commits' && (
           /* One card, one question: "what exactly happened". The trend chart
              and activity metrics now live in the Overview tab, where they sit
-             next to the languages/README that explain the shape. */
+             next to the languages/README that explain the shape.
+             No heading above the log: the log's own left pane is titled
+             "提交记录", so an outer h2 with the same words repeated the title
+             and added a second frame around a card that already has one. */
           <div className={s.commitsTab}>
             <div className="detail-section commit-log-section">
-              <div className="section-header">
-                <h2>{t('project.commitLog')}</h2>
-              </div>
               <ProjectCommitLog projectId={Number(id)} repos={project.repos || []} />
             </div>
           </div>

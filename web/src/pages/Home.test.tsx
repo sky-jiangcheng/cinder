@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, screen, waitFor, fireEvent } from '@testing-library/react'
 import { lagged, renderReady } from '../test/renderReady'
 
 // Partial mock: override the backend-calling endpoints, keep everything else
@@ -11,12 +11,20 @@ import { lagged, renderReady } from '../test/renderReady'
 // the backend for the config and the tag list.
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
+  const searchAllMock = vi.fn()
   return {
     ...actual,
     getProjects: vi.fn(),
     getConfig: vi.fn(),
     listAllTags: vi.fn(),
-    searchAll: vi.fn(),
+    searchAll: searchAllMock,
+    // ADR-0077: the pages search progressively now — local hits first, then a
+    // poll for the semantic ones. The runner is faked on top of the searchAll
+    // mock, so a test states its hits once and every search path sees them.
+    runProgressiveSearch: vi.fn((q: string, h: { onUpdate: (j: unknown) => void }) => {
+      void searchAllMock(q).then((hits: unknown[]) => h.onUpdate({ id: 'job', query: q, state: 'done', hits: hits as never[] }))
+      return { cancel: () => {} }
+    }),
     listRecentHandoffs: vi.fn(),
     getSummary: vi.fn(),
     getTodoCounts: vi.fn(),
@@ -44,6 +52,7 @@ import {
   type SearchHit,
 } from '../api/client'
 import Home from './Home'
+import { runProgressiveSearch } from '../api/client'
 
 const mockGetProjects = vi.mocked(getProjects)
 const mockGetConfig = vi.mocked(getConfig)
@@ -91,6 +100,10 @@ beforeEach(() => {
   mockGetConfig.mockResolvedValue({ config: {}, scan_roots: [] })
   mockListAllTags.mockResolvedValue([])
   mockSearch.mockResolvedValue([])
+  vi.mocked(runProgressiveSearch).mockImplementation((q, h) => {
+    void mockSearch(q).then((hits: unknown[]) => h.onUpdate({ id: 'job', query: q, state: 'done', hits: hits as never[] }))
+    return { cancel: () => {} }
+  })
 })
 
 describe('Home console (ADR-0038 decision 2)', () => {
@@ -145,8 +158,8 @@ describe('Home console (ADR-0038 decision 2)', () => {
 describe('Home console — the ask / search modes (ADR-0038 decision 3)', () => {
   it('switches modes explicitly instead of guessing from Enter vs the button', async () => {
     await renderHome()
-    const ask = screen.getByRole('button', { name: '问' })
-    const search = screen.getByRole('button', { name: '搜' })
+    const ask = screen.getByRole('button', { name: '问答' })
+    const search = screen.getByRole('button', { name: '搜索' })
     expect(ask.getAttribute('aria-pressed')).toBe('true')
     expect(search.getAttribute('aria-pressed')).toBe('false')
 
@@ -163,7 +176,7 @@ describe('Home console — the ask / search modes (ADR-0038 decision 3)', () => 
     ])
     await renderHome()
 
-    fireEvent.click(screen.getByRole('button', { name: '搜' }))
+    fireEvent.click(screen.getByRole('button', { name: '搜索' }))
     const box = screen.getByRole('textbox')
     fireEvent.change(box, { target: { value: '登录' } })
     fireEvent.keyDown(box, { key: 'Enter' })
@@ -181,7 +194,7 @@ describe('Home console — the ask / search modes (ADR-0038 decision 3)', () => 
     fireEvent.click(askBtns[0])
 
     // It prefills the box and switches to the ask mode — it does not send.
-    await waitFor(() => expect(screen.getByRole('button', { name: '问' }).getAttribute('aria-pressed')).toBe('true'))
+    await waitFor(() => expect(screen.getByRole('button', { name: '问答' }).getAttribute('aria-pressed')).toBe('true'))
     const next = screen.getByRole('textbox') as HTMLTextAreaElement
     expect(next.value).toContain('登录排查笔记')
   })
@@ -190,7 +203,7 @@ describe('Home console — the ask / search modes (ADR-0038 decision 3)', () => 
     mockSearch.mockResolvedValue([hit({ title: '命中的那篇笔记' })])
     await renderHome()
 
-    fireEvent.click(screen.getByRole('button', { name: '搜' }))
+    fireEvent.click(screen.getByRole('button', { name: '搜索' }))
     const box = screen.getByRole('textbox') as HTMLTextAreaElement
     fireEvent.change(box, { target: { value: '登录' } })
     fireEvent.keyDown(box, { key: 'Enter' })
@@ -203,11 +216,48 @@ describe('Home console — the ask / search modes (ADR-0038 decision 3)', () => 
     await waitFor(() => expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(''))
   })
 
+  // ADR-0077: the rows must appear before the semantic arm answers. The first
+  // job update carries local hits with state 'refining'; the second is final.
+  it('shows the local hits first and says the semantic arm is still running', async () => {
+    let push: ((job: unknown) => void) | null = null
+    vi.mocked(runProgressiveSearch).mockImplementation((query, handlers) => {
+      handlers.onUpdate({
+        id: 'job', query, state: 'refining',
+        hits: [hit({ title: '本地就命中的笔记' })],
+      })
+      push = handlers.onUpdate as (job: unknown) => void
+      return { cancel: () => {} }
+    })
+    await renderHome()
+
+    fireEvent.click(screen.getByRole('button', { name: '搜索' }))
+    const box = screen.getByRole('textbox')
+    fireEvent.change(box, { target: { value: '登录' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    // The list is already there, and the line under it says what is missing.
+    expect(await screen.findByText('本地就命中的笔记')).toBeTruthy()
+    expect(screen.getByText('knowledge.refining')).toBeTruthy()
+
+    await act(async () => {
+      push?.({
+        id: 'job', query: '登录', state: 'done',
+        hits: [
+          hit({ id: 9, title: '语义补上的笔记' }),
+          hit({ title: '本地就命中的笔记' }),
+        ],
+      })
+    })
+
+    expect(await screen.findByText('语义补上的笔记')).toBeTruthy()
+    expect(screen.queryByText('knowledge.refining')).toBeNull()
+  })
+
   it('runs the query behind a deep link: /?q=… opens the search mode and searches', async () => {
     mockSearch.mockResolvedValue([hit({ title: '深链命中的笔记' })])
     await renderReady(<Home />, { initialEntries: ['/?q=%E7%99%BB%E5%BD%95'] })
 
     expect(await screen.findByText('深链命中的笔记')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '搜' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: '搜索' }).getAttribute('aria-pressed')).toBe('true')
   })
 })

@@ -134,7 +134,7 @@ Imported notes carry `kind` = `knowledge` (memory files) or `log` (session recor
 
 Knowledge imported with no matching project is no longer lost — it lands on a **placeholder** (an "Unfiled repo" project named after the repo) or the **Uncategorized** default project, marked in the data by `project_kind`. The **Organize** area in this page's **"To file" tab** lets you re-file a batch of notes from a placeholder / Uncategorized bucket into a real project (or back into Uncategorized), or **confirm-delete** an emptied or orphaned placeholder (Uncategorized is never deletable; deletion is always a manual confirmation, never an automatic cascade). Project cards and the detail page badge these two buckets and show the associated repo path.
 
-For browsing, clicking a note in the knowledge base now **jumps straight to that note in the project's Notes tab and highlights it** (`/project/:id?tab=notes&noteId=N`) instead of only opening the project.
+For browsing, clicking a note in the knowledge base opens **that note's own page** (`/note/:id`, [ADR-0078](../adr/0078-note-detail-route.md)): title, provenance badge and body read at the full page measure, and the address survives the note being moved to another project. To manage notes in bulk, the page's footer offers "Open in project" (`/project/:id?tab=notes&noteId=N`, which the project page still focuses and highlights); the card titles in a project's Notes tab point at the note page too.
 
 ## Knowledge pages and the review queue
 

@@ -67,6 +67,10 @@ func TestBindingWritesAreComplete(t *testing.T) {
 		"EjectInstallerVolume":   "no DB write",
 		// Streams to the frontend over Wails events; blocked on the bridge.
 		"StartAskStream": "no DB write (Wails events)",
+		// ADR-0077: the name says "start" but the only state it mutates is an
+		// in-memory job handle, and the SQL it runs is the read-only search
+		// path. Nothing to route to the elected writer.
+		"StartSearchJob": "pure read (in-memory job handle only)",
 		// String assemblers: they read the DB and format; the FILE write (if
 		// any) happens in a native save dialog on the frontend side.
 		"ExportNoteAsMarkdown": "assembles a string; no DB write",

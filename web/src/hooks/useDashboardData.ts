@@ -5,6 +5,7 @@ import {
   refreshProjectHistory, getConfig, type Summary, type TodoCount, type NoteCount,
 } from '../api/client'
 import { useScanPolling } from './useScanPolling'
+import { useToast } from './useToast'
 import { useApiData, invalidateCache } from './useApiData'
 import {
   getDashboardScope, setDashboardScope, subscribeDashboardScope,
@@ -89,8 +90,27 @@ export function useDashboardData() {
     }
   }, [t])
 
-  const { scanning, message: scanMsg, doneMessage: scanDoneMsg, start: startScanPolling } = useScanPolling(
-    () => { void fetchSummary(date); void refetchProjects() }
+  const pushToast = useToast()
+
+  // A scan ends one of two ways and both need to be visible. The header used to
+  // carry the completion line in a visually-hidden live region only — correct
+  // for screen readers, invisible to everyone else, so a scan that finished
+  // looked exactly like one that never started. Settings shows a banner for the
+  // same event; on the dashboard a toast is the right weight (the button
+  // already reports progress while it runs, and the list refreshes underneath).
+  const {
+    scanning, message: scanMsg, doneMessage: scanDoneMsg,
+    progress: scanProgress, total: scanTotal, start: startScanPolling,
+  } = useScanPolling(
+    ok => {
+      void fetchSummary(date)
+      void refetchProjects()
+      if (ok) {
+        pushToast({ kind: 'success', title: t('common.scanDone', { defaultValue: '扫描完成' }) })
+      } else {
+        setError(t('common.failed'))
+      }
+    },
   )
 
   // Config does not depend on the scope, so it is loaded once (with a 30s
@@ -219,7 +239,7 @@ export function useDashboardData() {
   return {
     // State
     summary, dailyGoal, date, sortKey, confirmScan, showStarredOnly,
-    error, displayedError, scanning, scanMsg, scanDoneMsg, loading,
+    error, displayedError, scanning, scanMsg, scanProgress, scanTotal, scanDoneMsg, loading,
     // Derived
     projects, sorted, starredProjects, unstarredProjects,
     todoMap, noteMap, globalTodoCount, myAdded, isWorkday, sortOptions,

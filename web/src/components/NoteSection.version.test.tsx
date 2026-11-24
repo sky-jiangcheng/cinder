@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 // The version panel loads its data through a dynamic import of api/client, so
@@ -82,7 +83,7 @@ describe('NoteSection 版本恢复', () => {
       mockListNotes.mockResolvedValue([{ ...note, content: version.content }])
     })
 
-    render(<NoteSection projectId={12} />)
+    render(<MemoryRouter><NoteSection projectId={12} /></MemoryRouter>)
     await waitFor(() => expect(mockListNotes).toHaveBeenCalledTimes(1))
 
     fireEvent.click(screen.getByTitle('project.versionHistory'))

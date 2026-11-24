@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { getProjects, type Project } from '../api/client'
 import { useToast } from '../hooks/useToast'
@@ -17,16 +17,19 @@ import s from './Home.module.css'
 export default function Home() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const active = pathname === '/'
   const pushToast = useToast()
 
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsReady, setProjectsReady] = useState(false)
 
   useEffect(() => {
-    document.title = 'Home - Cinder Desktop'
-  }, [])
+    if (active) document.title = 'Home - Cinder Desktop'
+  }, [active])
 
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     getProjects(undefined, false)
       .then(p => {
@@ -42,13 +45,14 @@ export default function Home() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [active])
 
   return (
     <div className={s.page}>
       <h1 className="visually-hidden">{t('home.consoleTitle', { defaultValue: '知识库对话台' })}</h1>
 
       <HomeKnowledgeAssistant
+        active={active}
         projects={projects}
         projectsReady={projectsReady}
         onToast={pushToast}

@@ -6,4 +6,4 @@ package version
 // wails.json (info.productVersion); scripts/bump-version.sh propagates it
 // here. CI builds override this via ldflags at link time — this MUST stay a
 // var: `-X` only rewrites string variables, a const silently ignores it.
-var Version = "2.44.0"
+var Version = "2.45.0"

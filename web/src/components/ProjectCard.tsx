@@ -94,12 +94,12 @@ function ProjectCard({ project, date, todoCount, noteCount, dailyGoal = 0, isWor
       <Link to={to} className={`${s.card} ${s.flat} ${reachedGoal ? s.goalReached : ''}`}>
         <span className={s.flatName} title={project.root_path}>{project.name}</span>
         <span className={s.flatStats}>
+          {/* One number per question. "今日新增" and "新增" both printed
+              myAdded, so every row said the same figure twice; the second
+              pair is gone rather than re-pointed at a total the row does not
+              otherwise explain. */}
           <span className={s.pair}>
             <span className={s.label}>{t('project.todayAdded')}</span>
-            <span className={`${s.num} ${myAdded > 0 ? s.numSuccess : s.numMuted}`}>{myAdded > 0 ? `+${myAdded}` : '0'}</span>
-          </span>
-          <span className={s.pair}>
-            <span className={s.label}>{t('project.added')}</span>
             <span className={`${s.num} ${myAdded > 0 ? s.numSuccess : s.numMuted}`}>{myAdded > 0 ? `+${myAdded}` : '0'}</span>
           </span>
           <span className={s.pair}>

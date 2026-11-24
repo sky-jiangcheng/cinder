@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 // The API surface NoteSection touches. organizeNote is the one under test:
@@ -73,7 +74,7 @@ describe('NoteSection AI tidy', () => {
       content: '# 支付网关\n\n## 目录\n\n- 重试策略\n\n## 重试策略\n\n最多重试三次。',
       tags: 'gateway,retry,idempotency',
     })
-    render(<NoteSection projectId={12} />)
+    render(<MemoryRouter><NoteSection projectId={12} /></MemoryRouter>)
     await flush()
 
     fireEvent.click(screen.getByTitle('project.organizeHint'))
@@ -97,7 +98,7 @@ describe('NoteSection AI tidy', () => {
 
   it('keeps the stored note when the tidy call fails', async () => {
     mockOrganize.mockRejectedValue(new Error('AI chat is not configured — set the endpoint and model in Settings → AI'))
-    render(<NoteSection projectId={12} />)
+    render(<MemoryRouter><NoteSection projectId={12} /></MemoryRouter>)
     await flush()
 
     fireEvent.click(screen.getByTitle('project.organizeHint'))
@@ -118,7 +119,7 @@ describe('NoteSection AI tidy', () => {
       tags: '',
       warning: '（回复被输出上限截断）',
     })
-    render(<NoteSection projectId={12} />)
+    render(<MemoryRouter><NoteSection projectId={12} /></MemoryRouter>)
     await flush()
 
     fireEvent.click(screen.getByTitle('project.organizeHint'))

@@ -7,6 +7,9 @@ vi.mock('../api/client', () => ({
   listAllTags: vi.fn(),
   getProjects: vi.fn(),
   searchAll: vi.fn(),
+  // The hook searches progressively (ADR-0077). Mocking the runner rather than
+  // the two bindings keeps the assertions about "which list reached the UI".
+  runProgressiveSearch: vi.fn(),
   pinNote: vi.fn(),
   importClaudeMemory: vi.fn(),
   exportNoteAsMarkdown: vi.fn(),
@@ -22,12 +25,21 @@ vi.mock('react-i18next', () => ({
 }))
 
 import { useKnowledgePage, invalidateKnowledgeCache } from './useKnowledgePage'
-import { getProjects, listAllNotes, listAllTags, searchAll, type NoteWithProject, type Project } from '../api/client'
+import { getProjects, listAllNotes, listAllTags, runProgressiveSearch, type NoteWithProject, type Project } from '../api/client'
 
 const mockListAllNotes = vi.mocked(listAllNotes)
 const mockListAllTags = vi.mocked(listAllTags)
 const mockGetProjects = vi.mocked(getProjects)
-const mockSearchAll = vi.mocked(searchAll)
+const mockProgressive = vi.mocked(runProgressiveSearch)
+
+// Hands the page one finished job on the first tick — the shape the runner
+// produces when semantic search is off, which is the default.
+const progressiveReturns = (hits: unknown[] = []) => {
+  mockProgressive.mockImplementation((query, { onUpdate }) => {
+    onUpdate({ id: `job-${query}`, query, state: 'done', hits: hits as never[] })
+    return { cancel: () => {} }
+  })
+}
 
 // The hook resolves through Promise microtasks; a nested act flush settles
 // them without relying on timers.
@@ -74,7 +86,8 @@ beforeEach(() => {
   mockListAllNotes.mockReset().mockResolvedValue([])
   mockListAllTags.mockReset().mockResolvedValue([])
   mockGetProjects.mockReset().mockResolvedValue([])
-  mockSearchAll.mockReset().mockResolvedValue([])
+  mockProgressive.mockReset()
+  progressiveReturns([])
 })
 
 describe('useKnowledgePage', () => {
@@ -172,7 +185,7 @@ describe('useKnowledgePage', () => {
     // The search is debounced by 300ms: one request per pause in typing.
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)) })
 
-    expect(mockSearchAll).toHaveBeenCalledWith('网关')
+    expect(mockProgressive).toHaveBeenCalledWith('网关', expect.anything())
     expect(result.current.hits).toEqual([])
   })
 })

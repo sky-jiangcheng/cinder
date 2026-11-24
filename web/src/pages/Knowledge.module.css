@@ -250,6 +250,14 @@
   border-color: var(--warning);
 }
 
+/* Sits in the results header, right of the count: it reports the half of the
+   answer still outstanding, so it must not look like a warning or a block. */
+.searchingLine {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
 .tagChips {
   display: flex;
   flex-wrap: wrap;
@@ -278,6 +286,24 @@
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* The tag-cloud toggle: same row as the chips, but borderless so it reads as
+   "there is more behind this" rather than as one more tag to pick. */
+.tagMore {
+  padding: 4px 8px;
+  border: 1px dashed var(--border-default);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tagMore:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
 }
 
 /* Live result count. Replaces the old "笔记 (N)" heading: same information,

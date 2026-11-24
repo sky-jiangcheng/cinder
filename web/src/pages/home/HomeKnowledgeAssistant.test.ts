@@ -132,8 +132,8 @@ describe('dialogue snapshot (ADR-0056)', () => {
 })
 
 describe('knowledgeHref', () => {
-  it('deep-links a note to its row in the notes tab', () => {
-    expect(knowledgeHref(item({ project_id: 3, id: 7 }), 0)).toBe('/project/3?tab=notes&noteId=7')
+  it('deep-links a note to its own page', () => {
+    expect(knowledgeHref(item({ project_id: 3, id: 7 }), 0)).toBe('/note/7')
   })
 
   it('lands a todo on the todos tab — a todo id is not a note id', () => {
@@ -142,8 +142,10 @@ describe('knowledgeHref', () => {
     expect(href).not.toContain('noteId')
   })
 
-  it('falls back to the given project only for note and todo cards', () => {
-    expect(knowledgeHref(item({ project_id: 0 }), 9)).toBe('/project/9?tab=notes&noteId=7')
+  it('needs the fallback project only for todo cards — a note has its own address', () => {
+    // A note is addressed by its id alone (ADR-0078), so a hit with no project
+    // still lands on the note rather than on a guessed project's notes tab.
+    expect(knowledgeHref(item({ project_id: 0 }), 9)).toBe('/note/7')
     expect(knowledgeHref(item({ type: 'todo', kind: 'todo', project_id: 0 }), 9)).toBe('/project/9?tab=todos')
   })
 

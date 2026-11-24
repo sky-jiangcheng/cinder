@@ -38,25 +38,56 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/cinder-appicon.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/compiled"
 
-xcrun actool "$ICON_SRC" \
-  --compile "$TMP/compiled" \
-  --output-format human-readable-text \
-  --notices --warnings --errors \
-  --output-partial-info-plist "$TMP/info.plist" \
-  --app-icon AppIcon \
-  --include-all-app-icons \
-  --enable-on-demand-resources NO \
-  --development-region en \
-  --target-device mac \
-  --minimum-deployment-target 26.0 \
-  --platform macosx
+# actool occasionally races its CoreSVG appearance specialisation on a first
+# compile — the car comes out without the dark-aqua IconGroup and the dark
+# tile would never switch. Verify by parsing the assetutil JSON precisely and
+# retry the compile once.
+verify_dark_rendition() {
+  xcrun --sdk macosx assetutil --info "$1" 2>/dev/null | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+ok = any(
+    isinstance(e, dict)
+    and e.get('AssetType') in ('IconGroup', 'IconImageStack')
+    and e.get('Appearance') == 'NSAppearanceNameDarkAqua'
+    for e in data
+)
+sys.exit(0 if ok else 1)
+"
+}
+
+compile_icon() {
+  rm -rf "$TMP/compiled"
+  mkdir -p "$TMP/compiled"
+  xcrun actool "$ICON_SRC" \
+    --compile "$TMP/compiled" \
+    --output-format human-readable-text \
+    --notices --warnings --errors \
+    --output-partial-info-plist "$TMP/info.plist" \
+    --app-icon AppIcon \
+    --include-all-app-icons \
+    --enable-on-demand-resources NO \
+    --development-region en \
+    --target-device mac \
+    --minimum-deployment-target 26.0 \
+    --platform macosx
+}
+
+compile_icon
+if ! verify_dark_rendition "$TMP/compiled/Assets.car"; then
+  echo "first compile lacked the dark-aqua rendition — retrying once" >&2
+  compile_icon
+fi
 
 if [ ! -f "$TMP/compiled/Assets.car" ]; then
   echo "ERROR: actool produced no Assets.car" >&2
   exit 1
 fi
-if ! xcrun --sdk macosx assetutil --info "$TMP/compiled/Assets.car" | grep -q 'NSAppearanceNameDarkAqua'; then
-  echo "ERROR: Assets.car has no dark-aqua rendition — the dark tile would not be pure black" >&2
+if ! verify_dark_rendition "$TMP/compiled/Assets.car"; then
+  echo "ERROR: Assets.car has no dark-aqua IconGroup after retry — the dark tile would not be pure black" >&2
   exit 1
 fi
 

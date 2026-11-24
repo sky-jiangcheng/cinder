@@ -117,6 +117,11 @@ var bindingSurfaces = map[string]BindingSurface{
 	// ---- search --------------------------------------------------------------
 	"SearchNotes": {SurfaceMCPBacked, "repotory_notes_search", ""},
 	"SearchAll":   {SurfaceMCPBacked, "repotory_notes_search", ""},
+	// ADR-0077: the progressive-search handle. Desktop-only because it exists
+	// to keep a GUI responsive — an agent calls repotory_notes_search and gets
+	// the same fused answer in one call, with no poll loop to babysit.
+	"StartSearchJob": {SurfaceDesktopOnly, "", "progressive search for the search box: local hits now, semantic hits on poll; agents get one complete answer from repotory_notes_search"},
+	"GetSearchJob":   {SurfaceDesktopOnly, "", "poll partner of StartSearchJob; the refined hits land here or never, if the client stopped looking"},
 
 	// ---- notes ---------------------------------------------------------------
 	"GetNote":            {SurfaceMCPBacked, "repotory_notes_read", ""},
@@ -214,6 +219,7 @@ var bindingSurfaces = map[string]BindingSurface{
 	"CaptureClaudeHandoff":       {SurfaceDesktopOnly, "", "reads another tool's session transcript; consent is per-click in settings"},
 	"ListRecentHandoffs":         {SurfaceDesktopOnly, "", "memory-ring chrome: content-free entries, reading a handoff stays behind notes_read"},
 	"LatestHandoff":              {SurfaceDesktopOnly, "", "IDE status chrome: timestamp/title only by design, the body belongs to the knowledge reader"},
+	"ListHandoffTimeline":        {SurfaceDesktopOnly, "", "knowledge page's timeline view over handoffs; a reader over notes the agent already reaches via notes_list/notes_read, so it adds no agent capability"},
 	"RebuildEmbeddings":          {SurfaceDesktopOnly, "", "bulk sends note text to a configured endpoint; the gate lives in settings, not in an agent call"},
 
 	// ---- AI ------------------------------------------------------------------

@@ -47,6 +47,10 @@ import (
 //             ListCompileJobs, CancelCompileJob — submission returns at once so a
 //             multi-minute LLM batch never blocks a caller. One queue with two
 //             kernels (待决 ①); ListCompileJobs filters by kind.
+//   Progressive search (ADR-0077): StartSearchJob, GetSearchJob — the search
+//             box's poll handle. Local hits come back with the submission, the
+//             remote-embedding arm lands on a later poll. Agents use the
+//             synchronous SearchAll / repotory_notes_search instead.
 //   Wiki compile & review (ADR-0015): CompileNote, CompileProjectNotes,
 //             ListPendingWikiPages, ApproveWikiPage, RejectWikiPage. Deliberately
 //             no MCP twin: an agent able to write pending knowledge would bypass
@@ -288,6 +292,23 @@ func (a *App) SearchNotes(query string) ([]domain.SearchHit, error) {
 // SearchAll searches notes and todos together.
 func (a *App) SearchAll(query string) ([]domain.SearchHit, error) {
 	return a.svc.SearchAll(context.Background(), query)
+}
+
+// StartSearchJob starts a progressive search and returns with the local hits
+// already in hand (ADR-0077).
+//
+// SearchAll is one complete answer and stays the agent/CLI path. The UI cannot
+// use it: the semantic arm's query embedding is a remote round trip of 4–12s,
+// and a search box that shows nothing for that long reads as broken. This
+// binding splits the wait — local hits now, refined hits via GetSearchJob.
+func (a *App) StartSearchJob(query string) (*service.SearchJob, error) {
+	return a.svc.StartSearchJob(a.context(), query)
+}
+
+// GetSearchJob reports a progressive search's state (ADR-0077). Polled by the
+// UI until State is "done".
+func (a *App) GetSearchJob(id string) (*service.SearchJob, error) {
+	return a.svc.GetSearchJob(id)
 }
 
 // --- Notes ------------------------------------------------------------------
@@ -664,6 +685,14 @@ func (a *App) CreateHandoff(projectID int64, summary string, changes, decisions,
 // human entry point, agents read via repotory_notes_read / repotory_context.
 func (a *App) ListRecentHandoffs(limit int) []service.HandoffEntry {
 	return a.svc.ListRecentHandoffs(limit)
+}
+
+// ListHandoffTimeline returns the knowledge page's handoff timeline cards
+// (newest first, with a body excerpt — a reader view, unlike the ring).
+// Desktop-only like the ring: agents have repotory_notes_list / notes_read
+// and need no second read surface of the same rows.
+func (a *App) ListHandoffTimeline(limit int) []service.HandoffTimelineEntry {
+	return a.svc.ListHandoffTimeline(limit)
 }
 
 // CaptureClaudeHandoff runs an on-demand M1 session capture for one project

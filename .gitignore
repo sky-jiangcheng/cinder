@@ -70,6 +70,8 @@ docs/**/*.html
 # Regenerate per release rather than committing them. The MCP server has no
 # build-time input beyond this repo, so nothing is lost.
 assets/releases/
+# 本地 `hdiutil` 打的 DMG（13MB/份，纯本地验证用，发版产物走 assets/releases/）
+/release/
 
 # 根目录游离的 npm 依赖（图标脚本等的临时安装，真正的依赖树在 web/node_modules）
 /node_modules/

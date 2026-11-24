@@ -1,6 +1,6 @@
 # ADR-0076: Appearance-aware app icon — paper in light, pure black in dark
 
-- Status: **Accepted (2026-11-24, user asked the desktop app icon to follow the system like Claude's, with a pure-black background in dark mode)**
+- Status: **Accepted, but the "pure black" part of decisions 1 / 2 was reverted on 2026-11-24 to the brand ink `#34322D` (see the last landing-record entry) — light/dark system adaptation is kept, dark mode is no longer pure black, and the glyph is restored to full master size. The historical decision text is preserved; the landing record is authoritative on the reversal.**
 - Date: 2026-11-24
 - Related: [ADR-0050](0050-family-design-standard.md) (family palette), [ADR-0052](0052-the-knot-brand-mark.md) (The Knot master and the four domains), `scripts/generate-icons.mjs`, `scripts/apply-macos-app-icon.sh`
 
@@ -36,3 +36,11 @@ Constraints stay fixed: `build/icon.svg` remains the single source of truth and 
 ## Landing record
 
 - 2026-11-24: generator now derives the `.icon` and the black classic fallback; `scripts/apply-macos-app-icon.sh` was added and wired after the Wails build in `release.yml`. Local `actool` compilation, `assetutil` dark-rendition assertion, injection into a simulated `.app`, `ictool` light/dark previews, `generate-icons --check --tracked-only` and `check-brand.mjs` all passed.
+- 2026-11-24 (same-day reversal, user feedback: "too much drift, glyph shrunk, doesn't fit"):
+  - **Dark background pure black → brand ink `#34322D`**: the dark `fill-specializations` in `icon.json` now uses the master's ink token; `cinderAppField` for `appicon.png` / the size ladder / ico / icns went from a hardcoded `#000000` to `parts.field`. Light/dark adaptation and the "dark rendition must exist" release gate are unchanged — `assetutil` still asserts `NSAppearanceNameDarkAqua`; that layer's fill is simply no longer pure black.
+  - **Glyph no longer scaled by 0.8**: the old note claimed Icon Composer supplies its own safe area so the artwork should be shrunk first. In practice that double-pads the mark — the master's knot already spans 400/512 (78%) with a 56-unit margin, and Icon Composer adds another mask, so it read clearly too small in Dock / Launchpad. The master paths are now handed over at full size.
+  - Decisions 3 / 4 / 5 (post-build injection, sync gate, no framework migration) and the light paper field are unchanged. "Pure black in dark" in the title and historical decision text is legacy wording; this entry takes precedence.
+  - Verification: `node scripts/generate-icons.mjs` regenerated all 26 artefacts; `--check --tracked-only` and `check-brand.mjs` both pass.
+- 2026-11-24 (second pass, the mark still read small in Dock after installing locally): the "just drop `scale(0.8)`" call above was incomplete — the real squeeze came from the **layer canvas size**. Icon Composer lays each layer 1:1 on a **1024pt** canvas and only then masks it to the 824pt squircle; our `knot.svg` declared `viewBox/width/height = 512`, so the layer was placed at half size and the knot measured **36.4%** of the tile width (= master's 72.7% × 512/1024). Fix: `knot.svg` declares a 1024 canvas with the master's 512 grid `scale(2)`, measuring **72.8%** — matching the classic PNG ladder (72.7%).
+  - Measurement method: render the bundle icon at 512px through `NSWorkspace.icon(forFile:)` under an explicit `NSAppearance`, take the squircle bbox from alpha and the glyph bbox from luminance, then compare. That is the real Dock / Launchpad path; rendering `knot.svg` alone misses the canvas scaling entirely.
+  - The `scripts/generate-icons.mjs` comment was rewritten so nobody reverts to "512 is enough" again.

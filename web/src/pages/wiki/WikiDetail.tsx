@@ -177,17 +177,17 @@ export default function WikiDetail() {
           <h2 className={s.sectionTitle}>{t('wiki.sourceNotes')}</h2>
           <div className={s.chips}>
             {page.source_note_ids.map(nid => (
-              page.project_id === 0 ? (
-                <span key={nid} className={s.chip}>{t('wiki.noteRef', { n: nid })}</span>
-              ) : (
-                <Link
-                  key={nid}
-                  to={`/project/${page.project_id}?tab=notes&noteId=${nid}`}
-                  className={s.chipLink}
-                >
-                  {t('wiki.noteRef', { n: nid })}
-                </Link>
-              )
+              /* A note is addressed by its own id (ADR-0078), so this works for
+                 a global page's sources too — the note's project is not part of
+                 its address any more. */
+              <Link
+                key={nid}
+                to={`/note/${nid}`}
+                state={{ from: `/wiki/${page.id}` }}
+                className={s.chipLink}
+              >
+                {t('wiki.noteRef', { n: nid })}
+              </Link>
             ))}
           </div>
         </section>

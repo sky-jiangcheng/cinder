@@ -6,6 +6,11 @@ interface ScanPollingState {
   scanning: boolean
   message: string
   doneMessage: string
+  // Counters from the backend, so a caller can render its own localized
+  // progress line. `message` is assembled in Go and is English-only; a Chinese
+  // UI showing "Scanning 12/12..." is the reason these exist.
+  progress: number
+  total: number
 }
 
 // How often a healthy backend is polled, and how far the interval grows when
@@ -21,11 +26,18 @@ const MAX_FAILURES = 5
  * once it completes. Replaces the duplicated polling intervals in the
  * Dashboard (initial status check and post-trigger polling).
  */
-export function useScanPolling(onFinish: () => void): ScanPollingState & { start: (msg: string) => void } {
+export function useScanPolling(
+  // ok=false means the scan ended badly or the backend stopped answering. The
+  // dashboard needs the distinction: a finished scan is a toast, a failed one
+  // is an error the user may want to act on. Callers that only refresh ignore
+  // the argument.
+  onFinish: (ok: boolean) => void,
+): ScanPollingState & { start: (msg: string) => void } {
   const { t } = useTranslation()
   const [scanning, setScanning] = useState(false)
   const [message, setMessage] = useState('')
   const [doneMessage, setDoneMessage] = useState('')
+  const [counts, setCounts] = useState({ progress: 0, total: 0 })
   const timer = useRef<number | null>(null)
   // Consecutive failed polls, used to back the interval off.
   const failures = useRef(0)
@@ -64,10 +76,11 @@ export function useScanPolling(onFinish: () => void): ScanPollingState & { start
           setScanning(false)
           setMessage('')
           setDoneMessage(tRef.current('common.scanDone', { defaultValue: 'Scan complete' }))
-          onFinishRef.current()
+          onFinishRef.current(true)
           return
         }
         setMessage(s.message)
+        setCounts({ progress: s.progress, total: s.total })
       } catch {
         // A down backend is a normal state here (the local service may simply
         // not be running yet), but polling it every 2 seconds forever burns CPU
@@ -81,6 +94,7 @@ export function useScanPolling(onFinish: () => void): ScanPollingState & { start
           setScanning(false)
           setDoneMessage('')
           setMessage(tRef.current('common.failed', { defaultValue: 'Scan failed' }))
+          onFinishRef.current(false)
           return
         }
         delay = Math.min(POLL_INTERVAL * 2 ** failures.current, MAX_BACKOFF)
@@ -100,6 +114,7 @@ export function useScanPolling(onFinish: () => void): ScanPollingState & { start
         if (status.running || status.backfilling) {
           setScanning(true)
           setMessage(status.message)
+          setCounts({ progress: status.progress, total: status.total })
           poll()
         }
       })
@@ -110,6 +125,7 @@ export function useScanPolling(onFinish: () => void): ScanPollingState & { start
   const start = useCallback((msg: string) => {
     setScanning(true)
     setMessage(msg)
+    setCounts({ progress: 0, total: 0 })
     setDoneMessage('')
     // A fresh scan starts from the healthy interval, not from whatever backoff
     // the previous run had reached.
@@ -117,5 +133,5 @@ export function useScanPolling(onFinish: () => void): ScanPollingState & { start
     poll()
   }, [poll])
 
-  return { scanning, message, doneMessage, start }
+  return { scanning, message, doneMessage, progress: counts.progress, total: counts.total, start }
 }

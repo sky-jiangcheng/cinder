@@ -59,6 +59,14 @@
   --wails-draggable: drag;
 }
 
+.persistentPage {
+  display: contents;
+}
+
+.persistentPage[hidden] {
+  display: none;
+}
+
 .mainContent {
   flex: 1;
   max-width: 1280px;

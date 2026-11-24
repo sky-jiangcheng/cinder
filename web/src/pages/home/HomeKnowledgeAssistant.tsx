@@ -5,6 +5,10 @@ import DOMPurify from 'dompurify'
 import Icon from '../../components/Icon'
 import {
   askAIWithEvidenceStream,
+  runProgressiveSearch,
+  // The answer path still needs one complete evidence set before it can render
+  // anything (a half-answered question is not a partial answer), so it keeps the
+  // synchronous call; only the search-mode list renders progressively.
   searchAll,
   createNoteWithMeta,
   fileAnswerAsPage,
@@ -65,15 +69,13 @@ export interface DialogueMessage {
   localFallback?: boolean
 }
 
-// ADR-0056: this is a lazy route, so every top-level tab switch unmounts the
-// console. Keep a settled-message snapshot in localStorage instead of lifting
-// state or writing chat_threads (that table is the cross-client text contract,
-// which cannot carry evidence / search cards). Streaming drafts are excluded.
+// The console stays mounted after its first visit, so tab switches preserve the
+// live stream. localStorage is the reload snapshot; streaming drafts are excluded
+// because there is no stream to resume after a reload.
 const HISTORY_KEY = 'repotory.home.dialogue.v1'
 const HISTORY_LIMIT = 50
 
 export function serializeDialogue(messages: DialogueMessage[]): string {
-  // A remount has no stream to resume, so drafts never enter the snapshot.
   return JSON.stringify(messages.filter(m => !m.isStreaming).slice(-HISTORY_LIMIT))
 }
 
@@ -95,6 +97,7 @@ export function loadDialogue(): DialogueMessage[] {
 }
 
 interface Props {
+  active?: boolean
   projects: Project[]
   onToast: PushToast
   onGoToSettings: () => void
@@ -121,13 +124,13 @@ export function cardFromSearchHit(hit: SearchHit, index: number, projectName?: s
 // A todo has no per-row deep link — ProjectDetail only focuses ?noteId=, so an
 // id there would open the notes tab and highlight the note that happens to
 // share the number. Landing on the todos tab is the same rule the Knowledge
-// page uses (Knowledge.tsx).
+// page uses (Knowledge.tsx). A note, by contrast, has an address of its own
+// (/note/:id, ADR-0078) — it no longer travels through the project it lives in.
 export function knowledgeHref(item: EvidenceItem, fallbackProjectId: number): string {
   if (item.type === 'page') return `/wiki/${item.id}`
+  if (item.type === 'note') return `/note/${item.id}`
   const pid = item.project_id && item.project_id > 0 ? item.project_id : fallbackProjectId
-  return item.type === 'todo'
-    ? `/project/${pid}?tab=todos`
-    : `/project/${pid}?tab=notes&noteId=${item.id}`
+  return `/project/${pid}?tab=todos`
 }
 
 /**
@@ -158,12 +161,11 @@ export function matchProjects(
   return Array.from(matched.values()).slice(0, 6)
 }
 
-/** 一条检索命中的落点：笔记直接定位到那篇笔记，待办落到待办页签。 */
+/** 一条检索命中的落点：笔记直接到它自己的详情页（ADR-0078），待办落到待办页签。 */
 export function hitHref(hit: SearchHit): string {
+  if (hit.type === 'note') return `/note/${hit.id}`
   if (!hit.project_id || hit.project_id <= 0) return '/knowledge'
-  return hit.type === 'note'
-    ? `/project/${hit.project_id}?tab=notes&noteId=${hit.id}`
-    : `/project/${hit.project_id}?tab=todos`
+  return `/project/${hit.project_id}?tab=todos`
 }
 
 /**
@@ -278,6 +280,7 @@ function ConsoleInput({
 // --- 主组件 -------------------------------------------------------------------
 
 export default function HomeKnowledgeAssistant({
+  active = true,
   projects,
   onToast,
   onGoToSettings,
@@ -294,6 +297,9 @@ export default function HomeKnowledgeAssistant({
   const [searching, setSearching] = useState(false)
   // Only the latest search may clear the shared spinner.
   const searchSeqRef = useRef(0)
+  // Stops the polling of a superseded progressive search (ADR-0077). The
+  // backend job finishes regardless; this only ends the poll loop.
+  const searchCancelRef = useRef<(() => void) | null>(null)
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [messages, setMessages] = useState<DialogueMessage[]>(loadDialogue)
   const [tags, setTags] = useState<string[]>([])
@@ -310,6 +316,9 @@ export default function HomeKnowledgeAssistant({
     }, 200)
     return () => window.clearTimeout(timer)
   }, [messages])
+
+  // An orphaned poll would keep hitting the backend after the tab is gone.
+  useEffect(() => () => { searchCancelRef.current?.() }, [])
 
   // Mirror the newest settled answer into the shell's right rail. Only cards
   // from a finished message go out: a streaming draft's partial cards would
@@ -329,6 +338,7 @@ export default function HomeKnowledgeAssistant({
 
   // Check if AI chat endpoint is configured in settings
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     getConfig()
       .then(d => {
@@ -342,23 +352,24 @@ export default function HomeKnowledgeAssistant({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [active])
 
   // The idle stage's hot tags. One request, shared with the recommendation row.
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     listAllTags()
       .then(tg => { if (!cancelled) setTags(tg ?? []) })
       .catch(() => { if (!cancelled) setTags([]) })
     return () => { cancelled = true }
-  }, [])
+  }, [active])
 
   // Auto-scroll the stream as messages change or stream.
   useEffect(() => {
-    if (streamRef.current && messages.length > 0) {
+    if (active && streamRef.current && messages.length > 0) {
       streamRef.current.scrollTop = streamRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, active])
 
   // Seconds since the current ask started — the typing dots alone give zero
   // feedback and a local model's first token can take minutes.
@@ -405,6 +416,8 @@ export default function HomeKnowledgeAssistant({
       const q = rawQuery.trim()
       if (!q) return
       const seq = ++searchSeqRef.current
+      searchCancelRef.current?.()
+      searchCancelRef.current = null
       const targetProject = projects.find(p => p.id === scopeProjectId)
       const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       const userId = `q-${Date.now()}`
@@ -432,43 +445,51 @@ export default function HomeKnowledgeAssistant({
       ])
       setSearching(true)
 
-      try {
-        const hits = (await searchAll(q)) ?? []
+      // searchAll 只搜笔记与待办；按项目**名字**命中的项目在客户端补上，
+      // 与旧搜索页同一套口径。分组在两次回调里都要算：第一批是本地命中，
+      // 第二批是补上语义召回后的结果（ADR-0077）。
+      const paint = (hits: SearchHit[], done: boolean) => {
+        if (searchSeqRef.current !== seq) return
         const scoped = scopeProjectId === 0 ? hits : hits.filter(h => h.project_id === scopeProjectId)
         const groups = groupHitsByProject(scoped, projects)
-        // searchAll 只搜笔记与待办；按项目**名字**命中的项目在客户端补上，
-        // 与旧搜索页同一套口径。
         const needle = q.toLowerCase()
         const projectMatches =
           scopeProjectId === 0
             ? projects.filter(p => p.name.toLowerCase().includes(needle)).slice(0, 8)
             : []
-
-        if (searchSeqRef.current !== seq) return
         setMessages(prev =>
           prev.map(m =>
             m.id === resultId
-              ? { ...m, isStreaming: false, content: '', searchGroups: groups, projectMatches }
+              ? { ...m, isStreaming: !done, content: '', searchGroups: groups, projectMatches }
               : m,
           ),
         )
-      } catch (err) {
-        if (searchSeqRef.current !== seq) return
-        const detail = err instanceof Error ? err.message : String(err)
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === resultId
-              ? {
-                  ...m,
-                  isStreaming: false,
-                  content: `${t('search:searchFailed', { defaultValue: '检索失败' })}: ${detail}`,
-                }
-              : m,
-          ),
-        )
-      } finally {
-        if (searchSeqRef.current === seq) setSearching(false)
       }
+
+      const handle = runProgressiveSearch(q, {
+        onUpdate: job => {
+          if (searchSeqRef.current !== seq) return
+          paint(job.hits, job.state === 'done')
+          if (job.state === 'done') setSearching(false)
+        },
+        onError: (err: unknown) => {
+          if (searchSeqRef.current !== seq) return
+          const detail = err instanceof Error ? err.message : String(err)
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === resultId
+                ? {
+                    ...m,
+                    isStreaming: false,
+                    content: `${t('search:searchFailed', { defaultValue: '检索失败' })}: ${detail}`,
+                  }
+                : m,
+            ),
+          )
+          setSearching(false)
+        },
+      })
+      searchCancelRef.current = handle.cancel
     },
     [projects, scopeProjectId, t],
   )
@@ -838,6 +859,12 @@ export default function HomeKnowledgeAssistant({
   const idle = messages.length === 0
   const busy = asking || searching
 
+  // One shortcut hint, one place. "Enter 发送 / Shift+Enter 换行" used to appear
+  // twice (inside the placeholder AND as a footer chip) while the footer's
+  // left side repeated the welcome line's explanation of the two modes — three
+  // copies of what the mode switch and the placeholder already say. What is
+  // left: the placeholder states the task, the footer states the keys, and the
+  // footer's left side speaks only when there is something to warn about.
   const inputFooter = (
     <>
       {mode === 'ask' && configured === false ? (
@@ -851,9 +878,11 @@ export default function HomeKnowledgeAssistant({
           </span>
         </span>
       ) : (
-        <span>{t('home.consoleSub', { defaultValue: '问出带出处的答案，或直接搜出命中' })}</span>
+        <span />
       )}
-      <span>Enter ↵</span>
+      <span className={s.keyHint}>
+        {t('home.enterToSend', { defaultValue: 'Enter 发送 · Shift+Enter 换行' })}
+      </span>
     </>
   )
 
@@ -875,6 +904,16 @@ export default function HomeKnowledgeAssistant({
 
         <div className={s.headerRight}>
           <div className={s.modeSwitch} role="group" aria-label={t('home.modeLabel', { defaultValue: '检索模式' })}>
+            {/* Two single characters — 问 / 搜 — carried no information for
+                anyone who had not already used the page: the pair names
+                nothing, and both buttons look like a filter toggle. The label
+                now says what each mode produces, and the icon says it again
+                for the eye.
+
+                No aria-label on top of the visible text: an aria-label would
+                REPLACE the name "问答" with a longer sentence, so voice control
+                ("click 问答") would stop matching what the eye reads. The
+                explanation stays in `title`, where it belongs. */}
             <button
               type="button"
               className={`${s.modeBtn} ${mode === 'ask' ? s.modeBtnActive : ''}`}
@@ -882,7 +921,8 @@ export default function HomeKnowledgeAssistant({
               onClick={() => switchMode('ask')}
               title={t('home.modeAskHint', { defaultValue: '带出处的答案' })}
             >
-              {t('home.modeAsk', { defaultValue: '问' })}
+              <Icon name="bot" size={14} />
+              <span>{t('home.modeAsk', { defaultValue: '问答' })}</span>
             </button>
             <button
               type="button"
@@ -891,7 +931,8 @@ export default function HomeKnowledgeAssistant({
               onClick={() => switchMode('search')}
               title={t('home.modeSearchHint', { defaultValue: '命中列表' })}
             >
-              {t('home.modeSearch', { defaultValue: '搜' })}
+              <Icon name="search" size={14} />
+              <span>{t('home.modeSearch', { defaultValue: '搜索' })}</span>
             </button>
           </div>
 
@@ -947,7 +988,7 @@ export default function HomeKnowledgeAssistant({
               placeholder={
                 mode === 'search'
                   ? t('home.searchPlaceholder', { defaultValue: '搜笔记、待办与项目…' })
-                  : t('home.askPlaceholder', { defaultValue: '问点什么…（Enter 发送，Shift+Enter 换行）' })
+                  : t('home.askPlaceholder', { defaultValue: '问点什么…' })
               }
               busy={busy}
               stoppable={false}
@@ -1084,7 +1125,7 @@ export default function HomeKnowledgeAssistant({
                       <div className={s.bubbleUser}>{msg.content}</div>
                     ) : msg.kind === 'search' ? (
                       <div className={s.bubbleAssistant}>
-                        {msg.isStreaming ? (
+                        {msg.isStreaming && !msg.searchGroups ? (
                           <div className={s.typingIndicator}>
                             <span className={s.typingDot} />
                             <span className={s.typingDot} />
@@ -1093,11 +1134,23 @@ export default function HomeKnowledgeAssistant({
                         ) : msg.content ? (
                           <div className={s.markdownText}>{msg.content}</div>
                         ) : (
-                          <SearchResults
-                            groups={msg.searchGroups ?? []}
-                            projectMatches={msg.projectMatches ?? []}
-                            onAskAbout={handleAskAbout}
-                          />
+                          <>
+                            <SearchResults
+                              groups={msg.searchGroups ?? []}
+                              projectMatches={msg.projectMatches ?? []}
+                              onAskAbout={handleAskAbout}
+                            />
+                            {/* ADR-0077: the rows above are the local index's
+                                answer and are already final for a keyword
+                                query; the semantic arm is still embedding.
+                                Saying so is the difference between "still
+                                working" and "that's all there is". */}
+                            {msg.isStreaming && (
+                              <p className={s.searchRefining} role="status">
+                                {t('knowledge.refining')}
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
                     ) : (
@@ -1297,7 +1350,7 @@ export default function HomeKnowledgeAssistant({
               placeholder={
                 mode === 'search'
                   ? t('home.searchPlaceholder', { defaultValue: '搜笔记、待办与项目…' })
-                  : t('home.askPlaceholder', { defaultValue: '问点什么…（Enter 发送，Shift+Enter 换行）' })
+                  : t('home.askPlaceholder', { defaultValue: '问点什么…' })
               }
               busy={busy}
               stoppable={asking}

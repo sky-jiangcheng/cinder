@@ -80,19 +80,36 @@ func (s *Service) SearchNotesStrict(ctx context.Context, query string) ([]domain
 // first keeps the two ID spaces apart; the vector index only ever holds note
 // embeddings, so notes are the only subset it can extend.
 func (s *Service) SearchAll(ctx context.Context, query string) ([]domain.SearchHit, error) {
+	notes, todos, err := s.searchLexical(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	return s.fuseHits(ctx, query, notes, todos), nil
+}
+
+// searchLexical is stage one: the local FTS/LIKE pass plus provenance stamps.
+//
+// It is split out from SearchAll because the two stages have wildly different
+// costs. Measured on a real library (162 notes): this stage is ~3ms, while the
+// semantic arm's query embedding is a NETWORK round trip — 4–12s against a
+// remote embedding endpoint. Before the split every keystroke-triggered search
+// paid that round trip before showing anything at all (ADR-0077).
+//
+// The note/todo split lives here rather than in the caller: note IDs come from
+// project_notes and todo IDs from project_todos, both AUTOINCREMENT — id 1
+// exists in both tables and means different rows, so the two ID spaces must
+// never be fused together.
+func (s *Service) searchLexical(ctx context.Context, query string) (notes, todos []domain.SearchHit, err error) {
 	if strings.TrimSpace(query) == "" {
-		return []domain.SearchHit{}, nil
+		return []domain.SearchHit{}, []domain.SearchHit{}, nil
 	}
 	results, err := db.SearchAll(ctx, s.db, query)
 	if err != nil {
-		return nil, fmt.Errorf("search all: %w", err)
-	}
-	if results == nil {
-		results = []domain.SearchHit{}
+		return nil, nil, fmt.Errorf("search all: %w", err)
 	}
 	markLexicalRecall(results)
-	notes := make([]domain.SearchHit, 0, len(results))
-	todos := make([]domain.SearchHit, 0, len(results))
+	notes = make([]domain.SearchHit, 0, len(results))
+	todos = make([]domain.SearchHit, 0, len(results))
 	for _, h := range results {
 		if h.Type == "todo" {
 			todos = append(todos, h)
@@ -100,12 +117,25 @@ func (s *Service) SearchAll(ctx context.Context, query string) ([]domain.SearchH
 		}
 		notes = append(notes, h)
 	}
-	// Notes first (fused), then todos — the same shape db.SearchAll returns,
-	// so a lexical-only run keeps byte-identical ordering.
+	// Only note hits carry a source type; annotating the note slice is the
+	// whole job, and it mutates in place.
+	s.annotateSourceTypes(notes)
+	return notes, todos, nil
+}
+
+// fuseHits is stage two: the temporal and semantic recall arms over the note
+// subset, with the todos appended unchanged.
+//
+// Notes first (fused), then todos — the same shape db.SearchAll returns, so a
+// lexical-only run keeps byte-identical ordering. Both arms degrade to a no-op
+// on their own (semantic off, no embedder, unreachable endpoint, no vector
+// index), which is why this never returns an error: the worst case is stage
+// one's answer.
+func (s *Service) fuseHits(ctx context.Context, query string, notes, todos []domain.SearchHit) []domain.SearchHit {
 	fused := s.fuseTemporal(ctx, s.fuseSemantic(notes, query), query)
 	combined := append(fused, todos...)
 	s.annotateSourceTypes(combined)
-	return combined, nil
+	return combined
 }
 
 // markLexicalRecall stamps the base (FTS/LIKE) channel on every hit before

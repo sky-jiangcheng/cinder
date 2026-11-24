@@ -93,8 +93,11 @@ order: 27
 | [0075](0075-vscode-hindsight-experience-positioning.md) | 对标 VS Code / Hindsight 的体验结论——同层竞争、全栈差异与布局减法 | **Accepted（2026-11-24，用户要求补 ADR；只固化分析结论，不改代码/产品承诺）**：VS Code 三层（session 存储 / 云端 Memory / local memory + Chronicle）不可混为一谈，同层竞争仅三处（回忆入口 / Repository scope / 发现外部 session），均不覆盖 Cinder 的跨 agent 结构化结论 + 本地无账号 + 人审默认；布局结论是**确认既有减法**（0034/0038/0039/0042/0044/0050），不新开 UI 改造；Hindsight 不是存储层，重的是抽取 / consolidate / 重排 / 22 harness 接线 / 云运维全栈，三段出入的根因是商业公司走云平台化与多租户，目标函数不同而非能力落后清单。维持 ADR-0065 A 路线；明确不抄云 / 多租户 / 22 家覆盖竞赛 / traits / reflect；北极星仍是减少人工纠正次数 |
 | [0076](0076-appearance-aware-macos-app-icon.md) | 系统外观自适应 App 图标——浅色纸底，深色纯黑 | **Accepted（2026-11-24，用户要求桌面 App 图标参考 Claude 跟随系统，深色背景纯黑）**：品牌母图不变；新增由母图派生的 `build/AppIcon.icon/`（浅色纸底 + 墨结、深色纯黑 `#000000` + 纸结，无玻璃/阴影）；Wails v2 经典回退 `appicon.png`/ico/icns 改黑底纸结，旧系统浅色模式接受黑底；发版在 `wails build` 后签名前用 `xcrun actool` 编 `Assets.car`、注入 `CFBundleIconName=AppIcon`，`CFBundleIconFile` 保留；`assetutil` 断言 Dark Aqua 位存在；生成器同步门逐字节比对 `.icon` 源。不迁 Wails v3；Tinted/Clear 不单独设计 |
 
+| [0077](0077-progressive-search-job-polling.md) | 渐进式搜索——本地命中即刻返回，语义召回走异步 job 轮询 | **Accepted（2026-11-24，用户拍板「搜索改后端加异步 job + 轮询」）**：实测词法 3 ms / 查询嵌入 4–12 s（远程端点），旧 `SearchAll` 把两段合进一个同步响应，防抖后数秒空白被读作「搜索坏了」。拆成 `searchLexical`（同步返回，`hits` 必有值）+ `fuseHits`（后台时间轴/语义两臂）；`StartSearchJob`/`GetSearchJob` 两个 DesktopOnly 绑定，400 ms 轮询、TTL 2 min、上限 32、同 query 复用；语义关闭时直接 done、前端从不轮询；job 存内存不落库（避免把搜索历史写进知识库）；`SearchAll` 保留给 agent/CLI/问答证据链，两条路共用同一份融合定义；MCP 工具面与 CoreVersion 不变。真机：首答 4.5 ms，首批卡片 476 ms + 「正在补充语义结果…」，10.7 s 语义补入（20→44）。同批修扫描反馈（完成只写 visually-hidden → toast；后端英文进度 → 前端本地化计数） |
+| [0078](0078-note-detail-route.md) | 笔记有自己的地址——`/note/:id` 详情路由 | **Proposed（2026-11-24，用户提出「知识点进详情是详情页，笔记点进详情就进了项目」并选择落码）**：知识页有 `slug` + `/wiki/:id`，笔记是 `project_id NOT NULL` 的子记录、地址只能是 `/project/<pid>?tab=notes&noteId=<n>` 这对参数——`MoveNote` 换项目后旧链接即失效，且读一条笔记要穿过整个项目页。决策：新增 `/note/:id`，数据模型不动（笔记仍属于项目，地址不必经过项目，`GetNote` 已在绑定面上）；9 处跨页跳转改指笔记页，待办不动；`?noteId=` 保留为「管理入口」（老链接与「在项目中打开」仍可用）；返回来源走 `state.from`；项目内笔记卡改为「标题即链接 + 正文折叠（≈168px + 展开全文）」。代价：两处动作入口需同步维护、详情页刻意不含 AI 整理与新建、两种地址并存且无法互相重定向 |
+
 ## 约定
 
 - 每个重大不可逆决策一篇：背景 → 决策 → 后果
 - 被 superseded 的 ADR 保留原文与横幅，不删除
-- 新 ADR 从 `0077` 递增编号，文件名 `NNNN-kebab-title.md`
+- 新 ADR 从 `0078` 递增编号，文件名 `NNNN-kebab-title.md`

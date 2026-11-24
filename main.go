@@ -210,25 +210,46 @@ func appMenu() *menu.Menu {
 	return m
 }
 
-// spaFallback serves index.html for any GET request the embedded Assets could
-// not resolve. The browser build may use real SPA paths, so a direct load or
-// refresh of a deep link must receive the app shell. The desktop WebView uses
-// hash navigation to avoid custom-origin history limitations.
+// spaFallback serves requests the embedded Assets could not resolve. The
+// browser build may use real SPA paths, so a direct load or refresh of a deep
+// link must receive the app shell. The desktop WebView uses hash navigation
+// to avoid custom-origin history limitations.
+//
+// The two cases are NOT symmetric, and that asymmetry once broke the whole
+// desktop app (2026-11-24): assetserver injects the runtime script — the one
+// that creates window.go and every binding — ONLY into GET responses for "/"
+// or "/index.html" (see isRuntimeInjectionMatch). A deep-link GET
+// ("/dashboard") used to fall through here to the raw, UNINJECTED index.html:
+// no window.go, so the frontend decided it was in browser mode, routed with
+// BrowserRouter and sent every call as POST /api/rpc — which hits THIS
+// handler as a non-GET and answers 405. Health probes failed the same way and
+// the shell showed "后端不可用" forever, because every refresh of the deep
+// link re-entered the broken state.
+//
+// The fix makes the desktop shell incapable of entering that state: a
+// deep-link GET is redirected to its hash form ("/#/dashboard"), which the
+// INJECTED root page then routes client-side. A stray POST (the old broken
+// page retrying) still answers 405, but now with a log line so the next
+// diagnosis starts from evidence instead of a loop of guesses.
 type spaFallback struct{}
 
-// ServeHTTP serves the SPA shell for any path not found in the embedded assets.
+// ServeHTTP serves requests for paths the embedded assets do not contain.
 func (spaFallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
+		log.Printf("spaFallback: %s %s rejected (non-GET on the asset server)", r.Method, r.URL.Path)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	data, err := assets.ReadFile("web/dist/index.html")
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		return
+	// A deep-link GET would receive an UNINJECTED shell (assetserver injects
+	// the runtime only for "/" and "/index.html"), leaving the page without
+	// any bindings. Redirect to the hash form so the injected root page —
+	// already served for "/" — takes over and routes client-side.
+	redirect := "/#" + r.URL.Path
+	if q := r.URL.RawQuery; q != "" {
+		redirect += "?" + q
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(data)
+	log.Printf("spaFallback: GET %s -> redirect %s (deep links must load through the injected root)", r.URL.Path, redirect)
+	http.Redirect(w, r, redirect, http.StatusFound)
 }
 
 func init() {

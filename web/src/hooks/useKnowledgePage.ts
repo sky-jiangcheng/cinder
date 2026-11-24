@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  listAllNotes, listAllTags, searchAll, pinNote, importClaudeMemory, exportNoteAsMarkdown,
+  listAllNotes, listAllTags, runProgressiveSearch, pinNote, importClaudeMemory, exportNoteAsMarkdown,
   getProjects,
   type NoteWithProject, type Project, type SearchHit,
 } from '../api/client'
@@ -53,6 +53,12 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
   const [query, setQueryState] = useState('')
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [searchError, setSearchError] = useState(false)
+  // Search is an RPC round-trip (measured ~2.3s against a 23MB library), and
+  // the previous list stays on screen while it runs. Without this flag the
+  // field looked dead for those seconds — users typed, saw nothing move, and
+  // retyped. The flag starts when the debounce fires, not on the keystroke,
+  // so a pause mid-word does not flash the hint.
+  const [searching, setSearching] = useState(false)
   const [kindFilter, setKindFilter] = useState<KindFilter>('all')
   const [activeTag, setActiveTag] = useState<string | null>(null)
   // The topic filter (schema v27). Topics belong to a project, but this page
@@ -123,19 +129,49 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
     void fetchAll()
   }, [fetchAll])
 
+  // Progressive search (ADR-0077): the local index answers in milliseconds, the
+  // semantic arm's query embedding is a remote round trip of 4–12s. Submit,
+  // render what the local pass found, then swap in the refined list when the
+  // job reports done. The seq guard makes a superseded query's late update a
+  // no-op — including one that lands after the field was cleared.
+  const searchCancel = useRef<(() => void) | null>(null)
   const runSearch = useDebouncedCallback((q: string, ask: boolean) => {
-    if (!q.trim()) { setHits(null); setSearchError(false); return }
+    searchCancel.current?.()
+    searchCancel.current = null
+    if (!q.trim()) { setHits(null); setSearchError(false); setSearching(false); return }
     const seq = ++searchSeq.current
-    searchAll(q.trim())
-      .then(h => { if (seq === searchSeq.current) { setHits(h); setSearchError(false); if (ask) setAskMode(true) } })
-      .catch((e: unknown) => {
+    setSearching(true)
+    const handle = runProgressiveSearch(q.trim(), {
+      onUpdate: job => {
+        if (seq !== searchSeq.current) return
+        // hits === null is the job's "the start call itself failed" signal.
+        if (job.hits === null) {
+          setHits(null)
+          setSearchError(true)
+          setSearching(false)
+          if (ask) setAskMode(true)
+          return
+        }
+        setHits(job.hits)
+        setSearchError(false)
+        setSearching(job.state !== 'done')
+        if (ask) setAskMode(true)
+      },
+      onError: (e: unknown) => {
         if (seq !== searchSeq.current) return
         console.error('[useKnowledgePage] search failed', e)
         setHits(null)
         setSearchError(true)
+        setSearching(false)
         if (ask) setAskMode(true)
-      })
+      },
+    })
+    searchCancel.current = handle.cancel
   }, 300)
+
+  // Drop the poll when the page unmounts: an orphaned timer would keep hitting
+  // the backend after the tab is gone.
+  useEffect(() => () => { searchCancel.current?.() }, [])
 
   // setQuery IS the search entry point. The knowledge tab's skeleton owns the
   // query string (one field for both views, ADR-0038), and it drives the
@@ -192,10 +228,18 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
   // a chip that advertises a tag or a topic that does not exist in the scope
   // can only lead to an empty state, which reads as "the scope broke the
   // filter" rather than "there is nothing here".
-  const scopedNotes = useMemo(
-    () => (scopeProjectId ? notes.filter(n => n.project_id === scopeProjectId) : notes),
-    [notes, scopeProjectId],
-  )
+  //
+  // Handoff notes are EXCLUDED here: they live on the knowledge page's
+  // timeline view (their own home since 2026-11-24), not in the notes grid —
+  // one capture per session had the grid drowning in "Session Handoff …"
+  // cards. Filtering at the scope layer keeps every derived list (filters,
+  // tag chips, topic counts, pinned, recents) consistent. The timeline reads
+  // the same rows through ListHandoffTimeline, and a handoff stays reachable
+  // by id (deep links, search hits, the timeline's "open in notes" link).
+  const scopedNotes = useMemo(() => {
+    const inScope = scopeProjectId ? notes.filter(n => n.project_id === scopeProjectId) : notes
+    return inScope.filter(n => !parseTags(n.tags).includes('handoff'))
+  }, [notes, scopeProjectId])
 
   const filtered = useMemo(() => {
     let list = scopedNotes
@@ -267,7 +311,7 @@ export function useKnowledgePage(options: UseKnowledgePageOptions = {}) {
 
   return {
     // State
-    notes, tags: scopedTags, loading, error, query, hits: scopedHits, searchError, kindFilter, activeTag,
+    notes, tags: scopedTags, loading, error, query, hits: scopedHits, searchError, searching, kindFilter, activeTag,
     activeTopic, pinnedOnly, importing, message, newNotePicker, askMode, exportingId,
     // Derived
     filtered, projectNames, pinnedCount, recentNotes, topicCounts,

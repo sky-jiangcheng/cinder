@@ -108,18 +108,41 @@ export default function ProjectOverviewSection({ overview, trend, scope, onScope
         </div>
       )}
 
-      {(overview.languages?.length ?? 0) > 0 && (
-        <div className={s.langs}>
-          {overview.languages!.map(l => {
-            const max = overview.languages![0]?.count || 1
-            return (
-              <div key={l.language} className={s.langRow}>
-                <span className={s.langName}>{l.language}</span>
-                <div className={s.langBar}><div className={s.langFill} style={{ width: `${(l.count / max) * 100}%` }} /></div>
-                <span className={s.langCount}>{l.count}</span>
+      {/* Languages and contributors are both short ranked lists, so they share
+          one row: stacked, each one left a 600px hole at the right edge of a
+          1200px card. `auto-fit` keeps a lone list from looking half-finished
+          when the other one has no data. */}
+      {((overview.languages?.length ?? 0) > 0 || (overview.top_contributors?.length ?? 0) > 0) && (
+        <div className={s.split}>
+          {(overview.languages?.length ?? 0) > 0 && (
+            <div className={s.langs}>
+              {overview.languages!.map(l => {
+                const max = overview.languages![0]?.count || 1
+                return (
+                  <div key={l.language} className={s.langRow}>
+                    <span className={s.langName}>{l.language}</span>
+                    <div className={s.langBar}><div className={s.langFill} style={{ width: `${(l.count / max) * 100}%` }} /></div>
+                    <span className={s.langCount}>{l.count}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {(overview.top_contributors?.length ?? 0) > 0 && (
+            <div className={s.contributors}>
+              <h4 className={s.subTitle}>{t('project.topContributors')}</h4>
+              <div className={s.contribList}>
+                {overview.top_contributors!.map((c, i) => (
+                  <div key={i} className={s.contribItem}>
+                    <span className={s.contribRank}>#{i + 1}</span>
+                    <span className={s.contribName}>{c.author}</span>
+                    <span className={s.contribCount}>{c.count} {t('project.commitsUnit')}</span>
+                  </div>
+                ))}
               </div>
-            )
-          })}
+            </div>
+          )}
         </div>
       )}
 
@@ -137,21 +160,6 @@ export default function ProjectOverviewSection({ overview, trend, scope, onScope
                 <span className={s.depVersion}>{d.version}</span>
                 <span className={s.depSource}>{d.source}</span>
               </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {(overview.top_contributors?.length ?? 0) > 0 && (
-        <div className={s.contributors}>
-          <h4 className={s.subTitle}>{t('project.topContributors')}</h4>
-          <div className={s.contribList}>
-            {overview.top_contributors!.map((c, i) => (
-              <div key={i} className={s.contribItem}>
-                <span className={s.contribRank}>#{i + 1}</span>
-                <span className={s.contribName}>{c.author}</span>
-                <span className={s.contribCount}>{c.count} {t('project.commitsUnit')}</span>
-              </div>
             ))}
           </div>
         </div>

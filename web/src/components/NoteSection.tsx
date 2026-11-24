@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   listNotes, createNoteWithMeta, updateNoteFull, deleteNote, pinNote, moveNote,
@@ -493,6 +494,13 @@ function NoteCard({
 }) {
   const { t } = useTranslation()
   const { armed, click } = useConfirmClick(() => { void onDelete(note.id) })
+  // Long notes used to make the project's notes tab one very tall page: every
+  // card rendered its full markdown, so a project with a handful of handoffs
+  // was a wall of text to scroll past to reach the next note. A card now shows
+  // the beginning and offers the rest in place; the title opens the note's own
+  // page (/note/:id, ADR-0078) for reading at full width.
+  const [expanded, setExpanded] = useState(false)
+  const collapsible = note.content.length > 420 || note.content.split('\n').length > 6
 
   // The source badge is the derived TYPE (ADR-0022 决策 5), not the raw
   // source name: the server sends `source_type` and the shared badge
@@ -529,7 +537,9 @@ function NoteCard({
   return (
     <div className={`${s.card} ${note.pinned ? s.cardPinned : ''} ${highlighted ? s.cardFlash : ''}`} data-note-id={note.id}>
       <div className={s.titleRow}>
-        <span className={s.titleText}>{note.title || note.content.split('\n')[0] || t('project.noteWord')}</span>
+        <Link to={`/note/${note.id}`} className={s.titleText}>
+          {note.title || note.content.split('\n')[0] || t('project.noteWord')}
+        </Link>
         <div className={s.titleBadges}>
           {note.kind === 'knowledge' && <span className={s.badgeNoteSm}>{t('project.kinds.knowledge')}</span>}
           {/* The topic badge names the subject the note is filed under — the
@@ -544,7 +554,17 @@ function NoteCard({
           ><Icon name="pin" size={15} /></button>
         </div>
       </div>
-      <div className={`${s.body} markdown-body`} dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }} />
+      <div className={`${s.body} markdown-body ${collapsible && !expanded ? s.bodyClamped : ''}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }} />
+      {collapsible && (
+        <button
+          type="button"
+          className={s.expandBtn}
+          aria-expanded={expanded}
+          onClick={() => setExpanded(v => !v)}
+        >
+          {expanded ? t('project.collapseFull') : t('project.expandFull')}
+        </button>
+      )}
       {note.tags && (
         <div className={s.tagsRow}>
           {note.tags.split(',').map(tag => tag.trim()).filter(Boolean).map(tag => <span key={tag} className={s.tagChip}>#{tag}</span>)}

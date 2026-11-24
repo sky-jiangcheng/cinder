@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 // The API surface NoteSection touches. This file covers the topic layer's
@@ -90,7 +91,7 @@ const openEditor = async () => {
 
 describe('NoteSection topic filing', () => {
   it('keeps the chosen topic in the editor after the write lands', async () => {
-    render(<NoteSection projectId={12} />)
+    render(<MemoryRouter><NoteSection projectId={12} /></MemoryRouter>)
     await flush()
 
     const select = await openEditor()
@@ -107,7 +108,7 @@ describe('NoteSection topic filing', () => {
 
   it('renames the topic on the note cards as well as in the strip', async () => {
     mockListNotes.mockResolvedValue([{ ...note, topic_id: 7, topic_name: '支付网关' }])
-    render(<NoteSection projectId={12} />)
+    render(<MemoryRouter><NoteSection projectId={12} /></MemoryRouter>)
     await flush()
 
     expect(await screen.findByText('支付网关')).toBeTruthy()
@@ -128,7 +129,7 @@ describe('NoteSection topic filing', () => {
 
   it('drops the filing from the note cards when the topic is deleted', async () => {
     mockListNotes.mockResolvedValue([{ ...note, topic_id: 7, topic_name: '支付网关' }])
-    render(<NoteSection projectId={12} />)
+    render(<MemoryRouter><NoteSection projectId={12} /></MemoryRouter>)
     await flush()
 
     expect(await screen.findByText('支付网关')).toBeTruthy()

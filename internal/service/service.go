@@ -102,6 +102,10 @@ type Service struct {
 	// the search path was one extra round trip per query.
 	vecStore vectorStoreCache
 
+	// searchJobs holds the progressive-search handles the UI polls (ADR-0077).
+	// In-memory on purpose: see searchJobStore's comment.
+	searchJobs searchJobStore
+
 	// embedDimWarned keeps the "endpoint changed models" skip to one log line
 	// instead of one per drain tick. Reset whenever the embedding endpoint or
 	// model is reconfigured, which is exactly when the user deserves to hear

@@ -45,7 +45,10 @@ export default function KnowledgeCard({ note, exporting, onPin, onExport, onSele
           <Icon name="pin" size={15} />
         </button>
       </div>
-      <Link to={`/project/${note.project_id}?tab=notes&noteId=${note.id}`} className={s.body}>
+      {/* The card opens the note itself (ADR-0078). It used to hop through
+          /project/<pid>?noteId=, which both buried the note inside a project
+          page and made the link depend on where the note lived at click time. */}
+      <Link to={`/note/${note.id}`} className={s.body}>
         <div className={s.title}>{note.title || stripMarkdown(note.content, 40)}</div>
         {/* The subject the note is filed under (schema v27). On this page the
             project is shown next to it, so the pair reads as

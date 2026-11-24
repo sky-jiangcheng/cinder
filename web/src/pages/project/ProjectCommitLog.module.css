@@ -188,7 +188,14 @@
   flex: 1;
 }
 
+/* Two lines is the shape of a subject line; a 6-line wrap made every row a
+   different height and killed the timeline's scannability. Full text stays in
+   the title attribute and in the patch pane. */
 .feedMessage {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 13px;
   color: var(--text-primary);
   margin-bottom: 2px;
@@ -286,26 +293,33 @@
 }
 
 /* ---- open-book layout ---------------------------------------------------- */
+/* No border here: the log already sits inside a `.detail-section` card, and a
+   framed card inside a framed card read as a widget pasted into a page rather
+   than one surface. The book is the card's body — the tinted timeline column
+   and a hairline divider are enough to separate the two panes. */
 .book {
   display: grid;
   grid-template-columns: minmax(280px, 0.85fr) minmax(360px, 1.15fr);
   gap: 0;
   min-height: 420px;
-  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-primary);
 }
 
+/* Each pane scrolls on its own (the timeline and the patch are read
+   independently), but the page behind it must not keep scrolling once a pane
+   hits its end — that chain made the page jump while reading a diff. */
 .page {
   min-width: 0;
-  max-height: 640px;
+  max-height: min(72vh, 820px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px 16px;
 }
 
 .leftPage {
-  border-right: 2px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
 }
 
@@ -443,9 +457,14 @@
   flex-shrink: 0;
 }
 
+/* One scrollbar per file, not one per line. With `overflow-x` on each
+   `code` cell, a long line could only be read by dragging its own sliver of a
+   scrollbar — 40 independent scrollers in a diff. The row is as wide as its
+   longest line and the hunks container scrolls as a unit. */
 .hunks {
   display: flex;
   flex-direction: column;
+  overflow-x: auto;
 }
 
 .hunk + .hunk {
@@ -458,11 +477,14 @@
   color: var(--info);
   font-family: var(--font-mono);
   font-size: 10px;
+  white-space: pre;
 }
 
 .diffLine {
   display: grid;
   grid-template-columns: 42px 42px minmax(0, 1fr);
+  width: max-content;
+  min-width: 100%;
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
@@ -472,8 +494,7 @@
 .diffLine code {
   font-family: inherit;
   white-space: pre;
-  overflow-x: auto;
-  padding-right: 8px;
+  padding-right: 12px;
 }
 
 .lineNo {

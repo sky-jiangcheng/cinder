@@ -10,7 +10,7 @@
 class RepotoryCapture < Formula
   desc "Session-end capture CLI that writes Cinder handoff notes from Claude Code sessions"
   homepage "https://github.com/sky-jiangcheng/cinder"
-  version "2.44.0"
+  version "2.45.0"
   license "MIT"
 
   if OS.mac? && Hardware::CPU.arm?

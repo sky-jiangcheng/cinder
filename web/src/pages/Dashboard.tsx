@@ -35,7 +35,7 @@ function Dashboard() {
   const pushToast = useToast()
   const {
     summary, dailyGoal, date, sortKey, confirmScan, showStarredOnly,
-    displayedError, scanning, scanMsg, scanDoneMsg, loading,
+    displayedError, scanning, scanMsg, scanProgress, scanTotal, scanDoneMsg, loading,
     sorted, starredProjects, unstarredProjects,
     todoMap, noteMap, globalTodoCount, myAdded, isWorkday, sortOptions,
     setDate, setSortKey, setConfirmScan, setShowStarredOnly,
@@ -140,10 +140,9 @@ function Dashboard() {
                     : t('dashboard.weekend', { defaultValue: 'Happy weekend' })}
                 </div>
                 <div className={s.heroSub}>
-                  {t('dashboard.personalAdded')}{' '}
-                  <strong className={myAdded > 0 ? 'green' : 'muted-num'}>
-                    {myAdded > 0 ? `+${myAdded}` : '0'}
-                  </strong>{' · '}
+                  {/* The ring already carries today's number twice (percent and
+                      n / goal), so the line under it dropped the third copy and
+                      keeps only what nothing else on the hero states. */}
                   {t('dashboard.filesShort')} <strong>{summary?.my_files || 0}</strong> ·
                   {t('dashboard.reposInvolved', { count: summary?.repo_count || 0 })}
                 </div>
@@ -176,8 +175,15 @@ function Dashboard() {
                   <button className="btn btn-sm" onClick={() => setConfirmScan(false)}>{t('common.cancel')}</button>
                 </div>
               ) : (
-                <button className="btn btn-primary" onClick={() => setConfirmScan(true)} disabled={scanning}>
-                  {scanning ? (scanMsg || t('dashboard.scanning', { defaultValue: 'Processing...' })) : t('dashboard.rescan', { defaultValue: 'Rescan' })}
+                <button className="btn btn-secondary" onClick={() => setConfirmScan(true)} disabled={scanning}>
+                  {/* The counters are formatted here rather than downstream: the
+                      backend's message is assembled in Go and only exists in
+                      English, which in a Chinese UI read as "Scanning 12/12…". */}
+                  {scanning
+                    ? (scanTotal > 0
+                      ? t('common.scanProgress', { done: scanProgress, total: scanTotal, defaultValue: '扫描中 {{done}}/{{total}}…' })
+                      : (scanMsg || t('dashboard.scanning', { defaultValue: '扫描中…' })))
+                    : t('dashboard.rescan', { defaultValue: 'Rescan' })}
                 </button>
               )}
             </div>
@@ -346,15 +352,14 @@ function Dashboard() {
                 <ul className={s.handoffList}>
                   {entries.map(e => (
                     <li key={e.note_id}>
-                      {/* One row = one note, not one project. The Knowledge page
-                          already deep-links with ?tab=notes&noteId; ProjectDetail
-                          opens the notes tab and NoteSection scrolls to and
-                          flashes that exact note (ADR-0023). Landing on the
-                          project overview instead made the click a guess. */}
+                      {/* One row = one note, not one project. The row opens
+                          the note's own page (ADR-0078) and passes this page
+                          as the return target, so "back" comes here rather
+                          than to the knowledge tab. */}
                       <button
                         type="button"
                         className={s.handoffItem}
-                        onClick={() => navigate(`/project/${e.project_id}?tab=notes&noteId=${e.note_id}`)}
+                        onClick={() => navigate(`/note/${e.note_id}`, { state: { from: '/dashboard' } })}
                         title={t('handoff.openNote', { defaultValue: '打开这条交接记录 · {{name}}', name: e.project_name })}
                       >
                         <span className={s.handoffTitle}>{e.title}</span>

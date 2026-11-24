@@ -1,7 +1,6 @@
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { stripMarkdown } from '../utils/markdown'
 import DOMPurify from 'dompurify'
 import KnowledgeCard from './knowledge/KnowledgeCard'
 import KnowledgeOrganize from './knowledge/KnowledgeOrganize'
@@ -11,6 +10,7 @@ import PageShell from '../components/PageShell'
 import TabStrip, { type TabItem } from '../components/TabStrip'
 import { useKnowledgePage } from '../hooks/useKnowledgePage'
 import WikiPagesView from './Wiki'
+import HandoffTimelineBody from '../components/HandoffTimeline'
 import { getConfig, getProjects, type Project } from '../api/client'
 import s from './Knowledge.module.css'
 
@@ -44,7 +44,7 @@ import s from './Knowledge.module.css'
 // 预留钩子类：`knowledge`、`knowledge-section`、`large` —— 目前全站没有对应样式定义（P35 复核确认），
 // 保留在 markup 里作为将来挂样式的锚点，删留都不影响行为。
 
-type KnowledgeView = 'notes' | 'pages'
+type KnowledgeView = 'notes' | 'pages' | 'handoffs'
 
 /**
  * The notes drawer's own two views (ADR-0039 decision 3): the list itself,
@@ -57,7 +57,7 @@ type KnowledgeSub = 'notes' | 'organize'
 
 /** The deep-link surface: ?view= / ?q= / ?project= are shareable. */
 function readView(raw: string | null): KnowledgeView {
-  return raw === 'pages' ? 'pages' : 'notes'
+  return raw === 'pages' ? 'pages' : raw === 'handoffs' ? 'handoffs' : 'notes'
 }
 
 /**
@@ -70,6 +70,11 @@ function readSub(raw: string | null): KnowledgeSub {
 
 // Stable no-op so a hidden body's report callbacks keep a fixed identity.
 const noop = () => {}
+
+// How many tag chips the filter row shows before the toggle. Thirty-odd chips
+// used to push the note grid itself below the fold on a 1280×800 window — the
+// cloud is a filter, not the content, so it previews and expands on demand.
+const TAG_PREVIEW = 8
 
 /**
  * The search params for a given state. The view is left out when it is the
@@ -256,6 +261,15 @@ export default function Knowledge() {
               >
                 {t('knowledge.viewPages', { defaultValue: '知识页' })}
               </button>
+              <button
+                type="button"
+                className={`${s.viewTab} ${view === 'handoffs' ? s.viewTabActive : ''}`}
+                aria-pressed={view === 'handoffs'}
+                data-view="handoffs"
+                onClick={() => switchView('handoffs')}
+              >
+                {t('knowledge.viewHandoffs', { defaultValue: 'Handoff 时间轴' })}
+              </button>
             </div>
 
             {/* One field, two views — but the placeholder says what is actually
@@ -267,7 +281,11 @@ export default function Knowledge() {
                 type="search"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder={view === 'pages' ? t('wiki.searchPlaceholder') : t('knowledge.searchPlaceholder')}
+                placeholder={view === 'handoffs'
+                  ? t('knowledge.timelineSearchPlaceholder', { defaultValue: '搜索 Handoff…' })
+                  : view === 'pages'
+                    ? t('wiki.searchPlaceholder')
+                    : t('knowledge.searchPlaceholder')}
                 aria-label={view === 'pages' ? t('wiki.searchAria') : t('knowledge.searchAria')}
                 className={`form-input ${s.searchInput}`}
                 autoFocus
@@ -338,8 +356,10 @@ export default function Knowledge() {
           drawer's tab strip so both views read the same way: what you are
           looking at, and how much of it there is. The organize workbench has
           no list of its own to count, so the notes count steps aside while
-          it is open. */}
-      {!(view === 'notes' && sub === 'organize') && (
+          it is open. A live query steps aside for the same reason — the hits
+          list states its own count in its heading, and the bar used to show
+          "0 条笔记" above a list of 32 results while it waited. */}
+      {!(view === 'notes' && sub === 'organize') && !query.trim() && (
         <div className={s.resultCount} aria-live="polite">
           {t(countKey, { count })}
         </div>
@@ -367,6 +387,16 @@ export default function Knowledge() {
           onCount={view === 'pages' ? handleCount : noop}
           onError={view === 'pages' ? handleError : noop}
           onLoading={view === 'pages' ? handleLoading : noop}
+        />
+      </div>
+      <div hidden={view !== 'handoffs'}>
+        <HandoffTimelineBody
+          scope={scope}
+          query={query}
+          projects={projects}
+          onCount={view === 'handoffs' ? handleCount : noop}
+          onError={view === 'handoffs' ? handleError : noop}
+          onLoading={view === 'handoffs' ? handleLoading : noop}
         />
       </div>
     </PageShell>
@@ -403,9 +433,9 @@ function NotesBody({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const {
-    notes, tags, loading, error, hits, searchError, kindFilter, activeTag,
+    notes, tags, loading, error, hits, searchError, searching, kindFilter, activeTag,
     activeTopic, pinnedOnly, importing, message, newNotePicker, exportingId,
-    filtered, projectNames, recentNotes, topicCounts,
+    filtered, projectNames, topicCounts,
     setKindFilter, setActiveTag, setActiveTopic, setPinnedOnly, setNewNotePicker,
     setQuery, handlePin, handleExport, handleImport, fetchAll, flashMessage,
   } = useKnowledgePage({ projects, scopeProjectId: scope })
@@ -415,6 +445,13 @@ function NotesBody({
   // hide them), and the source chips filter notes by where they came from
   // (ADR-0022 pending item 2).
   const [sourceFilter, setSourceFilter] = useState('')
+  // The tag cloud is previewed, not printed in full; the toggle is per visit.
+  const [tagsExpanded, setTagsExpanded] = useState(false)
+  // The notes view this body renders, as a URL — used as `state.from` on a
+  // note hit so the note's detail page can return to THIS search result set
+  // (query and project scope intact) rather than to a bare list (ADR-0078).
+  const backToNotes = `/knowledge?view=notes${query ? `&q=${encodeURIComponent(query)}` : ''}${scope ? `&project=${scope}` : ''}`
+
   const recallLabel = (ch: string) =>
     ch === 'semantic' ? t('home.sourceSemantic')
       : ch === 'temporal' ? t('home.sourceTemporal')
@@ -517,6 +554,13 @@ function NotesBody({
                 <div className="knowledge-section">
                   <div className="section-header">
                     <h2>{t('knowledge.searchResults')} ({shownHits.length})</h2>
+                    {/* ADR-0077: the local index answered in milliseconds, so
+                        this list is already usable; only the semantic arm is
+                        still embedding. Saying so is the difference between
+                        "still working" and "that is all there is". */}
+                    {searching && (
+                      <p className={s.searchingLine} role="status">{t('knowledge.refining')}</p>
+                    )}
                   </div>
                   {hits.length === 0 ? (
                     <p className="empty-hint">{t('knowledge.noResults')}</p>
@@ -554,9 +598,13 @@ function NotesBody({
                               key={`${h.type}-${h.id}`}
                               to={
                                 h.type === 'note'
-                                  ? `/project/${h.project_id}?tab=notes&noteId=${h.id}`
+                                  /* A note hit opens the note itself (ADR-0078).
+                                     A todo still lands on its project's todos tab
+                                     — there is no per-todo route. */
+                                  ? `/note/${h.id}`
                                   : `/project/${h.project_id}?tab=todos`
                               }
+                              state={h.type === 'note' ? { from: backToNotes } : undefined}
                               className={s.hitItem}
                             >
                               <div className={s.hitHead}>
@@ -582,23 +630,11 @@ function NotesBody({
                 </div>
               ) : (
                 <>
-                  {recentNotes.length > 0 && (
-                    <div className={`knowledge-section ${s.recentSection}`}>
-                      <div className="section-header">
-                        <h2>{t('knowledge.recent')}</h2>
-                      </div>
-                      <div className={s.recentList}>
-                        {recentNotes.map(n => (
-                          <Link key={n.id} to={`/project/${n.project_id}?tab=notes&noteId=${n.id}`} className={s.recentItem}>
-                            <span className={s.recentTitle}>{n.title || stripMarkdown(n.content, 40)}</span>
-                            <span className={s.recentProject}>{n.project_name}</span>
-                            <span className={s.recentTime}>{n.updated_at.slice(0, 10)}</span>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
+                  {/* "最近编辑" used to sit here as five chips above the grid:
+                      the same notes, in the same order, as the first cards of
+                      the grid right below it. It cost ~90px of the first
+                      screen to repeat what was already visible, so the grid
+                      itself is now the recency list. */}
                   <div className={s.filters}>
                     <div className="filter-toggle">
                       <button className={`filter-btn ${kindFilter === 'all' ? 'active' : ''}`} onClick={() => setKindFilter('all')}>{t('knowledge.all')}</button>
@@ -625,7 +661,7 @@ function NotesBody({
                       >
                         {t('knowledge.allTags')}
                       </button>
-                      {tags.map(tg => (
+                      {(tagsExpanded ? tags : tags.slice(0, TAG_PREVIEW)).map(tg => (
                         <button
                           key={tg}
                           className={`${s.tagChip} ${activeTag === tg ? s.tagChipActive : ''}`}
@@ -634,6 +670,21 @@ function NotesBody({
                           #{tg}
                         </button>
                       ))}
+                      {/* The active tag stays visible even when it sits past the
+                          preview cut, otherwise the filter that is shaping the
+                          list below would have no chip to switch it off. */}
+                      {activeTag !== null && !(tagsExpanded ? tags : tags.slice(0, TAG_PREVIEW)).includes(activeTag) && (
+                        <button className={`${s.tagChip} ${s.tagChipActive}`} onClick={() => setActiveTag(null)}>
+                          #{activeTag}
+                        </button>
+                      )}
+                      {tags.length > TAG_PREVIEW && (
+                        <button className={s.tagMore} onClick={() => setTagsExpanded(v => !v)}>
+                          {tagsExpanded
+                            ? t('knowledge.tagsLess')
+                            : t('knowledge.tagsMore', { count: tags.length - TAG_PREVIEW })}
+                        </button>
+                      )}
                     </div>
                   )}
 

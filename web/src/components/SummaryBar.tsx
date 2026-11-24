@@ -63,14 +63,10 @@ function SummaryBar({ summary, globalTodoCount }: Props) {
         <span className={s.label}>{t('summaryBar.personalAdded')}</span>
         <span className={mine > 0 ? `${s.value} ${s.valueSuccess}` : `${s.value} ${s.valueZero}`}>{mine}</span>
       </div>
-      <div className={s.item}>
-        <span className={s.label}>{t('summaryBar.personalFiles')}</span>
-        <span className={s.value}>{summary.my_files || 0}</span>
-      </div>
-      <div className={s.item}>
-        <span className={s.label}>{t('summaryBar.date')}</span>
-        <span className={s.value}>{summary.is_workday ? t('common.workday') : t('common.weekend')}</span>
-      </div>
+      {/* "个人文件" and "日期/工作日" used to sit here too, but the hero card
+          states both (文件 n in its subtitle, and the date plus 工作日 in its
+          eyebrow). Six cells for four facts is what pushed this bar onto a
+          second row. */}
       {globalTodoCount !== undefined && globalTodoCount > 0 && (
         <div className={s.item}>
           <span className={s.label}>{t('summaryBar.todos')}</span>

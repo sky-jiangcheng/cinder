@@ -1,0 +1,271 @@
+/* The handoff timeline: a vertical rail of day groups, each entry a card on
+   the rail. The rail is the point — "when, in order" is the question this
+   view answers, so time reads before content. */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 40px;
+}
+
+.dayGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dayHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dayLabel {
+  color: var(--text-primary);
+}
+
+.dayCount {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.dayList {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* One continuous rail per day, dots sitting on it. */
+.dayList::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--border-color, var(--bg-tertiary));
+}
+
+.item {
+  position: relative;
+}
+
+.dot {
+  position: absolute;
+  left: -14px;
+  top: 16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, var(--text-secondary));
+  opacity: 0.55;
+  /* Keep the dot ON the rail: the rail runs at 4px inside the padded list,
+     the dot centers on it. */
+  transform: translateX(1px);
+}
+
+.item:first-child .dot {
+  opacity: 1;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color, transparent);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-secondary, transparent);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  transition: background var(--transition-fast, 0.15s), border-color var(--transition-fast, 0.15s);
+}
+
+.card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-strong, var(--border-color));
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.project {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.autoBadge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+.cardTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  /* Handoff titles are markdown headers; a long first line must not push the
+     excerpt off canvas. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardExcerpt {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.moreRow {
+  display: flex;
+  justify-content: center;
+}
+
+/* The handoff's OWN detail panel: opens under its card, inside the timeline.
+   Read-only markdown — editing a capture belongs to the notes page, which
+   stays reachable via the secondary link. */
+.detail {
+  margin: 6px 0 4px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-secondary, transparent);
+  overflow: hidden;
+}
+
+.detailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.detailMeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.detailLink {
+  color: var(--accent, var(--text-secondary));
+  text-decoration: none;
+}
+
+.detailLink:hover {
+  text-decoration: underline;
+}
+
+.detailClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detailClose:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.detailBody {
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.detailLoading {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detailError {
+  padding: 12px 14px;
+  margin: 0;
+  color: var(--danger, #c0392b);
+  font-size: 12px;
+}
+
+.moreBtn {
+  padding: 7px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s);
+}
+
+.moreBtn:hover {
+  background: var(--bg-tertiary);
+}
+
+.moreBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.empty {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}

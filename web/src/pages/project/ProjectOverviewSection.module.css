@@ -65,10 +65,23 @@
   gap: 6px;
 }
 
+/* Two short ranked lists side by side; a single child spans the row instead of
+   sitting in a half-width column with the other half empty. */
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px 28px;
+  align-items: start;
+}
+
+/* Capped rather than stretched: on a 1200px card the 1fr bar column grew to
+   ~800px, so a 41-line language drew a 2px sliver at the far left and its
+   count sat 800px away from the label it belonged to. */
 .langs {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-width: 560px;
 }
 
 .langRow {

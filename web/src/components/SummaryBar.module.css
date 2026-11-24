@@ -1,7 +1,12 @@
 /* SummaryBar — scoped module styles migrated from dashboard.css. */
 .bar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  /* One row, equal columns, whatever the card's width is. The old auto-fit
+     grid dropped to a second row as soon as the card was a little narrow,
+     which left the last two cells sitting under a four-cell row with no
+     column relationship to it — the numbers stopped being comparable. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   align-content: center;
   gap: 10px 16px;
   padding: 16px 20px;

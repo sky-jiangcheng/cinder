@@ -1,0 +1,174 @@
+/* ============================================
+   /note/:id — one note, in full (ADR-0078).
+
+   The reading surface mirrors /wiki/:id on purpose: both are "one record,
+   read by a person", so they read at the same measure (820px) and with the
+   same prose scale. Only classes exclusive to this page live here; .btn,
+   .markdown-body, .skeleton, .empty-* stay global.
+   ============================================ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  max-width: 820px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  margin-bottom: 16px;
+  width: fit-content;
+}
+
+.back:hover {
+  color: var(--accent);
+}
+
+/* The icon set has no left-arrow; the up-chevron rotated a quarter turn
+   points back, which is what the affordance means here. */
+.backIcon {
+  transform: rotate(-90deg);
+}
+
+.head {
+  margin-bottom: 20px;
+}
+
+.badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.kindBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+/* The project label is a LINK, not a badge-only label: the detail page's whole
+   point is that the note has an address of its own, so the project it belongs
+   to has to stay reachable from here. */
+.projectBadge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.projectBadge:hover {
+  text-decoration: underline;
+}
+
+.topicBadge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.title {
+  flex: 1;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+  letter-spacing: -0.015em;
+  /* A note's title is often its first line of text, which can be long. */
+  overflow-wrap: anywhere;
+}
+
+.footMeta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Doubled: this is a full-page reading surface and must win over the
+   single-class .markdown-body regardless of bundle order (same technique as
+   WikiDetail's .body.body). Prose = serif, 16px, 1.7 (ADR-0050 §⑤). */
+.body.body {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 28px 32px;
+  font-size: var(--text-prose);
+  line-height: var(--leading-prose);
+  color: var(--text-primary);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.tag {
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* "Open in project" is a navigation, not a mutation, so it is pushed to the
+   right and the destructive button follows it at the edge — the reading
+   actions stay on the left where the eye starts. */
+.secondaryLink {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  padding: 4px 2px;
+  margin-left: auto;
+}
+
+.secondaryLink:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .title {
+    font-size: 21px;
+  }
+
+  .body.body {
+    padding: 20px;
+  }
+
+  .secondaryLink {
+    margin-left: 0;
+  }
+}

@@ -383,9 +383,10 @@ describe('Dashboard (memory ring, ADR-0038 decision 5)', () => {
   })
 
   it('opens the exact handoff note, not the project overview', async () => {
-    // A row is one note, not one project. ProjectDetail already accepts
-    // ?tab=notes&noteId= (the Knowledge page uses it) and NoteSection scrolls
-    // to and flashes that note; landing on /project/:id made the click a guess.
+    // A row is one note, not one project. Since ADR-0078 the row opens the
+    // note's own page (/note/:id) instead of hopping through
+    // /project/<pid>?tab=notes&noteId= — the pair address both buried the note
+    // in a project page and broke once the note was moved.
     mockListRecentHandoffs.mockResolvedValue([
       entry({ note_id: 42, project_id: 7, project_name: 'Alpha' }),
     ])
@@ -397,7 +398,7 @@ describe('Dashboard (memory ring, ADR-0038 decision 5)', () => {
     fireEvent.click(row)
 
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/project/7?tab=notes&noteId=42')
+      expect(screen.getByTestId('location').textContent).toBe('/note/42')
     })
   })
 

@@ -5,6 +5,7 @@ import CommandPalette from './components/CommandPalette'
 import ToastHost, { type ToastItem } from './components/Toast'
 import { listenImportCompleted } from './api/transport'
 import { applyTheme, getStoredTheme, listenSystemTheme, storeTheme, type ThemeMode } from './utils/theme'
+import { stripDoubleClick, stripMouseDown } from './utils/windowTitlebar'
 import ErrorBoundary from './components/ErrorBoundary'
 import { getConnectionKind, subscribeConnection, startHealthPoll, isDesktopRuntime } from './api/transport'
 import { startUpdateCheck } from './api/updateStatus'
@@ -23,6 +24,7 @@ const ProjectDetail = lazy(() => import('./pages/ProjectDetail'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Knowledge = lazy(() => import('./pages/Knowledge'))
 const WikiDetail = lazy(() => import('./pages/wiki/WikiDetail'))
+const NoteDetail = lazy(() => import('./pages/notes/NoteDetail'))
 const Review = lazy(() => import('./pages/Review'))
 const CodeReview = lazy(() => import('./pages/CodeReview'))
 const NotFound = lazy(() => import('./pages/NotFound'))
@@ -239,7 +241,12 @@ function App() {
               onThemeChange={changeTheme}
             />
             <div className={s.mainColumn}>
-              <div className={s.titleStrip} aria-hidden="true" />
+              <div
+                className={s.titleStrip}
+                aria-hidden="true"
+                onMouseDown={stripMouseDown}
+                onDoubleClick={stripDoubleClick}
+              />
               <main id="main-content" className={s.mainContent} tabIndex={-1}>
                 <RoutedApp />
               </main>
@@ -269,13 +276,24 @@ function App() {
 // error instead of a black screen, and recovers when the route changes.
 // Suspense is placed OUTSIDE the ErrorBoundary so a failed chunk load is also
 // caught and displayed as a recoverable error rather than a blank page.
-function RoutedApp() {
+export function RoutedApp() {
   const { pathname } = useLocation()
+  const [homeMounted, setHomeMounted] = useState(pathname === '/')
+  if (pathname === '/' && !homeMounted) setHomeMounted(true)
+
+  const showHome = homeMounted || pathname === '/'
   return (
     <ErrorBoundary resetKey={pathname}>
+      {showHome && (
+        <Suspense fallback={<PageLoader />}>
+          <div className={s.persistentPage} hidden={pathname !== '/'}>
+            <Home />
+          </div>
+        </Suspense>
+      )}
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={null} />
           <Route path="/dashboard" element={<Dashboard />} />
           {/* Search and the wiki list are no longer top-level tabs (ADR-0038).
               Both routes survive as redirects so old bookmarks and the IDE
@@ -288,6 +306,13 @@ function RoutedApp() {
               /wiki/:id can be deep-linked and opened from the IDE plugins. */}
           <Route path="/wiki" element={<WikiRedirect />} />
           <Route path="/wiki/:id" element={<WikiDetail />} />
+          {/* A note gets an address of its own too (ADR-0078). Notes stay
+              project-owned in the database, but every cross-page link to one
+              used to be a /project/<pid>?noteId=<n> pair — an address that
+              both landed the reader inside a project page and broke as soon as
+              the note was moved. The project route still honours ?noteId= so
+              old links and the "open in project" hop keep working. */}
+          <Route path="/note/:id" element={<NoteDetail />} />
           <Route path="/review" element={<Review />} />
           <Route path="/code-review" element={<CodeReview />} />
           <Route path="/settings" element={<Settings />} />

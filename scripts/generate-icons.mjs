@@ -289,7 +289,7 @@ function smallAppSvg(smallText, fieldOverride = null) {
 }
 
 // Modern macOS app icons (Icon Composer .icon) carry per-appearance fills:
-// a paper field with an ink knot in light mode, and a PURE BLACK field with
+// a paper field with an ink knot in light mode, and the brand-ink field with
 // a paper knot in dark mode — the same inversion idea as the JetBrains dark
 // marketplace pair, applied at the OS icon layer. Icon Composer adds the
 // mask, glass and shadow, so the artwork here is the bare knot only.
@@ -300,13 +300,17 @@ function srgbColor(hex) {
   return `srgb:${channel(16)},${channel(8)},${channel(0)},1.000000`
 }
 
-function appearanceIconSource(parts) {
+function appearanceIconSource(parts, { dir = 'build/AppIcon.icon', layerName = 'knot' } = {}) {
   const paths = [...parts.letterform.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])
   if (!paths.length) throw new Error('generate-icons: cannot derive the appearance icon from the master')
-  // The master's knot spans 400/512; Icon Composer owns the outer mask and
-  // its own safe area, so scale the artwork down before handing it over.
-  const knot = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <g transform="translate(51.2 51.2) scale(0.8)">${paths.map((d) => `<path d="${d}"/>`).join('')}</g>
+  // Icon Composer places each layer 1:1 on a 1024pt canvas and only then masks
+  // it down to the 824pt squircle. A layer that declares 512 therefore lands at
+  // half size and the knot reads at 36% of the tile in Dock / Launchpad. The
+  // master's knot spans 400/512 (78%), so declare the canvas at 1024 and scale
+  // the 512 grid up by 2 — the mark then keeps its designed share of the tile.
+  const CANVAS = 1024
+  const knot = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}" width="${CANVAS}" height="${CANVAS}">
+  <g transform="scale(${CANVAS / 512})">${paths.map((d) => `<path d="${d}"/>`).join('')}</g>
 </svg>
 `
   const ink = srgbColor(parts.field)
@@ -314,14 +318,14 @@ function appearanceIconSource(parts) {
   const iconJson = {
     'fill-specializations': [
       { value: { solid: paper } },
-      { appearance: 'dark', value: { solid: 'srgb:0.000000,0.000000,0.000000,1.000000' } },
+      { appearance: 'dark', value: { solid: ink } },
     ],
     groups: [
       {
         layers: [
           {
-            name: 'knot',
-            'image-name': 'knot.svg',
+            name: layerName,
+            'image-name': `${layerName}.svg`,
             'fill-specializations': [
               { value: { solid: ink } },
               { appearance: 'dark', value: { solid: paper } },
@@ -337,8 +341,8 @@ function appearanceIconSource(parts) {
     'supported-platforms': { squares: 'shared' },
   }
   return {
-    'build/AppIcon.icon/icon.json': `${JSON.stringify(iconJson, null, 2)}\n`,
-    'build/AppIcon.icon/Assets/knot.svg': knot,
+    [`${dir}/icon.json`]: `${JSON.stringify(iconJson, null, 2)}\n`,
+    [`${dir}/Assets/${layerName}.svg`]: knot,
   }
 }
 
@@ -519,9 +523,11 @@ async function main() {
   const parts = extractBrandParts(svgText)
   const brandSvg = { normal: svg, small: smallSvgText }
   // Cinder's legacy OS icon (Wails' single appicon.png and its ico/icns
-  // ladders) is the pure-black dark rendition. Modern macOS gets the full
-  // light/dark pair from AppIcon.icon below; older macOS keeps a black tile.
-  const cinderAppField = '#000000'
+  // ladders) uses the brand ink field, same as the master. Modern macOS gets
+  // the full light/dark pair from AppIcon.icon below; older macOS keeps the
+  // ink tile. ADR-0076 originally specified pure black here; reverted after
+  // the black tile read as off-brand and too heavy in the Dock.
+  const cinderAppField = parts.field
   const appSvg = {
     normal: appMarkSvg(parts, 'Cinder', cinderAppField),
     small: smallAppSvg(smallSvgText, cinderAppField),
@@ -907,6 +913,29 @@ async function main() {
     } else {
       fs.writeFileSync(agentIcnPath, agentIcn)
       console.log(`  ✓ agent icons: icon.icns (${ICNS_SLOTS.length} PNG chunks, app domain)`)
+    }
+
+    // The agent's macOS appearance-aware app icon: the same light/dark
+    // inversion scheme as the desktop app's build/AppIcon.icon, derived from
+    // the Warden master (8-shape glyph, layer name "glyph"). Tauri's bundler
+    // only reads icons/icon.icns, so scripts/apply-macos-app-icon.sh in the
+    // agent repo compiles this into Assets.car and points CFBundleIconName at
+    // it — the icns above stays as the classic fallback for macOS < 26.
+    const wardenAppearanceIcon = appearanceIconSource(wardenParts, {
+      dir: 'src-tauri/AppIcon.icon',
+      layerName: 'glyph',
+    })
+    for (const [rel, content] of Object.entries(wardenAppearanceIcon)) {
+      const target = path.join(path.resolve(agentRepo), rel)
+      const buf = Buffer.from(content)
+      if (check) {
+        if (!fs.existsSync(target)) stale.push(`${target} (missing)`)
+        else if (sha(buf) !== sha(fs.readFileSync(target))) stale.push(`${target} (stale)`)
+      } else {
+        fs.mkdirSync(path.dirname(target), { recursive: true })
+        fs.writeFileSync(target, buf)
+        console.log(`  ✓ agent icon: ${rel} (macOS appearance-aware app icon)`)
+      }
     }
 
     // The macOS menu-bar icon is a TEMPLATE image: the Warden glyph alone,

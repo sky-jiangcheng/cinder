@@ -24,6 +24,7 @@ import type {
   ImportResult,
   ImportRun,
   HandoffResult,
+  HandoffTimelineEntry,
   KnowledgeSyncStatus,
   MergeCandidateReport,
   WikiLinkSuggestion,
@@ -369,6 +370,97 @@ export function searchAll(query: string): Promise<SearchHit[]> {
   }).then(d => d ?? [])
 }
 
+/** A progressive search handle (ADR-0077). `hits` is populated on arrival. */
+export interface SearchJob {
+  id: string
+  query: string
+  /** 'refining' — local hits in hand, semantic arm still running; 'done' — final. */
+  state: 'refining' | 'done'
+  /** Always populated: the job hands over the local hits with the submission. */
+  hits: SearchHit[]
+}
+
+/**
+ * Starts a progressive search. Returns as soon as the local index has answered
+ * (milliseconds); the semantic arm lands later via {@link getSearchJob}.
+ *
+ * With semantic search off the job comes back `done` — the caller should then
+ * never poll, which is why this returns the state rather than a promise of a
+ * final list.
+ */
+export function startSearchJob(query: string): Promise<SearchJob> {
+  return call<SearchJob>({
+    method: 'StartSearchJob',
+    args: [query],
+    path: `/search/job?q=${encodeURIComponent(query)}`,
+  }).then(d => ({ id: d?.id ?? '', query: d?.query ?? query, state: d?.state ?? 'done', hits: d?.hits ?? [] }))
+}
+
+export function getSearchJob(id: string): Promise<SearchJob> {
+  return call<SearchJob>({
+    method: 'GetSearchJob',
+    args: [id],
+    path: `/search/job/${encodeURIComponent(id)}`,
+  }).then(d => ({ ...d, hits: d?.hits ?? [] }))
+}
+
+// 400ms: the poll is a cheap in-memory read on the backend (the expensive work
+// is the embed it is waiting for), so a fast tick keeps the "results improved"
+// moment close to the arrival, while two or three ticks per second stay
+// invisible on the wire.
+const SEARCH_JOB_POLL_MS = 400
+// A job is done or gone within a minute of starting (the backend bounds the
+// embed); stopping after this many ticks keeps a dead backend from being
+// polled forever.
+const SEARCH_JOB_MAX_POLLS = 150
+
+/**
+ * Runs a progressive search start-to-finish, invoking `onUpdate` twice at most:
+ * once with the local hits, once with the refined ones.
+ *
+ * Returns a cancel function. Cancelling stops polling only — the backend job
+ * finishes on its own and its result is simply unread, which is the behaviour
+ * a query typed over needs.
+ */
+export function runProgressiveSearch(
+  query: string,
+  handlers: { onUpdate: (job: SearchJob) => void; onError: (err: unknown) => void },
+): { cancel: () => void } {
+  let cancelled = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  const poll = async (id: string, ticks: number): Promise<void> => {
+    if (cancelled || ticks >= SEARCH_JOB_MAX_POLLS) return
+    let job: SearchJob
+    try {
+      job = await getSearchJob(id)
+    } catch {
+      // Expired, or the backend restarted: the local hits already on screen are
+      // the best answer available, and that is exactly what the UI is showing.
+      return
+    }
+    if (cancelled) return
+    handlers.onUpdate(job)
+    if (job.state === 'done') return
+    timer = setTimeout(() => void poll(id, ticks + 1), SEARCH_JOB_POLL_MS)
+  }
+
+  startSearchJob(query)
+    .then(job => {
+      if (cancelled) return
+      handlers.onUpdate(job)
+      if (job.state !== 'done' && job.id) void poll(job.id, 0)
+    })
+    .catch(handlers.onError)
+
+  return {
+    cancel: () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    },
+  }
+}
+
 // --- Todos ------------------------------------------------------------------------
 
 export function listTodos(projectId: number): Promise<Todo[]> {
@@ -475,6 +567,24 @@ export function listNotes(projectId: number): Promise<Note[]> {
     args: [projectId],
     path: `/notes?project_id=${projectId}`,
   }).then(d => d ?? [])
+}
+
+/**
+ * getNote reads ONE note in full, by id alone.
+ *
+ * Notes are project-owned in the schema (project_notes.project_id is NOT
+ * NULL), but a note is also a record a person reads and shares on its own —
+ * so the detail route addresses it by id (/note/:id, ADR-0078) instead of
+ * through the project it currently lives in. `getNote` is the whole backend
+ * contract that route needs: the note carries its own project_id, which is
+ * what the page uses for the scope label and the "open in project" link.
+ */
+export function getNote(noteId: number): Promise<Note> {
+  return call<Note>({
+    method: 'GetNote',
+    args: [noteId],
+    path: `/notes/${noteId}`,
+  })
 }
 
 export function createNote(projectId: number, content: string): Promise<Note> {
@@ -677,6 +787,15 @@ export function diffNoteVersions(noteId: number, versionId: number): Promise<str
 
 export function listAllNotes(): Promise<NoteWithProject[]> {
   return call<NoteWithProject[]>({ method: 'ListAllNotes', path: '/notes/all' }).then(d => d ?? [])
+}
+
+/**
+ * listHandoffTimeline reads every handoff note across projects, newest first,
+ * as the knowledge page's timeline cards. `limit` grows as the user asks for
+ * more ("load more"); the server clamps the window.
+ */
+export function listHandoffTimeline(limit: number): Promise<HandoffTimelineEntry[]> {
+  return call<HandoffTimelineEntry[]>({ method: 'ListHandoffTimeline', args: [limit] }).then(d => d ?? [])
 }
 
 export function listAllTags(): Promise<string[]> {

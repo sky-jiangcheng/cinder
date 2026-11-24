@@ -80,7 +80,10 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
   // right after that call was a lie that also vanished after 3s (the banner
   // timeout), leaving the button idle while the scan was still running. Poll
   // the real status instead, exactly like the dashboard does.
-  const { scanning, message: scanMsg, doneMessage: scanDoneMsg, start: startScanPolling } = useScanPolling(() => {})
+  const {
+    scanning, message: scanMsg, doneMessage: scanDoneMsg,
+    progress: scanProgress, total: scanTotal, start: startScanPolling,
+  } = useScanPolling(() => {})
   const [importing, setImporting] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   // Remote backup (ADR-0025 L2): an S3-compatible push of the daily snapshot.
@@ -320,7 +323,13 @@ export default function ActionsTab({ initialConfig, showMessage }: Props) {
         <p className="section-desc">{t('settings.actionsDesc')}</p>
         <div className={s.actionRow}>
           <button className="btn btn-primary" onClick={handleRescan} disabled={scanning}>
-            {scanning ? (scanMsg || t('common.scanning', { defaultValue: 'Scanning…' })) : t('settings.rescanAll')}
+            {/* Counters, not the backend's message: that one is English-only
+                and this UI is localized. */}
+            {scanning
+              ? (scanTotal > 0
+                ? t('common.scanProgress', { done: scanProgress, total: scanTotal, defaultValue: 'Scanning {{done}}/{{total}}…' })
+                : (scanMsg || t('common.scanning', { defaultValue: 'Scanning…' })))
+              : t('settings.rescanAll')}
           </button>
           {/* The done message is a live region rather than showMessage(): the
               banner clears after 3s, which is shorter than a typical scan, so

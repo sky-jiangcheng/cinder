@@ -1,6 +1,6 @@
 # ADR-0076：系统外观自适应 App 图标——浅色纸底，深色纯黑
 
-- 状态：**Accepted（2026-11-24，用户要求桌面 App 图标参考 Claude 做系统适配，深色模式背景纯黑）**
+- 状态：**Accepted，但决策 1 / 2 的「纯黑」部分已于 2026-11-24 当日回退为品牌墨色 `#34322D`（见「落地记录」末条）——保留明暗系统适配，深色不再用纯黑；字形放大回母图满幅。文内历史决策段保留原样，回退以落地记录为准**
 - 日期：2026-11-24
 - 关联：[ADR-0050](0050-family-design-standard.md)（家族色板）、[ADR-0052](0052-the-knot-brand-mark.md)（The Knot 母图与四域纪律）、`scripts/generate-icons.mjs`、`scripts/apply-macos-app-icon.sh`
 
@@ -36,3 +36,11 @@ Wails v2 只从 `build/appicon.png` 生成一张 `iconfile.icns`，并由 `CFBun
 ## 落地记录
 
 - 2026-11-24：生成器中新增 `.icon` 派生与黑色经典回退；新增 `scripts/apply-macos-app-icon.sh`；release workflow 在 Wails 构建后注入图标。本地 `actool` 编译、`assetutil` 深色位断言、模拟 `.app` 注入、`ictool` 明暗预览、`generate-icons --check --tracked-only` 与 `check-brand.mjs` 全过。
+- 2026-11-24（同日回退，用户反馈「偏差太大、图案缩小、不适配」）：
+  - **深色背景纯黑 → 品牌墨色 `#34322D`**（`icon.json` 的 dark `fill-specializations` 改用母图 ink token，`appicon.png` / 尺寸阶梯 / ico / icns 的 `cinderAppField` 从写死 `#000000` 改为 `parts.field`）。系统明暗适配与「深色位必须存在」的发布门**不变**——`assetutil` 仍断言 `NSAppearanceNameDarkAqua`，只是深色那层的底色不再是纯黑。
+  - **字形去掉 `scale(0.8)`**：原注释称「Icon Composer 自带安全区所以先缩小」，实测这是**双重留白**——母图结已占 400/512（78%）并留 56 单位边距，Icon Composer 再套一层 mask 后字形在 Dock / Launchpad 里明显偏小。现在把母图路径满幅交给 `.icon`，不再预缩。
+  - 决策 3 / 4 / 5（发版注入、同步门、不迁框架）与浅色纸底不变；中文标题「深色纯黑」为历史措辞，以本条为准。
+  - 校验：`node scripts/generate-icons.mjs` 重生成 26 项；`--check --tracked-only` 与 `check-brand.mjs` 全过。
+- 2026-11-24（第二轮，装到本机后 Dock 里图案仍偏小）：上面那条「去掉 `scale(0.8)` 就够」的判断不完整——真正的压缩来自**图层画布尺寸**。Icon Composer 把每层按 1:1 铺在 **1024pt** 画布上，再由系统裁到 824pt squircle；我们的 `knot.svg` 只声明 `viewBox/width/height = 512`，于是图层被当成半尺寸摆在 1024 画布里，实测结只占方块宽 **36.4%**（= 母图 72.7% × 512/1024）。修法：`knot.svg` 声明 1024 画布并把母图 512 网格 `scale(2)`，实测回到 **72.8%**，与经典 PNG 阶梯（72.7%）一致。
+  - 度量口径：用 `NSWorkspace.icon(forFile:)` 在指定 `NSAppearance` 下把 bundle 图标渲染成 512px，再按 alpha 取 squircle bbox、按亮度取字形 bbox 求比值——这是 Dock / Launchpad 的真实路径，光看 `knot.svg` 单独渲染会漏掉画布缩放。
+  - `scripts/generate-icons.mjs` 注释同步改写，避免以后有人又按「512 就够」回退。
