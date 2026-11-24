@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [2.44.0] - 2026-11-24
+
 ### 变更
 - **桌面 App 图标跟随系统外观，深色模式纯黑（2026-11-24，ADR-0076）**：品牌母图未动；新增从母图派生的 `build/AppIcon.icon/`（Icon Composer 源：浅色 `#F7F4EE` 纸底 + `#34322D` 墨结，深色 **`#000000` 纯黑** + `#F7F4EE` 纸结，图形按 0.8 缩放，无玻璃/阴影/半透明）。Wails v2 只读单张 `appicon.png`，故经典回退（appicon.png / 尺寸阶梯 / ico / icns）一律改黑底纸结：旧 macOS 深色直接纯黑，旧系统浅色接受黑底，现代系统由 `Assets.car` 覆盖。新增 `scripts/apply-macos-app-icon.sh`：发版在 `wails build` 后、签名前用 `xcrun actool` 编 `Assets.car` 注入 `.app/Contents/Resources/`，写 `CFBundleIconName=AppIcon`，保留 `CFBundleIconFile` 作旧系统回退；`assetutil` 断言 `NSAppearanceNameDarkAqua` 存在，缺深色位直接失败。生成器同步门逐字节比对 `.icon` 源；Windows / Linux OS 图标、favicon、IDE 图标与应用内 BrandMark 全部不变。验证：actool 编译、assetutil 深色位、模拟 .app 注入、ictool 明暗预览、`generate-icons --check --tracked-only` 与 `check-brand.mjs` 全过。
 - **对标体验结论补 ADR-0075（2026-11-24）**：把 VS Code / Hindsight 两轮对标里未进 ADR 的三组结论固化（中英双份 + 两份索引）。VS Code 三层（本地 session 存储 / 云端 Copilot Memory + sync / local memory + Chronicle）不可混为一谈；同层竞争只有回忆入口、Repository scope、发现外部 session 三处，都不覆盖 Cinder 的跨 agent 结构化结论 + 本地无账号 + 人审默认。布局结论是**确认既有减法**（ADR-0034/0038/0039/0042/0044/0050），不新开 UI 改造，后续任何布局动作须有真机证据 + 纠正次数对照并单开 ADR。Hindsight 不是存储层——重的是 retain 抽取 / consolidate / 四路检索 + 重排 / 22 harness 接线 / 云运维；三段出入的根因是商业公司走云平台化与多租户，目标函数不同而非能力落后清单。维持 ADR-0065 A 路线，明确不抄云 / 多租户 / 覆盖面竞赛 / traits / reflect；北极星仍是减少人工纠正次数。本篇不改代码、schema、MCP 工具面与 CoreVersion。
