@@ -55,7 +55,12 @@ test("probeModels walks candidates on 404 and adopts the base that answered", as
     },
     async () => {
       const result = await probeModels("https://api.x.com", "k");
-      assert.deepEqual(seen, ["https://api.x.com/models", "https://api.x.com/v1/models"]);
+      // 404 先同 URL 重试一次（瞬时风控/边缘抖动兜底），仍 404 才换下一个候选。
+      assert.deepEqual(seen, [
+        "https://api.x.com/models",
+        "https://api.x.com/models",
+        "https://api.x.com/v1/models",
+      ]);
       assert.deepEqual(result.models, ["m1", "m2"]);
       assert.equal(result.resolvedBaseUrl, "https://api.x.com/v1");
     },
@@ -94,7 +99,9 @@ test("probeChat walks candidates on the relay-gateway 400 and lands on /v1", asy
     },
     async () => {
       const result = await probeChat("https://relay.example.com", "m", "k");
+      // relay 400 同样先同 URL 重试一次，再换 /v1 候选。
       assert.deepEqual(seen, [
+        "https://relay.example.com/chat/completions",
         "https://relay.example.com/chat/completions",
         "https://relay.example.com/v1/chat/completions",
       ]);

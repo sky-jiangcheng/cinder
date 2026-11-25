@@ -116,6 +116,22 @@ function truncated(text: string, max: number): string {
 }
 
 /**
+ * Turn a raw error body into something a human can act on. Gateways and
+ * misrouted requests frequently answer with a whole HTML page (Vercel's
+ * __next_error__ 404 page, a router's error template) — pasting 300
+ * characters of markup into the status line helped nobody. An HTML body is
+ * summarized to one line naming the likely causes; JSON and plain-text
+ * bodies keep the provider's own words. Mirrors aiclient.BodySummary.
+ */
+function bodySummary(text: string): string {
+  const t = text.trim();
+  if (/^<!doctype html|^<html/i.test(t)) {
+    return "(an HTML page, not an API answer — usually a provider risk-control interception of non-browser requests, a proxy/gateway detour, or a wrong path; it was retried once — if it keeps failing, check the Base URL, any local proxy, or try a different network)";
+  }
+  return truncated(t, 300);
+}
+
+/**
  * Is this response a wrong-path answer worth another candidate URL?
  *
  * A 404 always is — the classic wrong-shape probe. A 400 whose body is the
@@ -155,7 +171,22 @@ export async function probeModels(rawBase: string, apiKey: string): Promise<Prob
       lastNet = err;
       continue;
     }
-    const text = await res.text().catch(() => "");
+    let text = await res.text().catch(() => "");
+    // Transient-flavour rejection (404 page / relay 400): retry the SAME url
+    // once after a short backoff — provider risk-control windows and edge
+    // blips are exactly the failure a single retry absorbs. Probe traffic is
+    // side-effect free so the retry can never double-bill. Mirrors
+    // aiclient.probeGet.
+    if (pathRejected(res.status, text)) {
+      await new Promise((r) => setTimeout(r, 1200));
+      try {
+        res = await fetchWithTimeout(url, { headers: authHeaders(apiKey) }, PROBE_TIMEOUT_MS);
+        text = await res.text().catch(() => "");
+      } catch (err) {
+        lastNet = err;
+        continue;
+      }
+    }
     if (pathRejected(res.status, text)) {
       lastStatus = res.status;
       lastBody = text;
@@ -165,7 +196,7 @@ export async function probeModels(rawBase: string, apiKey: string): Promise<Prob
       throw new Error(`auth failed (${res.status}) — check the API key`);
     }
     if (res.status !== 200) {
-      throw new Error(`AI endpoint returned ${res.status}: ${truncated(text, 200)}`);
+      throw new Error(`AI endpoint returned ${res.status}: ${bodySummary(text)}`);
     }
     const models = parseProbeModels(text);
     if (!models.length) throw new Error("endpoint returned no models");
@@ -173,7 +204,7 @@ export async function probeModels(rawBase: string, apiKey: string): Promise<Prob
   }
   if (lastNet !== undefined) throw new Error(networkHint(lastNet));
   throw new Error(
-    `no /models path found — tried: ${candidates.join(", ")} (last status ${lastStatus}: ${truncated(lastBody, 120)})`,
+    `no /models path found — tried: ${candidates.join(", ")} (last status ${lastStatus}: ${bodySummary(lastBody)})`,
   );
 }
 
@@ -212,7 +243,27 @@ export async function probeChat(rawBase: string, model: string, apiKey: string):
       lastNet = err;
       continue;
     }
-    const text = await res.text().catch(() => "");
+    let text = await res.text().catch(() => "");
+    // Same transient-rejection retry as probeModels (mirrors aiclient.probePost):
+    // probe bodies are the fixed "Reply with exactly: OK", so re-sending is safe.
+    if (pathRejected(res.status, text)) {
+      await new Promise((r) => setTimeout(r, 1200));
+      try {
+        res = await fetchWithTimeout(
+          url,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders(apiKey) },
+            body,
+          },
+          PROBE_TIMEOUT_MS,
+        );
+        text = await res.text().catch(() => "");
+      } catch (err) {
+        lastNet = err;
+        continue;
+      }
+    }
     if (pathRejected(res.status, text)) {
       lastStatus = res.status;
       lastBody = text;
@@ -222,7 +273,7 @@ export async function probeChat(rawBase: string, model: string, apiKey: string):
       throw new Error(`auth failed (${res.status}) — check the API key`);
     }
     if (res.status !== 200) {
-      throw new Error(`AI endpoint returned ${res.status}: ${truncated(text, 300)}`);
+      throw new Error(`AI endpoint returned ${res.status}: ${bodySummary(text)}`);
     }
     let parsed: {
       choices?: Array<{ message?: { content?: string } }>;
@@ -244,6 +295,6 @@ export async function probeChat(rawBase: string, model: string, apiKey: string):
   }
   if (lastNet !== undefined) throw new Error(networkHint(lastNet));
   throw new Error(
-    `no working path found — tried: ${candidates.join(", ")} (last status ${lastStatus}: ${truncated(lastBody, 120)})`,
+    `no working path found — tried: ${candidates.join(", ")} (last status ${lastStatus}: ${bodySummary(lastBody)})`,
   );
 }
