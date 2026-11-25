@@ -111,7 +111,7 @@ function TodoSection({ projectId }: Props) {
       </div>
 
       {todos.length === 0 ? (
-        <p className="empty-hint">{t('todo.empty')}</p>
+        <p className={`empty-hint ${s.emptyState}`}>{t('todo.empty')}</p>
       ) : (
         <ul className={s.todoList}>
           {todos.map((todo, i) => (

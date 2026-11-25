@@ -17,15 +17,27 @@
   max-width: none;
 }
 
+/* Same treatment as NoteSection's empty hint: the state belongs to the card,
+   so it is centred in it instead of hanging off the first line. */
+.emptyState {
+  margin: 0;
+  padding: 28px 0;
+  text-align: center;
+}
+
 .todoList {
   list-style: none;
 }
 
+/* A checklist row is a line of text, not a full-width band: at the tab's
+   reading column the checkbox, the title and the actions stay within one
+   glance. 10px keeps the hit area comfortable without turning the list into
+   a table. */
 .todoItem {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border-subtle);
 }
 

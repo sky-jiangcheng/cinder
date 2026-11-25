@@ -38,6 +38,21 @@ interface Props {
 // restore the typed changes instead of silently dropping them.
 const editDraftKey = (noteId: number) => `repotory-edit-draft-${noteId}`
 
+/**
+ * Local "YYYY-MM-DD HH:mm" for a card byline. The store keeps ISO timestamps
+ * (`2026-10-18T07:03:46.212Z`); printing one verbatim leaks a serialization
+ * detail into the UI and, since the Z is UTC, also mislabels the hour for
+ * everyone not in that zone. Parsed dates are shown in the reader's zone; an
+ * unparseable legacy value falls back to the raw string rather than blank.
+ */
+function formatStamp(raw: string): string {
+  if (!raw) return ''
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return raw.slice(0, 16)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 function loadEditDraft(noteId: number): NoteDraft | null {
   try {
     const raw = localStorage.getItem(editDraftKey(noteId))
@@ -408,7 +423,7 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
       )}
 
       {filteredNotes.length === 0 && !isNew ? (
-        <p className="empty-hint">{filter !== 'all' ? t('knowledge.noMatch') : t('project.noNotesHint')}</p>
+        <p className={`empty-hint ${s.emptyState}`}>{filter !== 'all' ? t('knowledge.noMatch') : t('project.noNotesHint')}</p>
       ) : (
         <div className={s.list}>
           {filteredNotes.map(note => (
@@ -573,8 +588,8 @@ function NoteCard({
       <div className={s.meta}>
         <span className={s.time}>
           {note.updated_at !== note.created_at
-            ? `${t('project.updatedAtPrefix')} ${note.updated_at}`
-            : `${t('project.createdAtPrefix')} ${note.created_at}`}
+            ? `${t('project.updatedAtPrefix')} ${formatStamp(note.updated_at)}`
+            : `${t('project.createdAtPrefix')} ${formatStamp(note.created_at)}`}
         </span>
         <div className={s.actions}>
           <button className="btn btn-sm" onClick={() => onEdit(note)}>{t('project.edit')}</button>

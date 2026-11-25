@@ -55,6 +55,17 @@ function ProjectDetailPage() {
     setSearchParams(params, { replace: false })
   }
 
+  // A tab is a page of its own. Without this the scroll container keeps the
+  // offset of the tab the user just left, so switching from a long notes list
+  // to the overview dropped the reader into the middle of the overview —
+  // and on a short panel the strip could scroll out of reach entirely.
+  // The ref is PageShell's scrolling body (the only scrolling region on the
+  // page), so "switch tab" always starts at that tab's own beginning.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 })
+  }, [tab])
+
   const [copied, setCopied] = useState(false)
   const [actionMsg, setActionMsg] = useState('')
   const actionTimer = useRef<number | null>(null)
@@ -287,52 +298,57 @@ function ProjectDetailPage() {
             </div>
           )}
 
-          {/* Compact head: identity + copy action on line 1, one stat strip on
-              line 2, tab strip on line 3. Everything that used to be a stacked
-              card here (title card, 4-column stats grid, meta row) collapsed
-              into ~120px so the tab panels own the viewport. */}
           <div className={s.head}>
-            <div className={s.headLine}>
-              <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)}>
-                &larr; {t('project.backToDashboard')}
-              </button>
-              <h1>{project.name}</h1>
-              {project.project_kind === 'import_placeholder' && (
-                <span className="badge" title={t('project.kindPlaceholderTip', { defaultValue: '导入时未匹配到项目，按仓库名自动创建的落点项目' })}>
-                  {t('project.kindPlaceholder', { defaultValue: '未归类仓库' })}
+            <div className={s.headTop}>
+              <div className={s.identity}>
+                <button className={`btn btn-secondary btn-sm ${s.backButton}`} onClick={() => navigate(-1)}>
+                  &larr; {t('project.backToDashboard')}
+                </button>
+                <div className={s.titleBlock}>
+                  <div className={s.titleLine}>
+                    <h1>{project.name}</h1>
+                    {project.project_kind === 'import_placeholder' && (
+                      <span className="badge" title={t('project.kindPlaceholderTip', { defaultValue: '导入时未匹配到项目，按仓库名自动创建的落点项目' })}>
+                        {t('project.kindPlaceholder', { defaultValue: '未归类仓库' })}
+                      </span>
+                    )}
+                    {project.project_kind === 'default' && (
+                      <span className="badge" title={t('project.kindDefaultTip', { defaultValue: '无对应仓库的全局记忆落点，可在知识库「整理」里归口' })}>
+                        {t('project.kindDefault', { defaultValue: '未分类' })}
+                      </span>
+                    )}
+                  </div>
+                  <div className={s.headPath} title={project.root_path}>{project.root_path}</div>
+                </div>
+              </div>
+
+              <div className={s.headActions}>
+                <span className={s.levelControl} title={t('project.groupLevelHint')}>
+                  <button className="btn btn-sm btn-icon" onClick={() => onLevelChange('down')} aria-label={t('project.levelDown')}><Icon name="minus" size={14} /></button>
+                  <span className={s.levelValue}>{t('project.groupLevel', { n: project.level_override || 0 })}</span>
+                  <button className="btn btn-sm btn-icon" onClick={() => onLevelChange('up')} aria-label={t('project.levelUp')}><Icon name="plus" size={14} /></button>
                 </span>
-              )}
-              {project.project_kind === 'default' && (
-                <span className="badge" title={t('project.kindDefaultTip', { defaultValue: '无对应仓库的全局记忆落点，可在知识库「整理」里归口' })}>
-                  {t('project.kindDefault', { defaultValue: '未分类' })}
-                </span>
-              )}
-              <span className={s.headPath} title={project.root_path}>{project.root_path}</span>
-              <span className={s.levelControl} title={t('project.groupLevelHint')}>
-                <button className="btn btn-sm btn-icon" onClick={() => onLevelChange('down')} aria-label={t('project.levelDown')}><Icon name="minus" size={14} /></button>
-                <span className={s.levelValue}>{t('project.groupLevel', { n: project.level_override || 0 })}</span>
-                <button className="btn btn-sm btn-icon" onClick={() => onLevelChange('up')} aria-label={t('project.levelUp')}><Icon name="plus" size={14} /></button>
-              </span>
-              <button className="btn btn-primary btn-sm" onClick={handleCopyContext}>
-                {copied ? t('project.copied') : t('project.copyContext')}
-              </button>
+                <button className="btn btn-primary btn-sm" onClick={handleCopyContext}>
+                  {copied ? t('project.copied') : t('project.copyContext')}
+                </button>
+              </div>
             </div>
 
-            <div className={s.statsLine}>
-              <span className={s.stat}><span className={s.statLabel}>{t('project.activeDays')}</span><span className={s.statValue}>{totals.active}</span></span>
-              <span className={s.stat}><span className={s.statLabel}>{t('project.fileChanges')}</span><span className={s.statValue}>{totals.files}</span></span>
-              <span className={s.stat}><span className={s.statLabel}>{t('project.added')}</span><span className={`${s.statValue} ${totals.added > 0 ? 'green' : ''}`}>{totals.added > 0 ? `+${totals.added}` : '0'}</span></span>
-              <span className={s.stat}><span className={s.statLabel}>{t('project.deleted')}</span><span className={`${s.statValue} ${totals.deleted > 0 ? 'red' : ''}`}>{totals.deleted > 0 ? `-${totals.deleted}` : '0'}</span></span>
-              <span className={s.stat}><span className={s.statLabel}>{t('project.subRepos')}</span><span className={s.statValue}>{project.repos?.length || 0}</span></span>
-              {overview?.activity?.last_commit_date && (
-                <span className={s.stat}><span className={s.statLabel}>{t('project.lastCommit')}</span><span className={s.statValue}>{overview.activity.last_commit_date}</span></span>
-              )}
+            <div className={s.headMeta}>
+              <span>{t('commandPalette.reposCount', { count: project.repos?.length || 0 })}</span>
               {overview?.languages?.[0] && (
-                <span className={s.stat}><span className={s.statLabel}>{t('project.mainLanguage')}</span><span className={s.statValue}>{overview.languages[0].language}</span></span>
+                <>
+                  <span className={s.metaDivider} />
+                  <span>{t('project.mainLanguage')} <strong>{overview.languages[0].language}</strong></span>
+                </>
               )}
-              <span className={s.stat}><span className={s.statLabel}>{t('project.grouping')}</span><span className={s.statValue}>{project.is_auto_grouped ? t('project.autoGroup') : t('project.manualGroup')}</span></span>
+              <span className={s.metaDivider} />
+              <span>{project.is_auto_grouped ? t('project.autoGroup') : t('project.manualGroup')}</span>
               {dateParam && (
-                <span className={s.stat}><span className={s.statLabel}>{t('project.datePill')}</span><span className={s.statValue}>{dateParam}</span></span>
+                <>
+                  <span className={s.metaDivider} />
+                  <span>{t('project.datePill')} <strong>{dateParam}</strong></span>
+                </>
               )}
             </div>
 
@@ -365,8 +381,9 @@ function ProjectDetailPage() {
         </>
       }
       footer={<StatusBar />}
+      bodyRef={bodyRef}
     >
-      <div role="tabpanel" id={`project-panel-${tab}`} aria-labelledby={`project-tab-${tab}`}>
+      <div className={s.panelBody} role="tabpanel" id={`project-panel-${tab}`} aria-labelledby={`project-tab-${tab}`}>
         {tab === 'overview' && overview && (
           <ProjectOverviewSection
             overview={overview}
@@ -384,23 +401,32 @@ function ProjectDetailPage() {
              No heading above the log: the log's own left pane is titled
              "提交记录", so an outer h2 with the same words repeated the title
              and added a second frame around a card that already has one. */
-          <div className={s.commitsTab}>
-            <div className="detail-section commit-log-section">
-              <ProjectCommitLog projectId={Number(id)} repos={project.repos || []} />
-            </div>
+          <div className="detail-section commit-log-section">
+            <ProjectCommitLog projectId={Number(id)} repos={project.repos || []} />
           </div>
         )}
 
         {tab === 'notes' && (
-          /* key remounts the section when the project changes: /project/:id
-              reuses this page instance, and without the key the previous
-              project's open draft was persisted into the new project's
-              localStorage key — and could be saved there. */
-          <NoteSection key={`notes-${id}`} projectId={Number(id)} autoNew={searchParams.get('newNote') === '1'} focusNoteId={focusNoteId} />
+          /* Notes are read, not scanned: the list is a document column, so it
+             gets a measure instead of the full content width. At 1224px a note
+             body ran ~50 characters per line, which is past the point where the
+             eye loses the next line. The column (and every control in it) is
+             capped in one place so the filter strip cannot stay wide while the
+             cards narrow. `key` remounts the section when the project changes:
+             /project/:id reuses this page instance, and without the key the
+             previous project's open draft was persisted into the new project's
+             localStorage key — and could be saved there. */
+          <div className={s.readingColumn}>
+            <NoteSection key={`notes-${id}`} projectId={Number(id)} autoNew={searchParams.get('newNote') === '1'} focusNoteId={focusNoteId} />
+          </div>
         )}
 
         {tab === 'todos' && (
-          <TodoSection key={`todos-${id}`} projectId={Number(id)} />
+          /* Same column as notes: a checklist whose checkbox and delete button
+             sit 1100px apart is a checklist nobody scans. */
+          <div className={s.readingColumn}>
+            <TodoSection key={`todos-${id}`} projectId={Number(id)} />
+          </div>
         )}
       </div>
 

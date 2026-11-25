@@ -1,117 +1,123 @@
-/* ProjectDetail — page shell and compact head.
-   .detail-section / .section-header stay global: child sections consume both.
-
-   The page skeleton (pinned header + scrolling body) is the shared PageShell
-   component — see components/PageShell.module.css. This module only owns what
-   is exclusive to the project page. */
-
 .head {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  /* The bottom padding is the old .fixed's 4px, moved here with it. */
-  padding: 10px 0 4px;
+  gap: 12px;
+  padding: 4px 0 0;
+}
+
+.headTop,
+.identity,
+.titleLine,
+.headActions,
+.headMeta {
+  display: flex;
+  align-items: center;
+}
+
+.headTop {
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.identity {
+  min-width: 0;
+  gap: 14px;
 }
 
 .backButton {
-  margin-bottom: 12px;
-}
-
-/* Group-level stepper on the compact identity line. */
-.levelControl {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
   flex-shrink: 0;
 }
 
-.levelValue {
-  font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  min-width: 84px;
-  text-align: center;
-}
-
-.headLine {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.titleBlock {
   min-width: 0;
 }
 
-.headLine h1 {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
+.titleLine {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.titleLine h1 {
+  min-width: 0;
   margin: 0;
-  white-space: nowrap;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
 }
 
 .headPath {
-  font-size: 12px;
+  max-width: 720px;
+  margin-top: 4px;
+  overflow: hidden;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
-  min-width: 0;
 }
 
-.headLine :global(.btn-primary) {
+.headActions {
   flex-shrink: 0;
+  gap: 10px;
 }
 
-.statsLine {
-  display: flex;
-  gap: 18px;
-  align-items: baseline;
-  flex-wrap: wrap;
-  padding: 2px 0;
-}
-
-.stat {
+.levelControl {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  white-space: nowrap;
+  align-items: center;
+  gap: 4px;
 }
 
-.statLabel {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.statValue {
-  font-size: 12px;
+.levelValue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  height: 28px;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
-  color: var(--text-primary);
+  font-size: 11px;
+  text-align: center;
 }
 
-/* The semantic class stays global; a module-scoped doubled rule removes the
-   source-order dependency on that utility. */
-.statValue :global(.green) {
-  color: var(--success);
+.headMeta {
+  flex-wrap: wrap;
+  gap: 7px 10px;
+  padding-left: 112px;
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
-.statValue :global(.red) {
-  color: var(--danger);
+.headMeta strong {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.metaDivider {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--border-default);
 }
 
 .tabs {
   display: flex;
-  gap: 0;
+  overflow-x: auto;
   border-bottom: 1px solid var(--border-subtle);
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tabs :global(.tab-btn) {
-  padding: 8px 16px;
+  flex-shrink: 0;
+  padding: 9px 18px;
   font-size: 13px;
 }
 
@@ -119,19 +125,93 @@
   padding-left: 0;
 }
 
-/* The commit log is the only child and carries its own two panes (timeline /
-   patch), so this wrapper must not reserve a second column. The old
-   `1fr / 1.2fr` grid put the whole log in the narrow column and left ~40% of
-   the page empty, while the log's own grid split that remnant again — the
-   patch pane ended up 98px wide. */
-.commitsTab {
-  display: block;
+/* The tab strip's hairline is the panel's top edge, so the panel needs its own
+   breathing room. Without it the first card sat flush against the underline and
+   the active tab read as if it were touching the content. */
+.panelBody {
+  padding-top: 22px;
 }
 
-/* ---- 从 features/project-detail.css 下沉（P35 第六轮）---- */
+/* Reading-type tabs (notes, todos) do not use the full content width. The
+   column is one measured line length for the whole panel — heading, filters,
+   cards — so the controls and the cards cannot disagree about how wide this
+   tab is.
+
+   720px = 680px of card after the section's 20px padding, and 640px of text
+   after the card's own padding: at the 14px preview size that is ~45 Chinese
+   characters per line, inside the band where the eye finds the next line
+   without help. (At the old full 1224px it was ~76.)
+
+   Overview and commits are deliberately NOT capped: they are grids and a
+   two-pane reader that get better with width, which is why the cap lives on
+   the tab's wrapper here instead of inside NoteSection/TodoSection. */
+.readingColumn {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* The panel already ends the page; the commits card's own bottom margin was
+   stacking a second gap under it (the card is the last thing in its tab). */
+.panelBody :global(.detail-section) {
+  margin-bottom: 0;
+}
+
 .emptySection {
   padding: 24px 20px;
-  text-align: center;
   color: var(--text-tertiary);
   font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .headTop {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .headActions {
+    align-self: flex-end;
+  }
+
+  .headMeta {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .identity {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+    width: 100%;
+  }
+
+  .titleBlock {
+    width: 100%;
+  }
+
+  .titleLine h1 {
+    font-size: 23px;
+  }
+
+  .headPath {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .headActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .tabs :global(.tab-btn) {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .tabs :global(.tab-btn:first-child) {
+    padding-left: 0;
+  }
 }

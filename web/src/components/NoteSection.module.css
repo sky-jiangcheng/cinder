@@ -12,23 +12,40 @@
   margin-bottom: 12px;
 }
 
+/* "No notes yet" / "no match" sits inside the notes card. A bare one-line hint
+   at the card's top-left read as a stray label; centred with real padding it
+   reads as the card's state. */
+.emptyState {
+  margin: 0;
+  padding: 28px 0;
+  text-align: center;
+}
+
 .header h3 {
   margin-bottom: 0;
 }
 
+/* Wraps: at the tab's 720px reading column a long title plus its type badge,
+   topic badge and pin no longer fit one line, and without wrapping the pin was
+   pushed out of the card instead of moving under the title. */
 .titleRow {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin-bottom: 8px;
 }
 
 /* The title is the card's link to the note's own page (ADR-0078). It keeps the
    card's type and only reacts on hover, so the card still reads as a document
-   rather than a row of clickable chrome. */
+   rather than a row of clickable chrome.
+
+   15px, up from 13px: the body is 16px prose, and a 13px title read as a label
+   above the text instead of the document's name. */
 .titleText {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 1.45;
   color: var(--text-primary);
   text-decoration: none;
   overflow-wrap: anywhere;
@@ -42,14 +59,24 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
+/* One note = one sheet. The padding grew with the narrower column: at 800px
+   the card is no longer a banner, so it can afford the margins a document
+   wants (18/20 instead of 14/16). */
 .card {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 18px 20px;
   background: var(--bg-tertiary);
+  transition: border-color var(--transition-fast);
+}
+
+/* The hover border is the only affordance: the title is already a link, and
+   making the whole card clickable would fight the buttons at its foot. */
+.card:hover {
+  border-color: var(--border-default);
 }
 
 .cardPinned {
@@ -73,19 +100,39 @@
    doubling the outcome would depend on bundle order. A note body IS the
    knowledge being read: it takes the prose face on purpose (ADR-0050 §⑤
    加注 2026-11-16). */
+/* The list is a SCANNING surface, not the reading page. The 16px/1.7 prose
+   settings stay for /note/:id (and every other rendered document), but in a
+   card the same settings read oversized: 14px with a 1.6 line height keeps the
+   serif face while fitting roughly eight lines of real content into the same
+   card, which is what makes the list feel dense instead of airy. */
+
 .body.body {
   font-family: var(--font-display);
-  font-size: var(--text-prose);
-  line-height: var(--leading-prose);
+  font-size: 14px;
+  line-height: 1.62;
   margin-bottom: 8px;
   color: var(--text-primary);
+}
+
+/* Tighter block spacing inside a preview: the global prose margins are tuned
+   for a full page, where a 0.4em paragraph gap separates sections. In a card
+   they open holes between two lines of the same thought. */
+.body.body p {
+  margin: 0.3em 0;
+}
+
+.body.body li {
+  margin: 0.12em 0;
 }
 
 /* The collapsed state of a long note. The mask (not just overflow) is what
    tells the reader the text continues — a hard cut at the container edge reads
    as a rendering bug, a fade reads as "there is more". */
 .bodyClamped {
-  max-height: 168px;
+  /* Seven prose lines at 16px/1.7, not six: with the narrower column the
+     preview carries real content before it fades, and the fade still starts
+     well above the card's fold. */
+  max-height: 190px;
   overflow: hidden;
   -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
   mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
@@ -106,10 +153,16 @@
   text-decoration: underline;
 }
 
+/* Time on the left, actions on the right. They wrap instead of colliding on a
+   narrow window now that the card follows the tab's reading column: the four
+   actions plus the timestamp are ~360px, which no longer fits every breakpoint
+   the card itself survives. */
 .meta {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 6px 12px;
   font-size: 11px;
   color: var(--text-muted);
 }
