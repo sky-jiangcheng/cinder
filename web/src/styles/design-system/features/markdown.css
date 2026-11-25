@@ -52,7 +52,7 @@
   color: inherit;
 }
 .markdown-body pre code.hljs::before {
-  content: attr(class);
+  content: attr(data-language, 'code');
   display: block;
   font-size: 11px;
   color: var(--text-secondary);

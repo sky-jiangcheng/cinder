@@ -2,19 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  deleteNote, getNote, getProjects, moveNote, pinNote, setNoteTopic, updateNoteFull,
+  deleteNote, getNote, getNoteInsights, getProjects, moveNote, pinNote, setNoteTopic, updateNoteFull,
   type Note, type Project,
 } from '../../api/client'
 import NoteEditor, { type NoteDraft } from '../../components/notes/NoteEditor'
 import VersionHistoryPanel from '../../components/notes/VersionHistoryPanel'
+import RelatedNoteChips from '../../components/notes/RelatedNoteChips'
 import SourceTypeBadge from '../../components/SourceTypeBadge'
 import ErrorBanner from '../../components/ErrorBanner'
 import Icon from '../../components/Icon'
 import { useConfirmClick } from '../../hooks/useConfirmClick'
+import { useApiData } from '../../hooks/useApiData'
 import { useNoteMutations } from '../../hooks/useNoteMutations'
 import { useNoteVersionHistory } from '../../hooks/useNoteVersionHistory'
 import { useTopics } from '../../hooks/useTopics'
-import { renderMarkdown } from '../../utils/markdown'
+import { useRenderedMarkdown } from '../../hooks/useRenderedMarkdown'
 import s from './NoteDetail.module.css'
 
 // /note/:id — one note, in full, on a surface of its own (ADR-0078).
@@ -99,6 +101,21 @@ export default function NoteDetail() {
   // the hook ask for nothing until then).
   const topicState = useTopics(note?.project_id ?? 0)
   const vh = useNoteVersionHistory(run, reload)
+
+  // The note's AI layer. It shares the insight cache with the list the reader
+  // came from, so opening a card here usually costs no request at all; a cold
+  // link reads the same cache-backed endpoint. Nothing is generated here —
+  // the summary is whatever was last created from the list.
+  const noteProjectId = note?.project_id ?? 0
+  const insightState = useApiData(
+    () => (noteProjectId > 0 ? getNoteInsights(noteProjectId) : Promise.resolve([])),
+    [noteProjectId],
+    { cacheKey: noteProjectId > 0 ? 'note-insights' : undefined },
+  )
+  const insight = useMemo(
+    () => (insightState.data ?? []).find(i => i.note_id === noteId),
+    [insightState.data, noteId],
+  )
 
   // Same unsaved-changes guard the project's note list uses: an editor holding
   // a draft must make the shell warn before the tab closes.
@@ -190,6 +207,7 @@ export default function NoteDetail() {
     }, t('project.saveFailed') + ': ')
   }
   const { armed, click } = useConfirmClick(() => { void removeNote() })
+  const bodyHtml = useRenderedMarkdown(note?.content ?? '')
 
   if (loading) {
     return (
@@ -251,6 +269,29 @@ export default function NoteDetail() {
 
       {error && <ErrorBanner message={error} onRetry={retryLast} />}
 
+      {/* The AI layer sits above the note, not below it: "what this says and
+          what it connects to" is orientation, and orientation after 3,000
+          words is not orientation. Nothing renders until a summary or a
+          relation exists, so an unsummarized note is untouched. */}
+      {!editing && insight && (insight.summary || (insight.related?.length ?? 0) > 0) && (
+        <section className={s.insight}>
+          <div className={s.insightHead}>
+            <span className={s.spark} aria-hidden="true">✦</span>
+            <span>{t('noteDetail.aiInsight')}</span>
+            {insight.stale && <span className={s.staleTag}>{t('project.aiSummaryStale')}</span>}
+          </div>
+          {insight.summary && <p className={s.insightSummary}>{insight.summary}</p>}
+          {insight.keywords && insight.keywords.length > 0 && (
+            <div className={s.keywords}>
+              {insight.keywords.map(k => <span key={k} className={s.keyword}>{k}</span>)}
+            </div>
+          )}
+          {insight.related && insight.related.length > 0 && (
+            <RelatedNoteChips related={insight.related} showReason />
+          )}
+        </section>
+      )}
+
       {editing && draft ? (
         <NoteEditor
           value={draft}
@@ -270,7 +311,7 @@ export default function NoteDetail() {
         <>
           <article
             className={`${s.body} markdown-body`}
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
+            dangerouslySetInnerHTML={{ __html: bodyHtml }}
           />
           {note.tags && (
             <div className={s.tags}>

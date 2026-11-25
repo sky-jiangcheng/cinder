@@ -1,12 +1,14 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import type { NoteWithProject } from '../../api/client'
+import type { NoteInsight, NoteWithProject } from '../../api/client'
 import { renderMarkdown, stripMarkdown, parseTags } from '../../utils/markdown'
 import Icon from '../../components/Icon'
 import s from './KnowledgeCard.module.css'
 
 interface Props {
   note: NoteWithProject
+  /** The note's cached AI summary, when one exists. */
+  insight?: NoteInsight
   exporting: boolean
   onPin: (id: number, pinned: boolean) => void
   onExport: (id: number) => void
@@ -22,7 +24,7 @@ const badgeByKind: Record<string, string> = {
 }
 
 /** One card in the knowledge-hub note grid. */
-export default function KnowledgeCard({ note, exporting, onPin, onExport, onSelectTag }: Props) {
+export default function KnowledgeCard({ note, insight, exporting, onPin, onExport, onSelectTag }: Props) {
   const { t } = useTranslation()
   const tags = parseTags(note.tags)
   const kindLabel = note.kind === 'knowledge'
@@ -37,13 +39,24 @@ export default function KnowledgeCard({ note, exporting, onPin, onExport, onSele
     <div className={`${s.card} ${note.pinned ? s.pinned : ''}`}>
       <div className={s.head}>
         <span className={`${s.badge} ${badgeByKind[note.kind] ?? ''}`}>{kindLabel}</span>
-        <button
-          className={`pin-btn ${note.pinned ? 'pinned' : ''}`}
-          onClick={() => onPin(note.id, note.pinned)}
-          title={note.pinned ? t('project.unpinned') : t('project.pinned')}
-        >
-          <Icon name="pin" size={15} />
-        </button>
+        <div className={s.headActions}>
+          <button
+            className={s.iconBtn}
+            onClick={() => onExport(note.id)}
+            disabled={exporting}
+            title={exporting ? t('knowledge.copying') : t('knowledge.exportMd')}
+            aria-label={t('knowledge.exportMd')}
+          >
+            <Icon name="download" size={13} />
+          </button>
+          <button
+            className={`pin-btn ${note.pinned ? 'pinned' : ''}`}
+            onClick={() => onPin(note.id, note.pinned)}
+            title={note.pinned ? t('project.unpinned') : t('project.pinned')}
+          >
+            <Icon name="pin" size={15} />
+          </button>
+        </div>
       </div>
       {/* The card opens the note itself (ADR-0078). It used to hop through
           /project/<pid>?noteId=, which both buried the note inside a project
@@ -58,7 +71,19 @@ export default function KnowledgeCard({ note, exporting, onPin, onExport, onSele
             <span className={s.topic}>{note.topic_name}</span>
           </div>
         )}
-        <div className={`${s.snippet} markdown-body`} dangerouslySetInnerHTML={{ __html: renderMarkdown(stripMarkdown(note.content, 120)) }} />
+        {/* A summary replaces the raw prefix when one exists. That is the
+            point of the line: the reader gets the note's conclusion instead of
+            the first 120 characters, which on a captured note is usually a
+            heading and a half-finished sentence. Without a summary the card
+            behaves exactly as before. */}
+        {insight?.summary ? (
+          <div className={s.summary} title={insight.summary}>
+            <span className={s.spark} aria-hidden="true">✦</span>
+            {insight.summary}
+          </div>
+        ) : (
+          <div className={`${s.snippet} markdown-body`} dangerouslySetInnerHTML={{ __html: renderMarkdown(stripMarkdown(note.content, 120)) }} />
+        )}
         <div className={s.foot}>
           <span className={s.projectName}>{note.project_name}</span>
           <span className={s.time}>{note.updated_at.slice(0, 10)}</span>
@@ -69,15 +94,6 @@ export default function KnowledgeCard({ note, exporting, onPin, onExport, onSele
           {tags.map(tag => <span key={tag} className={s.tag} onClick={() => onSelectTag(tag)}>#{tag}</span>)}
         </div>
       )}
-      <button
-        className="btn btn-secondary btn-sm"
-        style={{ marginTop: 8, alignSelf: 'flex-start' }}
-        onClick={() => onExport(note.id)}
-        disabled={exporting}
-        title={t('knowledge.exportMd')}
-      >
-        {exporting ? t('knowledge.copying') : t('knowledge.exportMd')}
-      </button>
     </div>
   )
 }

@@ -352,11 +352,12 @@
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: 8px 12px;
-  transition: border-color var(--transition-fast);
+  padding: 9px 12px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .inputBox:focus-within {
@@ -413,7 +414,8 @@
 }
 
 .sendBtn:disabled {
-  opacity: 0.4;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
   cursor: not-allowed;
 }
 
@@ -432,6 +434,12 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   white-space: nowrap;
+}
+
+.inputCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
 }
 
 .fallbackNotice {
@@ -509,6 +517,14 @@
   min-width: 0;
 }
 
+/* Answers are documents, not chat bubbles: let them use the reading column
+   even when the markdown has short lines. User turns keep their narrow,
+   content-sized bubble so a one-word question does not stretch across the
+   page. */
+.msgRow:not(.msgRowUser) .msgBody {
+  width: 100%;
+}
+
 .msgMeta {
   display: flex;
   align-items: center;
@@ -544,10 +560,51 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: 2px 12px 12px 12px;
-  padding: 14px 16px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+}
+
+/* Answer masthead: the answer has a name and a measurable footprint, so it
+   reads as a deliverable instead of an unstructured block of prose. */
+.answerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.answerLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.answerFacts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.answerFact {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 2px 6px;
+  white-space: nowrap;
 }
 
 /* 本地回退的诚实标记：这条回复是关键词匹配，不是答案（ADR-0033 决策 2）。 */
@@ -577,6 +634,62 @@
 
 .markdownText p:last-child {
   margin-bottom: 0;
+}
+
+/* The first paragraph is the verdict. Giving it a rule and a step up in size
+   lets the eye start in the right place; the rest stays the serif reading
+   surface required by ADR-0050. */
+.markdownText > p:first-child {
+  font-size: 1.06em;
+  font-weight: 500;
+  margin-bottom: 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+}
+
+/* A bare bold line is how the model writes a subheading. When it is the only
+   child of a paragraph, set it as UI chrome so it separates the sections.
+   Browsers without :has simply keep the old bold paragraph. */
+.markdownText > p:has(> strong:only-child) {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  margin: 16px 0 6px;
+}
+
+/* Doubled so list density does not depend on stylesheet order against the
+   global .markdown-body rules (which the answer now also carries). */
+.markdownText.markdownText ul,
+.markdownText.markdownText ol {
+  padding-left: 20px;
+  margin: 4px 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdownText.markdownText li {
+  margin: 3px 0;
+}
+
+.markdownText li::marker {
+  color: var(--accent);
+}
+
+.markdownText hr {
+  border: none;
+  border-top: 1px dashed var(--border-default);
+  margin: 14px 0;
+}
+
+.markdownText h2,
+.markdownText h3 {
+  margin-top: 16px;
+}
+
+/* A warning converted from a leading ⚠️ uses the shared callout surface. */
+.markdownText .callout {
+  margin: 12px 0;
 }
 
 .markdownText pre {
@@ -787,13 +900,72 @@
 
 /* --- 引用卡片 --------------------------------------------------------------- */
 
-.cardSection {
+.references {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.referencesSummary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-sm);
+}
+
+.referencesSummary::-webkit-details-marker {
+  display: none;
+}
+
+.referencesSummary:hover {
+  color: var(--text-primary);
+}
+
+.referencesSummary:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 3px;
+}
+
+.refPill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.referencesChevron {
+  margin-left: 2px;
+  transition: transform var(--transition-fast);
+}
+
+.references[open] .referencesChevron {
+  transform: rotate(180deg);
+}
+
+.referencesBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 10px;
+}
+
+.cardGroup {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border-subtle);
+  min-width: 0;
 }
 
 .cardSectionHeader {
@@ -978,18 +1150,21 @@
 .msgActions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .actionBtn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  min-height: 28px;
   font-size: 11px;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   cursor: pointer;

@@ -118,6 +118,8 @@ describe('renderMarkdown', () => {
     const result = renderMarkdown('```js\nconsole.log("hi")\n```')
     expect(result).toContain('<pre><code')
     expect(result).toContain('hljs')
+    // The language badge must read a clean name, not the library's class list.
+    expect(result).toContain('data-language="js"')
   })
 
   it('renders inline code', () => {

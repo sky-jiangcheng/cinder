@@ -26,7 +26,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-import { searchCommits, getCommitDiff, getCommitFile, type CommitDiff, type RepoInfo } from '../../api/client'
+import { searchCommits, getCommitDiff, getCommitFile, type CommitDiff, type CommitPage, type RepoInfo } from '../../api/client'
 import ProjectCommitLog from './ProjectCommitLog'
 
 const commit = (hash: string, message: string) => ({
@@ -88,6 +88,37 @@ describe('ProjectCommitLog', () => {
     fireEvent.click(screen.getByText('project.nextPage'))
     await waitFor(() => expect(searchCommits).toHaveBeenCalledWith(137, 42, '', 20, 20))
     expect(screen.getByText('Page 2 / 3')).toBeTruthy()
+  })
+
+  it('paints the timeline shape instead of a blank loading string', async () => {
+    let resolve!: (page: CommitPage) => void
+    vi.mocked(searchCommits).mockImplementation(() => new Promise(r => { resolve = r }))
+    const { container } = render(<ProjectCommitLog projectId={137} repos={repos} />)
+    expect(container.querySelector('[class*="feedSkeleton"]')).not.toBeNull()
+    resolve({ items: [commit('aaa111', 'after resolve')], total: 1, offset: 0, limit: 20 })
+    expect(await screen.findByText('after resolve')).toBeTruthy()
+  })
+
+  it('keeps the current page on screen while the next page loads', async () => {
+    // offset 0 answers immediately; offset 20 stays pending until we release it.
+    let resolveNext!: (page: CommitPage) => void
+    const nextPage = new Promise<CommitPage>(r => { resolveNext = r })
+    vi.mocked(searchCommits).mockImplementation((_pid, _repo, _term, offset) =>
+      offset === 0
+        ? Promise.resolve({ items: [commit('abcdef123456', 'fix: explorer')], total: 60, offset: 0, limit: 20 })
+        : nextPage)
+
+    render(<ProjectCommitLog projectId={137} repos={repos} />)
+    await screen.findByText('fix: explorer')
+
+    fireEvent.click(screen.getByText('project.nextPage'))
+    await waitFor(() => expect(searchCommits).toHaveBeenLastCalledWith(137, 42, '', 20, 20))
+
+    // The outgoing page is still there — no blank pane, no scroll reset.
+    expect(screen.getByText('fix: explorer')).toBeTruthy()
+    resolveNext({ items: [commit('bbb222', 'page two')], total: 60, offset: 20, limit: 20 })
+    expect(await screen.findByText('page two')).toBeTruthy()
+    expect(screen.queryByText('fix: explorer')).toBeNull()
   })
 
   it('opens the selected commit patch on the right page', async () => {

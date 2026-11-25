@@ -1,0 +1,87 @@
+/* RelatedNoteChips — the "this note connects to these" row. */
+
+.row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* A quiet label, not a badge: the chips are the content. */
+.label {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* One chip plus, on the note page, its reason. Wraps as a unit so a reason is
+   never separated from the note it explains. */
+.item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* The note page has room, so the row wraps instead of clipping. */
+.rowWrapped {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 5px;
+}
+
+/* More room per title on the note page: the cards still cap at 168px. */
+.rowWrapped .chip {
+  max-width: 280px;
+}
+
+/* A chip is a link, but reads like a footnote marker: dashed left rule and a
+   muted color until hover, so the row does not compete with the tag chips
+   above it. */
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 168px;
+  padding: 1px 7px 1px 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  text-decoration: none;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.chip:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* On the note page the reason is visible: the terms are the evidence, so they
+   sit after the chip in a lighter weight rather than hidden in a tooltip. */
+.reason {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}

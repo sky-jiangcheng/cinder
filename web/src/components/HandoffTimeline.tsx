@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { getNote, listHandoffTimeline, type HandoffTimelineEntry, type Note, type Project } from '../api/client'
-import { renderMarkdown, stripMarkdown } from '../utils/markdown'
+import { stripMarkdown } from '../utils/markdown'
+import { useRenderedMarkdown } from '../hooks/useRenderedMarkdown'
 import { getToday, getYesterday } from '../utils/dates'
 import s from './HandoffTimeline.module.css'
 
@@ -53,6 +54,7 @@ export default function HandoffTimelineBody({ scope, query, projects, onCount, o
   const [detail, setDetail] = useState<Note | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const detailHtml = useRenderedMarkdown(detail?.content ?? '')
 
   useEffect(() => {
     let cancelled = false
@@ -239,7 +241,7 @@ export default function HandoffTimelineBody({ scope, query, projects, onCount, o
                         className={`${s.detailBody} markdown-body`}
                         // Same render path as NoteDetail's body: one markdown
                         // renderer, one sanitization story.
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(detail.content) }}
+                        dangerouslySetInnerHTML={{ __html: detailHtml }}
                       />
                     ) : null}
                   </div>

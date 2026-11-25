@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 
 // Partial mock: override the backend-calling endpoints, keep the rest real.
 vi.mock('../../api/client', async (importOriginal) => {
@@ -28,6 +28,7 @@ import {
   listAIModelsConfigured,
   testAIChat,
   testAIChatConfigured,
+  updateConfig,
 } from '../../api/client'
 import AiTab from './AiTab'
 
@@ -54,8 +55,8 @@ beforeEach(() => {
 describe('AiTab model pull', () => {
   it('does not show a model picker until a fetch has populated it', () => {
     renderTab(baseConfig)
-    // 拉取前 models 为空 → 没有 <select>。
-    expect(screen.queryByRole('combobox', { name: /model/i })).toBeNull()
+    // 拉取前 models 为空 → 没有 ▾ 箭头，也没有浮层。
+    expect(screen.queryByRole('button', { name: 'settings.ai.modelPicker' })).toBeNull()
   })
 
   it('auto-selects the first fetched model and shows a visible dropdown', async () => {
@@ -66,9 +67,19 @@ describe('AiTab model pull', () => {
     renderTab({ ...baseConfig, ai_chat_base_url: 'http://localhost:1234/v1' })
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.ai.fetchModels' }))
-    const select = await screen.findByRole('combobox', { name: /model/i })
-    // 下拉出现，且默认选中第一个（后端已排序 → model-a 在前）。
-    expect((select as HTMLSelectElement).value).toBe('model-a')
+    // 可见选择 UI 必须出现（WKWebView datalist 不渲染的回归守卫）：
+    // combobox = 同一个输入框 + ▾ 箭头；auto-select 落在输入框。
+    // 先等箭头出现——combobox 替换掉裸输入框后，旧节点引用不能再拿。
+    await screen.findByRole('button', { name: 'settings.ai.modelPicker' })
+    const input = screen.getByLabelText('settings.ai.model') as HTMLInputElement
+    expect(input.value).toBe('model-a')
+    const toggle = screen.getByRole('button', { name: 'settings.ai.modelPicker' })
+    // 点箭头 → 浮层列出全部候选（打开时不过滤，否则已选名字把其余项滤光）
+    fireEvent.click(toggle)
+    const listbox = screen.getByRole('listbox', { name: 'settings.ai.modelPicker' })
+    expect(listbox).toBeTruthy()
+    // within：页面其他区块（语义检索/审核）也有 select 的 option，不能混入
+    expect(within(listbox).getAllByRole('option').length).toBe(2)
   })
 
   it('lets the user pick a model from the visible dropdown', async () => {
@@ -79,14 +90,51 @@ describe('AiTab model pull', () => {
     renderTab({ ...baseConfig, ai_chat_base_url: 'http://localhost:1234/v1' })
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.ai.fetchModels' }))
-    const select = (await screen.findByRole('combobox', {
-      name: /model/i,
-    })) as HTMLSelectElement
-    fireEvent.change(select, { target: { value: 'model-b' } })
+    await screen.findByRole('button', { name: 'settings.ai.modelPicker' })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.ai.modelPicker' }))
+    // 从浮层选 model-b → 回填输入框，浮层收起。
+    fireEvent.click(screen.getByRole('option', { name: 'model-b' }))
     await waitFor(() =>
-      expect((screen.getByRole('combobox', { name: /model/i }) as HTMLSelectElement).value).toBe(
-        'model-b',
-      ),
+      expect((screen.getByLabelText('settings.ai.model') as HTMLInputElement).value).toBe('model-b'),
+    )
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('filters the reported models as you type inside the combobox', async () => {
+    vi.mocked(listAIModels).mockResolvedValue({
+      models: ['model-a', 'model-b', 'other-model'],
+      resolved_base_url: '',
+    })
+    renderTab({ ...baseConfig, ai_chat_base_url: 'http://localhost:1234/v1' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.ai.fetchModels' }))
+    await screen.findByRole('button', { name: 'settings.ai.modelPicker' })
+    // 在合并后的输入框里打字 → 浮层按字符过滤
+    fireEvent.change(screen.getByLabelText('settings.ai.model'), { target: { value: 'model-b' } })
+    await waitFor(() => {
+      const listbox = screen.getByRole('listbox', { name: 'settings.ai.modelPicker' })
+      expect(within(listbox).getAllByRole('option').map(o => o.textContent)).toEqual(['model-b'])
+    })
+  })
+
+  it('hides the model picker after a successful save — the model is settled', async () => {
+    vi.mocked(listAIModels).mockResolvedValue({
+      models: ['model-a', 'model-b'],
+      resolved_base_url: '',
+    })
+    vi.mocked(updateConfig).mockResolvedValue({ success: true })
+    renderTab({ ...baseConfig, ai_chat_base_url: 'http://localhost:1234/v1' })
+
+    // 拉取 → ▾ 箭头出现（供给选择）
+    fireEvent.click(screen.getByRole('button', { name: 'settings.ai.fetchModels' }))
+    await screen.findByRole('button', { name: 'settings.ai.modelPicker' })
+
+    // 保存 → combobox 整体收起（箭头与浮层都消失），界面回到清爽的两框。
+    // Save 按钮文案走 defaultValue（'Save'），且语义检索区有第二个同名按钮，
+    // AI 区的排在前面。
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0])
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'settings.ai.modelPicker' })).toBeNull(),
     )
   })
 })

@@ -159,6 +159,69 @@
   text-decoration: underline;
 }
 
+/* ---- The AI layer -------------------------------------------------------- */
+
+/* A quiet card above the note: tinted background, no border on the left only,
+   because it is an annotation ABOUT the note rather than a second document. */
+.insight {
+  margin: 0 0 16px;
+  padding: 10px 14px 12px;
+  background: var(--bg-secondary);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.insightHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.spark {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.staleTag {
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  padding: 0 5px;
+}
+
+/* The summary keeps the prose face: it is a sentence about the note, and the
+   reader is already in a reading context. */
+.insightSummary {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.keyword {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
 @media (max-width: 768px) {
   .title {
     font-size: 21px;

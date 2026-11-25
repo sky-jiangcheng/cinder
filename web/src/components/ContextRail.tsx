@@ -19,10 +19,10 @@
 // user opens it again; the state is remembered per machine.
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMatch, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import Icon from './Icon'
-import { browseWikiPages, listPendingWikiPages, type WikiPageSummary, type EvidenceItem } from '../api/client'
+import { browseWikiPages, getProjects, listPendingWikiPages, type WikiPageSummary, type EvidenceItem } from '../api/client'
 import { getAssistantCards, subscribeAssistantCards } from '../hooks/assistantCards'
 import { stripDoubleClick, stripMouseDown } from '../utils/windowTitlebar'
 import s from './ContextRail.module.css'
@@ -71,20 +71,68 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
   // returns a stable object until a new answer lands, so no re-render loop.
   const cards = useSyncExternalStore(subscribeAssistantCards, getAssistantCards, getAssistantCards)
 
+  // The rail's scope follows TWO focus sources, routing first:
+  //
+  //   1. ROUTING — the user opened /project/:id. That navigation IS an
+  //      explicit "show me this project's context" gesture: the queue and the
+  //      recently-updated list switch to that project while the route lasts.
+  //      (An earlier revision deliberately ignored routing; the user's field
+  //      feedback overruled it — a rail that sits still while you click
+  //      through projects reads as broken, not as stable.)
+  //   2. CONVERSATION — on non-project routes (the chat console), the newest
+  //      settled answer's single involved project pins the scope; multi- or
+  //      no-project answers keep the whole-library view, where a per-project
+  //      filter would just hide the other projects' items.
+  //
+  // The effect re-runs on every settled answer and every route change, so a
+  // fresh compilation or a project hop lands without leaving the page.
+  const routeMatch = useMatch('/project/:id')
+  const routeProjectId = routeMatch ? Number(routeMatch.params.id) : 0
+  const dialogFocus = cards.projectCards.length === 1 ? cards.projectCards[0] : null
+  const focusProjectId = routeProjectId > 0 ? routeProjectId : dialogFocus?.id ?? 0
+  // The heading badge needs a NAME, and a bare route only carries the id:
+  // resolve it from the conversation cards when they mention the project,
+  // otherwise fetch the project list once and keep an id→name map.
+  const [projectNames, setProjectNames] = useState<Record<number, string>>({})
+  const focusProjectName =
+    routeProjectId > 0
+      ? projectNames[routeProjectId] ??
+        (dialogFocus?.id === routeProjectId ? dialogFocus.name : null)
+      : dialogFocus?.name ?? null
+  // A multi-project answer cannot pick one scope, so the global list stays —
+  // but SAY it's global, or the unfiltered queue reads like a bug.
+  const showLibraryBadge = routeProjectId === 0 && cards.projectCards.length > 1
+
+  useEffect(() => {
+    if (routeProjectId <= 0 || projectNames[routeProjectId]) return
+    let cancelled = false
+    load(
+      () => getProjects(),
+      projects => {
+        if (cancelled) return
+        const map: Record<number, string> = {}
+        for (const p of projects ?? []) map[p.id] = p.name
+        setProjectNames(prev => ({ ...prev, ...map }))
+      },
+      () => {},
+    )
+    return () => { cancelled = true }
+  }, [routeProjectId])  // projectNames is intentionally absent: refetching the list won't rename anything
+
   useEffect(() => {
     let cancelled = false
     load(
-      () => listPendingWikiPages(0),
+      () => listPendingWikiPages(focusProjectId),
       pages => { if (!cancelled) setPending((pages ?? []).map(p => ({ id: p.page.id, title: p.page.title }))) },
       () => { if (!cancelled) setPending([]) },
     )
     load(
-      () => browseWikiPages(0, 6),
+      () => browseWikiPages(focusProjectId, 6),
       pages => { if (!cancelled) setRecent(pages ?? []) },
       () => { if (!cancelled) setRecent([]) },
     )
     return () => { cancelled = true }
-  }, [])
+  }, [focusProjectId, cards.messageId])
 
   if (collapsed) {
     // The folded handle is the rail's whole presence, so it carries the one
@@ -128,11 +176,15 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
           rail is one place for "what this conversation touched". Each card is
           a link, so a citation stays actionable without scrolling back.
 
+          Hidden on a project-detail route: there the rail IS the project's
+          context — "this turn mentioned…" is chat-scoped talk that means
+          nothing on a page you navigated to. Back on the console they return.
+
           When nothing was cited, the two blocks share ONE line instead of two
           titled blocks reading "暂无" — that was 140px of chrome on every page
           saying nothing, and it pushed the one block that does have content
           (recently updated) below the fold of the rail. */}
-      {cards.projectCards.length === 0 && cards.knowledgeCards.length === 0 ? (
+      {!routeProjectId && (cards.projectCards.length === 0 && cards.knowledgeCards.length === 0 ? (
         <p className={s.empty}>{t('shell.contextEmpty')}</p>
       ) : (
         <>
@@ -177,17 +229,26 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
             </section>
           )}
         </>
-      )}
+      ))}
 
       <section className={s.block}>
         {/* Same rule as the answer blocks: an empty queue is one muted line,
-            not a heading followed by a sentence that repeats it. */}
+            not a heading followed by a sentence that repeats it. When the
+            scope follows a single project from the newest answer, the project
+            name sits in the heading so "whose queue is this" is never a
+            guess. */}
         {pending && pending.length === 0 ? (
-          <p className={s.empty}>{t('shell.pendingNone')}</p>
+          <p className={s.empty}>
+            {focusProjectName
+              ? t('shell.pendingNoneProject', { project: focusProjectName })
+              : t('shell.pendingNone')}
+          </p>
         ) : (
           <>
             <h3 className={s.blockTitle}>
               <span>{t('shell.pendingTitle')}</span>
+              {focusProjectName && <span className={s.scope}>{focusProjectName}</span>}
+              {showLibraryBadge && <span className={s.scope}>{t('shell.scopeAllShort')}</span>}
               {pending && pending.length > 0 && <span className={s.count}>{pending.length}</span>}
             </h3>
             {pending === null ? null : (
@@ -215,9 +276,15 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
       <section className={s.block}>
         <h3 className={s.blockTitle}>
           <span>{t('shell.recentTitle')}</span>
+          {focusProjectName && <span className={s.scope}>{focusProjectName}</span>}
+          {showLibraryBadge && <span className={s.scope}>{t('shell.scopeAllShort')}</span>}
         </h3>
         {recent === null ? null : recent.length === 0 ? (
-          <p className={s.empty}>{t('shell.recentEmpty')}</p>
+          <p className={s.empty}>
+            {focusProjectName
+              ? t('shell.recentEmptyProject', { project: focusProjectName })
+              : t('shell.recentEmpty')}
+          </p>
         ) : (
           <ul className={s.list}>
             {recent.map(p => (

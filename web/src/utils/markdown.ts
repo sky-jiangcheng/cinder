@@ -26,6 +26,10 @@ async function loadMermaid() {
       startOnLoad: false,
       theme: 'default',
       securityLevel: 'strict',
+      // DOMPurify (the last step of the render chain) strips foreignObject and
+      // its HTML children, which is where Mermaid puts labels by default.
+      // SVG <text> labels survive sanitization, so diagrams keep their text.
+      htmlLabels: false,
     })
     mermaidModule = mermaid
   }
@@ -165,7 +169,11 @@ function highlightCodeBlocks(html: string): string {
         // auto-detect, without ever handing hljs a name it would reject.
         highlighted = hljs.highlightAuto(decoded).value
       }
-      return `<pre><code class="hljs${lang ? ` language-${lang}` : ''}">${highlighted}</code></pre>`
+      // The stylesheet's language badge reads data-language. attr(class) used
+      // to print "hljs language-ts" verbatim — the library's own class names,
+      // not a language label a reader asked for.
+      const label = lang || 'text'
+      return `<pre><code class="hljs${lang ? ` language-${lang}` : ''}" data-language="${label}">${highlighted}</code></pre>`
     }
   )
 }

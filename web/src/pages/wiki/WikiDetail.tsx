@@ -5,7 +5,7 @@ import { getProjects, getWikiPage } from '../../api/client'
 import type { PageEdge, Project, WikiPageDetail } from '../../api/client'
 import ErrorBanner from '../../components/ErrorBanner'
 import Icon from '../../components/Icon'
-import { renderMarkdown } from '../../utils/markdown'
+import { useRenderedMarkdown } from '../../hooks/useRenderedMarkdown'
 import s from './WikiDetail.module.css'
 
 // One approved page, in full (ADR-0032 decision 1: the detail route renders
@@ -96,9 +96,9 @@ export default function WikiDetail() {
     return m
   }, [page])
 
-  const bodyHtml = useMemo(() => {
+  const bodySource = useMemo(() => {
     if (!page) return ''
-    const withLinks = page.content.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (whole, rawSlug, rawLabel) => {
+    return page.content.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (whole, rawSlug, rawLabel) => {
       const slug = String(rawSlug).trim()
       const edge = linkMap.get(slug)
       if (!edge) return whole
@@ -107,8 +107,8 @@ export default function WikiDetail() {
       const text = String(rawLabel ?? edge.title ?? slug).replace(/[[\]]/g, '\\$&')
       return `[${text}](${WIKILINK_PREFIX}${encodeURIComponent(edge.slug)})`
     })
-    return renderMarkdown(withLinks)
   }, [page, linkMap])
+  const bodyHtml = useRenderedMarkdown(bodySource)
 
   const handleBodyClick = (e: MouseEvent<HTMLDivElement>) => {
     const anchor = (e.target as HTMLElement).closest('a')

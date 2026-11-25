@@ -302,6 +302,61 @@ export interface NoteWithProject extends Note {
   root_path: string
 }
 
+// ---- The note AI layer (schema v33) ---------------------------------------
+//
+// The insight layer answers three questions a card used to leave to the
+// reader: what is this note about (summary), what does it connect to
+// (related), and why (shared terms). The reason is shipped as evidence —
+// terms, same-topic/same-project flags — rather than a sentence, because the
+// sentence has to be phrased in the reader's language, not the server's.
+
+/** A note as a cross-reference: enough to label a chip and link it. */
+export interface NoteRef {
+  id: number
+  project_id: number
+  project_name?: string
+  title: string
+}
+
+/** Another note judged relevant, with the evidence for the judgement. */
+export interface RelatedNote extends NoteRef {
+  /** Dice overlap of the two notes' weighted terms, rounded to 0.01. */
+  score: number
+  /** The terms the two notes share — what the UI shows as "why". */
+  shared?: string[]
+  same_topic?: boolean
+  same_project?: boolean
+}
+
+/** One note's AI layer. Summary is absent until one has been generated. */
+export interface NoteInsight {
+  note_id: number
+  summary?: string
+  keywords?: string[]
+  related?: RelatedNote[]
+  /** Served from the cache — no model call was made for it. */
+  cached: boolean
+  /** The note changed after its summary was written. */
+  stale?: boolean
+}
+
+/** Result of one batch summary call. */
+export interface NoteInsightGeneration {
+  insights: NoteInsight[]
+  /** Notes the model returned nothing usable for. */
+  failed: number
+  /** Non-fatal caveat: truncation, protocol miss, notes left over. */
+  warning?: string
+}
+
+/** A suspected duplicate pair, with the terms the two notes share. */
+export interface NoteDuplicate {
+  a: NoteRef
+  b: NoteRef
+  score: number
+  shared?: string[]
+}
+
 /**
  * One card of the knowledge page's handoff timeline: the reader view over
  * every handoff note in the knowledge base, newest first. The excerpt is the

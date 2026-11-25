@@ -19,7 +19,7 @@ import {
   type EvidenceItem,
   type SearchHit,
 } from '../../api/client'
-import { renderMarkdown } from '../../utils/markdown'
+import { useRenderedMarkdown } from '../../hooks/useRenderedMarkdown'
 import type { PushToast } from '../../hooks/useToast'
 import { publishAssistantCards } from '../../hooks/assistantCards'
 import s from './HomeKnowledgeAssistant.module.css'
@@ -74,6 +74,50 @@ export interface DialogueMessage {
 // because there is no stream to resume after a reload.
 const HISTORY_KEY = 'repotory.home.dialogue.v1'
 const HISTORY_LIMIT = 50
+
+/**
+ * Answers sometimes arrive with a plain "⚠️ 注意:" paragraph. The renderer
+ * already owns a callout surface for `> [!WARNING]`; converting that leading
+ * marker (and the lines that continue it) gives the warning a real boundary
+ * without rewriting the answer's words. A blank line, rule, heading or list
+ * ends the warning block — anything else stays inside it.
+ */
+export function normalizeAnswerMarkdown(content: string, warningTitle: string): string {
+  if (!content) return content
+  // The CJK branches here RECOGNISE model output, they do not render UI text:
+  // the words are what a Chinese answer may literally start with, so they are
+  // written as escapes to keep them visibly separate from translatable copy.
+  const warningStart = /^\s*(?:\u26a0\ufe0f?|\u26a0)\s*(?:\u6ce8\u610f|Note)?\s*[:\uff1a]?\s*(.*)$/
+  const out: string[] = []
+  let inWarning = false
+  for (const line of content.split('\n')) {
+    const hit = line.match(warningStart)
+    if (hit?.[1]?.trim()) {
+      if (inWarning) out.push('')
+      out.push(`> [!WARNING] ${warningTitle}`, `> ${hit[1].trim()}`)
+      inWarning = true
+      continue
+    }
+    const trimmed = line.trim()
+    if (inWarning) {
+      if (
+        !trimmed ||
+        trimmed.startsWith('---') ||
+        trimmed.startsWith('>') ||
+        /^#{1,6}\s/.test(trimmed) ||
+        /^[-*]\s/.test(trimmed)
+      ) {
+        out.push('')
+        inWarning = false
+      } else {
+        out.push(`> ${trimmed}`)
+        continue
+      }
+    }
+    out.push(line)
+  }
+  return out.join('\n')
+}
 
 export function serializeDialogue(messages: DialogueMessage[]): string {
   return JSON.stringify(messages.filter(m => !m.isStreaming).slice(-HISTORY_LIMIT))
@@ -877,6 +921,10 @@ export default function HomeKnowledgeAssistant({
             </button>
           </span>
         </span>
+      ) : input.length > 0 ? (
+        <span className={s.inputCount}>
+          {t('home.draftChars', { chars: input.length, defaultValue: `${input.length} 字` })}
+        </span>
       ) : (
         <span />
       )}
@@ -1155,14 +1203,15 @@ export default function HomeKnowledgeAssistant({
                       </div>
                     ) : (
                       <div className={s.bubbleAssistant}>
+                        {!msg.isStreaming && msg.content && <AnswerHead msg={msg} />}
                         {/* Markdown Answer, typing indicator, or an explicit
                             empty-reply notice. A finished stream with no text
                             must NOT keep the dots spinning — that is what made
                             a silent backend failure look like a hang. */}
                         {msg.content ? (
-                          <div
-                            className={s.markdownText}
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                          <AssistantAnswerBody
+                            content={msg.content}
+                            warningTitle={t('home.warningTitle')}
                           />
                         ) : msg.isStreaming ? (
                           <div className={s.typingIndicator}>
@@ -1187,124 +1236,12 @@ export default function HomeKnowledgeAssistant({
                           </span>
                         )}
 
-                        {/* Related Project Cards */}
-                        {msg.projectCards && msg.projectCards.length > 0 && (
-                          <div className={s.cardSection}>
-                            <div className={s.cardSectionHeader}>
-                              <Icon name="grid" size={14} />
-                              <span>
-                                {t('home.relatedProjects', {
-                                  count: msg.projectCards.length,
-                                  defaultValue: `涉及项目卡片 (${msg.projectCards.length})`,
-                                })}
-                              </span>
-                            </div>
-                            <div className={s.projectCardsGrid}>
-                              {msg.projectCards.map(p => (
-                                <div
-                                  key={p.id}
-                                  className={s.projectCard}
-                                  onClick={() => navigate(`/project/${p.id}`)}
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') navigate(`/project/${p.id}`)
-                                  }}
-                                >
-                                  <div className={s.projectCardTop}>
-                                    <span className={s.projectName}>
-                                      <Icon name="file-text" size={14} />
-                                      {p.name}
-                                    </span>
-                                    {p.repo_count > 0 && (
-                                      <span className={s.projectRepoBadge}>
-                                        {p.repo_count} repos
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className={s.projectPath} title={p.root_path}>
-                                    {p.root_path}
-                                  </div>
-                                  <div className={s.projectCardBottom}>
-                                    <span className={s.projectActivity}>
-                                      {p.my_added > 0 ? `+${p.my_added} lines` : 'active'}
-                                    </span>
-                                    <span className={s.cardActionLink}>
-                                      {t('home.viewProjectDetail', { defaultValue: '进入项目详情' })} →
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Cited Knowledge Cards */}
-                        {msg.knowledgeCards && msg.knowledgeCards.length > 0 && (
-                          <div className={s.cardSection}>
-                            <div className={s.cardSectionHeader}>
-                              <Icon name="file-text" size={14} />
-                              <span>
-                                {t('home.citedKnowledge', {
-                                  count: msg.knowledgeCards.length,
-                                  defaultValue: `引用知识卡片 (${msg.knowledgeCards.length})`,
-                                })}
-                              </span>
-                            </div>
-                            <div className={s.knowledgeCardsGrid}>
-                              {msg.knowledgeCards.map(item => (
-                                <div
-                                  key={`${item.ref || item.id}-${item.id}`}
-                                  className={s.knowledgeCard}
-                                  onClick={() => handleOpenKnowledge(item)}
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') handleOpenKnowledge(item)
-                                  }}
-                                >
-                                  <div className={s.knowledgeCardHead}>
-                                    {item.ref && <span className={s.refBadge}>[{item.ref}]</span>}
-                                    <span className={s.kindBadge}>
-                                      {item.type === 'page'
-                                        ? item.kind || 'Wiki'
-                                        : item.type === 'todo'
-                                          ? t('search:groupTodos', { defaultValue: '待办' })
-                                          : t('dashboard.noteType', { defaultValue: '知识笔记' })}
-                                    </span>
-                                    {item.source_path && (
-                                      <span className={s.sourceBadge} title={t('home.recallSource', { source: item.source_path })}>
-                                        {item.source_path === 'graph'
-                                          ? t('home.sourceGraph')
-                                          : item.source_path === 'semantic'
-                                            ? t('home.sourceSemantic')
-                                            : item.source_path === 'fact'
-                                              ? t('home.sourceFact')
-                                              : t('home.sourceFts')}
-                                      </span>
-                                    )}
-                                    {item.project_name && (
-                                      <span className={s.projectBadge} title={item.project_name}>
-                                        📁 {item.project_name}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className={s.knowledgeTitle} title={item.title}>
-                                    {item.title}
-                                  </div>
-                                  {item.snippet && (
-                                    <div className={s.knowledgeSnippet} title={item.snippet}>
-                                      {item.snippet}
-                                    </div>
-                                  )}
-                                  <div className={s.cardActionLink}>
-                                    {t('home.viewKnowledgeDetail', { defaultValue: '查看知识详情' })} →
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <AssistantReferences
+                          projectCards={msg.projectCards ?? []}
+                          knowledgeCards={msg.knowledgeCards ?? []}
+                          onOpenProject={p => navigate(`/project/${p.id}`)}
+                          onOpenKnowledge={handleOpenKnowledge}
+                        />
 
                         {/* Reply Actions */}
                         {!msg.isStreaming && msg.content && (
@@ -1367,7 +1304,210 @@ export default function HomeKnowledgeAssistant({
   )
 }
 
+/**
+ * The answer body is its own component because the async renderer needs a
+ * stable hook owner per message — a hook cannot be called inside messages.map.
+ * The debounce keeps a streaming answer from re-parsing on every token; the
+ * sync fallback still shows the latest text immediately while it settles.
+ */
+export function AssistantAnswerBody({ content, warningTitle }: { content: string; warningTitle: string }) {
+  const html = useRenderedMarkdown(normalizeAnswerMarkdown(content, warningTitle), 120)
+  return (
+    <div
+      className={`${s.markdownText} markdown-body`}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+}
+
+/** The settled answer's masthead: what it is, and how much evidence it used. */
+export function AnswerHead({ msg }: { msg: DialogueMessage }) {
+  const { t } = useTranslation()
+  const projects = msg.projectCards?.length ?? 0
+  const knowledge = msg.knowledgeCards?.length ?? 0
+  return (
+    <div className={s.answerHead}>
+      <span className={s.answerLabel}>
+        <Icon name="bot" size={12} />
+        {t('home.answerLabel', { defaultValue: '回答' })}
+      </span>
+      <span className={s.answerFacts}>
+        {projects > 0 && (
+          <span className={s.answerFact}>
+            {t('home.answerFactProjects', { projects, defaultValue: `${projects} 项目` })}
+          </span>
+        )}
+        {knowledge > 0 && (
+          <span className={s.answerFact}>
+            {t('home.answerFactKnowledge', { knowledge, defaultValue: `${knowledge} 知识` })}
+          </span>
+        )}
+        <span className={s.answerFact}>
+          {t('home.answerFactChars', { chars: msg.content.length, defaultValue: `${msg.content.length} 字` })}
+        </span>
+      </span>
+    </div>
+  )
+}
+
 // --- 搜模式的结果 -------------------------------------------------------------
+
+export function AssistantReferences({
+  projectCards,
+  knowledgeCards,
+  onOpenProject,
+  onOpenKnowledge,
+}: {
+  projectCards: Project[]
+  knowledgeCards: EvidenceItem[]
+  onOpenProject: (project: Project) => void
+  onOpenKnowledge: (item: EvidenceItem) => void
+}) {
+  const { t } = useTranslation()
+  const count = projectCards.length + knowledgeCards.length
+  if (count === 0) return null
+
+  return (
+    <details className={s.references}>
+      <summary className={s.referencesSummary}>
+        <Icon name="layers" size={14} />
+        <span>{t('home.references', { count, defaultValue: `引用与相关项目 (${count})` })}</span>
+        {projectCards.length > 0 && (
+          <span className={s.refPill}>
+            {t('home.answerFactProjects', { projects: projectCards.length, defaultValue: `${projectCards.length} 项目` })}
+          </span>
+        )}
+        {knowledgeCards.length > 0 && (
+          <span className={s.refPill}>
+            {t('home.answerFactKnowledge', {
+              knowledge: knowledgeCards.length,
+              defaultValue: `${knowledgeCards.length} 知识`,
+            })}
+          </span>
+        )}
+        <Icon name="arrow-down" size={14} className={s.referencesChevron} />
+      </summary>
+      <div className={s.referencesBody}>
+        {projectCards.length > 0 && (
+          <div className={s.cardGroup}>
+            {knowledgeCards.length > 0 && (
+              <div className={s.cardSectionHeader}>
+                <Icon name="grid" size={14} />
+                <span>{t('home.relatedProjects', { count: projectCards.length, defaultValue: `涉及项目卡片 (${projectCards.length})` })}</span>
+              </div>
+            )}
+            <div className={s.projectCardsGrid}>
+              {projectCards.map(p => (
+                <div
+                  key={p.id}
+                  className={s.projectCard}
+                  onClick={() => onOpenProject(p)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenProject(p)
+                    }
+                  }}
+                >
+                  <div className={s.projectCardTop}>
+                    <span className={s.projectName}>
+                      <Icon name="file-text" size={14} />
+                      {p.name}
+                    </span>
+                    {p.repo_count > 0 && (
+                      <span className={s.projectRepoBadge}>
+                        {p.repo_count} repos
+                      </span>
+                    )}
+                  </div>
+                  <div className={s.projectPath} title={p.root_path}>
+                    {p.root_path}
+                  </div>
+                  <div className={s.projectCardBottom}>
+                    <span className={s.projectActivity}>
+                      {p.my_added > 0 ? `+${p.my_added} lines` : 'active'}
+                    </span>
+                    <span className={s.cardActionLink}>
+                      {t('home.viewProjectDetail', { defaultValue: '进入项目详情' })} →
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {knowledgeCards.length > 0 && (
+          <div className={s.cardGroup}>
+            {projectCards.length > 0 && (
+              <div className={s.cardSectionHeader}>
+                <Icon name="file-text" size={14} />
+                <span>{t('home.citedKnowledge', { count: knowledgeCards.length, defaultValue: `引用知识卡片 (${knowledgeCards.length})` })}</span>
+              </div>
+            )}
+            <div className={s.knowledgeCardsGrid}>
+              {knowledgeCards.map(item => (
+                <div
+                  key={`${item.ref || item.id}-${item.id}`}
+                  className={s.knowledgeCard}
+                  onClick={() => onOpenKnowledge(item)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenKnowledge(item)
+                    }
+                  }}
+                >
+                  <div className={s.knowledgeCardHead}>
+                    {item.ref && <span className={s.refBadge}>[{item.ref}]</span>}
+                    <span className={s.kindBadge}>
+                      {item.type === 'page'
+                        ? item.kind || 'Wiki'
+                        : item.type === 'todo'
+                          ? t('search:groupTodos', { defaultValue: '待办' })
+                          : t('dashboard.noteType', { defaultValue: '知识笔记' })}
+                    </span>
+                    {item.source_path && (
+                      <span className={s.sourceBadge} title={t('home.recallSource', { source: item.source_path })}>
+                        {item.source_path === 'graph'
+                          ? t('home.sourceGraph')
+                          : item.source_path === 'semantic'
+                            ? t('home.sourceSemantic')
+                            : item.source_path === 'fact'
+                              ? t('home.sourceFact')
+                              : t('home.sourceFts')}
+                      </span>
+                    )}
+                    {item.project_name && (
+                      <span className={s.projectBadge} title={item.project_name}>
+                        {item.project_name}
+                      </span>
+                    )}
+                  </div>
+                  <div className={s.knowledgeTitle} title={item.title}>
+                    {item.title}
+                  </div>
+                  {item.snippet && (
+                    <div className={s.knowledgeSnippet} title={item.snippet}>
+                      {item.snippet}
+                    </div>
+                  )}
+                  <div className={s.cardActionLink}>
+                    {t('home.viewKnowledgeDetail', { defaultValue: '查看知识详情' })} →
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </details>
+  )
+}
 
 function SearchResults({
   groups,

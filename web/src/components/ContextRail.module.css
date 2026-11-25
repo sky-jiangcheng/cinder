@@ -220,3 +220,21 @@
     display: none;
   }
 }
+
+/* Scope badge: whose queue / whose recent updates this block is showing.
+   Only present when the newest answer pinned the rail to ONE project. */
+.scope {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  background: var(--bg-tertiary, rgba(127, 127, 127, 0.15));
+  color: var(--text-primary);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

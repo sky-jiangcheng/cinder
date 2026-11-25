@@ -32,6 +32,9 @@ import type {
   MergeResult,
   Note,
   NoteCount,
+  NoteDuplicate,
+  NoteInsight,
+  NoteInsightGeneration,
   NoteOrganizeResult,
   NoteTopic,
   NoteVersion,
@@ -689,6 +692,51 @@ export function organizeNote(noteId: number): Promise<NoteOrganizeResult> {
     args: [noteId],
     path: `/notes/${noteId}/organize`,
   })
+}
+
+/**
+ * Draft a weekly report from one week of a project's material. Like
+ * organizeNote this returns a PROPOSAL (note_id 0 — it is a new note) and
+ * writes nothing; the caller puts it where the person reviews it.
+ *
+ * weekOffset: 0 is this week, -1 the previous one. A future week is refused
+ * by the backend: there is nothing in it to report.
+ */
+export function generateWeeklyReport(projectId: number, weekOffset: number): Promise<NoteOrganizeResult> {
+  return call<NoteOrganizeResult>({
+    method: 'GenerateWeeklyReport',
+    args: [projectId, weekOffset],
+    path: `/projects/${projectId}/weekly-report`,
+  })
+}
+
+/**
+ * The AI layer of every note in scope: cached card summary + related notes.
+ * Read-only and model-free (summaries come from the cache), so a card grid can
+ * call it on page load. `projectId` 0 means the whole knowledge base — the one
+ * scope where relations cross project boundaries.
+ */
+export function getNoteInsights(projectId: number): Promise<NoteInsight[]> {
+  return call<NoteInsight[]>({ method: 'NoteInsights', args: [projectId] }).then(d => d ?? [])
+}
+
+/**
+ * Summarize a batch of notes and cache the result. An empty `noteIds` means
+ * "fill the gaps" (notes with no summary, or one that no longer matches their
+ * content). The service caps the batch, so callers should expect a warning
+ * about leftovers rather than a complete run.
+ */
+export function generateNoteInsights(projectId: number, noteIds: number[] = []): Promise<NoteInsightGeneration> {
+  return call<NoteInsightGeneration>({ method: 'GenerateNoteInsights', args: [projectId, noteIds] })
+    .then(d => d ?? { insights: [], failed: 0 })
+}
+
+/**
+ * Suspected duplicate note pairs in scope. A heuristic suggestion for a human
+ * to inspect — nothing is merged.
+ */
+export function findDuplicateNotes(projectId: number): Promise<NoteDuplicate[]> {
+  return call<NoteDuplicate[]>({ method: 'DuplicateNotes', args: [projectId] }).then(d => d ?? [])
 }
 
 export function pinNote(noteId: number, pinned: boolean): Promise<void> {

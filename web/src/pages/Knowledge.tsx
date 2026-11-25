@@ -11,7 +11,9 @@ import TabStrip, { type TabItem } from '../components/TabStrip'
 import { useKnowledgePage } from '../hooks/useKnowledgePage'
 import WikiPagesView from './Wiki'
 import HandoffTimelineBody from '../components/HandoffTimeline'
-import { getConfig, getProjects, type Project } from '../api/client'
+import NoteDelegate from '../components/notes/NoteDelegate'
+import { getConfig, getNoteInsights, getProjects, type Project } from '../api/client'
+import { useApiData } from '../hooks/useApiData'
 import s from './Knowledge.module.css'
 
 // The knowledge tab: ONE object, two states (ADR-0038 decision 4).
@@ -440,6 +442,21 @@ function NotesBody({
     setQuery, handlePin, handleExport, handleImport, fetchAll, flashMessage,
   } = useKnowledgePage({ projects, scopeProjectId: scope })
 
+  // The AI layer for the grid: cached summaries + related notes across the
+  // whole knowledge base (project 0). One fetch serves every card, and a
+  // scope change re-reads the same cache rather than re-summarizing anything.
+  const insightState = useApiData(() => getNoteInsights(0), [], { cacheKey: 'note-insights:global' })
+  const insights = useMemo(
+    () => new Map((insightState.data ?? []).map(i => [i.note_id, i] as const)),
+    [insightState.data],
+  )
+  // How much of the library already carries a summary — the delegation strip
+  // prints it next to the button so "0/179" is visible before the click.
+  const summarizedCount = useMemo(
+    () => notes.filter(n => insights.get(n.id)?.summary).length,
+    [notes, insights],
+  )
+
   // ADR-0072 provenance transparency: recall badges say WHICH arm surfaced
   // each hit (the home assistant already shows them; this surface used to
   // hide them), and the source chips filter notes by where they came from
@@ -713,6 +730,14 @@ function NotesBody({
                   )}
 
                   <div className="knowledge-section">
+                    {filtered.length > 0 && (
+                      <NoteDelegate
+                        projectId={scope}
+                        total={notes.length}
+                        summarized={summarizedCount}
+                        onGenerated={() => insightState.refetch()}
+                      />
+                    )}
                     {projectNames.length > 0 && (
                       <div className={s.projectJump}>
                         <span className={s.projectJumpLabel}>{t('knowledge.jumpProject')}</span>
@@ -750,6 +775,7 @@ function NotesBody({
                           <KnowledgeCard
                             key={n.id}
                             note={n}
+                            insight={insights.get(n.id)}
                             exporting={exportingId === n.id}
                             onPin={handlePin}
                             onExport={handleExport}

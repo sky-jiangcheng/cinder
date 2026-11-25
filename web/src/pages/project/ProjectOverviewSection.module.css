@@ -1,226 +1,232 @@
-/* Project overview section — scoped styles migrated from project-detail.css. */
 .section {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
-/* Trend + activity folded in here from the Commits tab. One card, one header:
-   the metrics sit above the chart so the numbers and the shape share a scope. */
-.activity {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px 6px;
+.activityCard,
+.panel {
+  background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
-.activityHead {
+.activityCard {
+  padding: 22px;
+}
+
+.activityHead,
+.titleRow,
+.panelTitleRow,
+.trendHead,
+.disclosureSummary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.activityHead {
+  align-items: flex-start;
   flex-wrap: wrap;
 }
 
-.activityHead .subTitle {
-  margin-bottom: 0;
+.titleRow {
+  justify-content: flex-start;
+  gap: 10px;
 }
 
-.metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-}
-
-.metric {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  white-space: nowrap;
-}
-
-.metricLabel {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.metricValue {
-  font-size: 12px;
-  font-family: var(--font-mono);
+.activityHead h2,
+.panelTitle,
+.trendHead h3 {
+  margin: 0;
   color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.activityHead h2 {
+  font-size: 17px;
+}
+
+.lastCommit {
+  margin: 5px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .cacheHint {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  background: var(--bg-primary);
+  font-size: 10px;
+  font-weight: 500;
 }
 
-.tech {
+.statusDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.live .statusDot {
+  background: var(--success);
+}
+
+.cached .statusDot {
+  background: var(--warning);
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--border-subtle);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 15px 18px;
+  background: var(--bg-secondary);
+}
+
+.metricLabel {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metricValue {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.trend {
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.trendHead {
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.trendHead h3,
+.panelTitle {
+  font-size: 13px;
+}
+
+.rangeSummary {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 6px 14px;
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
-/* Two short ranked lists side by side; a single child spans the row instead of
-   sitting in a half-width column with the other half empty. */
-.split {
+.rangeSummary strong {
+  margin-left: 3px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.rangeSummary .added strong {
+  color: var(--success);
+}
+
+.rangeSummary .deleted strong {
+  color: var(--danger);
+}
+
+.noData {
+  margin: 18px 0 0;
+  padding: 24px;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.contentGrid,
+.lowerGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 14px 28px;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 16px;
   align-items: start;
 }
 
-/* Capped rather than stretched: on a 1200px card the 1fr bar column grew to
-   ~800px, so a 41-line language drew a 2px sliver at the far left and its
-   count sat 800px away from the label it belonged to. */
-.langs {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 560px;
+.panel {
+  min-width: 0;
+  padding: 20px;
 }
 
-.langRow {
-  display: grid;
-  grid-template-columns: 90px 1fr 40px;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-}
-
-.langName {
-  color: var(--text-secondary);
-}
-
-.langBar {
-  height: 6px;
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.langFill {
-  height: 100%;
-  background: var(--accent-light);
-  border-radius: 3px;
-}
-
-.langCount {
-  text-align: right;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-}
-
-/* Doubled, same reason as KnowledgeCard's .snippet: the element carries
-   `markdown-body` too, and the serif prose face must not win here by bundle
-   order — a capped README excerpt inside an overview card is chrome. */
-.readme.readme {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 12px 14px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-}
-
-.subTitle {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
-.dependencies {
+.panelBlock + .panelBlock {
   margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
 }
 
+.panelTitleRow {
+  margin-bottom: 13px;
+}
+
+.panelTitleRow .panelTitle {
+  margin: 0;
+}
+
+.panelMeta,
+.moreHint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.moreHint {
+  margin: 10px 0 0;
+  text-align: right;
+}
+
+.techList,
 .depsList {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
 }
 
-.depChip {
+.techChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  min-height: 25px;
   padding: 3px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-}
-
-.depName {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.depVersion {
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.depSource {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  text-transform: uppercase;
-}
-
-.contributors {
-  margin-top: 20px;
-}
-
-.contribList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.contribItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-}
-
-.contribRank {
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 12px;
-  min-width: 24px;
-}
-
-.contribName {
-  flex: 1;
-  color: var(--text-primary);
-}
-
-.contribCount {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-/* ---- 从 components/cards.css 下沉（P35 第六轮）----
-   `.tech-chip.tech-*` 是同一元素上的复合类，下沉后两者都在 module 作用域内，直接用
-   复合选择器即可（不需要 doubled：变体 (0,2,0) 本来就高于基类 (0,1,0)）。 */
-.techChip {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 12px;
+  border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .techChip.techFramework {
@@ -231,4 +237,258 @@
 .techChip.techTool {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+}
+
+.langList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.langRow {
+  display: grid;
+  grid-template-columns: 82px minmax(70px, 1fr) 46px 36px;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+}
+
+.langName {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.langBar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+}
+
+.langFill {
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: var(--accent-light);
+}
+
+.langCount,
+.langPercent {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+}
+
+.langPercent {
+  color: var(--text-secondary);
+}
+
+.contribList {
+  display: flex;
+  flex-direction: column;
+}
+
+.contribItem {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.contribItem:last-child {
+  border-bottom: 0;
+}
+
+.contribRank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.contribItem:first-child .contribRank {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.contribName {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contribCount {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.disclosure {
+  padding: 0;
+  overflow: hidden;
+}
+
+.lowerGrid > .disclosure:only-child {
+  grid-column: 1 / -1;
+}
+
+.disclosureSummary {
+  min-height: 52px;
+  padding: 14px 18px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.disclosureSummary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosureSummary:hover {
+  background: var(--bg-hover);
+}
+
+.disclosureSummary:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: -3px;
+}
+
+.disclosureTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.disclosureChevron {
+  flex: none;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast);
+}
+
+.disclosure[open] .disclosureChevron {
+  transform: rotate(180deg);
+}
+
+.disclosure[open] .disclosureSummary {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.depCount {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.readme.readme {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 18px 20px 22px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.depsList {
+  padding: 16px 18px 18px;
+}
+
+.depChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  font-size: 11px;
+}
+
+.depName {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.depVersion {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.depSource {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.disclosure > .moreHint {
+  padding: 0 18px 16px;
+}
+
+@media (max-width: 900px) {
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .activityCard {
+    padding: 16px;
+  }
+
+  .metric {
+    padding: 13px 14px;
+  }
+
+  .metricValue {
+    font-size: 21px;
+  }
+
+  .trendHead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .rangeSummary {
+    justify-content: flex-start;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .langRow {
+    grid-template-columns: 68px minmax(50px, 1fr) 40px 32px;
+    gap: 6px;
+  }
+
+  .disclosureSummary {
+    padding: 13px 15px;
+  }
+
+  .readme {
+    padding: 15px 16px 18px;
+  }
+
+  .depsList {
+    padding: 14px 15px 16px;
+  }
 }

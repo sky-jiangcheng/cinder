@@ -4,10 +4,11 @@ import { useTranslation } from 'react-i18next'
 import {
   listNotes, createNoteWithMeta, updateNoteFull, deleteNote, pinNote, moveNote,
   organizeNote, setNoteTopic,
+  getNoteInsights,
   getProjects,
-  type Note, type NoteTopic, type Project,
+  type Note, type NoteInsight, type NoteOrganizeResult, type NoteTopic, type Project,
 } from '../api/client'
-import { renderMarkdown } from '../utils/markdown'
+import { useRenderedMarkdown } from '../hooks/useRenderedMarkdown'
 import { useApiData } from '../hooks/useApiData'
 import { useConfirmClick } from '../hooks/useConfirmClick'
 import { useNoteMutations } from '../hooks/useNoteMutations'
@@ -19,6 +20,8 @@ import type { KindFilter } from '../types/kind'
 import NoteEditor, { type NoteDraft } from './notes/NoteEditor'
 import NoteFilterBar from './notes/NoteFilterBar'
 import TopicFilterBar from './notes/TopicFilterBar'
+import RelatedNoteChips from './notes/RelatedNoteChips'
+import NoteDelegate from './notes/NoteDelegate'
 import SourceTypeBadge from './SourceTypeBadge'
 import VersionHistoryPanel from './notes/VersionHistoryPanel'
 import ErrorBanner from './ErrorBanner'
@@ -51,6 +54,14 @@ function formatStamp(raw: string): string {
   if (Number.isNaN(d.getTime())) return raw.slice(0, 16)
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/**
+ * Byte size for a card's byline — an IDE shows file sizes next to names; a
+ * note card carries its own weight the same way.
+ */
+function noteSize(chars: number): string {
+  return chars < 1024 ? `${chars} B` : `${(chars / 1024).toFixed(1)} KB`
 }
 
 function loadEditDraft(noteId: number): NoteDraft | null {
@@ -95,6 +106,23 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   const [draft, setDraft, clearDraft] = useNoteDraft(projectId)
   const { data: projectsData } = useApiData(() => getProjects(undefined, false), [], { cacheKey: 'projects:all' })
   const projects = projectsData ?? []
+
+  // The AI layer (schema v33): a cached one-line summary per note plus the
+  // notes it relates to. It rides along with the list because it is a plain
+  // cache read — no model call — and a failure leaves the cards exactly as
+  // they were: decoration must never take the list down with it.
+  const insightState = useApiData(() => getNoteInsights(projectId), [projectId], { cacheKey: 'note-insights' })
+  const insights = useMemo(
+    () => new Map((insightState.data ?? []).map(i => [i.note_id, i] as const)),
+    [insightState.data],
+  )
+  // Summaries are generated as an explicit batch through the delegation strip
+  // (notes/NoteDelegate), not on page load: the model is slow and paid for,
+  // and a summary does not change until the note does.
+  const summarizedCount = useMemo(
+    () => notes.filter(n => insights.get(n.id)?.summary).length,
+    [notes, insights],
+  )
 
   // The topic layer (schema v27): a project holds topics, a note is filed
   // under one of them. The hook owns the list so the filter bar, the editor
@@ -294,6 +322,26 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
   }
 
   /**
+   * A weekly report lands in the NEW note composer, not in an existing note's
+   * editor: it is a new page about the week. Unsaved text already in the
+   * composer wins — the person's half-written note is not ours to discard,
+   * and a report is one click away from being regenerated.
+   */
+  const handleWeekly = (proposal: NoteOrganizeResult) => {
+    if (draft.content.trim()) {
+      setError(t('project.weeklyDraftBusy'))
+      return
+    }
+    setError('')
+    setDraft({
+      content: proposal.content,
+      title: proposal.title,
+      tags: proposal.tags,
+      kind: 'knowledge',
+    })
+  }
+
+  /**
    * Filing an existing note under a topic takes effect immediately, the same
    * way moving it to another project does: both are organizing acts rather
    * than edits to the note's text, and making the user press "save" a second
@@ -393,6 +441,19 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
         <ErrorBanner message={error} onRetry={retryLast} />
       )}
 
+      {/* The delegation strip (notes/NoteDelegate): digest this batch, find
+          the duplicates. Kept out of the header row so the strip can report
+          what the last action actually did. */}
+      {notes.length > 0 && (
+        <NoteDelegate
+          projectId={projectId}
+          total={notes.length}
+          summarized={summarizedCount}
+          onGenerated={() => insightState.refetch()}
+          onWeekly={handleWeekly}
+        />
+      )}
+
       <NoteFilterBar filter={filter} setFilter={setFilter} notesCount={notes.length} t={t} />
 
       {/* The topic layer sits between the project and the notes: the strip
@@ -410,16 +471,18 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
       />
 
       {isNew && (
-        <NoteEditor
-          value={draft}
-          onChange={setDraft}
-          onSave={handleCreate}
-          onCancel={() => { setIsNew(false); clearDraft() }}
-          saving={saving}
-          topics={topicState.topics}
-          topicId={draft.topicId ?? 0}
-          onTopicChange={id => setDraft(d => ({ ...d, topicId: id }))}
-        />
+        <div className={s.wideEditor}>
+          <NoteEditor
+            value={draft}
+            onChange={setDraft}
+            onSave={handleCreate}
+            onCancel={() => { setIsNew(false); clearDraft() }}
+            saving={saving}
+            topics={topicState.topics}
+            topicId={draft.topicId ?? 0}
+            onTopicChange={id => setDraft(d => ({ ...d, topicId: id }))}
+          />
+        </div>
       )}
 
       {filteredNotes.length === 0 && !isNew ? (
@@ -430,6 +493,7 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
             <NoteCard
               key={note.id}
               note={note}
+              insight={insights.get(note.id)}
               highlighted={flashId === note.id}
               editing={editingId === note.id}
               editDraft={editDraft}
@@ -477,11 +541,13 @@ function NoteSection({ projectId, autoNew = false, focusNoteId }: Props) {
 
 /** NoteCard renders one note, switching to the inline editor when editing. */
 function NoteCard({
-  note, highlighted, editing, editDraft, onEditDraftChange, onSaveEdit, onCancelEdit, saving,
+  note, insight, highlighted, editing, editDraft, onEditDraftChange, onSaveEdit, onCancelEdit, saving,
   projects, currentProjectId, onMoveProject, onPin, onEdit, onOrganize, organizing, isProposal,
   organizeWarning, onOpenHistory, onDelete, topics, onSetTopic,
 }: {
   note: Note
+  /** The note's AI layer, when one has been generated and is still current. */
+  insight?: NoteInsight
   highlighted: boolean
   editing: boolean
   editDraft: NoteDraft
@@ -509,6 +575,7 @@ function NoteCard({
 }) {
   const { t } = useTranslation()
   const { armed, click } = useConfirmClick(() => { void onDelete(note.id) })
+  const bodyHtml = useRenderedMarkdown(note.content)
   // Long notes used to make the project's notes tab one very tall page: every
   // card rendered its full markdown, so a project with a handful of handoffs
   // was a wall of text to scroll past to reach the next note. A card now shows
@@ -516,6 +583,11 @@ function NoteCard({
   // page (/note/:id, ADR-0078) for reading at full width.
   const [expanded, setExpanded] = useState(false)
   const collapsible = note.content.length > 420 || note.content.split('\n').length > 6
+  // Byline facts: line count + size carry the note's weight at a glance (the
+  // IDE shows the same "N lines, X chars" in its status bar). Both created and
+  // updated stamps render when they differ, so the card tells its own history.
+  const lineCount = note.content ? note.content.split('\n').length : 0
+  const changed = note.updated_at !== note.created_at
 
   // The source badge is the derived TYPE (ADR-0022 决策 5), not the raw
   // source name: the server sends `source_type` and the shared badge
@@ -524,33 +596,35 @@ function NoteCard({
 
   if (editing) {
     return (
-      <div className={`${s.card} ${highlighted ? s.cardFlash : ''}`} data-note-id={note.id}>
-        {isProposal && (
-          <div className={s.proposalBanner}>
-            <span>{t('project.organizeProposal')}</span>
-            {organizeWarning && <em>{organizeWarning}</em>}
-          </div>
-        )}
-        <NoteEditor
-          value={editDraft}
-          onChange={onEditDraftChange}
-          onSave={onSaveEdit}
-          onCancel={onCancelEdit}
-          saving={saving}
-          showPinned
-          projects={projects}
-          currentProjectId={currentProjectId}
-          onMoveProject={(pid) => onMoveProject(note.id, pid)}
-          topics={topics}
-          topicId={editDraft.topicId ?? note.topic_id}
-          onTopicChange={(tid) => onSetTopic(note.id, tid)}
-        />
+      <div className={`${s.card} ${s.cardWide} ${highlighted ? s.cardFlash : ''}`} data-note-id={note.id}>
+        <div className={s.wideEditor}>
+          {isProposal && (
+            <div className={s.proposalBanner}>
+              <span>{t('project.organizeProposal')}</span>
+              {organizeWarning && <em>{organizeWarning}</em>}
+            </div>
+          )}
+          <NoteEditor
+            value={editDraft}
+            onChange={onEditDraftChange}
+            onSave={onSaveEdit}
+            onCancel={onCancelEdit}
+            saving={saving}
+            showPinned
+            projects={projects}
+            currentProjectId={currentProjectId}
+            onMoveProject={(pid) => onMoveProject(note.id, pid)}
+            topics={topics}
+            topicId={editDraft.topicId ?? note.topic_id}
+            onTopicChange={(tid) => onSetTopic(note.id, tid)}
+          />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className={`${s.card} ${note.pinned ? s.cardPinned : ''} ${highlighted ? s.cardFlash : ''}`} data-note-id={note.id}>
+    <div className={`${s.card} ${expanded ? s.cardWide : ''} ${note.pinned ? s.cardPinned : ''} ${highlighted ? s.cardFlash : ''}`} data-note-id={note.id}>
       <div className={s.titleRow}>
         <Link to={`/note/${note.id}`} className={s.titleText}>
           {note.title || note.content.split('\n')[0] || t('project.noteWord')}
@@ -569,7 +643,24 @@ function NoteCard({
           ><Icon name="pin" size={15} /></button>
         </div>
       </div>
-      <div className={`${s.body} markdown-body ${collapsible && !expanded ? s.bodyClamped : ''}`} dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }} />
+      {/* The AI line: what this note says, in one sentence, before the raw
+          text. Only rendered once a summary exists — until then the card is
+          exactly the document it always was, which is the honest state.
+
+          A summarized card hands the preview slot to the summary instead of
+          showing both: the summary IS the preview, and the raw prefix under it
+          was two clipped lines of markdown heading. Expanding restores the
+          body (the summary stays above it as orientation). */}
+      {insight?.summary && (
+        <div className={`${s.aiLine} ${expanded ? '' : s.aiLineFill}`} title={(insight.keywords ?? []).join(t('common.listSeparator'))}>
+          <span className={s.spark} aria-hidden="true">✦</span>
+          <span className={s.aiText}>{insight.summary}</span>
+          {insight.stale && <span className={s.staleTag}>{t('project.aiSummaryStale')}</span>}
+        </div>
+      )}
+      {(!insight?.summary || expanded) && (
+        <div className={`${s.body} markdown-body ${collapsible && !expanded ? s.bodyClamped : ''}`} dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+      )}
       {collapsible && (
         <button
           type="button"
@@ -585,12 +676,22 @@ function NoteCard({
           {note.tags.split(',').map(tag => tag.trim()).filter(Boolean).map(tag => <span key={tag} className={s.tagChip}>#{tag}</span>)}
         </div>
       )}
+      {insight?.related && insight.related.length > 0 && (
+        // Two chips, not three: at a card's width a third one shrinks every
+        // title to "Session Han..." and the row stops telling the reader
+        // anything. The note page lists all of them with their reasons.
+        <RelatedNoteChips related={insight.related} max={2} />
+      )}
       <div className={s.meta}>
-        <span className={s.time}>
-          {note.updated_at !== note.created_at
-            ? `${t('project.updatedAtPrefix')} ${formatStamp(note.updated_at)}`
-            : `${t('project.createdAtPrefix')} ${formatStamp(note.created_at)}`}
-        </span>
+        <div className={s.metaFacts}>
+          <span className={s.time}>
+            {changed
+              ? `${t('project.createdAtPrefix')} ${formatStamp(note.created_at)} · ${t('project.updatedAtPrefix')} ${formatStamp(note.updated_at)}`
+              : `${t('project.createdAtPrefix')} ${formatStamp(note.created_at)}`}
+          </span>
+          <span className={s.fact}>{t('project.noteFacts', { lines: lineCount, size: noteSize(note.content.length) })}</span>
+          {(note.version ?? 1) > 1 && <span className={s.versionFact}>{t('project.noteVersion', { version: note.version })}</span>}
+        </div>
         <div className={s.actions}>
           <button className="btn btn-sm" onClick={() => onEdit(note)}>{t('project.edit')}</button>
           <button

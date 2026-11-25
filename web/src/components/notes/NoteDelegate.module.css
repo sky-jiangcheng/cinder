@@ -1,0 +1,174 @@
+/* NoteDelegate — the AI delegation strip above a note grid. */
+
+/* Quiet by default: one row of text buttons with a dashed outline, because the
+   list itself is the page's content and this strip is a tool sitting on it. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  /* Hugs its content: a full-width dashed box with three small buttons at the
+     left reads as an empty container, not as a tool. */
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+/* A typographic mark, not an emoji: same colour in both themes, same size
+   regardless of the font fallback. */
+.spark {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.btn {
+  padding: 2px 9px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The week picker. It appears in place (after the button that opened it)
+   rather than as a menu: two choices, both visible, no dismissal arc. */
+.choices {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 2px;
+}
+
+.choice {
+  padding: 1px 7px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.choice:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The outcome of the last action. It sits in the strip rather than as a toast:
+   "12 of 30 summarized" is context for the button that produced it, and a
+   toast would take it away before the user finished reading the count. */
+.note {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.error {
+  font-size: 11px;
+  color: var(--danger, var(--warning));
+}
+
+/* The duplicate panel: a work list, not a result page. A row pairs two titles
+   with the percentage and the shared terms, so a false positive can be
+   dismissed without opening either note. */
+.panel {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.panelHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.panelNote {
+  flex: 1;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.close {
+  align-self: center;
+  display: inline-flex;
+  padding: 2px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 11.5px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.title {
+  color: var(--text-primary);
+  text-decoration: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.vs {
+  color: var(--text-muted);
+}
+
+.score {
+  font-family: var(--font-mono);
+  color: var(--warning);
+}
+
+.shared {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}

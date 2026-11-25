@@ -407,16 +407,16 @@ function ProjectDetailPage() {
         )}
 
         {tab === 'notes' && (
-          /* Notes are read, not scanned: the list is a document column, so it
-             gets a measure instead of the full content width. At 1224px a note
-             body ran ~50 characters per line, which is past the point where the
-             eye loses the next line. The column (and every control in it) is
-             capped in one place so the filter strip cannot stay wide while the
-             cards narrow. `key` remounts the section when the project changes:
-             /project/:id reuses this page instance, and without the key the
-             previous project's open draft was persisted into the new project's
-             localStorage key — and could be saved there. */
-          <div className={s.readingColumn}>
+          /* Notes are a card grid, like the knowledge hub: at 720px the tab
+             showed one sheet per screen, which is a reading column doing a
+             scanning job. The grid gets the full content width (it improves
+             with width), and the editor — the only thing that still needs a
+             measure — caps itself at 760px inside NoteSection. `key` remounts
+             the section when the project changes: /project/:id reuses this page
+             instance, and without the key the previous project's open draft was
+             persisted into the new project's localStorage key — and could be
+             saved there. */
+          <div className={s.gridColumn}>
             <NoteSection key={`notes-${id}`} projectId={Number(id)} autoNew={searchParams.get('newNote') === '1'} focusNoteId={focusNoteId} />
           </div>
         )}

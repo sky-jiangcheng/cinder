@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   listAIModels,
@@ -57,6 +57,28 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
   // 保存成功的按钮级反馈：全局 toast 之外，按钮本身也要"动一下"——之前保存
   // 成功只有右上角一条消息扫过，表单和按钮毫无变化，用户不知道存没存上。
   const [savedFlash, setSavedFlash] = useState(false)
+  // 模型下拉跟「拉取→保存」周期走：拉取成功才出现（供选择），保存成功即消失
+  // （模型已定，界面回归清爽）。改了地址/模型后重新拉取，下拉会再回来。
+  const [pickerVisible, setPickerVisible] = useState(false)
+  // combobox：一个控件同时承担手动输入与列表选择。models 就绪后输入框右侧
+  // 出现 ▾ 箭头，点开是过滤式浮层（按已输入的字符过滤，WKWebView 的原生
+  // <datalist> 不渲染下拉，所以自绘）；选择回填输入框，Escape / 点外部关闭。
+  const [pickerOpen, setPickerOpen] = useState(false)
+  // 过滤基准：点箭头打开时为空（显示全部），在输入框里打字才按字符过滤——
+  // 否则 auto-select 填入的模型名会把其余候选全部滤掉，改选无从谈起。
+  const [pickerQuery, setPickerQuery] = useState('')
+  const comboRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (comboRef.current && !comboRef.current.contains(e.target as Node)) setPickerOpen(false)
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    return () => document.removeEventListener('mousedown', onDocMouseDown)
+  }, [pickerOpen])
+  const filteredModels = models.filter(m =>
+    m.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
+  )
 
   const savedBaseURL = config.ai_chat_base_url || ''
   const savedModel = config.ai_chat_model || ''
@@ -80,9 +102,11 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
         ? await listAIModelsConfigured()
         : await listAIModels(baseURL.trim(), apiKey.trim())
       setModels(res.models)
-      // Auto-select the first fetched model when the field is empty so the pull
-      // has a visible result. Previously the list only fed a <datalist>, which
-      // WKWebView renders weakly, so after "拉取模型" the picker looked unchanged.
+      // 拉取成功 → 下拉出现（供给选择）。Auto-select the first fetched model
+      // when the field is empty so the pull has a visible result. Previously
+      // the list only fed a <datalist>, which WKWebView renders weakly, so
+      // after "拉取模型" the picker looked unchanged.
+      if (res.models.length > 0) setPickerVisible(true)
       if (res.models.length > 0 && model.trim() === '') {
         setModel(res.models[0])
       }
@@ -142,6 +166,8 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
       onSaved()
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2000)
+      // 模型已定 → 下拉收起，界面回到清爽的两框（地址 + 模型）。
+      setPickerVisible(false)
       return true
     } catch (e: unknown) {
       showMessage(t('settings.saveFailedMsg', { msg: e instanceof Error ? e.message : t('common.unknownError') }))
@@ -228,27 +254,78 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
 
       <div className="form-group">
         <label htmlFor="ai-model">{t('settings.ai.model')}</label>
-        <input
-          id="ai-model"
-          type="text"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="form-input"
-          placeholder="qwen2.5-7b-instruct / gpt-4o-mini / …"
-        />
-        {/* 拉取到的模型渲染成真正可见可点的下拉（WKWebView 对 <datalist> 支持差，
-            旧实现在 WebKit 里不显示下拉，拉取后「看起来没变化」）。保留上方自由
-            文本输入以便手输列表外的模型；从这里选择会回填 model。 */}
-        {models.length > 0 && (
-          <select
-            className="form-input"
-            aria-label="model"
-            value={models.includes(model) ? model : ''}
+        {/* 拉取到的模型与输入框合并成一个 combobox：手动输入与列表选择共用
+            一个控件，不再有两个框。WKWebView 的原生 <datalist> 不渲染下拉
+            （历史教训），所以箭头与浮层自绘；浮层按已输入字符过滤，Escape /
+            点击外部关闭。可见性跟「拉取→保存」周期走：拉取成功出现，保存
+            成功消失——回归守卫钉住这条链。 */}
+        {models.length > 0 && pickerVisible && (
+          <div className="model-combo" ref={comboRef}>
+            <input
+              id="ai-model"
+              type="text"
+              value={model}
+              onChange={(e) => {
+                setModel(e.target.value)
+                setPickerQuery(e.target.value)
+                setPickerOpen(true)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setPickerOpen(false)
+              }}
+              className="form-input"
+              placeholder="qwen2.5-7b-instruct / gpt-4o-mini / …"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="model-combo-toggle"
+              aria-label={t('settings.ai.modelPicker', { count: models.length })}
+              aria-expanded={pickerOpen}
+              onClick={() => {
+                setPickerQuery('')
+                setPickerOpen(o => !o)
+              }}
+            >
+              ▾
+            </button>
+            {pickerOpen && (
+              <div
+                className="model-combo-pop"
+                role="listbox"
+                aria-label={t('settings.ai.modelPicker', { count: models.length })}
+              >
+                {filteredModels.length === 0 && (
+                  <div className="model-combo-empty">{t('settings.ai.modelNoMatch')}</div>
+                )}
+                {filteredModels.map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="option"
+                    aria-selected={m === model.trim()}
+                    className="model-combo-option"
+                    onClick={() => {
+                      setModel(m)
+                      setPickerOpen(false)
+                    }}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {!(models.length > 0 && pickerVisible) && (
+          <input
+            id="ai-model"
+            type="text"
+            value={model}
             onChange={(e) => setModel(e.target.value)}
-          >
-            <option value="" hidden />
-            {models.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+            className="form-input"
+            placeholder="qwen2.5-7b-instruct / gpt-4o-mini / …"
+          />
         )}
         <span className="form-hint">{t('settings.ai.modelHint')}</span>
       </div>

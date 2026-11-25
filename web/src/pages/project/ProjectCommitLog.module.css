@@ -305,6 +305,45 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-primary);
+  transition: opacity 0.15s ease;
+}
+
+/* A page turn keeps the outgoing page visible until the incoming one lands:
+   dimming says "loading" without emptying the pane or moving the scroll. */
+.bookStale {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* First load paints the shape of the list (rows, message line, meta line)
+   instead of a one-line "loading" string: the pane does not jump when the real
+   commits arrive. */
+.feedSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px 2px;
+}
+
+.skeletonRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.skeletonDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.skeletonBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
 }
 
 /* Each pane scrolls on its own (the timeline and the patch are read

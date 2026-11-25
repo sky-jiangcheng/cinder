@@ -25,15 +25,16 @@
   margin-bottom: 0;
 }
 
-/* Wraps: at the tab's 720px reading column a long title plus its type badge,
-   topic badge and pin no longer fit one line, and without wrapping the pin was
-   pushed out of the card instead of moving under the title. */
+/* One line, always: a grid card has a fixed height, so a wrapped title would
+   steal a preview line. The title ellipsizes instead; the badges and pin never
+   shrink. */
 .titleRow {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 6px 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  min-width: 0;
 }
 
 /* The title is the card's link to the note's own page (ADR-0078). It keeps the
@@ -43,12 +44,16 @@
    15px, up from 13px: the body is 16px prose, and a 13px title read as a label
    above the text instead of the document's name. */
 .titleText {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.45;
   color: var(--text-primary);
   text-decoration: none;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .titleText:hover {
@@ -56,21 +61,48 @@
   text-decoration: underline;
 }
 
+/* The notes tab is a scanning surface: equal-width cards in an auto-fill grid,
+   so the page shows rows of notes instead of one full-width sheet at a time.
+   minmax(340px) yields three columns at the tab's ~1200px content width and
+   falls back to one on a narrow window without a media query. */
 .list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
-/* One note = one sheet. The padding grew with the narrower column: at 800px
-   the card is no longer a banner, so it can afford the margins a document
-   wants (18/20 instead of 14/16). */
+/* One note = one card of a fixed footprint. A standard height is what makes a
+   grid readable at a glance: varying heights break the row rhythm and let one
+   long note push every later card below the fold. Content that exceeds the
+   height fades out (`.bodyClamped`) and the expander or /note/:id shows the
+   rest.
+   
+   236px, up from 216px: the AI layer added a summary line and a related row,
+   and taking that room out of the preview left two clipped lines — which is
+   not a preview. The card stays the same shape; it just carries its new rows. */
 .card {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 18px 20px;
+  padding: 14px 16px;
   background: var(--bg-tertiary);
   transition: border-color var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  height: 236px;
+  overflow: hidden;
+}
+
+/* The editor and an expanded note need the room the grid card does not have. */
+.cardWide {
+  grid-column: 1 / -1;
+  height: auto;
+}
+
+/* A wide editor at 1200px would be an unreadable line length; the card widens
+   for the controls, the text inside keeps a 760px measure. */
+.wideEditor {
+  max-width: 760px;
 }
 
 /* The hover border is the only affordance: the title is already a link, and
@@ -108,9 +140,14 @@
 
 .body.body {
   font-family: var(--font-display);
-  font-size: 14px;
-  line-height: 1.62;
-  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  /* The preview takes whatever height the fixed card has left: meta is pinned
+     to the bottom, so the body is the only elastic row. */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin-bottom: 4px;
   color: var(--text-primary);
 }
 
@@ -121,6 +158,21 @@
   margin: 0.3em 0;
 }
 
+/* Most note bodies open with `# Title`, which repeats the card title above. At
+   card scale a prose heading would eat the whole preview, so it reads as a
+   compact label and leaves the lines below it visible. */
+.body.body :is(h1, h2, h3, h4) {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0.15em 0 0.3em;
+}
+
+.body.body ul,
+.body.body ol {
+  margin: 0.25em 0;
+  padding-left: 1.2em;
+}
+
 .body.body li {
   margin: 0.12em 0;
 }
@@ -128,24 +180,23 @@
 /* The collapsed state of a long note. The mask (not just overflow) is what
    tells the reader the text continues — a hard cut at the container edge reads
    as a rendering bug, a fade reads as "there is more". */
+/* The clamped preview now gets its height from the fixed card (`flex: 1`), so
+   the mask is the only thing this class adds: a hard cut at the card edge reads
+   as a bug, a fade reads as "there is more". */
 .bodyClamped {
-  /* Seven prose lines at 16px/1.7, not six: with the narrower column the
-     preview carries real content before it fades, and the fade still starts
-     well above the card's fold. */
-  max-height: 190px;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 68%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 68%, transparent 100%);
 }
 
 .expandBtn {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   font-size: 11px;
   color: var(--accent);
   background: none;
   border: none;
-  padding: 0 0 6px;
+  padding: 0 0 4px;
   cursor: pointer;
 }
 
@@ -162,13 +213,37 @@
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 6px 12px;
-  font-size: 11px;
+  gap: 4px 8px;
+  margin-top: auto;
+  font-size: 10.5px;
   color: var(--text-muted);
 }
 
 .time {
   font-family: var(--font-mono);
+}
+
+/* Created/updated stamps, content size and version — the card's own byline.
+   Mirrors the IDE status bar's "N lines, X chars" so a card reads as a real
+   artifact with provenance, not a bare title over a text snippet. */
+.metaFacts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.fact {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.versionFact {
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-secondary);
 }
 
 .actions {
@@ -208,9 +283,11 @@
 
 .tagsRow {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .tagChip {
@@ -243,3 +320,69 @@
   font-size: 11px;
   font-weight: 500;
 }
+
+/* ---- The AI layer -------------------------------------------------------- */
+
+/* The summary line: one sentence of judgement, above the note's own text.
+   Deliberately NOT markdown — a summary that renders headings or fences turns
+   the card back into a document, which is what this line exists to spare the
+   reader. Clamped to one line: the card has a fixed height and the body below
+   is what the user came for. */
+.aiLine {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-bottom: 6px;
+  padding-left: 7px;
+  border-left: 2px solid var(--accent);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.aiText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* When the summary takes the preview slot (no body below it), it gets the
+   elastic height and wraps to a few lines instead of truncating after one —
+   the card still has to look like it holds something. */
+.aiLineFill {
+  flex: 1;
+  min-height: 0;
+  align-items: flex-start;
+  overflow: hidden;
+}
+
+.aiLineFill .aiText {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The spark is a typographic mark, not an emoji: it stays the accent colour in
+   both themes and does not change size with the font fallback. */
+.spark {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 10px;
+}
+
+/* A summary whose note has since been edited. The text is still shown (it is
+   the last thing the model said) but flagged, because quoting a stale summary
+   as current would be a quiet lie. */
+.staleTag {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  padding: 0 5px;
+}
+

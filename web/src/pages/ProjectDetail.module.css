@@ -151,6 +151,13 @@
   margin: 0 auto;
 }
 
+/* Notes switched from a document column to a card grid: fixed-size cards are
+   scanned, not read line by line, so the tab takes the content width and lets
+   the grid decide its column count. TodoSection still uses .readingColumn. */
+.gridColumn {
+  width: 100%;
+}
+
 /* The panel already ends the page; the commits card's own bottom margin was
    stacking a second gap under it (the card is the last thing in its tab). */
 .panelBody :global(.detail-section) {

@@ -80,15 +80,29 @@ export default function ProjectCommitLog({ projectId, repos }: Props) {
   const requestKey = `${projectId}|${fetchRepoId ?? 'all'}|${term}|${page}|${pageSize}`
   const [result, setResult] = useState<{ key: string; page: CommitPage | null; error: string } | null>(null)
   const shown = result && result.key === requestKey ? result : null
-  const commits = shown?.page?.items ?? null
-  const total = shown?.page?.total ?? 0
+  // A page turn re-reads the SAME query, so the outgoing page is still true
+  // context: keep it on screen (dimmed) until the incoming one lands instead of
+  // blanking the reader and bouncing the scroll. The carried page is scoped to
+  // project+repo+search term, so switching any of those still shows a skeleton
+  // — a previous project's history must never appear under this one.
+  const [lastGood, setLastGood] = useState<{ query: string; page: CommitPage } | null>(null)
+  const queryKey = `${projectId}|${fetchRepoId ?? 'all'}|${term}`
+  const carried = !shown && lastGood && lastGood.query === queryKey ? lastGood.page : null
+  const listed = shown?.page ?? carried
+  const commits = listed?.items ?? null
+  const total = listed?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const refreshing = !shown && !!carried
 
   useEffect(() => {
     let cancelled = false
     const key = requestKey
     searchCommits(projectId, fetchRepoId ?? 0, term, page * pageSize, pageSize)
-      .then(data => { if (!cancelled) setResult({ key, page: data, error: '' }) })
+      .then(data => {
+        if (cancelled) return
+        setResult({ key, page: data, error: '' })
+        setLastGood({ query: `${projectId}|${fetchRepoId ?? 'all'}|${term}`, page: data })
+      })
       .catch((e: unknown) => {
         if (cancelled) return
         setResult({ key, page: null, error: e instanceof Error ? e.message : t('common.failed') })
@@ -264,14 +278,26 @@ export default function ProjectCommitLog({ projectId, repos }: Props) {
         <span className={s.resultCount}>{t('project.commitCount', { count: total })}</span>
       </div>
 
-      {commits === null && !shown?.error && <div className={s.status}>{t('common.loading')}</div>}
+      {commits === null && !shown?.error && (
+        <div className={s.feedSkeleton} aria-hidden>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className={s.skeletonRow}>
+              <span className={`skeleton ${s.skeletonDot}`} />
+              <span className={s.skeletonBody}>
+                <span className="skeleton skeleton-text" style={{ width: `${72 - i * 5}%` }} />
+                <span className="skeleton skeleton-text" style={{ width: '38%', height: 9 }} />
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {shown?.error && <div className={`${s.status} ${s.statusError}`}>{shown.error}</div>}
       {commits !== null && !shown?.error && commits.length === 0 && (
         <div className={s.status}>{t('project.noCommits')}</div>
       )}
 
       {commits !== null && commits.length > 0 && (
-        <div className={s.book}>
+        <div className={`${s.book} ${refreshing ? s.bookStale : ''}`} aria-busy={refreshing}>
           <section className={`${s.page} ${s.leftPage}`} aria-label={t('project.logPageTitle')}>
             <div className={s.pageHead}>{t('project.logPageTitle')}</div>
             <ul className={s.feed}>

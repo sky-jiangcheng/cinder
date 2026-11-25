@@ -381,10 +381,14 @@
   color: white;
 }
 
+/* Standard card footprint: the hub is an index, so density wins over air.
+   232px is the smallest width at which a title, a three-line excerpt and the
+   project/date byline still read; at the hub's ~1216px content width it yields
+   five columns. */
 .noteGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 12px;
 }
 
 .recentSection {
