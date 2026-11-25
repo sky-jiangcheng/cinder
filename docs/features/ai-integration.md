@@ -9,7 +9,7 @@ Cinder 面向 AI 代理提供读取通道与自检工具，全部复用同一 `i
 
 ## 价值定位：Cinder 是 AI 的数据源，而非 AI 平台
 
-**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 25 个工具来**消费**这层数据，按需取数、精确检索。
+**Cinder 不托管模型、不代持密钥、不自带 agent 编排。** 更准确地说：它是**数据底座**——把 git 原始信息建模成结构化、可索引、可物化的本地知识库（详见[存储结构优化与 AI 价值](../storage-optimization.md)）；AI 工具（Claude Code / Cursor 等）通过 MCP 的 26 个工具来**消费**这层数据，按需取数、精确检索。
 
 这一层「为什么比让 AI 直接读 git 更优」的论证，见[存储结构优化与 AI 价值](../storage-optimization.md)。
 
@@ -118,7 +118,7 @@ go build -o cinder-server ./cmd/server
 
 ## MCP Server（`cinder-mcp`）
 
-MCP 是唯一的 AI 执行接口（`cinder` 无 CLI 子命令）。stdio 协议，进程内单次开库，25 个工具（含 6 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 每日复盘 + 共享会话写入）：
+MCP 是唯一的 AI 执行接口（`cinder` 无 CLI 子命令）。stdio 协议，进程内单次开库，26 个工具（含 6 个写操作：扫描 + 笔记创建/更新 + 会话交接 + 每日复盘 + 共享会话写入）：
 
 会话记忆协议的两端在时序上是这样落位的：
 
@@ -448,7 +448,7 @@ WorkBuddy 装好后还需要在连接器管理页点一次「信任」，MCP 工
 
 | 文件 | 作用 |
 |------|------|
-| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、25 个工具的路由决策、agent 不可用的能力清单 |
+| `SKILL.md` | 三级降级接入（MCP → HTTP RPC → SQLite 只读）、会话记忆协议、26 个工具的路由决策、agent 不可用的能力清单 |
 | `references/mcp-tools.md` | 每个工具的精确参数签名、HTTP RPC 方法映射 |
 | `references/data-model.md` | schema 与不变量（主题归属、迁移规则、handoff 保护、trigram 边界） |
 | `scripts/repotory-query.py` | MCP 不可用时的只读兜底查询（检索 / 列主题 / 列项目 / 库概况） |

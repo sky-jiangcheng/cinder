@@ -9,7 +9,7 @@ Cinder provides read channels and self-check tools for AI agents, all reusing th
 
 ## Value proposition: Cinder is a data source for AI, not an AI platform
 
-**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 25 MCP tools, fetching on demand and searching precisely.
+**Cinder does not host models, does not hold API keys on your behalf, and ships no agent orchestration.** More precisely: it is the **data foundation** — it models raw git information into a structured, indexable, materializable local knowledge base (see [Storage Optimization and AI Value](../storage-optimization.md)); AI tools (Claude Code / Cursor, etc.) **consume** this layer of data through the 26 MCP tools, fetching on demand and searching precisely.
 
 For the argument for why this layer is better than letting AI read git directly, see [Storage Optimization and AI Value](../storage-optimization.md).
 
@@ -116,7 +116,7 @@ go build -o cinder-server ./cmd/server
 - For browser development use `bash scripts/dev.sh`: it starts the headless API (default 18765) *and* Vite. Running `npx vite` alone yields a page that loads but 502s every request — that is a missing backend, not a broken app.
 - **Release assets contain**: the desktop installers (4 platforms), `cinder-mcp-<platform>`, `cinder-capture-<platform>` (the SessionEnd hook's zero-credit capture CLI — the binary behind ADR-0010/0054's primary path), and the VS Code VSIX. `cinder-server`, `cmd/vector-init`, `cmd/abeval` and `cmd/wiki-export` (the read-only wiki export) must still be built yourself (`go build` / `go run`); they are not distributed with releases.
 
-MCP is the only AI execution interface (the `cinder` binary dispatches no CLI subcommands). stdio protocol, the database is opened once per process, 25 tools (including 6 write operations: scan + note create/update + session handoff + daily review + shared conversation writes):
+MCP is the only AI execution interface (the `cinder` binary dispatches no CLI subcommands). stdio protocol, the database is opened once per process, 26 tools (including 6 write operations: scan + note create/update + session handoff + daily review + shared conversation writes):
 
 The two ends of the session memory protocol, in sequence:
 
@@ -448,7 +448,7 @@ Package contents:
 
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 25 tools, and the list of capabilities agents must not use |
+| `SKILL.md` | Three-tier fallback access (MCP → HTTP RPC → read-only SQLite), the session memory protocol, routing decisions for all 26 tools, and the list of capabilities agents must not use |
 | `references/mcp-tools.md` | Exact parameter signatures per tool, plus the HTTP RPC method mapping |
 | `references/data-model.md` | Schema and invariants (topic ownership, migration rules, handoff protection, trigram boundaries) |
 | `scripts/repotory-query.py` | Read-only fallback queries when MCP is unavailable (search / list topics / list projects / library stats) |

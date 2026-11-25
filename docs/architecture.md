@@ -158,7 +158,7 @@ flowchart TB
     end
     subgraph AGENT[🤖 AI Agent 用户 — 工具面]
         direction LR
-        MCP[cinder-mcp · 25 个 MCP 工具]
+        MCP[cinder-mcp · 26 个 MCP 工具]
         DSH[dsh Harness 插件 · llms.txt]
     end
     subgraph CORE[🧠 本地知识库 — 唯一事实源]

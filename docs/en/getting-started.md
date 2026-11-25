@@ -178,7 +178,7 @@ The `Cinder Desktop` item in the macOS menu bar is the system application menu (
 | **Knowledge Base** | Core | Cross-project note hub: Markdown `/` block editor, tags, pinning, FTS5 full-text search, version history |
 | **Repo Mining** | Core | Automatically extracts README, tech stack (20+ formats), language breakdown, dependencies, contributors |
 | **Project Retrieval** | Core | Global command palette `⌘/Ctrl+K`, global full-text search, fast project context jump |
-| **AI Memory Interfaces** | Core | llms.txt, note export, `cinder-mcp` with 25 tools (including `repotory_context` / `repotory_handoff`) |
+| **AI Memory Interfaces** | Core | llms.txt, note export, `cinder-mcp` with 26 tools (including `repotory_context` / `repotory_handoff`) |
 | **Dashboard & Metrics** | Supporting | Daily goal progress ring, project cards, activity trend lines, Git commit heatmap |
 | **Memory Importers** | Built-in | 8 idempotent agent memory importers (see [Knowledge Source Import](plugins/overview.md)) |
 

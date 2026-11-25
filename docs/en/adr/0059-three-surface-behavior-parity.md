@@ -1,6 +1,6 @@
 # ADR-0059: Three-surface behaviour contract — one authority and a parity gate
 
-Status: **Accepted (raised by the 2026-11-12 engineering assessment; the owner chose B + C, both gates, the same day; not implemented — tracked as TODO 13.2)**
+Status: **Accepted (raised by the 2026-11-12 engineering assessment; the owner chose B + C, both gates, the same day); implemented 2026-11-13 — gate B is `scripts/shared-chat-conformance.fixture.json` (8 settled / 0 skipped) with a runner per surface, gate C is `scripts/e2e-gate-c.sh` (headless three-leg smoke); see the landing record under TODO 13.2**
 Date: 2026-11-12
 Related: [ADR-0048](0048-core-contract-version.md) (contract version semantics), [ADR-0055](0055-agent-surface-contract-and-observability.md) (exit contract and doc gate), [ADR-0033](0033-mcp-ask-evidence-answer.md) (agent and desktop get the same answer), [ADR-0036](0036-ide-chat-console.md) (console rendering and escaping)
 Starting schema: v31 → **v31 (no schema change)**; `CoreVersion` unchanged

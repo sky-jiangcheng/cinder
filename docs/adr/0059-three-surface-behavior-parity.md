@@ -1,6 +1,6 @@
 # ADR-0059: 三端行为契约——单一权威与对等门
 
-状态：**Accepted（2026-11-12 工程评估提出，同日用户选定 B + C 双门；未落码，跟踪 TODO 13.2）**
+状态：**Accepted（2026-11-12 工程评估提出，同日用户选定 B + C 双门）；已落码（2026-11-13：门 B `scripts/shared-chat-conformance.fixture.json` 8 条 settled / 0 skipped + 三端 runner，门 C `scripts/e2e-gate-c.sh` headless 三程冒烟；落地记录见 TODO 13.2）**
 日期：2026-11-12
 关联：[ADR-0048](0048-core-contract-version.md)（契约版本语义）、[ADR-0055](0055-agent-surface-contract-and-observability.md)（出口契约与文档门）、[ADR-0033](0033-mcp-ask-evidence-answer.md)（agent 与桌面端拿到同一个答案）、[ADR-0036](0036-ide-chat-console.md)（对话台的渲染与转义）
 起始 schema：v31 → **v31（无 schema 变更）**；`CoreVersion` 不变
