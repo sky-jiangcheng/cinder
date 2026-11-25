@@ -1,6 +1,6 @@
 # Cinder MCP 工具完整参考（通道 A）
 
-25 个工具的精确参数签名（取自 `cinder-mcp` 的 `tools/list` 实际响应，非手写推测）。
+26 个工具的精确参数签名（取自 `cinder-mcp` 的 `tools/list` 实际响应，非手写推测）。
 
 ```
 repotory_agent_score()
@@ -19,6 +19,7 @@ repotory_integrity()
 repotory_metrics(path: string, since: string, until: string)
 repotory_notes_create(category: string, content*: string, project_id*: number,
                        tags: string, title*: string)
+repotory_notes_duplicates(path: string, project_id: number)
 repotory_notes_list(limit: number)
 repotory_notes_organize(id*: number)
 repotory_notes_read(id: number)
@@ -196,6 +197,21 @@ FTS5 trigram + bm25 全文检索。
 - 要生效必须人工 `notes_update`
 - 需要桌面端设置里配好 AI 端点
 - 机器写的措辞同样要过人工审核（ADR-0015 的评审闸）
+
+### `repotory_notes_duplicates(project_id?, path?)`
+
+同一项目内**疑似重复**的笔记配对（只读建议，永不合并）。
+
+| 参数 | 说明 |
+|------|------|
+| `project_id` | 可选，限定项目；省略 = 全库 |
+| `path` | 可选，绝对路径，服务端解析成项目（与 `repotory_context` 同一条规则） |
+
+- **返回数组**，空结果就是 `[]`（不是 `null`）
+- 每项 `{a, b, score, shared}`：`score` 是内容重合度（0–1），`shared` 是共同词 —— **判断依据比百分比更重要**
+- **跨项目配对不会出现**：不同项目里相似的两条通常是从两个角度写同一件事，不是要合并的错误
+- 阈值故意很高（score ≥ 0.6 且共享词 ≥ 4），所以「没结果」是常态，不是故障
+- **只提案**：合并/删除仍要在 Cinder Desktop 由人做
 
 ### `repotory_chat(operation*, ...)`
 

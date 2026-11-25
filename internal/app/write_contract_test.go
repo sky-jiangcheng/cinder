@@ -75,6 +75,10 @@ func TestBindingWritesAreComplete(t *testing.T) {
 		// any) happens in a native save dialog on the frontend side.
 		"ExportNoteAsMarkdown": "assembles a string; no DB write",
 		"ExportMemoryJSON":     "assembles a string; no DB write",
+		// The model call is audited but nothing is stored: the result is a
+		// proposal the editor holds, and only the person's save writes. Same
+		// gate as OrganizeNote, which is not classified either.
+		"GenerateWeeklyReport": "assembles a proposal; no DB write",
 		// Reads install paths; the verb matcher tripped on InstallInfo's name.
 		"GetInstallInfo": "pure read",
 		// Reads another tool's transcript — but the write it drives is

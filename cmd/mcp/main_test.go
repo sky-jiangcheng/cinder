@@ -139,7 +139,7 @@ func (ts *testServer) jsonPayload(res *mcp.CallToolResult) map[string]any {
 //
 // The literal is duplicated in internal/version/core.go; the drift guard in
 // scripts/check-version-drift.mjs fails if the two copies disagree.
-const wantCoreVersion = "2.4.0"
+const wantCoreVersion = "2.5.0"
 
 func TestToolsRegistered(t *testing.T) {
 	ts := newTestServer(t)
@@ -153,6 +153,7 @@ func TestToolsRegistered(t *testing.T) {
 		"repotory_notes_create",
 		"repotory_notes_update",
 		"repotory_notes_organize",
+		"repotory_notes_duplicates",
 		"repotory_agent_score",
 		"repotory_integrity",
 		"repotory_context",

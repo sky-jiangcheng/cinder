@@ -135,7 +135,7 @@ ls -la ~/Library/Application\ Support/repotory/repotory.db   # macOS
 
 ## 三、工具路由（通道 A）
 
-25 个工具，按意图选：
+26 个工具，按意图选：
 
 ### 读
 

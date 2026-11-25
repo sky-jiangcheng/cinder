@@ -68,7 +68,7 @@ func Ask(ctx context.Context, p Provider, messages []aiclient.Message, tools []a
 			continue
 		}
 		if status != http.StatusOK {
-			return "", "", fmt.Errorf("AI endpoint returned %d: %s", status, truncate(string(rawBody), 300))
+			return "", "", fmt.Errorf("AI endpoint returned %d: %s", status, aiclient.BodySummary(string(rawBody)))
 		}
 		var cr aiclient.Response
 		if err := json.Unmarshal(rawBody, &cr); err != nil {

@@ -333,6 +333,44 @@ func (a *App) OrganizeNote(noteID int64) (*service.NoteOrganizeResult, error) {
 	return a.svc.OrganizeNote(noteID)
 }
 
+// NoteInsights returns the AI layer of every note in scope: cached card
+// summary, keywords, and up to three related notes with the terms that link
+// them. Reads only — the summary cache is read here, never written — so a card
+// grid can call it on page load. projectID <= 0 means the whole knowledge base.
+func (a *App) NoteInsights(projectID int64) []domain.NoteInsight {
+	return a.svc.NoteInsights(projectID)
+}
+
+// GenerateNoteInsights summarizes a batch of notes and caches the result. An
+// empty noteIDs fills the gaps (notes whose summary is missing or stale).
+//
+// Writes only the derived note_insights cache — the notes themselves are
+// untouched — which is why this is not behind the human gate, but it IS
+// write-classified: the cache lives in the same SQLite file as the knowledge
+// base, and a non-writer process must not write it behind the writer's back.
+func (a *App) GenerateNoteInsights(projectID int64, noteIDs []int64) (*domain.NoteInsightGeneration, error) {
+	return a.svc.GenerateNoteInsights(projectID, noteIDs)
+}
+
+// DuplicateNotes returns suspected duplicate note pairs in scope, each with the
+// terms the two notes share. Deterministic and model-free; a pair is a
+// suggestion to look at, never an automatic merge.
+func (a *App) DuplicateNotes(projectID int64) []domain.NoteDuplicate {
+	return a.svc.DuplicateNotes(projectID)
+}
+
+// GenerateWeeklyReport drafts a weekly report from one week of a project's
+// material and returns the PROPOSAL — nothing is written, exactly like
+// OrganizeNote. weekOffset 0 is this week, -1 the previous one; a future week
+// is refused because there is nothing in it to report.
+//
+// Desktop-only on purpose: an agent asked for a weekly report can read the
+// same notes and commits itself, and would otherwise be handed a second,
+// competing draft of the same week.
+func (a *App) GenerateWeeklyReport(projectID int64, weekOffset int) (*service.NoteOrganizeResult, error) {
+	return a.svc.GenerateWeeklyReport(a.ctx, projectID, weekOffset)
+}
+
 // CreateNote creates a new note for a project.
 func (a *App) CreateNote(projectID int64, content string) (*domain.Note, error) {
 	// Write-classified: client-role forwards via the catalogue (ADR-0058).

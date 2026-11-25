@@ -138,6 +138,13 @@ var bindingSurfaces = map[string]BindingSurface{
 	// draft with it without bypassing the review gate (ADR-0015). The write
 	// stays behind repotory_notes_update, as it always was.
 	"OrganizeNote":       {SurfaceMCPBacked, "repotory_notes_organize", ""},
+	// The insight layer is the card grid's own rendering aid: a cached
+	// one-line summary plus related-note chips, with the linking terms shown
+	// so a person can check them. An agent already reads the full notes.
+	"NoteInsights":         {SurfaceDesktopOnly, "", "card-grid decoration over notes an agent already reads in full"},
+	"GenerateNoteInsights": {SurfaceDesktopOnly, "", "fills the card summary cache; an agent has the note body and needs no summary of it"},
+	"DuplicateNotes":       {SurfaceMCPBacked, "repotory_notes_duplicates", ""},
+	"GenerateWeeklyReport": {SurfaceDesktopOnly, "", "a human-facing weekly digest drafted from the week's own material; an agent asked for one can read the same notes and commits itself, and a second draft of the same week would compete with this one"},
 	"DeleteNote":         {SurfaceDesktopOnly, "", "deletion is a human action; no agent path deletes knowledge"},
 	"PinNote":            {SurfaceDesktopOnly, "", "pinning changes the UI sort order only; it alters no knowledge content"},
 	"MoveNote":           {SurfaceDesktopOnly, "", "moving a note between projects re-files knowledge; a human decides where it belongs"},
@@ -318,6 +325,10 @@ var bindingWrites = map[string]bool{
 	"UpdateNoteMeta": true, "DeleteNote": true, "PinNote": true, "MoveNote": true,
 	"CreateTopic": true, "UpdateTopic": true, "DeleteTopic": true, "SetNoteTopic": true,
 	"RestoreNoteVersion": true,
+	// The insight layer writes only its own derived cache (note_insights), but
+	// that cache is in the shared SQLite file: a non-writer process must route
+	// it like any other write rather than touch the file behind the writer.
+	"GenerateNoteInsights": true,
 	// todos
 	"CreateTodo": true, "ToggleTodo": true, "DeleteTodo": true, "ReorderTodos": true,
 	// config / scan roots

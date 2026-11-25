@@ -189,6 +189,7 @@ func notesListLimit(req mcp.CallToolRequest) int {
 func registerTools(mcpServer *server.MCPServer, svc *service.Service, w *writerapi.Manager) {
 	registerChatTool(mcpServer, svc, w)
 	registerMetricsTool(mcpServer, svc)
+	registerNotesDuplicatesTool(mcpServer, svc)
 
 	mcpServer.AddTool(mcp.Tool{
 		Name:        "repotory_notes_list",

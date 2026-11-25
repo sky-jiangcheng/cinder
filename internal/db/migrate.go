@@ -489,6 +489,11 @@ func upgradeSchema(db *sql.DB) error {
 			"ALTER TABLE wiki_pages ADD COLUMN review_reason TEXT NOT NULL DEFAULT ''",
 			"ALTER TABLE wiki_pages ADD COLUMN review_source TEXT NOT NULL DEFAULT ''",
 		}},
+		// v33: the note AI layer (card summary + keywords), cached so a card
+		// grid reads summaries without a model call per card. Purely
+		// additive; content_hash is stored next to the summary so an edited
+		// note is reported as stale rather than silently mis-quoted.
+		{id: 33, fn: EnsureNoteInsights},
 	}
 
 	for _, m := range migrations {

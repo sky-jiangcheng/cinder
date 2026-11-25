@@ -72,7 +72,12 @@ const schemaVersionKey = "schema_version"
 // note_versions rows written before it hold post-edit content and keep
 // version = 0, which is why the check's shape expectations below still accept
 // rows it never backfilled.
-const ExpectedSchemaVersion = 32
+// v32 added the AI review verdict columns on wiki_pages.
+// v33 added note_insights (internal/db's EnsureNoteInsights): one cached
+// summary + keywords row per note, keyed by note id with an ON DELETE CASCADE
+// and a content hash so an edited note's summary is reported stale instead of
+// silently quoted as current. Purely additive.
+const ExpectedSchemaVersion = 33
 
 // StaleAfterDays is the age at which the repo_meta knowledge cache is reported
 // as stale. The cache feeds generated knowledge (tech stack, readme excerpt,

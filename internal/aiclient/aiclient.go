@@ -156,6 +156,59 @@ func FinishReason(cr Response) string {
 	return strings.TrimSpace(cr.Choices[0].FinishReason)
 }
 
+// bodySummary turns a raw error body into something a human can act on.
+// Gateways and misrouted requests frequently answer with a whole HTML page
+// (Vercel's __next_error__ 404 page, a router's error template) — pasting
+// 300 characters of markup into the status line helped nobody. An HTML body
+// is summarized to one line naming the likely causes; JSON and plain-text
+// bodies keep the provider's own words, which are usually the shortest path
+// to the actual problem.
+func BodySummary(body string) string {
+	trimmed := strings.TrimSpace(body)
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "<!doctype html") || strings.HasPrefix(lower, "<html") {
+		return "(an HTML page, not an API answer — usually a provider risk-control interception of non-browser requests, a proxy/gateway detour, or a wrong path; it was retried once — if it keeps failing, check the Base URL, any local proxy, or try a different network)"
+	}
+	return clip(trimmed, 300)
+}
+
+// probePost posts one candidate URL, and — when the path comes back rejected
+// in the transient flavour (404 page or the relay-gateway 400) — retries the
+// SAME url once after a short backoff. Probe traffic is side-effect free (a
+// fixed "Reply with exactly: OK"), so a retry can never double-bill, while a
+// provider's risk-control window (Vercel firewall-style interception of
+// non-browser POSTs) or an edge blip is exactly the momentary failure a
+// single retry absorbs — observed twice in the field as GET /models
+// succeeding while POST /chat/completions 404'd with an HTML page. Real
+// traffic (loop.go / StreamChat) deliberately does NOT retry: those bodies
+// are the user's own words and re-sending them could double-charge.
+func probePost(ctx context.Context, url, apiKey string, body []byte) (int, []byte, error) {
+	status, raw, err := PostJSON(ctx, url, apiKey, body)
+	if err == nil && PathRejected(status, string(raw)) {
+		select {
+		case <-ctx.Done():
+			return status, raw, err
+		case <-time.After(1200 * time.Millisecond):
+		}
+		status, raw, err = PostJSON(ctx, url, apiKey, body)
+	}
+	return status, raw, err
+}
+
+// probeGet is probePost for the GET-shaped /models probe (also idempotent).
+func probeGet(ctx context.Context, url, apiKey string) (int, []byte, error) {
+	status, raw, err := Get(ctx, url, apiKey)
+	if err == nil && PathRejected(status, string(raw)) {
+		select {
+		case <-ctx.Done():
+			return status, raw, err
+		case <-time.After(1200 * time.Millisecond):
+		}
+		status, raw, err = Get(ctx, url, apiKey)
+	}
+	return status, raw, err
+}
+
 // CandidateURLs builds the /models or /chat/completions URLs to probe in
 // order. Users commonly mistype LM Studio's base as ".../api/v1" when the
 // OpenAI layer lives at ".../v1", so near-miss variants are probed too and
@@ -368,7 +421,7 @@ func PostJSONStream(ctx context.Context, rawURL, apiKey string, body []byte, onD
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-			return resp.StatusCode, "", fmt.Errorf("AI endpoint returned %d: %s", resp.StatusCode, clip(string(raw), 300))
+			return resp.StatusCode, "", fmt.Errorf("AI endpoint returned %d: %s", resp.StatusCode, BodySummary(string(raw)))
 		}
 		reason, err := ParseSSEStream(resp.Body, onDelta)
 		return http.StatusOK, reason, err
@@ -560,7 +613,7 @@ func PostJSONToolStream(ctx context.Context, rawURL, apiKey string, body []byte,
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-			return resp.StatusCode, "", fmt.Errorf("AI endpoint returned %d: %s", resp.StatusCode, clip(string(raw), 300))
+			return resp.StatusCode, "", fmt.Errorf("AI endpoint returned %d: %s", resp.StatusCode, BodySummary(string(raw)))
 		}
 		reason, err := ParseSSEToolStream(resp.Body, onDelta, onTool)
 		return resp.StatusCode, reason, err
@@ -591,7 +644,7 @@ func ListModels(baseURL, apiKey string) (*ModelListResult, error) {
 	var lastStatus int
 	var lastBody string
 	for _, url := range candidates {
-		status, raw, err := Get(ctx, url, strings.TrimSpace(apiKey))
+		status, raw, err := probeGet(ctx, url, strings.TrimSpace(apiKey))
 		if err != nil {
 			lastNet = err
 			continue
@@ -604,7 +657,7 @@ func ListModels(baseURL, apiKey string) (*ModelListResult, error) {
 			return nil, fmt.Errorf("auth failed (%d) — check the API key", status)
 		}
 		if status != http.StatusOK {
-			return nil, fmt.Errorf("AI endpoint returned %d: %s", status, clip(string(raw), 200))
+			return nil, fmt.Errorf("AI endpoint returned %d: %s", status, BodySummary(string(raw)))
 		}
 		models, ok := ParseModels(raw)
 		if !ok {
@@ -618,7 +671,7 @@ func ListModels(baseURL, apiKey string) (*ModelListResult, error) {
 	if lastNet != nil {
 		return nil, NetworkHint(lastNet)
 	}
-	return nil, fmt.Errorf("no /models path found — tried: %s (last status %d: %s)", strings.Join(candidates, ", "), lastStatus, clip(lastBody, 120))
+	return nil, fmt.Errorf("no /models path found — tried: %s (last status %d: %s)", strings.Join(candidates, ", "), lastStatus, BodySummary(lastBody))
 }
 
 // TestChat verifies a specific model works by sending a minimal completion.
@@ -658,7 +711,7 @@ func ProbeChatWithTimeout(baseURL, model, apiKey string, messages []Message, tim
 	var lastStatus int
 	var lastBody string
 	for _, url := range candidates {
-		status, raw, err := PostJSON(ctx, url, strings.TrimSpace(apiKey), body)
+		status, raw, err := probePost(ctx, url, strings.TrimSpace(apiKey), body)
 		if err != nil {
 			lastNet = err
 			continue
@@ -671,7 +724,7 @@ func ProbeChatWithTimeout(baseURL, model, apiKey string, messages []Message, tim
 			return nil, fmt.Errorf("auth failed (%d) — check the API key", status)
 		}
 		if status != http.StatusOK {
-			return nil, fmt.Errorf("AI endpoint returned %d: %s", status, clip(string(raw), 300))
+			return nil, fmt.Errorf("AI endpoint returned %d: %s", status, BodySummary(string(raw)))
 		}
 		var cr Response
 		if err := json.Unmarshal(raw, &cr); err != nil {
@@ -696,7 +749,7 @@ func ProbeChatWithTimeout(baseURL, model, apiKey string, messages []Message, tim
 	if lastNet != nil {
 		return nil, NetworkHint(lastNet)
 	}
-	return nil, fmt.Errorf("no working path found — tried: %s (last status %d: %s)", strings.Join(candidates, ", "), lastStatus, clip(lastBody, 120))
+	return nil, fmt.Errorf("no working path found — tried: %s (last status %d: %s)", strings.Join(candidates, ", "), lastStatus, BodySummary(lastBody))
 }
 
 // StreamChatWithTimeout is ProbeChatWithTimeout with stream:true: it probes the
@@ -755,7 +808,7 @@ func StreamChatWithTimeout(baseURL, model, apiKey string, messages []Message, ti
 	if lastNet != nil {
 		return b.String(), "", NetworkHint(lastNet)
 	}
-	return b.String(), "", fmt.Errorf("no working path found — tried: %s (last status %d: %s)", strings.Join(CandidateURLs(base, "/chat/completions"), ", "), lastStatus, clip(lastBody, 120))
+	return b.String(), "", fmt.Errorf("no working path found — tried: %s (last status %d: %s)", strings.Join(CandidateURLs(base, "/chat/completions"), ", "), lastStatus, BodySummary(lastBody))
 }
 
 // ChatTimeout bounds the PLAIN chat path (a short question, no retrieval): a

@@ -8,6 +8,7 @@
   "repotory_notes_create",
   "repotory_notes_update",
   "repotory_notes_organize",
+  "repotory_notes_duplicates",
   "repotory_agent_score",
   "repotory_integrity",
   "repotory_context",
