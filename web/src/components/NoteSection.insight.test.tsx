@@ -101,10 +101,10 @@ describe('NoteSection AI layer', () => {
 
     expect(await screen.findByText('迁移前先查 pragma table_info。')).toBeTruthy()
     // The title appears twice: as the second card's own title and as the
-    // related chip on the first card. The chip is the anchor carrying a reason.
-    const chips = await screen.findAllByText('列检测')
-    const chip = chips.find(n => n.closest('a')?.getAttribute('title'))
-    expect(chip?.closest('a')?.getAttribute('title')).toBe('共同：迁移、sqlite')
+    // related chip on the first card. Only the chip carries the reason, so
+    // finding it by that title is also the assertion that the reason is there.
+    const chip = await screen.findByTitle('共同：迁移、sqlite')
+    expect(chip.textContent).toContain('列检测')
   })
 
   it('flags a summary whose note was edited after it was written', async () => {

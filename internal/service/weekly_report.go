@@ -38,7 +38,7 @@ const (
 //     identical in the numbers, and reporting "0 commits" for days nobody
 //     looked is the failure repotory_metrics' own description warns about.
 //   - A week with no material is an error, not an empty report. "本周没有
-//    记录" is information; a page of plausible filler is not.
+//     记录" is information; a page of plausible filler is not.
 func (s *Service) GenerateWeeklyReport(ctx context.Context, projectID int64, weekOffset int) (*NoteOrganizeResult, error) {
 	if projectID <= 0 {
 		return nil, fmt.Errorf("a project id is required")
@@ -165,7 +165,7 @@ func weeklyWindow(now time.Time, offset int) (time.Time, time.Time) {
 	if weekday == 0 {
 		weekday = 7
 	}
-	start := now.AddDate(0, 0, -(weekday - 1) + offset*7)
+	start := now.AddDate(0, 0, -(weekday-1)+offset*7)
 	start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, now.Location())
 	return start, start.AddDate(0, 0, 7)
 }

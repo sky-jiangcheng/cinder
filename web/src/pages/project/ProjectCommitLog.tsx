@@ -279,7 +279,9 @@ export default function ProjectCommitLog({ projectId, repos }: Props) {
       </div>
 
       {commits === null && !shown?.error && (
-        <div className={s.feedSkeleton} aria-hidden>
+        // aria-hidden keeps the placeholders out of the accessibility tree;
+        // the test id is how the test sees the same thing the eye does.
+        <div className={s.feedSkeleton} aria-hidden data-testid="commit-skeleton">
           {Array.from({ length: 7 }).map((_, i) => (
             <div key={i} className={s.skeletonRow}>
               <span className={`skeleton ${s.skeletonDot}`} />

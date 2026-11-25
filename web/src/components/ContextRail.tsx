@@ -117,7 +117,11 @@ export default function ContextRail({ collapsed, onToggle }: Props) {
       () => {},
     )
     return () => { cancelled = true }
-  }, [routeProjectId])  // projectNames is intentionally absent: refetching the list won't rename anything
+    // projectNames is deliberately absent: the guard above already returns
+    // once the id is known, so listing it would only re-run the effect for a
+    // fetch that cannot change the name it just fetched.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeProjectId])
 
   useEffect(() => {
     let cancelled = false

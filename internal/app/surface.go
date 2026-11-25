@@ -137,7 +137,7 @@ var bindingSurfaces = map[string]BindingSurface{
 	// reviews in the editor and saves themselves, which is why an agent may
 	// draft with it without bypassing the review gate (ADR-0015). The write
 	// stays behind repotory_notes_update, as it always was.
-	"OrganizeNote":       {SurfaceMCPBacked, "repotory_notes_organize", ""},
+	"OrganizeNote": {SurfaceMCPBacked, "repotory_notes_organize", ""},
 	// The insight layer is the card grid's own rendering aid: a cached
 	// one-line summary plus related-note chips, with the linking terms shown
 	// so a person can check them. An agent already reads the full notes.
@@ -145,17 +145,17 @@ var bindingSurfaces = map[string]BindingSurface{
 	"GenerateNoteInsights": {SurfaceDesktopOnly, "", "fills the card summary cache; an agent has the note body and needs no summary of it"},
 	"DuplicateNotes":       {SurfaceMCPBacked, "repotory_notes_duplicates", ""},
 	"GenerateWeeklyReport": {SurfaceDesktopOnly, "", "a human-facing weekly digest drafted from the week's own material; an agent asked for one can read the same notes and commits itself, and a second draft of the same week would compete with this one"},
-	"DeleteNote":         {SurfaceDesktopOnly, "", "deletion is a human action; no agent path deletes knowledge"},
-	"PinNote":            {SurfaceDesktopOnly, "", "pinning changes the UI sort order only; it alters no knowledge content"},
-	"MoveNote":           {SurfaceDesktopOnly, "", "moving a note between projects re-files knowledge; a human decides where it belongs"},
-	"ListTopics":         {SurfaceDesktopOnly, "", "the topic layer's read side; an agent gets the note itself, and the topic is a filing label a human curates"},
-	"CreateTopic":        {SurfaceDesktopOnly, "", "creating a filing label is an organising act, like MoveNote which also has no MCP twin"},
-	"UpdateTopic":        {SurfaceDesktopOnly, "", "renaming a filing label re-files knowledge; a human decides what a subject is called"},
-	"DeleteTopic":        {SurfaceDesktopOnly, "", "deleting a filing label changes how knowledge is organised; a human decides"},
-	"SetNoteTopic":       {SurfaceDesktopOnly, "", "filing a note under a topic is the same organising act as MoveNote"},
-	"ListNoteVersions":   {SurfaceDesktopOnly, "", "version-history panel; agents read the live note"},
-	"RestoreNoteVersion": {SurfaceDesktopOnly, "", "restoring overwrites current content — human only"},
-	"DiffNoteVersions":   {SurfaceDesktopOnly, "", "version diff for the note history panel; agents read the live note via notes_read"},
+	"DeleteNote":           {SurfaceDesktopOnly, "", "deletion is a human action; no agent path deletes knowledge"},
+	"PinNote":              {SurfaceDesktopOnly, "", "pinning changes the UI sort order only; it alters no knowledge content"},
+	"MoveNote":             {SurfaceDesktopOnly, "", "moving a note between projects re-files knowledge; a human decides where it belongs"},
+	"ListTopics":           {SurfaceDesktopOnly, "", "the topic layer's read side; an agent gets the note itself, and the topic is a filing label a human curates"},
+	"CreateTopic":          {SurfaceDesktopOnly, "", "creating a filing label is an organising act, like MoveNote which also has no MCP twin"},
+	"UpdateTopic":          {SurfaceDesktopOnly, "", "renaming a filing label re-files knowledge; a human decides what a subject is called"},
+	"DeleteTopic":          {SurfaceDesktopOnly, "", "deleting a filing label changes how knowledge is organised; a human decides"},
+	"SetNoteTopic":         {SurfaceDesktopOnly, "", "filing a note under a topic is the same organising act as MoveNote"},
+	"ListNoteVersions":     {SurfaceDesktopOnly, "", "version-history panel; agents read the live note"},
+	"RestoreNoteVersion":   {SurfaceDesktopOnly, "", "restoring overwrites current content — human only"},
+	"DiffNoteVersions":     {SurfaceDesktopOnly, "", "version diff for the note history panel; agents read the live note via notes_read"},
 
 	// ---- todos ---------------------------------------------------------------
 	"ListTodos":    {SurfaceDesktopOnly, "", "todo panel; repotory_context already surfaces open todos"},

@@ -93,8 +93,10 @@ describe('ProjectCommitLog', () => {
   it('paints the timeline shape instead of a blank loading string', async () => {
     let resolve!: (page: CommitPage) => void
     vi.mocked(searchCommits).mockImplementation(() => new Promise(r => { resolve = r }))
-    const { container } = render(<ProjectCommitLog projectId={137} repos={repos} />)
-    expect(container.querySelector('[class*="feedSkeleton"]')).not.toBeNull()
+    render(<ProjectCommitLog projectId={137} repos={repos} />)
+    // The skeleton is aria-hidden on purpose (placeholders are not content);
+    // the test id is the seam that lets the test see it without DOM digging.
+    expect(screen.getByTestId('commit-skeleton')).toBeTruthy()
     resolve({ items: [commit('aaa111', 'after resolve')], total: 1, offset: 0, limit: 20 })
     expect(await screen.findByText('after resolve')).toBeTruthy()
   })
