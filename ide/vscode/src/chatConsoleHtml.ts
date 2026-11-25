@@ -1252,20 +1252,62 @@ function setProviderStatus(text, cls) {
   providerStatus.textContent = text;
   providerStatus.className = 'form-status' + (cls ? ' ' + cls : '');
 }
+
+// The three provider buttons are async round-trips to the host (direct probe
+// or service RPC), so they need a visible state machine: a busy label while
+// the request is in flight, a ✓ flash on the button that just succeeded, and
+// a re-enable when the result lands. Without it a save "looked like nothing
+// happened" — the only feedback used to be one status line the eye skips.
+const PROVIDER_BUTTONS = ['p-save', 'p-test', 'p-fetch'];
+let providerBusyReset = null;
+function providerBtn(id) {
+  return document.getElementById(id);
+}
+function providerBtnLabel(btn) {
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  return btn.dataset.label;
+}
+function setProviderBusy(busy, activeId, busyLabel) {
+  clearTimeout(providerBusyReset);
+  for (const id of PROVIDER_BUTTONS) {
+    const btn = providerBtn(id);
+    btn.disabled = busy && id !== activeId ? true : busy;
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    if (busy && id === activeId) btn.textContent = busyLabel;
+    else btn.textContent = btn.dataset.label;
+  }
+  if (busy) {
+    // Safety net: the host ALWAYS posts a providerResult — even for errors —
+    // but if it dies mid-request the sheet must not stay frozen forever.
+    providerBusyReset = setTimeout(() => setProviderBusy(false), 45000);
+  }
+}
+function flashProviderButton(id, label) {
+  const btn = providerBtn(id);
+  const base = providerBtnLabel(btn);
+  btn.textContent = label;
+  setTimeout(() => {
+    if (btn.textContent === label) btn.textContent = base;
+  }, 2000);
+}
 document.getElementById('p-save').addEventListener('click', () => {
+  if (document.getElementById('p-save').disabled) return;
   const form = providerForm();
   if (!form.baseUrl || !form.model) {
     setProviderStatus('Base URL and model are both required.', 'err');
     return;
   }
   setProviderStatus('Saving…');
+  setProviderBusy(true, 'p-save', 'Saving…');
   vscode.postMessage({ type: 'providerSave', ...form });
 });
 document.getElementById('p-test').addEventListener('click', () => {
+  if (document.getElementById('p-test').disabled) return;
   const form = providerForm();
   if (!form.baseUrl || !form.model) {
     if (providerHasKey) {
       setProviderStatus('Testing the saved provider…');
+      setProviderBusy(true, 'p-test', 'Testing…');
       vscode.postMessage({ type: 'providerTestSaved' });
       return;
     }
@@ -1273,15 +1315,18 @@ document.getElementById('p-test').addEventListener('click', () => {
     return;
   }
   setProviderStatus('Testing…');
+  setProviderBusy(true, 'p-test', 'Testing…');
   vscode.postMessage({ type: 'providerTest', ...form });
 });
 document.getElementById('p-fetch').addEventListener('click', () => {
+  if (document.getElementById('p-fetch').disabled) return;
   const form = providerForm();
   if (!form.baseUrl) {
     setProviderStatus('A base URL is required to fetch models.', 'err');
     return;
   }
   setProviderStatus('Fetching models…');
+  setProviderBusy(true, 'p-fetch', 'Fetching…');
   vscode.postMessage({ type: 'providerModels', baseUrl: form.baseUrl, apiKey: form.apiKey });
 });
 
@@ -1384,6 +1429,10 @@ window.addEventListener('message', (event) => {
       setProviderStatus('No provider configured yet — answers fail until one is saved.', 'err');
     } else setProviderStatus('Configured. Answers use this endpoint.', 'ok');
   } else if (msg.type === 'providerResult') {
+    // The round-trip is over whichever button started it: re-enable all
+    // three, then flash ✓ on the one that succeeded so the save (or test)
+    // reads as an event, not as silent nothing.
+    setProviderBusy(false);
     const list = document.getElementById('p-model-list');
     if (msg.kind === 'models' && msg.ok) {
       list.replaceChildren();
@@ -1395,12 +1444,15 @@ window.addEventListener('message', (event) => {
       const modelEl = document.getElementById('p-model');
       if (!modelEl.value && (msg.models || []).length) modelEl.value = msg.models[0];
       if (msg.resolvedBaseUrl) document.getElementById('p-base').value = msg.resolvedBaseUrl;
+      flashProviderButton('p-fetch', '✓ Fetched');
     }
     if (msg.resolvedBaseUrl && msg.kind === 'test') {
       document.getElementById('p-base').value = msg.resolvedBaseUrl;
     }
-    setProviderStatus(msg.message, msg.ok ? 'ok' : 'err');
+    setProviderStatus((msg.ok ? '✓ ' : '') + msg.message, msg.ok ? 'ok' : 'err');
+    if (msg.kind === 'test' && msg.ok) flashProviderButton('p-test', '✓ OK');
     if (msg.kind === 'save' && msg.ok) {
+      flashProviderButton('p-save', '✓ Saved');
       providerHasKey = providerHasKey || !!document.getElementById('p-key').value;
       document.getElementById('p-key').value = '';
       if (providerHasKey) {

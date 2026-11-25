@@ -183,14 +183,31 @@ func CandidateURLs(base, path string) []string {
 	return out
 }
 
+// PathRejected answers "is this response a wrong-path answer worth another
+// candidate URL". A 404 always is — the classic wrong-shape probe. A 400
+// whose body is the relay-gateway rejection ("Request path cannot be
+// relayed" — CF-Worker-style proxies that only forward /v1/*) is the same
+// dead end: the path itself is unsupported, so the sibling candidate may be
+// the right one. Any other 400 is about the REQUEST (bad model, bad body)
+// and must surface to the user unchanged — retrying it against a made-up
+// sibling would only mask the real error.
+func PathRejected(status int, body string) bool {
+	if status == http.StatusNotFound {
+		return true
+	}
+	return status == http.StatusBadRequest &&
+		strings.Contains(strings.ToLower(body), "request path cannot be relayed")
+}
+
 // NextCandidate answers "is this 404 a URL-shape problem worth another try".
 //
 // It is shared by every path that walks CandidateURLs so the rule lives in
-// one place: only a 404 moves to the next candidate (a wrong path), while an
-// auth failure or a 5xx is a real answer about the endpoint and must not be
-// retried against a made-up sibling URL.
-func NextCandidate(candidates []string, current string, status int) (string, bool) {
-	if status != http.StatusNotFound {
+// one place: only a rejected path (404, or the relay-gateway 400 — see
+// PathRejected) moves to the next candidate, while an auth failure or a 5xx
+// is a real answer about the endpoint and must not be retried against a
+// made-up sibling URL.
+func NextCandidate(candidates []string, current string, status int, body string) (string, bool) {
+	if !PathRejected(status, body) {
 		return "", false
 	}
 	for i, c := range candidates {
@@ -579,7 +596,7 @@ func ListModels(baseURL, apiKey string) (*ModelListResult, error) {
 			lastNet = err
 			continue
 		}
-		if status == http.StatusNotFound {
+		if PathRejected(status, string(raw)) {
 			lastStatus, lastBody = status, string(raw)
 			continue
 		}
@@ -646,7 +663,7 @@ func ProbeChatWithTimeout(baseURL, model, apiKey string, messages []Message, tim
 			lastNet = err
 			continue
 		}
-		if status == http.StatusNotFound {
+		if PathRejected(status, string(raw)) {
 			lastStatus, lastBody = status, string(raw)
 			continue
 		}
@@ -717,7 +734,7 @@ func StreamChatWithTimeout(baseURL, model, apiKey string, messages []Message, ti
 	for _, url := range CandidateURLs(base, "/chat/completions") {
 		status, reason, err := PostJSONStream(ctx, url, strings.TrimSpace(apiKey), body, delta)
 		if err != nil {
-			if status == http.StatusNotFound {
+			if PathRejected(status, err.Error()) {
 				lastStatus, lastBody = status, err.Error()
 				continue
 			}

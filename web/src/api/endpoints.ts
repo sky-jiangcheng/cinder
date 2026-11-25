@@ -488,11 +488,21 @@ export function listAIModels(baseURL: string, apiKey: string): Promise<AIModelLi
   }).then(d => d ?? { models: [], resolved_base_url: '' })
 }
 
+export function listAIModelsConfigured(): Promise<AIModelListResult> {
+  return call<AIModelListResult>({ method: 'ListAIModelsConfigured' })
+    .then(d => d ?? { models: [], resolved_base_url: '' })
+}
+
 export function testAIChat(baseURL: string, model: string, apiKey: string): Promise<AITestResult> {
   return call<AITestResult>({
     method: 'TestAIChat',
     args: [baseURL, model, apiKey],
   }).then(d => d ?? { reply: '', resolved_base_url: '' })
+}
+
+export function testAIChatConfigured(): Promise<AITestResult> {
+  return call<AITestResult>({ method: 'TestAIChatConfigured' })
+    .then(d => d ?? { reply: '', resolved_base_url: '' })
 }
 
 export function rebuildEmbeddings(): Promise<number> {

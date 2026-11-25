@@ -60,7 +60,7 @@ func Ask(ctx context.Context, p Provider, messages []aiclient.Message, tools []a
 		if err != nil {
 			return "", "", err
 		}
-		if next, ok := aiclient.NextCandidate(candidates, url, status); ok {
+		if next, ok := aiclient.NextCandidate(candidates, url, status, string(rawBody)); ok {
 			url = next
 			// A URL probe is not a tool round: the model has not seen this
 			// attempt, so it must not eat into the tool budget.
@@ -210,7 +210,7 @@ func AskStream(
 		})
 		cancel()
 		if err != nil {
-			if next, ok := aiclient.NextCandidate(candidates, url, status); ok {
+			if next, ok := aiclient.NextCandidate(candidates, url, status, err.Error()); ok {
 				url = next
 				// A URL probe is not a tool round: the model has not seen this
 				// attempt, so it must not eat into the tool budget.

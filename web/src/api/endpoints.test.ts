@@ -20,10 +20,12 @@ import {
   getAppVersion,
   getProjectDetail,
   getProjects,
+  listAIModelsConfigured,
   openBrowserURL,
   runComponentUpdate,
   searchAll,
   searchNotes,
+  testAIChatConfigured,
   toggleStar,
 } from './endpoints'
 import type { Evidence } from './types'
@@ -93,6 +95,13 @@ describe('endpoint routing contract', () => {
       args: [3],
       path: '/projects/3',
     })
+  })
+
+  it('configured AI probes use saved-provider bindings without secret arguments', async () => {
+    await listAIModelsConfigured()
+    await testAIChatConfigured()
+    expect(callMock).toHaveBeenNthCalledWith(1, { method: 'ListAIModelsConfigured' })
+    expect(callMock).toHaveBeenNthCalledWith(2, { method: 'TestAIChatConfigured' })
   })
 
   it('captureClaudeHandoff POSTs per-project and returns the handoff result', async () => {

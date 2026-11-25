@@ -135,3 +135,54 @@ func TestIsLoopbackHost(t *testing.T) {
 		})
 	}
 }
+
+// Regression guard for the relay-gateway 400: CF-Worker-style proxies that
+// only forward /v1/* reject every other path with a 400
+// "Request path cannot be relayed" instead of a 404, which used to stop the
+// candidate walk dead on the first URL — every model then failed with the
+// same error no matter what was typed, because the /v1 sibling that would
+// have worked was never tried. PathRejected must treat that 400 like a 404,
+// and must leave every OTHER 400 (bad model, bad body) alone: those are
+// answers about the request, not about the path.
+func TestPathRejected(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{"404 is always a wrong path", http.StatusNotFound, `{"error":"no route"}`, true},
+		{"relay-gateway 400", http.StatusBadRequest, `{"error":{"message":"Request path cannot be relayed","code":400}}`, true},
+		{"relay-gateway 400 lowercase", http.StatusBadRequest, "request path cannot be relayed", true},
+		{"relay-gateway 400 mixed case", http.StatusBadRequest, "Request Path Cannot Be Relayed", true},
+		{"plain 400 is about the request", http.StatusBadRequest, `{"error":{"message":"model not found"}}`, false},
+		{"400 with the word relay in a different phrase", http.StatusBadRequest, `cannot relay to upstream`, false},
+		{"401 is auth", http.StatusUnauthorized, "bad key", false},
+		{"500 is a real answer", http.StatusInternalServerError, "boom", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := PathRejected(tc.status, tc.body); got != tc.want {
+				t.Fatalf("PathRejected(%d, %q) = %v, want %v", tc.status, tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// NextCandidate must consult PathRejected: the relay-gateway 400 walks to the
+// sibling, a plain 400 does not.
+func TestNextCandidateOnRelayed400(t *testing.T) {
+	candidates := []string{
+		"https://relay.example.com/chat/completions",
+		"https://relay.example.com/v1/chat/completions",
+	}
+	next, ok := NextCandidate(candidates, candidates[0], http.StatusBadRequest,
+		`{"error":{"message":"Request path cannot be relayed","code":400}}`)
+	if !ok || next != candidates[1] {
+		t.Fatalf("relay 400 should walk to %q, got (%q, %v)", candidates[1], next, ok)
+	}
+	next, ok = NextCandidate(candidates, candidates[0], http.StatusBadRequest, `{"error":{"message":"model not found"}}`)
+	if ok || next != "" {
+		t.Fatalf("a plain 400 must not walk: got (%q, %v)", next, ok)
+	}
+}

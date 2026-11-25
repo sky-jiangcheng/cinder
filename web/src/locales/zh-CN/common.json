@@ -473,6 +473,8 @@
       "apiKey": "API Key",
       "apiKeyPlaceholder": "********(保持原样表示不修改)",
       "apiKeyHint": "本地服务通常无需填写。密钥保存在本地数据库,不会明文返回。",
+      "maskedKeyHint": "测试或拉取模型会使用已保存密钥；修改地址或模型后需重新输入。",
+      "reenterApiKey": "地址或模型已修改，请重新输入 API 密钥后再测试或拉取模型。",
       "test": "测试连接",
       "testing": "测试中…",
       "testOk": "连接成功——回复: {{reply}}",

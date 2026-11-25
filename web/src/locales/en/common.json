@@ -474,6 +474,8 @@
       "apiKey": "API key",
       "apiKeyPlaceholder": "******** (leave as-is to keep)",
       "apiKeyHint": "Local servers usually need none. Stored server-side, never returned in plaintext.",
+      "maskedKeyHint": "Probes use the saved key. Re-enter it after changing the endpoint or model.",
+      "reenterApiKey": "The endpoint or model changed. Re-enter the API key before testing or fetching models.",
       "test": "Test connection",
       "testing": "Testing…",
       "testOk": "Connection OK — reply: {{reply}}",

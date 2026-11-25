@@ -116,11 +116,28 @@ function truncated(text: string, max: number): string {
 }
 
 /**
+ * Is this response a wrong-path answer worth another candidate URL?
+ *
+ * A 404 always is — the classic wrong-shape probe. A 400 whose body is the
+ * relay-gateway rejection ("Request path cannot be relayed" — CF-Worker-style
+ * proxies that only forward /v1/*) is the same dead end: the path itself is
+ * unsupported, so the sibling candidate may be the right one. Any other 400
+ * is about the REQUEST (bad model, bad body) and must surface to the user
+ * unchanged. Mirrors aiclient.PathRejected so the IDEs and the desktop app
+ * walk candidate URLs identically.
+ */
+function pathRejected(status: number, body: string): boolean {
+  if (status === 404) return true;
+  return status === 400 && body.toLowerCase().includes("request path cannot be relayed");
+}
+
+/**
  * Probe the endpoint's /models with the typed values — no service, no save.
  *
- * Only a 404 moves to the next candidate (a wrong path); an auth failure or
- * any other status is a real answer about the endpoint and must not be
- * retried against a made-up sibling URL — the same rule the server applies.
+ * Only a rejected path (404, or the relay-gateway 400 — see pathRejected)
+ * moves to the next candidate; an auth failure or any other status is a real
+ * answer about the endpoint and must not be retried against a made-up
+ * sibling URL — the same rule the server applies.
  */
 export async function probeModels(rawBase: string, apiKey: string): Promise<ProbeModelsResult> {
   const base = rawBase.trim();
@@ -139,7 +156,7 @@ export async function probeModels(rawBase: string, apiKey: string): Promise<Prob
       continue;
     }
     const text = await res.text().catch(() => "");
-    if (res.status === 404) {
+    if (pathRejected(res.status, text)) {
       lastStatus = res.status;
       lastBody = text;
       continue;
@@ -196,7 +213,7 @@ export async function probeChat(rawBase: string, model: string, apiKey: string):
       continue;
     }
     const text = await res.text().catch(() => "");
-    if (res.status === 404) {
+    if (pathRejected(res.status, text)) {
       lastStatus = res.status;
       lastBody = text;
       continue;

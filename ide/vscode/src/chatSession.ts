@@ -354,7 +354,7 @@ export class ChatSession {
         type: "providerResult",
         kind: "save",
         ok: true,
-        message: "Saved. Chat questions in this panel now use this endpoint.",
+        message: "✓ Saved. Chat questions in this panel now use this endpoint.",
       });
     } catch (err) {
       this.post({
@@ -390,7 +390,7 @@ export class ChatSession {
         type: "providerResult",
         kind: "test",
         ok: true,
-        message: reply ? `Endpoint answered: ${reply.slice(0, 80)}` : "Endpoint answered.",
+        message: reply ? `✓ Endpoint answered: ${reply.slice(0, 80)}` : "✓ Endpoint answered.",
         resolvedBaseUrl: result?.resolved_base_url,
       });
     } catch (err) {
@@ -422,7 +422,7 @@ export class ChatSession {
         type: "providerResult",
         kind: "test",
         ok: true,
-        message: reply ? `Saved endpoint answered: ${reply.slice(0, 80)}` : "Saved endpoint answered.",
+        message: reply ? `✓ Saved endpoint answered: ${reply.slice(0, 80)}` : "✓ Saved endpoint answered.",
         resolvedBaseUrl: result?.resolved_base_url,
       });
     } catch (err) {

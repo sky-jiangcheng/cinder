@@ -77,6 +77,48 @@ test("probeModels stops on an auth failure instead of probing made-up siblings",
   );
 });
 
+// CF-Worker-style relays that only forward /v1/* reject every other path with
+// a 400 "Request path cannot be relayed" instead of a 404 — the walk used to
+// stop dead there, so every model failed with the same error. The /v1
+// sibling must still be tried, and a REAL 400 (bad model) must not walk.
+test("probeChat walks candidates on the relay-gateway 400 and lands on /v1", async (t) => {
+  const seen: string[] = [];
+  await withFetch(
+    t,
+    async (url) => {
+      seen.push(String(url));
+      if (String(url) === "https://relay.example.com/chat/completions") {
+        return jsonRes(400, { error: { message: "Request path cannot be relayed", code: 400 } });
+      }
+      return jsonRes(200, { choices: [{ message: { content: " OK " } }] });
+    },
+    async () => {
+      const result = await probeChat("https://relay.example.com", "m", "k");
+      assert.deepEqual(seen, [
+        "https://relay.example.com/chat/completions",
+        "https://relay.example.com/v1/chat/completions",
+      ]);
+      assert.equal(result.reply, "OK");
+      assert.equal(result.resolvedBaseUrl, "https://relay.example.com/v1");
+    },
+  );
+});
+
+test("probeChat surfaces a real 400 without probing made-up siblings", async (t) => {
+  const seen: string[] = [];
+  await withFetch(
+    t,
+    async (url) => {
+      seen.push(String(url));
+      return jsonRes(400, { error: { message: "model not found" } });
+    },
+    async () => {
+      await assert.rejects(probeChat("https://api.x.com/v1", "m", "k"), /model not found/);
+      assert.deepEqual(seen, ["https://api.x.com/v1/chat/completions"]);
+    },
+  );
+});
+
 test("probeModels reports a network refusal as 'nothing is listening'", async (t) => {
   await withFetch(
     t,

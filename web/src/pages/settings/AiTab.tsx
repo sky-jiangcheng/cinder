@@ -1,8 +1,17 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { listAIModels, rebuildEmbeddings, testAIChat, updateConfig } from '../../api/client'
+import {
+  listAIModels,
+  listAIModelsConfigured,
+  rebuildEmbeddings,
+  testAIChat,
+  testAIChatConfigured,
+  updateConfig,
+} from '../../api/client'
 import AiAuditSection from './AiAuditSection'
 import WikiReviewSection from './WikiReviewSection'
+
+const SECRET_MASK = '********'
 
 // 预留钩子类：`ai-url-row` —— 目前全站没有对应样式定义（P35 复核确认），
 // 保留在 markup 里作为将来挂样式的锚点，删留都不影响行为。
@@ -45,14 +54,31 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
   const [semanticSaving, setSemanticSaving] = useState(false)
   const [rebuilding, setRebuilding] = useState(false)
   const [semanticMsg, setSemanticMsg] = useState('')
+  // 保存成功的按钮级反馈：全局 toast 之外，按钮本身也要"动一下"——之前保存
+  // 成功只有右上角一条消息扫过，表单和按钮毫无变化，用户不知道存没存上。
+  const [savedFlash, setSavedFlash] = useState(false)
+
+  const savedBaseURL = config.ai_chat_base_url || ''
+  const savedModel = config.ai_chat_model || ''
+  const keyIsMasked = apiKey.trim() === SECRET_MASK
+  const canUseSavedCredentials = (nextBaseURL: string, nextModel?: string) =>
+    config.ai_chat_api_key === SECRET_MASK && keyIsMasked &&
+    nextBaseURL.trim() === savedBaseURL.trim() && !!savedModel.trim() &&
+    (nextModel === undefined || nextModel.trim() === savedModel.trim())
 
   const fetchModels = async () => {
     if (!baseURL.trim() || modelsLoading) return
+    if (keyIsMasked && !canUseSavedCredentials(baseURL)) {
+      setModelsMsg(t('settings.ai.reenterApiKey'))
+      return
+    }
     setModelsLoading(true)
     setModelsMsg('')
     setModels([])
     try {
-      const res = await listAIModels(baseURL.trim(), apiKey.trim())
+      const res = canUseSavedCredentials(baseURL)
+        ? await listAIModelsConfigured()
+        : await listAIModels(baseURL.trim(), apiKey.trim())
       setModels(res.models)
       // Auto-select the first fetched model when the field is empty so the pull
       // has a visible result. Previously the list only fed a <datalist>, which
@@ -77,10 +103,16 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
 
   const testModel = async () => {
     if (!model.trim() || testing) return
+    if (keyIsMasked && !canUseSavedCredentials(baseURL, model)) {
+      setTestMsg(t('settings.ai.reenterApiKey'))
+      return
+    }
     setTesting(true)
     setTestMsg('')
     try {
-      const res = await testAIChat(baseURL.trim(), model.trim(), apiKey.trim())
+      const res = canUseSavedCredentials(baseURL, model)
+        ? await testAIChatConfigured()
+        : await testAIChat(baseURL.trim(), model.trim(), apiKey.trim())
       if (res.resolved_base_url && res.resolved_base_url !== baseURL.trim()) {
         setBaseURL(res.resolved_base_url)
       }
@@ -103,11 +135,13 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
       await updateConfig('ai_chat_model', model.trim())
       // The masked placeholder round-trips as "unchanged"; only overwrite the
       // secret when the user typed a fresh value.
-      if (apiKey.trim() && apiKey !== '********') {
+      if (apiKey.trim() && apiKey !== SECRET_MASK) {
         await updateConfig('ai_chat_api_key', apiKey.trim())
       }
       showMessage(t('settings.configSaved'))
       onSaved()
+      setSavedFlash(true)
+      setTimeout(() => setSavedFlash(false), 2000)
       return true
     } catch (e: unknown) {
       showMessage(t('settings.saveFailedMsg', { msg: e instanceof Error ? e.message : t('common.unknownError') }))
@@ -130,12 +164,12 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
       await updateConfig('embedding_model', embeddingModel.trim())
       // GetConfig masks both secrets. A placeholder means "keep the stored
       // value"; sending it back would replace the real key with stars.
-      if (embeddingAPIKey.trim() && embeddingAPIKey !== '********') {
+      if (embeddingAPIKey.trim() && embeddingAPIKey !== SECRET_MASK) {
         await updateConfig('embedding_api_key', embeddingAPIKey.trim())
       }
       await updateConfig('vector_store', vectorStore)
       await updateConfig('vector_store_url', vectorStoreURL.trim())
-      if (vectorStoreAPIKey.trim() && vectorStoreAPIKey !== '********') {
+      if (vectorStoreAPIKey.trim() && vectorStoreAPIKey !== SECRET_MASK) {
         await updateConfig('vector_store_api_key', vectorStoreAPIKey.trim())
       }
       await updateConfig('vector_store_collection', vectorCollection.trim())
@@ -230,6 +264,7 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
           placeholder={t('settings.ai.apiKeyPlaceholder')}
         />
         <span className="form-hint">{t('settings.ai.apiKeyHint')}</span>
+        {keyIsMasked && <span className="form-hint">{t('settings.ai.maskedKeyHint')}</span>}
       </div>
 
       <div className="empty-actions">
@@ -237,7 +272,11 @@ export default function AiTab({ config, showMessage, onSaved }: Props) {
           {testing ? t('settings.ai.testing') : t('settings.ai.testModel')}
         </button>
         <button className="btn btn-secondary" onClick={save} disabled={saving || testing}>
-          {saving ? t('settings.saving', { defaultValue: 'Saving…' }) : t('settings.save', { defaultValue: 'Save' })}
+          {savedFlash
+            ? t('settings.configSaved')
+            : saving
+              ? t('settings.saving', { defaultValue: 'Saving…' })
+              : t('settings.save', { defaultValue: 'Save' })}
         </button>
       </div>
       {testMsg && <p className="form-hint">{testMsg}</p>}
