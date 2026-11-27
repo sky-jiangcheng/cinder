@@ -11,9 +11,9 @@
 
 ### 事实一：JetBrains 插件把「服务在不在」变成了「插件能不能用」
 
-`ide/jetbrains/` 落地 7 个 Kotlin 源文件，其中**所有**数据访问都经 `RepotoryClient.rpc()` 打 `POST {serverUrl}/api/rpc`（[RepotoryClient.kt:302-320](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L302-L320)）。插件用的绑定是：`SearchAll`（notes + todos）、`SearchWikiPages`、`GetNote`、`GetWikiPage`、`ListProjects`、`OrganizeNote`、`UpdateNoteFull`、`CreateNoteWithMeta`、`MoveNote`。
+`ide/jetbrains/` 落地 7 个 Kotlin 源文件，其中**所有**数据访问都经 `RepotoryClient.rpc()` 打 `POST {serverUrl}/api/rpc`（[RepotoryClient.kt:302-320](../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L302-L320)）。插件用的绑定是：`SearchAll`（notes + todos）、`SearchWikiPages`、`GetNote`、`GetWikiPage`、`ListProjects`、`OrganizeNote`、`UpdateNoteFull`、`CreateNoteWithMeta`、`MoveNote`。
 
-于是**检索、读笔记、写笔记、改归属项目全部要求 `127.0.0.1:18765` 上有东西应答**。服务不在时，工具窗里连一次搜索都发不出去（`RepotoryClient.search` 的 `offline = true` 分支，[RepotoryClient.kt:246-254](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L246-L254)）。
+于是**检索、读笔记、写笔记、改归属项目全部要求 `127.0.0.1:18765` 上有东西应答**。服务不在时，工具窗里连一次搜索都发不出去（`RepotoryClient.search` 的 `offline = true` 分支，[RepotoryClient.kt:246-254](../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L246-L254)）。
 
 **而装桌面应用救不了这个**：桌面端是 Wails 进程，不监听任何端口（ADR-0001 决策 M1），`repotory-server` 才是那个监听 18765 的东西；`scripts/install.sh` 只装 `repotory` + `repotory-mcp`，**不装 `repotory-server`**。
 
@@ -23,20 +23,20 @@
 
 | 能力 | VS Code 扩展走哪条 | 备注 |
 |---|---|---|
-| 检索、笔记读/写/建、组织、wiki 读写、projects 列表 | **MCP stdio**（`repotory-mcp`） | `callTool(...)` 共 21 处调用点（[extension.ts:346-670](file:///workspace/ide/vscode/src/extension.ts#L346-L670)） |
-| `MoveNote`（改笔记所属项目） | **HTTP** `/api/rpc` | `moveNoteViaRpc`（[extension.ts:700-708](file:///workspace/ide/vscode/src/extension.ts#L700-L708)） |
-| `ResolveWorkspacePath`（工作区解析） | **HTTP** `/api/rpc` | `refreshScope`（[extension.ts:267-270](file:///workspace/ide/vscode/src/extension.ts#L267-L270)） |
-| 深链（跳浏览器 web UI） | **HTTP** | `openHit`（[extension.ts:527-537](file:///workspace/ide/vscode/src/extension.ts#L527-L537)） |
+| 检索、笔记读/写/建、组织、wiki 读写、projects 列表 | **MCP stdio**（`repotory-mcp`） | `callTool(...)` 共 21 处调用点（[extension.ts:346-670](../../ide/vscode/src/extension.ts#L346-L670)） |
+| `MoveNote`（改笔记所属项目） | **HTTP** `/api/rpc` | `moveNoteViaRpc`（[extension.ts:700-708](../../ide/vscode/src/extension.ts#L700-L708)） |
+| `ResolveWorkspacePath`（工作区解析） | **HTTP** `/api/rpc` | `refreshScope`（[extension.ts:267-270](../../ide/vscode/src/extension.ts#L267-L270)） |
+| 深链（跳浏览器 web UI） | **HTTP** | `openHit`（[extension.ts:527-537](../../ide/vscode/src/extension.ts#L527-L537)） |
 
-VS Code 侧 `MoveNote` 走 HTTP 的理由写在代码注释里：**「re-filing knowledge is a human decision an agent must not make」**（[extension.ts:695-698](file:///workspace/ide/vscode/src/extension.ts#L695-L698)）——这条能力**故意**不进 MCP。而且它在服务不可用时**降级**而非中断：「Fields saved, but moving the note failed」（[extension.ts:660-665](file:///workspace/ide/vscode/src/extension.ts#L660-L665)）。
+VS Code 侧 `MoveNote` 走 HTTP 的理由写在代码注释里：**「re-filing knowledge is a human decision an agent must not make」**（[extension.ts:695-698](../../ide/vscode/src/extension.ts#L695-L698)）——这条能力**故意**不进 MCP。而且它在服务不可用时**降级**而非中断：「Fields saved, but moving the note failed」（[extension.ts:660-665](../../ide/vscode/src/extension.ts#L660-L665)）。
 
 **结论：VS Code 侧真正的形态就是「MCP 主通道 + HTTP 补缺」**。JetBrains 侧的问题不是选错了传输层，是**把 VS Code 里两个可以降级的 HTTP 依赖点，变成了唯一的路径**。
 
 ### 事实三：「MCP 是唯一执行接口」这个措辞漂移了
 
-仓库的规范定义是「MCP 是唯一的 **AI** 执行接口」（[docs/features/ai-integration.md:117](file:///workspace/docs/features/ai-integration.md#L117)、[docs/product/2026-08-24-scope-reduction.md:274](file:///workspace/docs/product/2026-08-24-scope-reduction.md#L274)）——**限定词是「AI」**，指 agent 侧。
+仓库的规范定义是「MCP 是唯一的 **AI** 执行接口」（[docs/features/ai-integration.md:117](../../docs/features/ai-integration.md#L117)、[docs/product/2026-08-24-scope-reduction.md:274](../../docs/product/2026-08-24-scope-reduction.md#L274)）——**限定词是「AI」**，指 agent 侧。
 
-但 [ADR-0009 决策 1](file:///workspace/docs/adr/0009-ide-presence.md#L20) 写成「MCP 保持唯一执行接口」，同一句里又说「一切新 IDE 资产……经 headless HTTP **或** MCP stdio 调共享服务层」；[ADR-0027 决策 1](file:///workspace/docs/adr/0027-jetbrains-plugin.md#L21) 更直接：既说「插件……经 headless HTTP 调共享服务层」，又说「不新增执行接口（MCP 保持唯一执行接口）」——**同一句话自相矛盾**。
+但 [ADR-0009 决策 1](../../docs/adr/0009-ide-presence.md#L20) 写成「MCP 保持唯一执行接口」，同一句里又说「一切新 IDE 资产……经 headless HTTP **或** MCP stdio 调共享服务层」；[ADR-0027 决策 1](../../docs/adr/0027-jetbrains-plugin.md#L21) 更直接：既说「插件……经 headless HTTP 调共享服务层」，又说「不新增执行接口（MCP 保持唯一执行接口）」——**同一句话自相矛盾**。
 
 读法有两种：
 
@@ -47,9 +47,9 @@ VS Code 侧 `MoveNote` 走 HTTP 的理由写在代码注释里：**「re-filing 
 
 ### 事实四：深链硬依赖 `repotory-server`，而它从来没有过任何分发渠道
 
-插件「打开选中项」跳浏览器 SPA，而 web UI 只在 `repotory-server --web-dist` 里。server 没带 `web/` 时链接落 404，插件只能弹窗警告「Repotory is running API-only — this link would land on a 404」（[RepotoryToolWindow.kt:1060-1066](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryToolWindow.kt#L1060-L1066)）。
+插件「打开选中项」跳浏览器 SPA，而 web UI 只在 `repotory-server --web-dist` 里。server 没带 `web/` 时链接落 404，插件只能弹窗警告「Repotory is running API-only — this link would land on a 404」（[RepotoryToolWindow.kt:1060-1066](../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryToolWindow.kt#L1060-L1066)）。
 
-而 `repotory-server` 的资产虽然发在 release 里（`repotory-server-<target>.tar.gz`，含二进制 + `web/`），**没有任何安装渠道**：install.sh 不装它，Homebrew / Scoop 只有 `repotory` 与 `repotory-mcp`（[packaging/README.md:8-18](file:///workspace/packaging/README.md#L8-L18)）。
+而 `repotory-server` 的资产虽然发在 release 里（`repotory-server-<target>.tar.gz`，含二进制 + `web/`），**没有任何安装渠道**：install.sh 不装它，Homebrew / Scoop 只有 `repotory` 与 `repotory-mcp`（[packaging/README.md:8-18](../../packaging/README.md#L8-L18)）。
 
 于是出现一个闭环缺口：`packaging/README.md` 给 `repotory-server` 登记的消费者一栏写的就是 **"JetBrains plugin one-click start"**——它唯一的分发路径是插件自己，而 ADR-0027 决策 4 的边界 ① 明文禁止插件下载二进制。
 
@@ -64,16 +64,16 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 | `SearchAll`（notes + todos） | `repotory_notes_search` | ✅ |
 | `SearchWikiPages`（scope 0，跨项目） | `repotory_wiki_search`（省略 `project_id` / `path` 即跨项目） | ✅ |
 | `GetNote` | `repotory_notes_read` | ✅ |
-| `GetWikiPage` | `repotory_wiki_read` | ✅ **同一个 `service.WikiPageDetail`**，`out_links` / `in_links` / `source_note_ids` 全在（[wikipage/page.go](file:///workspace/internal/service/wikipage/page.go)、[tools_wiki.go:112](file:///workspace/cmd/mcp/tools_wiki.go#L112)）——插件详情面板的「链接 / 反向链接 / 来源笔记」不会丢 |
+| `GetWikiPage` | `repotory_wiki_read` | ✅ **同一个 `service.WikiPageDetail`**，`out_links` / `in_links` / `source_note_ids` 全在（[wikipage/page.go](../../internal/service/wikipage/page.go)、[tools_wiki.go:112](../../cmd/mcp/tools_wiki.go#L112)）——插件详情面板的「链接 / 反向链接 / 来源笔记」不会丢 |
 | `ListProjects` | `repotory_projects_list` | ✅ |
 | `OrganizeNote` | `repotory_notes_organize` | ✅ |
 | `UpdateNoteFull`（含 `pinned`） | `repotory_notes_update`（**无 `pinned`**） | ⚠️ **差异一** |
 | `CreateNoteWithMeta` | `repotory_notes_create`（`project_id` / `title` / `content` / `category` / `tags`） | ✅ 参数同构 |
 | `MoveNote` | **无孪生**（`cmd/mcp` 零命中） | ⚠️ **差异二**（VS Code 同样走 HTTP，理由见事实二） |
 
-**差异一（`pinned`）**：`db.UpdateNoteFull(db, noteID, content, title, tags, kind, pinned)` 有 `pinned`，MCP 的 `repotory_notes_update` 没有。插件的笔记编辑器确实在写它（`pinned = draft.pinned`，[NoteEditorDialog.kt:67](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/NoteEditorDialog.kt#L67)）。**不补就是功能回退。**
+**差异一（`pinned`）**：`db.UpdateNoteFull(db, noteID, content, title, tags, kind, pinned)` 有 `pinned`，MCP 的 `repotory_notes_update` 没有。插件的笔记编辑器确实在写它（`pinned = draft.pinned`，[NoteEditorDialog.kt:67](../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/NoteEditorDialog.kt#L67)）。**不补就是功能回退。**
 
-**差异二（handoff 不可编辑）**：`repotory_notes_update` 对 `handoff` 标签的笔记按 append-only 处理（会话记忆协议的退出记录不许被改写，[main.go:297-302](file:///workspace/cmd/mcp/main.go#L297-L302)）；HTTP 的 `UpdateNoteFull` 没有这条 guard。所以迁到 MCP 后，**IDE 里将不能编辑 handoff 笔记**——而 VS Code 现在也不能。这是收窄，且是朝正确方向的收窄。
+**差异二（handoff 不可编辑）**：`repotory_notes_update` 对 `handoff` 标签的笔记按 append-only 处理（会话记忆协议的退出记录不许被改写，[main.go:297-302](../../cmd/mcp/main.go#L297-L302)）；HTTP 的 `UpdateNoteFull` 没有这条 guard。所以迁到 MCP 后，**IDE 里将不能编辑 handoff 笔记**——而 VS Code 现在也不能。这是收窄，且是朝正确方向的收窄。
 
 ## 决策
 
@@ -81,7 +81,7 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 
 **「MCP 是唯一执行接口」一律读作「MCP 是唯一的 AI 执行接口」。** 人侧界面（桌面端 / 两个 IDE 插件 / 浏览器）调的是**绑定面**，两种通道都合法。
 
-本 ADR 据此**修订** [ADR-0009 决策 1](file:///workspace/docs/adr/0009-ide-presence.md#L20) 与 [ADR-0027 决策 1](file:///workspace/docs/adr/0027-jetbrains-plugin.md#L21) 的措辞：补上「AI」限定词。ADR-0009 决策 1 的实质授权（「经 headless HTTP **或** MCP stdio 调共享服务层」）不变。
+本 ADR 据此**修订** [ADR-0009 决策 1](../../docs/adr/0009-ide-presence.md#L20) 与 [ADR-0027 决策 1](../../docs/adr/0027-jetbrains-plugin.md#L21) 的措辞：补上「AI」限定词。ADR-0009 决策 1 的实质授权（「经 headless HTTP **或** MCP stdio 调共享服务层」）不变。
 
 ### 决策 2：JetBrains 插件改走 **MCP 主通道 + HTTP 补缺**，与 VS Code 扩展同构
 
@@ -104,7 +104,7 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 
 否则迁移就是**功能回退**（插件现在能写置顶）。
 
-实现必须遵守该工具既有的 **partial-update 纪律**：省略 = 保持原值。`db.UpdateNoteMeta` 会 wholesale 替换 `title` / `tags` / `kind` / `pinned`，所以工具侧必须先读笔记再合并（现有实现已是这个形状，[main.go:287-295](file:///workspace/cmd/mcp/main.go#L287-L295)——那段注释记着一次真实事故：只传 `category` 曾把标题、标签清空并把笔记 unpin）。**`pinned` 必须作为可选布尔参数加入这个合并逻辑，不得因省略而取消置顶。**
+实现必须遵守该工具既有的 **partial-update 纪律**：省略 = 保持原值。`db.UpdateNoteMeta` 会 wholesale 替换 `title` / `tags` / `kind` / `pinned`，所以工具侧必须先读笔记再合并（现有实现已是这个形状，[main.go:287-295](../../cmd/mcp/main.go#L287-L295)——那段注释记着一次真实事故：只传 `category` 曾把标题、标签清空并把笔记 unpin）。**`pinned` 必须作为可选布尔参数加入这个合并逻辑，不得因省略而取消置顶。**
 
 这是对 agent 面的**增量**（既有工具加一个可选参数，不新增工具、不改既有语义）。
 
@@ -131,7 +131,7 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 
 `repotory-server` **继续保持「用户自行获取的可选增强」**，本 ADR **不新建** install.sh / Homebrew / Scoop 渠道。理由：VS Code 扩展从来没有 `repotory-server` 也照样发布了——深链不是任何一个客户端的可用性前提，把它变成前提是 JetBrains 侧独有的过度承诺。
 
-**连带修正**：[packaging/README.md:16-18](file:///workspace/packaging/README.md#L16-L18) 给 `repotory-server` 登记的消费者一栏写着 "JetBrains plugin one-click start"，与本决策不符（插件不下载、也无渠道可指），应改为「手动获取（深链增强）」。
+**连带修正**：[packaging/README.md:16-18](../../packaging/README.md#L16-L18) 给 `repotory-server` 登记的消费者一栏写着 "JetBrains plugin one-click start"，与本决策不符（插件不下载、也无渠道可指），应改为「手动获取（深链增强）」。
 
 ### 决策 7：`repotory-mcp` 二进制的查找顺序对齐 VS Code 侧
 
@@ -146,7 +146,7 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 ## 后果
 
 - **正面**：JetBrains 插件达到与 VS Code 扩展同等的可用度——装了 `repotory-mcp`（install.sh / Homebrew / Scoop **三条渠道都有**）就能检索、读写、编辑、建笔记；服务不再是使用前提。两个 IDE 分发面从此同构（同一套 MCP 工具面、同一套降级语义）。「装桌面 App 但插件不可用」这个现象消失。
-- **负面**：插件要新增一个 Kotlin 版 MCP stdio 客户端（`initialize` 握手 + `tools/call` + JSON 结果解析）。**注意 MCP 侧多数工具走 `makeJSONResult` 返回结构化 JSON**（[results.go:20](file:///workspace/cmd/mcp/results.go#L20)），比 VS Code 侧解析 `repotory_notes_search` 文本输出的做法干净——但 `repotory_notes_search` / `repotory_wiki_search` 返回的是文本，需要各写一个解析器。
+- **负面**：插件要新增一个 Kotlin 版 MCP stdio 客户端（`initialize` 握手 + `tools/call` + JSON 结果解析）。**注意 MCP 侧多数工具走 `makeJSONResult` 返回结构化 JSON**（[results.go:20](../../cmd/mcp/results.go#L20)），比 VS Code 侧解析 `repotory_notes_search` 文本输出的做法干净——但 `repotory_notes_search` / `repotory_wiki_search` 返回的是文本，需要各写一个解析器。
 - **负面（agent 面）**：`repotory_notes_update` 加 `pinned` 参数 = 动了 agent 可见的工具面。需同步 `docs/api/reference.md`（中英双份）与 `docs/features/ai-integration.md`（工具描述）。属**增量**，不改既有语义。
 - **负面（行为收窄）**：handoff 笔记在 IDE 里不可编辑（决策 4，与 VS Code 现状一致）；改笔记所属项目在无服务时不可用（决策 5，且已保存的内容不丢）。
 - **中性**：桌面端仍不监听任何端口；`repotory-server` 仍是独立二进制、仍随 release 发布、仍**无分发渠道**。
@@ -166,7 +166,7 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 
 **更正一：两个搜索工具返回的是 JSON，不是文本。**
 
-「后果」一节写「`repotory_notes_search` / `repotory_wiki_search` 返回的是文本，需要各写一个解析器」。逐个核对 `cmd/mcp` 后确认**不成立**：两者都走 `makeJSONResult`，返回结构化 JSON（[main.go:135](file:///workspace/cmd/mcp/main.go#L135)、[tools_wiki.go:87](file:///workspace/cmd/mcp/tools_wiki.go#L87)）。**文本只出现在错误路径**（`makeTextResult`：`query is required` / `error: …` / `note not found: …` / `refusing to update note N: …`）。
+「后果」一节写「`repotory_notes_search` / `repotory_wiki_search` 返回的是文本，需要各写一个解析器」。逐个核对 `cmd/mcp` 后确认**不成立**：两者都走 `makeJSONResult`，返回结构化 JSON（[main.go:135](../../cmd/mcp/main.go#L135)、[tools_wiki.go:87](../../cmd/mcp/tools_wiki.go#L87)）。**文本只出现在错误路径**（`makeTextResult`：`query is required` / `error: …` / `note not found: …` / `refusing to update note N: …`）。
 
 所以实现上**没有「两个文本解析器」，而是「一个 JSON 解析器 + 一条错误分支」**：解析不成 JSON 的文本 = 工具在拒绝，必须**报错**，绝不能当成空结果。空结果是用户唯一分不清「没匹配」和「调用失败」的答案——比报错更糟。落地时这条被钉成了 8 个工具映射各自的回归用例（`ide/jetbrains/src/test/kotlin/dev/repotory/jetbrains/McpPayloadsTest.kt`）。
 
@@ -178,3 +178,13 @@ MCP 工具与 HTTP 绑定打的是**同一个 service 层**，所以「换传输
 - 随包分发的 skill 工具签名文档：`SKILL.md`、`skill/repotory/references/mcp-tools.md`、`skill/repotory/SKILL.md`（该文件自称签名「取自 `tools/list` 实际响应」，加参数后必须同步，否则就是漂移）。
 
 **落地记录（2026-11-01）**：① `cmd/mcp` 的 `repotory_notes_update` 加了可选布尔 `pinned`（省略 = 保持原值；`false` 与省略是两回事，按参数**是否存在**判定）；② `ide/jetbrains/` 新增 `McpStdioClient.kt`（协议层）、`McpPayloads.kt`（解析层）、`McpBinaryResolver.kt`（二进制查找）、`RepotoryMcp.kt`（8 项能力门面），八项数据调用改走 MCP，`MoveNote` 与 web UI 探测留在 HTTP；③ 设置页新增「MCP binary」栏与「Check MCP channel」诊断；④ VS Code 侧 `openHit` 补上 `servesWebUi` 预检；⑤ 插件新增 27 条 JVM 单测并进了 CI（`gradle test`）。
+
+**修订（2026-11-26）：决策 6 的深链入口作废，HTTP 只剩 `MoveNote`。**
+决策 6 把深链定为「尽力而为」，理由是「跳 web UI 是插件的一个出口」。ADR-0044 的第三次修订把卡片上的
+**Open in Cinder** 换成了「就地问」（卡片正文本来就已经就地读出，那个按钮唯一提供的动作是离开面板），
+于是这条通道**没有调用方了**：`RepotoryClient.deepLink` / `servesWebUi`、`RepotoryHit.route`、
+`openCard` / `offerFallback`、VS Code 侧的 `openHit` / `servesWebUi` / `Transport.openExternal`
+全部删除，设置页那条「API and web UI both reachable」的判据一并去掉——它只是在教用户为深链加
+`--web-dist`。**HTTP 补缺面从两项缩到一项**：`MoveNote`（决策 2，human-only）。决策 6 的另一半
+（「`repotory-server` 保持可选、深链不是任何客户端的可用性前提」）反而更成立了：如今它连一个
+可用性前提都不是了。门 C 的第二程随之改成「卡片就地读出整篇正文」。

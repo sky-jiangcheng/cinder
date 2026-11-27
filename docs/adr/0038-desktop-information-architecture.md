@@ -2,7 +2,7 @@
 
 - 状态：Accepted（2026-11-02，用户直接提出问题并拍定取舍）
 - 日期：2026-11-02
-- 关联：[ADR-0024](0024-home-workbench-merge-search-page.md)（**本文 supersede 其决策 1**，并修订其决策 2、3 的落点）、[ADR-0034](0034-desktop-three-column-shell.md)（外壳三栏结构不变，右栏的搜索入口按本文删除）、[ADR-0036](0036-ide-chat-console.md)（**桌面端首次对齐它的对话台模型**）、[ADR-0032](0032-approved-knowledge-page-visibility.md)（知识页的只读语义不变）、[ADR-0017](0017-one-kernel-two-entry-points.md)（仪表盘「不移出首屏」的原则以新方式兑现）
+- 关联：[ADR-0024](0024-home-workbench-merge-search-page.md)（**本文 supersede 其决策 1**，并修订其决策 2、3 的落点）、[ADR-0034](0034-desktop-three-column-shell.md)（外壳三栏结构不变，右栏的搜索入口按本文删除）、[ADR-0036](0036-ide-chat-console.md)（**桌面端首次对齐它的对话台模型**）、[ADR-0032](0032-approved-wiki-page-visibility.md)（知识页的只读语义不变）、[ADR-0017](0017-one-kernel-two-entry-points.md)（仪表盘「不移出首屏」的原则以新方式兑现）
 
 ## 背景
 

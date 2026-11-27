@@ -122,6 +122,6 @@ After the change every one of them equals "the tab strip's bottom edge + 20px of
 
 **In-browser check** (639×795): after scrolling the review page's "merge suggestions" panel by 600px, **the tab strip is still where it was**, the cards scroll past underneath it, and the scrollbar's thumb moves down while its track still starts below the strip.
 
-**Screenshot archive**: [`outputs/screenshots/2026-11-03-adr0042-page-shell/`](../../outputs/screenshots/2026-11-03-adr0042-page-shell/) — `00-before-user-report.png` is the screenshot from the user's report (red box over the upper half of the scrollbar), `01`–`05` are the review / knowledge / settings-AI / dashboard / project-detail pages after the change, at the same size (1360×860).
+**Screenshot archive**: [`outputs/screenshots/2026-11-03-adr0042-page-shell/`](../../../outputs/screenshots/2026-11-03-adr0042-page-shell/) — `00-before-user-report.png` is the screenshot from the user's report (red box over the upper half of the scrollbar), `01`–`05` are the review / knowledge / settings-AI / dashboard / project-detail pages after the change, at the same size (1360×860).
 
 **Regression**: `npm test` **49 files / 413 cases** pass (the Review scroll assertion now checks the region is zeroed, plus a `scrollTo` mock), `npm run build` / `npm run lint` (0 errors, 0 warnings) / `check-i18n-keys` / `check-docs-mirror` all green.

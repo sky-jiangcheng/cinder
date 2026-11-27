@@ -294,7 +294,7 @@ v2.31.0 的发布流水线里，**只有 VS Code Marketplace 那一格红了**�
 
 **「同时发出」不是可选项，是这次改名成立的前提**。已装用户的 `.mcp.json`、VS Code / JetBrains 设置里的路径、hook 脚本里写的都是 `repotory-mcp`；如果归档里只有新名字，**升级一次就断全部已配置的客户端**。所以每个安装渠道都带兼容层：`install.sh` 装完建软链、`install.ps1` 复制副本（Windows 软链要开发者模式）、Homebrew 的 `binary "cinder-mcp", target: "repotory-mcp"`、Scoop 的双 shim、Docker 镜像里的 `ln -s`、归档里预先打好的软链。IDE 插件与 `repotory-init` 的二进制查找改成**按名单遍历**（新名优先，旧名兜底），常见目录同时收新旧两种包目录。
 
-**连带炸出来的一处真缺陷**：资产名带版本之后，`releases/latest/download/<固定文件名>` **不再可用**——两个安装脚本此前都靠这个 URL 拿包。修法是先解析最新 tag 再拼版本化 URL（`install.sh` 跟 `curl -I` 的重定向取结尾，`install.ps1` 走 API），并保留 `VERSION` / `RELEASES` / `CINDER_RELEASE_BASE` 覆盖点，供安装冒烟测试用 fixture 顶替真实发布。**应用内更新器同批改**：`appAssetPattern` 认新形状、`legacyAppAssetPattern` 认旧形状，`platformAsset` 从「前缀匹配」改成「含 `-<os>-<arch>.`」——**版本号插在品牌与平台之间，前缀匹配从此必失**，这是最容易漏的一处（漏了就是「点了更新没反应」）。
+**连带炸出来的一处真缺陷**：资产名带版本之后，`releases/latest/download/<固定文件名>` **不再可用**——两个安装脚本此前都靠这个 URL 拿包。修法是先解析最新 tag 再拼版本化 URL（`install.sh` 跟 `curl -I` 的重定向取结尾，`install.ps1` 走 API），并保留覆盖点、供安装冒烟测试用 fixture 顶替真实发布——`install.sh` 是 `VERSION` / `RELEASES`，`install.ps1` 是 `$env:VERSION` / `$env:CINDER_RELEASE_BASE`（两个脚本各一套，不是三个名字都有）。**应用内更新器同批改**：`appAssetPattern` 认新形状、`legacyAppAssetPattern` 认旧形状，`platformAsset` 从「前缀匹配」改成「含 `-<os>-<arch>.`」——**版本号插在品牌与平台之间，前缀匹配从此必失**，这是最容易漏的一处（漏了就是「点了更新没反应」）。
 
 **没动的**：MCP server 名仍是 `repotory-mcp`（`NewMCPServer` 的参数是**客户端看到的服务器身份**，不是文件名，改它等于改契约）；`REPOTORY_MCP_BIN` 环境变量名、`repotory_*` 工具前缀、数据目录、cask/bucket token、skill 目录 `skill/repotory/` 全部照旧。**包管理器的 cask/formula/scoop 文件名也没改**——`brew install sky-jiangcheng/homebrew-repo/repotory-mcp` 是用户保存下来的命令，token 一改那条命令就废。
 

@@ -2,7 +2,7 @@
 
 状态：**Accepted（2026-11-02）**
 日期：2026-11-02
-关联：[ADR-0034](0034-desktop-three-column-shell.md)（桌面外壳三栏化，品牌标记留在左栏）、[ADR-0021](0021-*.md)（若有则并入）、[ADR-0036](0036-ide-chat-console.md)（两个 IDE 面板改成对话台）、[ADR-0006](0006-scope-reduction.md)（范围冻结）、[ADR-0007](0007-session-memory-protocol.md)（会话记忆协议）
+关联：[ADR-0034](0034-desktop-three-column-shell.md)（桌面外壳三栏化，品牌标记留在左栏）、[ADR-0021](0021-temporal-graph-page-versions.md)（若有则并入）、[ADR-0036](0036-ide-chat-console.md)（两个 IDE 面板改成对话台）、[ADR-0006](0006-scope-freeze.md)（范围冻结）、[ADR-0007](0007-session-memory-protocol.md)（会话记忆协议）
 起始 schema：v28（**本 ADR 不改 schema**）
 
 > **Superseded by [ADR-0052](0052-the-knot-brand-mark.md)**：「不得靠具体形状建立知名度」改为「不得靠具象物件，靠可参数复现的构造」。

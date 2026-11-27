@@ -2,7 +2,7 @@
 
 - 状态：Accepted（2026-11-02，用户指出「仪表盘、知识库、审核多处可以用 tab 但是没有使用」）
 - 日期：2026-11-02
-- 关联：[ADR-0038](0038-desktop-information-architecture.md)（**本文不翻转它的任何决策**，只把它的落地粒度从「区块」细到「tab」）、[ADR-0032](0032-approved-knowledge-page-visibility.md)（只列已批准页的语义不变）、[ADR-0019](0019-entity-disambiguation-merge.md)、[ADR-0020](0020-community-summary.md)、[ADR-0023](0023-knowledge-import-landing.md)、[ADR-0017](0017-one-kernel-two-entry-points.md)
+- 关联：[ADR-0038](0038-desktop-information-architecture.md)（**本文不翻转它的任何决策**，只把它的落地粒度从「区块」细到「tab」）、[ADR-0032](0032-approved-wiki-page-visibility.md)（只列已批准页的语义不变）、[ADR-0019](0019-entity-resolution-merge.md)、[ADR-0020](0020-community-synthesis.md)、[ADR-0023](0023-note-ownership-knowledge-organize.md)、[ADR-0017](0017-one-kernel-two-entry-points.md)
 
 ## 背景
 

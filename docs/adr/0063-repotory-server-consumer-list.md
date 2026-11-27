@@ -107,3 +107,16 @@ ADR-0035 的「不建渠道」决策针对的是**增强**：深链不可用时�
 4. **两端面板**：provider 设置的读（GetConfig）与写（UpdateConfig ×3）改走 MCP 工具；两端 MCP 客户端不检查 `IsError`，写失败以 `error: …` 文本返回，按既有 ask 模式显式检查后抛错（新增用例钉住）。`ListAIModels` / `TestAIChatConfigured` 等**探测**保持 HTTP——它们不是配置写，无服务时如实降级。
 5. **测试**：writerapi 新增 `TestConfigWriteIsCatalogueCovered`（客户端角色 `DecideWrite(UpdateConfig)` = WriteForward、`UpdateScanRoots` 仍 WriteRefuse、转发写落库）；cmd/mcp 新增 `TestConfigTools`（读掩码、写校验、未知键拒绝）；VS Code 新增 provider 三例（读走 MCP、写三键、拒绝文案）；JetBrains 新增拒绝写用例。
 6. **契约面影响**：`UpdateConfig` 从「客户端进程拒绝」变为「转发给写者」——独立 server 以客户端角色运行时，配置写会转发给持写权的进程（桌面或自举的 MCP），不再需要 server 自身持锁。**代价照记**：agent 现在可以读写 provider 配置（含端点/模型/密钥）——这是所有者明确的政策反转，工具描述如实说明；`repotory_config_update` 的写仍受白名单与数值校验约束，且经单写者契约路由。
+
+**修订（2026-11-26）：清单里的「深链」一行作废，决策 5 随之失效。**
+ADR-0044 的第三次修订把卡片上的 **Open in Cinder** 换成了「就地问」，深链在两端都不再有调用方，
+整条链路删除（见 ADR-0035 修订）。按决策 1 的维护纪律，本表同批更新：server 的消费者只剩
+`MoveNote` / `BindWorkspaceToProject` / 一键启动 / 诊断四项，**没有「增强」类消费者了**。
+决策 5（「深链维持尽力而为的增强」）不再成立——不是降级，是不存在；
+`packaging/README.md` 的渠道说明按同一口径改过。
+
+同批还把落地记录第 2 条 ① 里「二进制旁有 `web/` 时自动加 `--web-dist`」删了：两个启动器现在只传
+`--port`。那个 flag 的用途就是让读者在浏览器里打开知识 UI，而深链没了之后面板从不 link 进去
+（JetBrains 那条注释自己写着 "The plugin itself no longer links into that UI"，却仍在传参）；
+插件起的服务唯一消费者是 human-only 的 `MoveNote`，没有理由在回环端口上多挂一份 SPA。
+`--web-dist` 作为 server 自身的能力保留：想浏览的人自己带 flag 起服务（`ide/jetbrains/README.md` 教的就是这件事）。

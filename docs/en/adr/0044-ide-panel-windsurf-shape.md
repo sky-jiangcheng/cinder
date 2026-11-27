@@ -135,6 +135,109 @@ sides; the difference is allowed only in "how this form is drawn" — the same r
 decision 8. **Both sides read the same server-side configuration** — so what is set up in VS Code
 is the same endpoint when it is opened in JetBrains.
 
+> **Revision 2026-11-26: the provider lives on a settings sub-page, not in a dialog.**
+> The owner's verdict on the JetBrains panel was that its UI was "too low"; it was rebuilt against
+> the VS Code hidden-chrome layout. The header keeps the mark, one channel-state dot and a row of
+> 24px icons (history / new / settings — the "desktop app" one is removed in the second revision
+> below) — every text button and the bordered `online` pill is gone. The composer is one rounded box with the send key inside it plus a single pill row (mode
+> group on the left, project chip on the right).
+> Two consequences for decision ⑤: ① **the provider form is a settings-tree page**
+> (`Settings ▸ Tools ▸ Cinder ▸ AI Provider`) instead of a `DialogWrapper` summoned by a header
+> action — the header's gear opens that tree, so the route did not get longer. The original measure
+> ("spreading it across the settings page would put it too far from 'click the icon and configure
+> it'") is rejected by the owner: configuration having ONE home beats saving a click.
+> ② **the settings page is grouped** into `CHANNEL` (`cinder-mcp`), `LOCAL SERVICE` (optional) and
+> `AI PROVIDER` (entry to the sub-page); the flat form did not say which button belonged to which
+> field. "Start local service" and "Refresh" left the header as setup-class actions: the first is on
+> the settings page, the second is the status dot (click it to re-probe the channel). The substance
+> of ⑤ is unchanged — the plugin still reads and writes only the server's `ai_chat_*` rows, keeps no
+> second copy, and stores no key in the IDE's settings. In the landing table `ProviderDialog.kt` is
+> now `RepotoryProviderConfigurable.kt`.
+>
+> **Revision 2026-11-26, second pass: the "open the desktop app" entry is gone, and the
+> panel's visual language is completed.** The owner's judgement: the plugin should not carry
+> a button whose only job is to jump to Cinder Desktop — the panel IS the product in this
+> window, and a button that sends the reader away says the panel is a preview. Both headers
+> keep three icons now (history / new / settings): JetBrains drops `PanelIcons.desktop()` and
+> `openDesktopApp()`, VS Code drops `#act-desktop` and the `openDesktop` webview message (the
+> `repotory.openDesktop` command stayed, on the ground that "it is not part of the panel" — the
+> fourth revision below retires that ground too). The card's **Open in
+> Cinder** stays: it opens that one note or page, not "the desktop app".
+> The same pass fixed three places that read as stock widgets, identically on both sides:
+> ① the mode group became a **segmented control** (`SegmentTrack` / `.modes`) — three modes
+> are one-of-three, and three separately bordered buttons read as three unrelated switches;
+> ② the send key is a **line arrow** (`PanelIcons.send()` / `ICON_SEND`), not the `↵`
+> character, which is the Enter legend rather than a button; ③ the scope chip's lock is
+> **drawn** (`PanelIcons.lock()` / `ICON_LOCK`) instead of the 🔒 emoji, which comes out as
+> another vendor's coloured glyph on some platforms and was the one pixel on the panel that
+> did not follow the theme. The question row also sits on a very faint wash (6% of the
+> foreground mixed into the background; `textCodeBlock-background` in VS Code) and the mode
+> label is coloured per face (Ask blue / Notes amber / Pages purple, the same three the card
+> badges use) — without that, a question and its own answer run together into one column of
+> same-coloured text.
+>
+> **Revision 2026-11-26, third pass: a card no longer jumps out; it asks in place.**
+> The previous pass kept the card's **Open in Cinder**, on the grounds that it opened that one
+> note or page. The owner's follow-up question retired that ground: the body already opens in
+> place (`repotory_notes_read` / `repotory_wiki_read`), so the only thing the button offered was
+> a way OUT of the panel — a reader who wanted to know more got a relocation, not an answer.
+> It is now **Ask about this**: the click asks — a question about that card
+> (`followUpQuestion` / `followUp`, word for word the same on both sides) goes into the composer
+> and then through the same submit path Enter uses, so the turn itself records what was asked.
+> The first version only drafted, on the fear that a stray click would spend a model call; on the
+> owner's call it sends, because a button labelled "Ask about this" that waits for Enter is a
+> label the button does not keep — and a busy shared turn declines the submit and keeps the
+> draft, so the click is never silently lost. The whole deep-link path went with it: `RepotoryClient.deepLink` / `servesWebUi` /
+> `openCard` / `offerFallback` (JetBrains), `openHit` / `servesWebUi` / the `open` message /
+> `Transport.openExternal` (VS Code), `RepotoryHit.route` and `StartOutcome.webUi`, plus the
+> settings page's "API and web UI both reachable" test — a distinction that only existed to tell
+> the reader to start the server with `--web-dist` (ADR-0035 decision 6's deep link is void; see
+> the revision there). Gate C's second journey changed from "the deep link points at the row the
+> search returned" to "the card reads its whole body in place" — that is the path the panel
+> actually depends on now. The launchers' "add `--web-dist` when `web/` sits next to the binary"
+> (`RepotoryServer.kt` / `serverLauncher.ts`) went with it: it was a window onto the same entry,
+> and dropping the flag from the gate script while the launchers kept adding it automatically left
+> half the path in place. Both launch commands now carry `--port` and nothing else.
+> One piece of same-rooted dead code went too: the static detail pane in
+> `NoteDetailHtml.kt` (`promoHtml` / `noteHtml` / `wikiPageHtml`, and its line "Open in Cinder is
+> the way out of the pane") has had no caller since ADR-0036; the file keeps only the shared
+> escaping and markdown renderer and is renamed `HtmlText.kt`, and the never-wired `copyCard` and
+> `snippetHtml` are deleted.
+>
+> The same standard, swept back over both panels in the same round, retired three more
+> "said but not done" places. **① The idle panel's example question did nothing**:
+> clicking "→ Why was the retry budget raised?" only moved focus into an empty composer (the
+> mode was already Ask), leaving the reader to retype the sentence. The rule is now one
+> sentence — **if the label is a question, the click asks it**: both sides grew
+> `askNow(text)`, shared by the card action and the example, and the JetBrains question is the
+> `ChatConsoleHtml.EXAMPLE_ASK` constant, so the label and the string actually sent cannot
+> drift apart (a test pins it). **② The green dot claimed more than it measured**: its tooltip
+> said "MCP channel ready — asking, searching, reading and writing work now", while the probe
+> only calls `McpBinaryResolver.resolveHere` (is the file there — no spawn, no tool call), so a
+> broken or mismatched binary still showed green. It now states what it found, and
+> `LinkState.STARTING`, never assigned by anything, is gone (the README's green/amber/red
+> changed accordingly), and the tooltip's "Click to locate it" is finally kept: the click opens
+> the file picker instead of re-raising the once-per-panel balloon, which made every click after
+> the first do nothing. **③ Two texts pointed at entries that do not exist**: the settings
+> page's `StartOutcome.BinaryMissing` said "or download a release bundle" on a page with
+> neither a download nor a link — its same-rooted `offerServerBinaryHelp()` (the dialog with
+> the "Open Download Page" button) had had no caller since the one-click start rewrite, so it
+> went, `RELEASES_URL` with it, and so did the orphaned "Where the desktop app is downloaded
+> from" comment in `RepotoryToolWindow.kt`.
+>
+> **Revision 2026-11-26, fourth pass: the command palette's `Cinder: Open Desktop App` goes
+> too.** The second pass kept it because "it is not part of the panel", but that ground only
+> said where the command was not, never why it should exist. Everything the plugin can do on
+> this machine already has an entry — `Cinder: Start Local Service` starts the service,
+> `Cinder: Setup & Diagnostics` installs, probes and repairs, `Cinder: Register MCP Server`
+> writes the config — and what was left, "open the same product in another window", is a
+> relocation, whose only answer on failure was sending the reader to GitHub for an installer:
+> exactly the kind of text this round is removing. So `repotory.openDesktop` is deleted — the
+> `openDesktop()` function, the `exec` import, the `package.json` entry, and the two
+> `media/icon-desktop-*.svg` icons that existed only for `view/title`. The two sides' action
+> surfaces now agree again — install, probe, start, write MCP, set the path, none of them
+> "go look over there".
+
 **⑥ Project recognition = candidate projects plus one binding action.**
 When the workspace misses, the panel no longer disables the chip; it shows "choose a project",
 and clicking it lists the `Candidates` returned by `ResolveWorkspacePath` (plus an "all projects"
@@ -195,6 +298,6 @@ one-to-one**.
 | Host wiring | `ide/vscode/src/extension.ts`, `ide/vscode/src/chatConsole.ts` |
 | Manifest | `ide/vscode/package.json` (`view/title` removed; the commands and their icons stay) |
 | JetBrains isomorphism | `ide/jetbrains/.../ChatConsoleHtml.kt`, `ChatModel.kt`, `ChatSession.kt`, `RepotoryToolWindow.kt` (header action strip, scope chip) |
-| JetBrains provider form | `ide/jetbrains/.../ProviderDialog.kt` (`DialogWrapper`), `DiagnosticsDialog.kt` |
+| JetBrains provider form | `ide/jetbrains/.../RepotoryProviderConfigurable.kt` (settings sub-page since 2026-11-26; `ProviderDialog.kt` deleted), `PanelChrome.kt` (self-painted header icons and pills), `DiagnosticsDialog.kt` |
 | Service | `internal/service/workspace.go` (`BindRepositoryToProject`) |
 | Bindings | `internal/app/bindings.go` (`BindWorkspaceToProject`), `internal/app/surface.go` (classification and reason) |

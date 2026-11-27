@@ -2,7 +2,7 @@
 
 - Status: Accepted (2026-11-02; raised directly by the user, who decided the trade-offs)
 - Date: 2026-11-02
-- Related: [ADR-0024](0024-home-workbench-merge-search-page.md) (**this ADR supersedes its decision 1** and relocates its decisions 2 and 3), [ADR-0034](0034-desktop-three-column-shell.md) (the three-column shell is unchanged; the rail's search entry is removed here), [ADR-0036](0036-ide-chat-console.md) (**the desktop side aligns with its chat-console model for the first time**), [ADR-0032](0032-approved-knowledge-page-visibility.md) (the read-only semantics of knowledge pages are unchanged), [ADR-0017](0017-one-kernel-two-entry-points.md) ("the dashboard does not leave the first screen" is honoured in a new way)
+- Related: [ADR-0024](0024-home-workbench-merge-search-page.md) (**this ADR supersedes its decision 1** and relocates its decisions 2 and 3), [ADR-0034](0034-desktop-three-column-shell.md) (the three-column shell is unchanged; the rail's search entry is removed here), [ADR-0036](0036-ide-chat-console.md) (**the desktop side aligns with its chat-console model for the first time**), [ADR-0032](0032-approved-wiki-page-visibility.md) (the read-only semantics of knowledge pages are unchanged), [ADR-0017](0017-one-kernel-two-entry-points.md) ("the dashboard does not leave the first screen" is honoured in a new way)
 
 ## Background
 

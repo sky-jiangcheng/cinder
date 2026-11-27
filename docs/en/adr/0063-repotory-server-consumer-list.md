@@ -107,3 +107,19 @@ This ADR has no code change: the `docs-mirror` gate (both languages in one batch
 4. **Both panels**: the provider settings' read (GetConfig) and write (UpdateConfig ×3) move over the MCP tools. Neither MCP client checks `IsError`, so a failed write returns `error: …` text — both sides check that discriminator explicitly and throw (new cases pin it). The probes (`ListAIModels` / `TestAIChatConfigured`) stay on HTTP — they are not config writes and degrade honestly without a service.
 5. **Tests**: writerapi gains `TestConfigWriteIsCatalogueCovered` (a client role's `DecideWrite(UpdateConfig)` = WriteForward, `UpdateScanRoots` still WriteRefuse, the forwarded write lands); cmd/mcp gains `TestConfigTools` (read masks, write validates, unknown key rejected); VS Code gains three provider cases (read over MCP, three keys written, rejected text surfaces); JetBrains gains a rejected-write case.
 6. **Contract-surface impact**: `UpdateConfig` changes from "refused from a client process" to "forwarded to the writer" — a standalone server running in client role now forwards config writes to whichever process holds the write role (the desktop or a self-elected MCP), instead of needing to hold the lock itself. **The cost, recorded**: agents can now read and write provider configuration (endpoint / model / key) — that is the owner's explicit policy reversal, stated plainly in the tool descriptions; `repotory_config_update` writes are still bounded by the allow-list and value validation, and route through the single-writer contract.
+
+**Revision (2026-11-26): the "deep links" row is void, and decision 5 with it.**
+ADR-0044's third revision replaced the card's **Open in Cinder** with asking in place, so deep
+links have no caller in either panel and the whole path is deleted (see the ADR-0035 revision).
+Following decision 1's maintenance rule, this list is updated in the same batch: the server's
+consumers are now `MoveNote` / `BindWorkspaceToProject` / one-click start / diagnostics — **there is
+no "enhancement"-class consumer left**. Decision 5 ("deep links stay a best-effort enhancement") no
+longer holds: not downgraded, gone. `packaging/README.md`'s channel notes were corrected to match.
+
+The same batch removed "add `--web-dist` when `web/` sits next to the binary" from item 2① of the
+landing record: both launchers now pass `--port` and nothing else. That flag exists to let a reader
+open the knowledge UI in a browser, and since the deep link went away the panels never link into it
+(the JetBrains comment itself said "The plugin itself no longer links into that UI" while still
+passing the flag); the only consumer of a service the plugins start is the human-only `MoveNote`, so
+there is no reason to hang a second SPA off the loopback port. `--web-dist` stays a capability of the
+server itself — anyone who wants the UI passes the flag by hand (`ide/jetbrains/README.md` says how).

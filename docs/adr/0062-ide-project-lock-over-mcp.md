@@ -7,7 +7,7 @@
 
 ### 现象：一句与面板实际状态不符的提示
 
-两个 IDE 面板打开时，`refreshScope()` 会尝试把当前工作区文件夹解析成项目并锁定面板。解析走 HTTP 桥的只读绑定 `ResolveWorkspacePath`（VS Code [chatSession.ts:150-188](file:///workspace/ide/vscode/src/chatSession.ts#L150-L188)，JetBrains [ChatSession.kt:109-147](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/ChatSession.kt#L109-L147)）。**一旦这次 HTTP 调用抛异常（连接拒绝/超时），面板顶部就挂出**：
+两个 IDE 面板打开时，`refreshScope()` 会尝试把当前工作区文件夹解析成项目并锁定面板。解析走 HTTP 桥的只读绑定 `ResolveWorkspacePath`（VS Code [chatSession.ts:150-188](../../ide/vscode/src/chatSession.ts#L150-L188)，JetBrains [ChatSession.kt:109-147](../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/ChatSession.kt#L109-L147)）。**一旦这次 HTTP 调用抛异常（连接拒绝/超时），面板顶部就挂出**：
 
 > The local Cinder service is not reachable at http://127.0.0.1:18765 — the project lock needs it, so the panel searches across all projects.
 
@@ -16,7 +16,7 @@
 1. **面板并没有坏**。ADR-0035 之后，检索、读、写、建、整理、项目列表全部走 MCP，不经过 18765——服务不在时面板的八项数据能力照常可用，只有项目锁拿不到。提示的措辞把「面板降级」讲成了「面板不可用」。
 2. **这个服务对多数用户本来就不在**。监听 18765 的是 `repotory-server`（`cmd/server`）；桌面 App 是 Wails 进程、不监听任何端口（ADR-0001 决策 M1），`scripts/install.sh` 只装 `repotory` + `repotory-mcp`、**不装 `repotory-server`**；而 `repotory-mcp` 有 install.sh / Homebrew / Scoop **三条分发渠道**，`repotory-server` **一条都没有**（ADR-0035 遗留 ①）。也就是说，用户按官方渠道装完，项目锁是**唯一**一个必然要依赖一个没被安装的东西的能力。
 
-而且这条横幅**不会自动消失**：webview 只在点 ✕ 时清空（[chatConsoleHtml.ts:1197-1199](file:///workspace/ide/vscode/src/chatConsoleHtml.ts#L1197-L1199)），`refreshScope` 只在激活、面板就绪、工作区文件夹变化时各跑一次——服务是后启动的，横幅会一直挂着，直到用户手动关掉或换工作区。
+而且这条横幅**不会自动消失**：webview 只在点 ✕ 时清空（[chatConsoleHtml.ts:1197-1199](../../ide/vscode/src/chatConsoleHtml.ts#L1197-L1199)），`refreshScope` 只在激活、面板就绪、工作区文件夹变化时各跑一次——服务是后启动的，横幅会一直挂着，直到用户手动关掉或换工作区。
 
 ### 事实一：项目锁留在 HTTP 是 ADR-0035 的刻意选择，但它当时面对的问题不是传输层
 
@@ -30,7 +30,7 @@ ADR-0035 决策 2 定下「八走 MCP，两留 HTTP」：`MoveNote` 留 HTTP 是
 "ResolveWorkspacePath": {SurfaceDesktopOnly, "", "agents pass `path` to repotory_context instead; a second client-side matcher is the disagreement this avoids"},
 ```
 
-[bindings.go:973-980](file:///workspace/internal/app/bindings.go#L973-L980) 的注释给出同源理由：匹配规则必须留在服务端，客户端复制一份「这个目录属于哪个项目」的匹配器，正是 agent 与侧边栏对「一次会话该拿到哪些知识」发生分歧的根源。
+[bindings.go:973-980](../../internal/app/bindings.go#L973-L980) 的注释给出同源理由：匹配规则必须留在服务端，客户端复制一份「这个目录属于哪个项目」的匹配器，正是 agent 与侧边栏对「一次会话该拿到哪些知识」发生分歧的根源。
 
 **这个理由反对的是「客户端（插件内）复制匹配逻辑」，不是「经 MCP 传输调用服务端同一份解析」。** MCP 工具与 HTTP 绑定打的是同一个 service 层（ADR-0035 事实五），`repotory-mcp` 进程内直接调 `svc.ResolveProjectByPath`——匹配规则仍在服务端，面板拿到的仍是同一份 `ProjectResolution`。**经 MCP 调用不产生第二套匹配器**：它和今天经 HTTP 调用拿到的是同一个函数、同一个结构体、同一份规则。
 
@@ -48,7 +48,7 @@ ADR-0035 决策 1 把术语钉死：「MCP 是唯一执行接口」一律读作�
 
 **决策 1：新增 MCP 只读工具 `repotory_workspace_resolve(path)`。**
 
-- 入参 `path`（绝对目录），长度上限用 `bounds.MaxPathLen`——与绑定、`repotory_context` 的 `path`、`BindWorkspaceToProject` **同一个包里的同一个限值**。三条面对同一条路径的可接受长度不能给出不同答案（绑定注释已写明这个约束，[bindings.go:982-986](file:///workspace/internal/app/bindings.go#L982-L986)）。
+- 入参 `path`（绝对目录），长度上限用 `bounds.MaxPathLen`——与绑定、`repotory_context` 的 `path`、`BindWorkspaceToProject` **同一个包里的同一个限值**。三条面对同一条路径的可接受长度不能给出不同答案（绑定注释已写明这个约束，[bindings.go:982-986](../../internal/app/bindings.go#L982-L986)）。
 - 返回与绑定 `ResolveWorkspacePath` **逐字段同构**的 `ProjectResolution`（`Project` / `Repository` / `MatchedOn` / `Candidates`），调用同一个 `svc.ResolveProjectByPath`。
 - **纯读、无写、无副作用**。工具描述必须写明：agent 常规不需要它——`repotory_context` 的 `path` 参数已包含同一份解析；它给需要**显示**「这个文件夹属于哪个项目」的人侧客户端（IDE 面板的项目锁）用。
 

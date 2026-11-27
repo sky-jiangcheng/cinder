@@ -2,7 +2,7 @@
 
 - Status: Accepted (2026-11-02 — the user picked each of the three options explicitly)
 - Date: 2026-11-02
-- Related: [ADR-0014](0014-llm-wiki-knowledge-compiler.md) (layered context L3→L0 and the evidence layer), [ADR-0031](0031-global-page-scope.md) (**L3 gets no automatic fallback** — this ADR does not change that), [ADR-0015](0015-w3-minimal-compile-loop.md) (the compile gate), [ADR-0033](0033-ai-chat-endpoint.md), [ADR-0007](0007-session-memory-protocol.md) (the session-memory protocol), [ADR-0025](0025-backup-recovery.md)
+- Related: [ADR-0014](0014-llm-wiki-knowledge-compiler.md) (layered context L3→L0 and the evidence layer), [ADR-0031](0031-global-page-scope.md) (**L3 gets no automatic fallback** — this ADR does not change that), [ADR-0015](0015-w3-minimal-compile-loop.md) (the compile gate), [ADR-0033](0033-mcp-ask-evidence-answer.md), [ADR-0007](0007-session-memory-protocol.md) (the session-memory protocol), [ADR-0025](0025-backup-recovery.md)
 
 ## Background
 

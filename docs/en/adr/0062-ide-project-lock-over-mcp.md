@@ -7,7 +7,7 @@
 
 ### The symptom: a banner that misstates the panel's actual state
 
-When either IDE panel opens, `refreshScope()` tries to resolve the current workspace folder into a project and lock the panel to it. The resolution goes through the read-only HTTP-bridge binding `ResolveWorkspacePath` (VS Code [chatSession.ts:150-188](file:///workspace/ide/vscode/src/chatSession.ts#L150-L188), JetBrains [ChatSession.kt:109-147](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/ChatSession.kt#L109-L147)). **Whenever that HTTP call throws (connection refused / timeout), the panel posts**:
+When either IDE panel opens, `refreshScope()` tries to resolve the current workspace folder into a project and lock the panel to it. The resolution goes through the read-only HTTP-bridge binding `ResolveWorkspacePath` (VS Code [chatSession.ts:150-188](../../../ide/vscode/src/chatSession.ts#L150-L188), JetBrains [ChatSession.kt:109-147](../../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/ChatSession.kt#L109-L147)). **Whenever that HTTP call throws (connection refused / timeout), the panel posts**:
 
 > The local Cinder service is not reachable at http://127.0.0.1:18765 — the project lock needs it, so the panel searches across all projects.
 
@@ -16,7 +16,7 @@ Facing two facts, this sentence misstates the situation:
 1. **The panel is not broken.** Since ADR-0035, search, read, write, create, organize and the project list all go over MCP, not over 18765 — with no service up, the panel's eight data capabilities work as usual and only the project lock is lost. The wording describes "the panel is degraded" as if it were "the panel is unusable".
 2. **That service is not there for most users, by design of the distribution.** What listens on 18765 is `repotory-server` (`cmd/server`); the desktop app is a Wails process that listens on no port (ADR-0001 decision M1), `scripts/install.sh` installs `repotory` + `repotory-mcp` and **not `repotory-server`**, and `repotory-mcp` has three distribution channels (install.sh / Homebrew / Scoop) while `repotory-server` has **none** (ADR-0035 leftover ①). In other words, after a user installs from the official channels, the project lock is the **only** capability that necessarily depends on a binary nobody installed.
 
-And the banner **does not clear itself**: the webview only empties it on ✕ ([chatConsoleHtml.ts:1197-1199](file:///workspace/ide/vscode/src/chatConsoleHtml.ts#L1197-L1199)), and `refreshScope` runs only on activation, panel readiness and workspace-folder changes — a service started later leaves the banner up until the user dismisses it or switches workspaces.
+And the banner **does not clear itself**: the webview only empties it on ✕ ([chatConsoleHtml.ts:1197-1199](../../../ide/vscode/src/chatConsoleHtml.ts#L1197-L1199)), and `refreshScope` runs only on activation, panel readiness and workspace-folder changes — a service started later leaves the banner up until the user dismisses it or switches workspaces.
 
 ### Fact 1: keeping the project lock on HTTP was an ADR-0035 choice, but the problem it was answering was not the transport layer
 
@@ -30,7 +30,7 @@ ADR-0035 decision 2 fixed "eight to MCP, two to HTTP": `MoveNote` stays HTTP bec
 "ResolveWorkspacePath": {SurfaceDesktopOnly, "", "agents pass `path` to repotory_context instead; a second client-side matcher is the disagreement this avoids"},
 ```
 
-The comment in [bindings.go:973-980](file:///workspace/internal/app/bindings.go#L973-L980) gives the same-source reason: the matching rules must live server-side, and a client-side copy of "which project owns this directory" is precisely how an agent and the sidebar end up disagreeing about what knowledge a session gets.
+The comment in [bindings.go:973-980](../../../internal/app/bindings.go#L973-L980) gives the same-source reason: the matching rules must live server-side, and a client-side copy of "which project owns this directory" is precisely how an agent and the sidebar end up disagreeing about what knowledge a session gets.
 
 **That reason objects to "the client (inside the plugin) copying the matching logic", not to "calling the same server-side resolution over MCP".** MCP tools and the HTTP binding hit the same service layer (ADR-0035 fact 5); `repotory-mcp` calls `svc.ResolveProjectByPath` in-process — the matching rules stay server-side, and the panel still receives the same `ProjectResolution`. **Calling it over MCP does not create a second matcher**: it is the same function, the same struct, the same rules as the HTTP call today.
 
@@ -48,7 +48,7 @@ ADR-0035 decision 1 pinned the terminology: "MCP is the only execution interface
 
 **Decision 1: add the read-only MCP tool `repotory_workspace_resolve(path)`.**
 
-- Input `path` (absolute directory), length-capped by `bounds.MaxPathLen` — the **same constant from the same package** as the binding, `repotory_context`'s `path`, and `BindWorkspaceToProject`. The three surfaces must not disagree about how long a path they will look at (the binding's comment already states this constraint, [bindings.go:982-986](file:///workspace/internal/app/bindings.go#L982-L986)).
+- Input `path` (absolute directory), length-capped by `bounds.MaxPathLen` — the **same constant from the same package** as the binding, `repotory_context`'s `path`, and `BindWorkspaceToProject`. The three surfaces must not disagree about how long a path they will look at (the binding's comment already states this constraint, [bindings.go:982-986](../../../internal/app/bindings.go#L982-L986)).
 - Returns a `ProjectResolution` **field-for-field identical** to the binding's (`Project` / `Repository` / `MatchedOn` / `Candidates`), calling the same `svc.ResolveProjectByPath`.
 - **Pure read, no write, no side effect.** The tool description must state that agents do not normally need it — `repotory_context`'s `path` argument already includes the same resolution; it exists for the human-side client (the IDE panel's project lock) that needs to **display** "which project this folder belongs to".
 

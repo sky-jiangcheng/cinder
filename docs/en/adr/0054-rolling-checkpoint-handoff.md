@@ -2,7 +2,7 @@
 
 Status: **Accepted (2026-11-10 — the user asked for the ADR and the code in one breath, implemented the same day; the precondition that the install actions have not been executed on any real working directory yet is in the implementation record below)**
 Date: 2026-11-10
-Related: [ADR-0010](0010-claude-session-capture.md) (the SessionEnd hook and the privacy gate), [ADR-0043](0043-agent-instructions.md) (the instruction block teaches agents to read and write the memory layer), [ADR-0040](0040-handoff-as-channel.md) (handoff as an evidence channel), [ADR-0048](0048-core-contract-version.md) (changes to the MCP tool surface bump the contract version)
+Related: [ADR-0010](0010-session-auto-capture.md) (the SessionEnd hook and the privacy gate), [ADR-0043](0043-handoff-instructions-in-agent-instruction-files.md) (the instruction block teaches agents to read and write the memory layer), [ADR-0040](0040-unscoped-ask-orientation-and-handoff-evidence.md) (handoff as an evidence channel), [ADR-0048](0048-core-contract-version.md) (changes to the MCP tool surface bump the contract version)
 Starting schema: v30 → **v30 (no schema change)**; `CoreVersion` 1.2.0 → **1.3.0** (`repotory_handoff` gains the optional field `milestone`)
 
 ## Background
@@ -34,7 +34,7 @@ When an agent is hard-killed by credit exhaustion:
 - **The hook path is gone too**: `claude -p` needs a model call; with credits exhausted the hook's call fails the same way
 - **End state**: the agent died at 80% and left nothing behind. The next agent can only reverse-engineer the intent from git commits — the intermediate decisions and unfinished steps are simply lost
 
-Meanwhile the `repotory-capture` binary (`handoffFromSession` → `CreateHandoffNote`) never calls a model — it takes the last assistant message, the tool list and the git branch from the transcript and writes them straight into a handoff note. **This is a zero-credit path, and the current hook script does not use it.**
+Meanwhile the `repotory-capture` binary (`handoffFromAgentSession` → `CreateHandoffNote`) never calls a model — it takes the last assistant message, the tool list and the git branch from the transcript and writes them straight into a handoff note. **This is a zero-credit path, and the current hook script does not use it.**
 
 ### Problem 3: handoff is a session-end snapshot, not a rolling checkpoint
 
@@ -76,7 +76,7 @@ primary: repotory-capture (reads transcript → writes handoff; zero model calls
 fallback: claude -p (model summarizes, costs credit)
 ```
 
-`repotory-capture` never calls a model (`handoffFromSession` only reads parsed transcript fields), so it keeps working when credits are gone. The `claude -p` fallback is kept because it produces a richer, more structured handoff when credits *are* available — it is strictly an upgrade over the raw-transcript version, never the only option.
+`repotory-capture` never calls a model (`handoffFromAgentSession` only reads parsed transcript fields), so it keeps working when credits are gone. The `claude -p` fallback is kept because it produces a richer, more structured handoff when credits *are* available — it is strictly an upgrade over the raw-transcript version, never the only option.
 
 ### 4. The reader side leads with the newest checkpoint, whichever kind it is
 
@@ -120,7 +120,7 @@ fallback: claude -p (model summarizes, costs credit)
 
 ## Links
 
-- [ADR-0010: Claude session capture](0010-claude-session-capture.md) — the hook and the privacy gate
-- [ADR-0043: Agent instructions](0043-agent-instructions.md) — the instruction block that teaches reading and writing
-- [ADR-0040: Handoff as channel](0040-handoff-as-channel.md) — handoff rides its own evidence channel
+- [ADR-0010: Claude session capture](0010-session-auto-capture.md) — the hook and the privacy gate
+- [ADR-0043: Agent instructions](0043-handoff-instructions-in-agent-instruction-files.md) — the instruction block that teaches reading and writing
+- [ADR-0040: Handoff as channel](0040-unscoped-ask-orientation-and-handoff-evidence.md) — handoff rides its own evidence channel
 - [ADR-0048: Core contract version](0048-core-contract-version.md) — MCP surface changes bump the version

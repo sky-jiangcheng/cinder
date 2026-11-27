@@ -2,7 +2,7 @@
 
 状态：**Accepted（2026-11-10，用户拍定「请开始生成 ADR 和代码改动」并同日落地；生效前提与残余断链见文末「落地记录」）**
 日期：2026-11-10
-关联：[ADR-0010](0010-claude-session-capture.md)（SessionEnd hook 与 transcript 捕捉的隐私门）、[ADR-0043](0043-agent-instructions.md)（指令块教 agent 读写记忆层）、[ADR-0040](0040-handoff-as-channel.md)（handoff 作为独立证据通道）、[ADR-0048](0048-core-contract-version.md)（MCP 工具面变更要涨契约版本）
+关联：[ADR-0010](0010-session-auto-capture.md)（SessionEnd hook 与 transcript 捕捉的隐私门）、[ADR-0043](0043-handoff-instructions-in-agent-instruction-files.md)（指令块教 agent 读写记忆层）、[ADR-0040](0040-unscoped-ask-orientation-and-handoff-evidence.md)（handoff 作为独立证据通道）、[ADR-0048](0048-core-contract-version.md)（MCP 工具面变更要涨契约版本）
 起始 schema：v30 → **v30（无 schema 变更）**；`CoreVersion` 1.2.0 → **1.3.0**（`repotory_handoff` 新增可选字段 `milestone`）
 
 ## 背景
@@ -32,7 +32,7 @@
 - **hook 路径也失效**：`claude -p` 需要调 model，credit 已耗尽，hook 的总结调用同样失败
 - **结果**：agent 干到 80% 断气了，什么都没留下。下一个 agent 接手时只能从 git commit 反推意图，中间决策和未完成事项全部丢失
 
-而 `repotory-capture` 二进制（`handoffFromSession` → `CreateHandoffNote`）全程不调 model——它直接从 transcript 解析最后一条 assistant 消息、工具列表、git 分支写成 handoff。**这是一个零 credit 的降级路径，但当前 hook 脚本完全没用它。**
+而 `repotory-capture` 二进制（`handoffFromAgentSession` → `CreateHandoffNote`）全程不调 model——它直接从 transcript 解析最后一条 assistant 消息、工具列表、git 分支写成 handoff。**这是一个零 credit 的降级路径，但当前 hook 脚本完全没用它。**
 
 ### 问题三：handoff 是"会话末一次性快照"，不是"滚动检查点"
 
@@ -74,7 +74,7 @@
 降级路径：claude -p（调 model 写结构化 handoff，花 credit）
 ```
 
-`repotory-capture` 全程不调 model（`handoffFromSession` 只取 transcript 解析结果），所以即使 credit 已耗尽也能工作。`claude -p` 降级路径保留，因为它能写更结构化的 handoff（总结、决策、gotchas 都更完整），在 credit 充足时效果更好。
+`repotory-capture` 全程不调 model（`handoffFromAgentSession` 只取 transcript 解析结果），所以即使 credit 已耗尽也能工作。`claude -p` 降级路径保留，因为它能写更结构化的 handoff（总结、决策、gotchas 都更完整），在 credit 充足时效果更好。
 
 ### D4 读取侧适配：latest milestone 优先于 final
 
@@ -120,7 +120,7 @@
 
 ## 关联文档
 
-- [ADR-0010: Claude session capture](0010-claude-session-capture.md)——SessionEnd hook 与 transcript 捕捉的隐私门
-- [ADR-0043: Agent instructions](0043-agent-instructions.md)——指令块教 agent 读写记忆层
-- [ADR-0040: Handoff as channel](0040-handoff-as-channel.md)——handoff 作为独立证据通道
+- [ADR-0010: Claude session capture](0010-session-auto-capture.md)——SessionEnd hook 与 transcript 捕捉的隐私门
+- [ADR-0043: Agent instructions](0043-handoff-instructions-in-agent-instruction-files.md)——指令块教 agent 读写记忆层
+- [ADR-0040: Handoff as channel](0040-unscoped-ask-orientation-and-handoff-evidence.md)——handoff 作为独立证据通道
 - [ADR-0048: Core contract version](0048-core-contract-version.md)——MCP 工具面变更要涨契约版本

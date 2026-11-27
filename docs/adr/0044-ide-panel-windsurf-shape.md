@@ -121,6 +121,86 @@ JetBrains 端是**一个 `DialogWrapper` 对话框**（`ProviderDialog.kt`，由
 差异只允许存在于「怎么把这张表单画出来」这一层（与 ADR-0036 决策 8 同一把尺子）。
 **两端都读服务端同一份配置**——所以在 VS Code 里配好，JetBrains 里打开就是同一个端点。
 
+> **2026-11-26 修订：provider 的承载形态改成设置页的子页，不是对话框。**
+> 用户对 JetBrains 面板的验收结论是「UI 太 low」，参照 VS Code 的隐藏式布局重排：头部只留
+> 品牌 + 一个通道状态点 + 一排 24px 图标（历史 / 新建 / 设置；「桌面端」这一枚在下面第二次修订里删掉），文字按钮与带边框的
+> `online` 胶囊全部删除；面板内的三行式工具行改成输入框内嵌发送键 + 一行胶囊（模式组 / 项目 chip）。
+> 与决策⑤ 有关的两条随之改变：
+> ① **provider 表单落在设置树里**（`Settings ▸ Tools ▸ Cinder ▸ AI Provider`），不再由头部动作
+> 直接弹 `DialogWrapper`；头部齿轮打开设置树，`AI Provider` 是它的子页。原文「摊进设置页会离
+> 『点图标就该配』太远」这条判据被用户否决——配置只有一个家，比少一次点击重要；头部齿轮仍在，
+> 路径长度没变。② **设置页本身也分了组**：`CHANNEL`（`cinder-mcp`）/ `LOCAL SERVICE`（可选）/
+> `AI PROVIDER`（子页入口），原来的平铺表单读不出「哪个按钮属于哪个字段」。
+> 「Start local service」「Refresh」这两个设置类动作从头部移出：前者在设置页，后者由状态点承担
+> （点一下重新探测通道）。决策⑤ 的实质不变——仍然只读写服务端 `ai_chat_*`，插件不留第二份，
+> 密钥不进 IDE 设置。落地清单里的 `ProviderDialog.kt` 相应改为 `RepotoryProviderConfigurable.kt`。
+>
+> **2026-11-26 同日二次修订：删掉「打开桌面端」入口，并把面板的视觉语言补齐。**
+> 用户的判断是插件不该有一个「点一下跳去 Cinder 桌面」的按钮——面板在这个窗口里就是产品本身，
+> 一个只能把读者送走的按钮等于说「这里只是预览」。于是两端头部都只剩三枚图标
+> （历史 / 新建 / 设置）：JetBrains 删 `PanelIcons.desktop()` 与 `openDesktopApp()`，
+> VS Code 删 `#act-desktop` 与 `openDesktop` 的 webview 消息（命令面板里的
+> `repotory.openDesktop` 当时保留，理由是「它不属于面板」——同日第四次修订把这个理由也推翻）。
+> 卡片上的 **Open in Cinder** 不变——它打开的是
+> 那一条具体的笔记/页面，不是「整个桌面端」。
+> 同一次改动补齐了三处「一眼就是原生控件」的地方，两端同一套做法：
+> ① 模式组从一个边框胶囊变成**分段控件**（`SegmentTrack` / `.modes`）：三个模式是一选一，
+> 三个各自带框的按钮读起来像三个互不相干的开关；② 发送键用**线描箭头**
+> （`PanelIcons.send()` / `ICON_SEND`）而不是 `↵` 字符——`↵` 是 Enter 的图例，不是发送键；
+> ③ 项目 chip 的锁**画出来**（`PanelIcons.lock()` / `ICON_LOCK`），不再用 🔒 emoji——
+> emoji 在部分平台是别的厂商的彩色字形，是面板上唯一不跟随主题的像素。
+> 另外：问题的标题行加了一层极淡的底衬（取主题前后景 6% 混色，VS Code 用
+> `textCodeBlock-background`），模式标签按面配色（Ask 蓝 / Notes 琥珀 / Pages 紫，
+> 与卡片 badge 同源）；没有这一层，问题与它自己的回答会连成一列同色文字。
+>
+> **2026-11-26 同日三次修订：卡片不再往外跳，改成「就地问」。**
+> 上一轮保留了卡片上的 **Open in Cinder**，理由是「它打开的是那一条具体的笔记/页面」。
+> 用户的追问撤掉了这个理由：卡片的正文本来就已经就地打开
+> （`repotory_notes_read` / `repotory_wiki_read`），那个按钮唯一提供的动作是**离开面板**——
+> 读者想多知道一点时，得到的是一次跳转，而不是一个回答。于是换成 **Ask about this**：
+> 点击即问：一条**关于这张卡片的问句**（`followUpQuestion` / `followUp`，两端逐字相同）先进输入框，
+> 再走与 Enter 相同的提交路径，所以这一轮本身就写着问了什么。第一版只草拟不发送（怕误点花掉一次
+> 模型调用），同日按用户判断改成直接发送——按钮写着 "Ask about this"，却要读者再按一次 Enter，
+> 是标签没兑现；而共享会话正在跑时提交会被拒、草稿留在输入框里，点击并不会静默丢失。
+> 随之删除的是整条深链链路：`RepotoryClient.deepLink` / `servesWebUi` / `openCard` /
+> `offerFallback`（JetBrains）、`openHit` / `servesWebUi` / `open` 消息 /
+> `Transport.openExternal`（VS Code）、`RepotoryHit.route` 与 `StartOutcome.webUi`，
+> 以及设置页里「API and web UI both reachable」这条只为深链存在的判据
+> （ADR-0035 决策 6 的深链入口由此作废，见该篇修订）。
+> 门 C 的第二程从「深链指向检索真正返回的那一行」改成「卡片就地读出整篇正文」——
+> 面板现在真正依赖的是这条路径。启动器里那条「二进制旁有 `web/` 就自动加 `--web-dist`」
+> （`RepotoryServer.kt` / `serverLauncher.ts`）也一并删掉：它是给同一个入口开的窗，
+> 脚本去掉了 flag 而启动器继续自动加，等于留了半条路；两端的启动命令现在只有 `--port`。
+> 顺带删掉一处同源的死代码：`NoteDetailHtml.kt` 里那套静态
+> 详情面板（`promoHtml` / `noteHtml` / `wikiPageHtml`，连同它那句 "Open in Cinder is the way
+> out of the pane"）自 ADR-0036 起就没有调用方，文件只剩共享的转义与 Markdown 渲染，
+> 改名 `HtmlText.kt`；同样没人接线的 `copyCard`、`snippetHtml` 一并删除。
+>
+> 同轮按同一标准回扫，又收掉三处「说了没做」。**① 空态那句示例问句点了没反应**：
+> `→ Why was the retry budget raised?` 原先只把焦点移进空输入框（模式本来就是 Ask），
+> 读者得自己把整句重打一遍。规则收敛成一条：**标签是一句问句，点击就问**——两端抽出
+> `askNow(text)`，卡片动作与示例共用；JB 的问句抽成 `ChatConsoleHtml.EXAMPLE_ASK`，
+> label 与真正发出去的那句同源（用例钉住）。**② 状态点的绿点说了它没测的事**：
+> tooltip 原写「MCP channel ready — asking, searching, reading and writing work now」，
+> 但探针只做 `McpBinaryResolver.resolveHere`（查文件在不在，不 spawn、不调工具），
+> 二进制损坏或版本不匹配时照样是绿的；现在只说「repotory-mcp 找到了」，
+> 而从未被赋值过的 `LinkState.STARTING` 直接删除（README 的 green/amber/red 随之改口）；tooltip 那句「Click to locate it」也终于兑现——点击直接开文件选择框，而不是落进那个每面板只弹一次的 balloon（第二次之后点了等于没点）。
+> **③ 两处文案指向不存在的入口**：设置页 `StartOutcome.BinaryMissing` 说
+> 「or download a release bundle」，可那一页既没有下载也没有链接——同源的
+> `offerServerBinaryHelp()`（含 `Open Download Page` 按钮）自一键启动改造后就没有调用方，
+> 连同 `RELEASES_URL` 一起删；`RepotoryToolWindow.kt` 里那句悬空的
+> 「Where the desktop app is downloaded from」也一样。
+>
+> **2026-11-26 同日四次修订：命令面板里的 `Cinder: Open Desktop App` 也删。**
+> 二次修订留它的理由是「它不属于面板」，可这个理由只说明它不在被清理的那块地上，
+> 没说清它为什么该存在。插件在这台机器上能做的事已经有入口——`Cinder: Start Local Service`
+> 起服务、`Cinder: Setup & Diagnostics` 装探修、`Cinder: Register MCP Server` 写配置——
+> 剩下的「打开另一个窗口里的同一个产品」只是一次窗口位移，而且它失败时给出的唯一出路
+> 是让读者去 GitHub 下载安装包，正是本轮删掉的那类把读者送走的文案。于是删掉
+> `repotory.openDesktop`：VS Code 的 `openDesktop()`、`exec` import、`package.json`
+> 里的命令条目，以及只为 `view/title` 配的那两份 `media/icon-desktop-*.svg`。
+> 两端的动作面至此回到同一套——装、探、起、写 MCP、设路径，没有一条是「去那边看」。
+
 **⑥ 项目识别 = 候选项目 + 一个绑定动作。**
 工作区没命中项目时，面板不再把 chip 禁用，而是显示「选择项目」，
 点开列出 `ResolveWorkspacePath` 返回的 `Candidates`（外加一个「全库」项）。
@@ -172,6 +252,6 @@ JetBrains 的 `JEditorPane` 只支持 HTML 3.2，没有 flexbox、没有 CSS 变
 | 宿主装配 | `ide/vscode/src/extension.ts`、`ide/vscode/src/chatConsole.ts` |
 | 清单 | `ide/vscode/package.json`（删 `view/title`；命令与图标保留） |
 | JetBrains 同构 | `ide/jetbrains/.../ChatConsoleHtml.kt`、`ChatModel.kt`、`ChatSession.kt`、`RepotoryToolWindow.kt`（头部动作条、作用域 chip） |
-| JetBrains provider 表单 | `ide/jetbrains/.../ProviderDialog.kt`（`DialogWrapper`）、`DiagnosticsDialog.kt` |
+| JetBrains provider 表单 | `ide/jetbrains/.../RepotoryProviderConfigurable.kt`（设置树子页，2026-11-26 起；原 `ProviderDialog.kt` 已删除）、`PanelChrome.kt`（头部图标与胶囊自绘）、`DiagnosticsDialog.kt` |
 | service | `internal/service/workspace.go`（`BindRepositoryToProject`） |
 | 绑定 | `internal/app/bindings.go`（`BindWorkspaceToProject`）、`internal/app/surface.go`（分类与理由） |

@@ -2,7 +2,7 @@
 
 - 状态：Accepted（2026-11-02，用户就三个选项逐项拍定）
 - 日期：2026-11-02
-- 关联：[ADR-0014](0014-llm-wiki-knowledge-compiler.md)（分层上下文 L3→L0 与取证层）、[ADR-0031](0031-global-page-scope.md)（**L3 不做自动兜底**，本篇不改这条）、[ADR-0015](0015-w3-minimal-compile-loop.md)（编译闸门）、[ADR-0033](0033-ai-chat-endpoint.md)、[ADR-0007](0007-session-memory-protocol.md)（会话记忆协议）、[ADR-0025](0025-backup-recovery.md)
+- 关联：[ADR-0014](0014-llm-wiki-knowledge-compiler.md)（分层上下文 L3→L0 与取证层）、[ADR-0031](0031-global-page-scope.md)（**L3 不做自动兜底**，本篇不改这条）、[ADR-0015](0015-w3-minimal-compile-loop.md)（编译闸门）、[ADR-0033](0033-mcp-ask-evidence-answer.md)、[ADR-0007](0007-session-memory-protocol.md)（会话记忆协议）、[ADR-0025](0025-backup-recovery.md)
 
 ## 背景
 

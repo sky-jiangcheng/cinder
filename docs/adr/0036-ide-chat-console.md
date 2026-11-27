@@ -2,7 +2,7 @@
 
 状态：**Accepted（2026-11-02）**——由项目所有者拍定，参照 Cline 插件的界面标准重构两个 IDE 分发面
 日期：2026-11-02
-关联：[ADR-0009](0009-ide-presence.md)（VS Code 扩展）、[ADR-0027](0027-jetbrains-plugin.md)（JetBrains 插件，本 ADR **修订**其决策 2 的界面形态）、[ADR-0035](0035-jetbrains-mcp-primary-channel.md)（通道分层：八项数据能力走 MCP）、[ADR-0032](0032-approved-knowledge-page-visibility.md)（已批准知识页）、[ADR-0033](0033-evidence-ask.md)（证据问答 `repotory_ask`）、[ADR-0015](0015-human-gate.md)（人工闸门）
+关联：[ADR-0009](0009-ide-presence.md)（VS Code 扩展）、[ADR-0027](0027-jetbrains-plugin.md)（JetBrains 插件，本 ADR **修订**其决策 2 的界面形态）、[ADR-0035](0035-jetbrains-mcp-primary-channel.md)（通道分层：八项数据能力走 MCP）、[ADR-0032](0032-approved-wiki-page-visibility.md)（已批准知识页）、[ADR-0033](0033-mcp-ask-evidence-answer.md)（证据问答 `repotory_ask`）、[ADR-0015](0015-w3-minimal-compile-loop.md)（人工闸门）
 起始 schema：v28（**本 ADR 不改 schema**）
 
 ## 背景
@@ -97,3 +97,7 @@ VS Code 与 JetBrains 的面板**同一套结构、同一套措辞、同一套�
 - **两端同构的落地方式**：同一套措辞、同一套折叠规则（最近 2 轮可见 + 「N earlier turns ▾」+ 「Sources (N)」）、同一套过滤说明（`Locked to <项目>: K of N matches shown.`）。差异只允许存在于「怎么把 Swing 画成 HTML」这一层。
 - **同批修掉的三个真 bug**（两端互相挑出来的，各有回归测试钉住）：① VS Code 侧空答案措辞被自身覆盖（赋值顺序错）；② 卡片寻址只按 id（笔记与待办是独立 id 空间，会打开错项）→ 改 type+id；③ 待办卡片拿 id 去 `notes_read` 读到同号笔记 → 改为直接给摘录不发调用。
 - **顺带修掉的构建缺陷**：`build.gradle.kts` 里 `buildSearchableOptions { enabled = false }` 不够——`prepareJarSearchableOptions` 的输入目录不存在，Gradle 拒绝执行，**干净树 `gradle buildPlugin` 直接红**（CI 门禁同样红）。必须把整条链关掉。
+
+## 补充（2026-11-26）：答案里的内联思考折叠成一行
+
+有的网关不把 reasoning 放进 `reasoning_content`，而是直接拼在 `content` 里、用 `<think>…</think>` 包起来。两个面板原来都整段渲染 `content`，于是思考成了正文：VS Code 与 JetBrains 显示的是字面标签加推理，桌面端与 Warden 平铺原文。现在渲染前拆开——正文照旧渲染，思考折叠成答案上方的一行（点开可读），形状与 CodeBuddy 等 IDE 插件一致。Swing 的 HTML kit 没有 `<details>`，所以 JetBrains 用链接加重渲染，和 Sources 的折叠同一套；VS Code 与桌面端用 `<details>`（桌面端只在聊天答案组件 `AssistantAnswerBody` 里折叠，笔记正文照旧渲染）；Warden 用 DOM 建的 `<details>`，内容仍走 `textContent`（模型输出不可信）。流式中还没闭合的开标签也折叠，不让笔记在模型仍在思考时闪进面板。原始文本仍按原样入库（审计与历史看到的是模型真正说过的话），变的只是显示。

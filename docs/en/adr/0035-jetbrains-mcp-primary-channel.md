@@ -11,9 +11,9 @@ This ADR answers one specific usability question: **why can't the JetBrains plug
 
 ### Fact one: the JetBrains plugin turned "is the service running?" into "does the plugin work at all?"
 
-`ide/jetbrains/` shipped 7 Kotlin source files, and **every** data access goes through `RepotoryClient.rpc()` to `POST {serverUrl}/api/rpc` ([RepotoryClient.kt:302-320](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L302-L320)). The bindings it uses are `SearchAll` (notes + todos), `SearchWikiPages`, `GetNote`, `GetWikiPage`, `ListProjects`, `OrganizeNote`, `UpdateNoteFull`, `CreateNoteWithMeta`, `MoveNote`.
+`ide/jetbrains/` shipped 7 Kotlin source files, and **every** data access goes through `RepotoryClient.rpc()` to `POST {serverUrl}/api/rpc` ([RepotoryClient.kt:302-320](../../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L302-L320)). The bindings it uses are `SearchAll` (notes + todos), `SearchWikiPages`, `GetNote`, `GetWikiPage`, `ListProjects`, `OrganizeNote`, `UpdateNoteFull`, `CreateNoteWithMeta`, `MoveNote`.
 
-So **searching, reading a note, writing a note, re-filing a note all require something to answer on `127.0.0.1:18765`**. With no service up, the tool window cannot even issue one search (the `offline = true` branch of `RepotoryClient.search`, [RepotoryClient.kt:246-254](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L246-L254)).
+So **searching, reading a note, writing a note, re-filing a note all require something to answer on `127.0.0.1:18765`**. With no service up, the tool window cannot even issue one search (the `offline = true` branch of `RepotoryClient.search`, [RepotoryClient.kt:246-254](../../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryClient.kt#L246-L254)).
 
 **And installing the desktop app does not fix this**: the desktop app is a Wails process and listens on no port (ADR-0001 decision M1) — `repotory-server` is the thing that listens on 18765, and `scripts/install.sh` installs `repotory` + `repotory-mcp`, **not `repotory-server`**.
 
@@ -23,20 +23,20 @@ The real shape of the VS Code side (its call sites, not its documentation):
 
 | Capability | Which channel the VS Code extension uses | Note |
 |---|---|---|
-| Search, note read/write/create, organize, wiki read/write, project list | **MCP stdio** (`repotory-mcp`) | 21 `callTool(...)` sites ([extension.ts:346-670](file:///workspace/ide/vscode/src/extension.ts#L346-L670)) |
-| `MoveNote` (re-file a note into another project) | **HTTP** `/api/rpc` | `moveNoteViaRpc` ([extension.ts:700-708](file:///workspace/ide/vscode/src/extension.ts#L700-L708)) |
-| `ResolveWorkspacePath` (workspace resolution) | **HTTP** `/api/rpc` | `refreshScope` ([extension.ts:267-270](file:///workspace/ide/vscode/src/extension.ts#L267-L270)) |
-| Deep link (open the web UI in a browser) | **HTTP** | `openHit` ([extension.ts:527-537](file:///workspace/ide/vscode/src/extension.ts#L527-L537)) |
+| Search, note read/write/create, organize, wiki read/write, project list | **MCP stdio** (`repotory-mcp`) | 21 `callTool(...)` sites ([extension.ts:346-670](../../../ide/vscode/src/extension.ts#L346-L670)) |
+| `MoveNote` (re-file a note into another project) | **HTTP** `/api/rpc` | `moveNoteViaRpc` ([extension.ts:700-708](../../../ide/vscode/src/extension.ts#L700-L708)) |
+| `ResolveWorkspacePath` (workspace resolution) | **HTTP** `/api/rpc` | `refreshScope` ([extension.ts:267-270](../../../ide/vscode/src/extension.ts#L267-L270)) |
+| Deep link (open the web UI in a browser) | **HTTP** | `openHit` ([extension.ts:527-537](../../../ide/vscode/src/extension.ts#L527-L537)) |
 
-The reason VS Code sends `MoveNote` over HTTP is written into the code comment: **"re-filing knowledge is a human decision an agent must not make"** ([extension.ts:695-698](file:///workspace/ide/vscode/src/extension.ts#L695-L698)) — that capability **deliberately** never enters MCP. And when the service is unavailable it **degrades** rather than aborting: "Fields saved, but moving the note failed" ([extension.ts:660-665](file:///workspace/ide/vscode/src/extension.ts#L660-L665)).
+The reason VS Code sends `MoveNote` over HTTP is written into the code comment: **"re-filing knowledge is a human decision an agent must not make"** ([extension.ts:695-698](../../../ide/vscode/src/extension.ts#L695-L698)) — that capability **deliberately** never enters MCP. And when the service is unavailable it **degrades** rather than aborting: "Fields saved, but moving the note failed" ([extension.ts:660-665](../../../ide/vscode/src/extension.ts#L660-L665)).
 
 **Conclusion: the VS Code extension's real shape is exactly "MCP primary with HTTP filling the gaps".** The JetBrains plugin's problem is not that it picked the wrong transport — it is that **it turned two HTTP dependencies that VS Code can degrade away from into its only path**.
 
 ### Fact three: the phrase "MCP is the only execution interface" has drifted
 
-The repository's canonical definition is "MCP is the only **AI** execution interface" ([docs/features/ai-integration.md:117](file:///workspace/docs/features/ai-integration.md#L117), [docs/product/2026-08-24-scope-reduction.md:274](file:///workspace/docs/product/2026-08-24-scope-reduction.md#L274)) — the qualifier is **"AI"**, meaning the agent side.
+The repository's canonical definition is "MCP is the only **AI** execution interface" ([docs/features/ai-integration.md:117](../../../docs/features/ai-integration.md#L117), [docs/product/2026-08-24-scope-reduction.md:274](../../../docs/product/2026-08-24-scope-reduction.md#L274)) — the qualifier is **"AI"**, meaning the agent side.
 
-But [ADR-0009 decision 1](file:///workspace/docs/adr/0009-ide-presence.md#L20) writes "MCP remains the only execution interface" and in the same sentence says "every new IDE asset … reaches the shared service layer through headless HTTP **or** MCP stdio"; [ADR-0027 decision 1](file:///workspace/docs/adr/0027-jetbrains-plugin.md#L21) goes further: it says both "the plugin … reaches the shared service layer through headless HTTP" **and** "no new execution interface is added (MCP remains the only execution interface)" — **self-contradictory in one sentence**.
+But [ADR-0009 decision 1](../../../docs/adr/0009-ide-presence.md#L20) writes "MCP remains the only execution interface" and in the same sentence says "every new IDE asset … reaches the shared service layer through headless HTTP **or** MCP stdio"; [ADR-0027 decision 1](../../../docs/adr/0027-jetbrains-plugin.md#L21) goes further: it says both "the plugin … reaches the shared service layer through headless HTTP" **and** "no new execution interface is added (MCP remains the only execution interface)" — **self-contradictory in one sentence**.
 
 There are two readings:
 
@@ -47,11 +47,11 @@ There are two readings:
 
 ### Fact four: deep links hard-depend on `repotory-server`, which has never had any distribution channel
 
-The plugin's "open the selected item" opens the SPA in a browser, and the web UI only exists inside `repotory-server --web-dist`. When the server runs without `web/`, the link lands on a 404 and the plugin can only warn: "Repotory is running API-only — this link would land on a 404" ([RepotoryToolWindow.kt:1060-1066](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryToolWindow.kt#L1060-L1066)).
+The plugin's "open the selected item" opens the SPA in a browser, and the web UI only exists inside `repotory-server --web-dist`. When the server runs without `web/`, the link lands on a 404 and the plugin can only warn: "Repotory is running API-only — this link would land on a 404" ([RepotoryToolWindow.kt:1060-1066](../../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/RepotoryToolWindow.kt#L1060-L1066)).
 
-The `repotory-server` asset does ship in releases (`repotory-server-<target>.tar.gz`, binary + `web/`), but **no installer ever installs it**: not `install.sh`, and Homebrew / Scoop carry only `repotory` and `repotory-mcp` ([packaging/README.md:8-18](file:///workspace/packaging/README.md#L8-L18)).
+The `repotory-server` asset does ship in releases (`repotory-server-<target>.tar.gz`, binary + `web/`), but **no installer ever installs it**: not `install.sh`, and Homebrew / Scoop carry only `repotory` and `repotory-mcp` ([packaging/README.md:8-18](../../../packaging/README.md#L8-L18)).
 
-That leaves a closed loop: the "Consumers" column of [packaging/README.md:16-18](file:///workspace/packaging/README.md#L16-L18) lists `repotory-server`'s consumer as **"JetBrains plugin one-click start"** — its only distribution path is the plugin itself, while boundary ① of ADR-0027 decision 4 explicitly forbids the plugin from downloading a binary.
+That leaves a closed loop: the "Consumers" column of [packaging/README.md:16-18](../../../packaging/README.md#L16-L18) lists `repotory-server`'s consumer as **"JetBrains plugin one-click start"** — its only distribution path is the plugin itself, while boundary ① of ADR-0027 decision 4 explicitly forbids the plugin from downloading a binary.
 
 **The VS Code side never had this hole, because it never promised deep links would work** — its `openHit` just calls `openExternal` on a URL that may not resolve, with no pre-check.
 
@@ -64,16 +64,16 @@ MCP tools and HTTP bindings call the **same service layer**, so for most capabil
 | `SearchAll` (notes + todos) | `repotory_notes_search` | ✅ |
 | `SearchWikiPages` (scope 0, across projects) | `repotory_wiki_search` (omit `project_id` / `path` to search across projects) | ✅ |
 | `GetNote` | `repotory_notes_read` | ✅ |
-| `GetWikiPage` | `repotory_wiki_read` | ✅ **the same `service.WikiPageDetail`** — `out_links` / `in_links` / `source_note_ids` are all present ([wikipage/page.go](file:///workspace/internal/service/wikipage/page.go), [tools_wiki.go:112](file:///workspace/cmd/mcp/tools_wiki.go#L112)) — so the plugin detail pane's "Links / Backlinks / source notes" sections do not lose anything |
+| `GetWikiPage` | `repotory_wiki_read` | ✅ **the same `service.WikiPageDetail`** — `out_links` / `in_links` / `source_note_ids` are all present ([wikipage/page.go](../../../internal/service/wikipage/page.go), [tools_wiki.go:112](../../../cmd/mcp/tools_wiki.go#L112)) — so the plugin detail pane's "Links / Backlinks / source notes" sections do not lose anything |
 | `ListProjects` | `repotory_projects_list` | ✅ |
 | `OrganizeNote` | `repotory_notes_organize` | ✅ |
 | `UpdateNoteFull` (has `pinned`) | `repotory_notes_update` (**no `pinned`**) | ⚠️ **difference one** |
 | `CreateNoteWithMeta` | `repotory_notes_create` (`project_id` / `title` / `content` / `category` / `tags`) | ✅ isomorphic parameters |
 | `MoveNote` | **no twin** (zero hits in `cmd/mcp`) | ⚠️ **difference two** (VS Code also uses HTTP here — reason in fact two) |
 
-**Difference one (`pinned`)**: `db.UpdateNoteFull(db, noteID, content, title, tags, kind, pinned)` takes `pinned`, MCP's `repotory_notes_update` does not. The plugin's note editor does write it (`pinned = draft.pinned`, [NoteEditorDialog.kt:67](file:///workspace/ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/NoteEditorDialog.kt#L67)). **Not closing it is a functional regression.**
+**Difference one (`pinned`)**: `db.UpdateNoteFull(db, noteID, content, title, tags, kind, pinned)` takes `pinned`, MCP's `repotory_notes_update` does not. The plugin's note editor does write it (`pinned = draft.pinned`, [NoteEditorDialog.kt:67](../../../ide/jetbrains/src/main/kotlin/dev/repotory/jetbrains/NoteEditorDialog.kt#L67)). **Not closing it is a functional regression.**
 
-**Difference two (handoff notes are not editable)**: `repotory_notes_update` treats notes tagged `handoff` as append-only (they are the session-memory protocol's exit records and must not be rewritten, [main.go:297-302](file:///workspace/cmd/mcp/main.go#L297-L302)); HTTP's `UpdateNoteFull` has no such guard. So after the move to MCP, **handoff notes will not be editable in either IDE** — and they are not editable in VS Code today either. That is a narrowing, and a narrowing in the right direction.
+**Difference two (handoff notes are not editable)**: `repotory_notes_update` treats notes tagged `handoff` as append-only (they are the session-memory protocol's exit records and must not be rewritten, [main.go:297-302](../../../cmd/mcp/main.go#L297-L302)); HTTP's `UpdateNoteFull` has no such guard. So after the move to MCP, **handoff notes will not be editable in either IDE** — and they are not editable in VS Code today either. That is a narrowing, and a narrowing in the right direction.
 
 ## Decision
 
@@ -81,7 +81,7 @@ MCP tools and HTTP bindings call the **same service layer**, so for most capabil
 
 **"MCP is the only execution interface" is read as "MCP is the only AI execution interface".** Human-facing surfaces (desktop app, both IDE plugins, the browser) call the **binding surface**, and both channels are legitimate.
 
-This ADR accordingly **amends the wording** of [ADR-0009 decision 1](file:///workspace/docs/adr/0009-ide-presence.md#L20) and [ADR-0027 decision 1](file:///workspace/docs/adr/0027-jetbrains-plugin.md#L21) by adding the "AI" qualifier. ADR-0009 decision 1's substantive authorisation ("through headless HTTP **or** MCP stdio") is unchanged.
+This ADR accordingly **amends the wording** of [ADR-0009 decision 1](../../../docs/adr/0009-ide-presence.md#L20) and [ADR-0027 decision 1](../../../docs/adr/0027-jetbrains-plugin.md#L21) by adding the "AI" qualifier. ADR-0009 decision 1's substantive authorisation ("through headless HTTP **or** MCP stdio") is unchanged.
 
 ### Decision 2: the JetBrains plugin moves to an **MCP primary channel with HTTP filling the gaps** — isomorphic with the VS Code extension
 
@@ -104,7 +104,7 @@ The capability routing table — **eight over MCP, two staying on HTTP**:
 
 Otherwise the migration is a **functional regression** (the plugin can set pinned today).
 
-The implementation must obey that tool's existing **partial-update discipline**: omitting a field keeps its current value. `db.UpdateNoteMeta` replaces `title` / `tags` / `kind` / `pinned` wholesale, so the tool must read the note first and merge (the existing implementation already works that way, [main.go:287-295](file:///workspace/cmd/mcp/main.go#L287-L295) — that comment records a real incident where passing only `category` once wiped the title and tags and unpinned the note). **`pinned` must join that merge as an optional boolean; omission must never unpin a note.**
+The implementation must obey that tool's existing **partial-update discipline**: omitting a field keeps its current value. `db.UpdateNoteMeta` replaces `title` / `tags` / `kind` / `pinned` wholesale, so the tool must read the note first and merge (the existing implementation already works that way, [main.go:287-295](../../../cmd/mcp/main.go#L287-L295) — that comment records a real incident where passing only `category` once wiped the title and tags and unpinned the note). **`pinned` must join that merge as an optional boolean; omission must never unpin a note.**
 
 This is an **addition** to the agent-facing surface (an optional parameter on an existing tool — no new tool, no change to existing semantics).
 
@@ -131,7 +131,7 @@ A deep link is an **enhancement**, not a first-class capability. Both plugins ta
 
 `repotory-server` **keeps being "an optional enhancement the user obtains themselves"**. This ADR creates **no** install.sh / Homebrew / Scoop channel. The reason: the VS Code extension has shipped for its whole life with no `repotory-server` — deep links are not a usability precondition for any client, and making them one is an over-promise unique to the JetBrains side.
 
-**Consequential correction**: the "Consumers" column of [packaging/README.md:16-18](file:///workspace/packaging/README.md#L16-L18) lists `repotory-server`'s consumer as "JetBrains plugin one-click start", which contradicts this decision (the plugin neither downloads nor has anything to point at). It should read "obtained manually (deep-link enhancement)".
+**Consequential correction**: the "Consumers" column of [packaging/README.md:16-18](../../../packaging/README.md#L16-L18) lists `repotory-server`'s consumer as "JetBrains plugin one-click start", which contradicts this decision (the plugin neither downloads nor has anything to point at). It should read "obtained manually (deep-link enhancement)".
 
 ### Decision 7: `repotory-mcp` binary resolution mirrors the VS Code side
 
@@ -146,7 +146,7 @@ This ADR swaps a transport and adds one optional parameter to an existing tool. 
 ## Consequences
 
 - **Positive**: the JetBrains plugin reaches parity with the VS Code extension — install `repotory-mcp` (it has **all three** channels: install.sh / Homebrew / Scoop) and you can search, read, edit and create notes; the service stops being a precondition for using the plugin. The two IDE distribution faces are now isomorphic (the same MCP tool surface, the same degradation semantics). "Desktop app installed but the plugin is dead" stops happening.
-- **Negative**: the plugin needs a Kotlin MCP stdio client (`initialize` handshake + `tools/call` + JSON result parsing). **Note that most MCP tools return structured JSON** via `makeJSONResult` ([results.go:20](file:///workspace/cmd/mcp/results.go#L20)), which is cleaner than the VS Code side's parsing of `repotory_notes_search`'s text output — but `repotory_notes_search` / `repotory_wiki_search` return text and each needs its own parser.
+- **Negative**: the plugin needs a Kotlin MCP stdio client (`initialize` handshake + `tools/call` + JSON result parsing). **Note that most MCP tools return structured JSON** via `makeJSONResult` ([results.go:20](../../../cmd/mcp/results.go#L20)), which is cleaner than the VS Code side's parsing of `repotory_notes_search`'s text output — but `repotory_notes_search` / `repotory_wiki_search` return text and each needs its own parser.
 - **Negative (agent-facing)**: adding `pinned` to `repotory_notes_update` touches the tool surface agents see. `docs/api/reference.md` (both language versions) and `docs/features/ai-integration.md` (tool descriptions) must be synchronised. It is an **addition** and changes no existing semantics.
 - **Negative (behavioural narrowing)**: handoff notes are not editable in an IDE (decision 4, matching VS Code today); re-filing a note is unavailable without the service (decision 5, and the content that was saved is not lost).
 - **Neutral**: the desktop app still listens on no port; `repotory-server` is still a separate binary, still shipped in releases, and still has **no distribution channel**.
@@ -166,7 +166,7 @@ This ADR swaps a transport and adds one optional parameter to an existing tool. 
 
 **Correction one: the two search tools return JSON, not text.**
 
-The "Consequences" section says "`repotory_notes_search` / `repotory_wiki_search` return text, so each needs its own parser". Checking `cmd/mcp` one by one shows **this does not hold**: both go through `makeJSONResult` and return structured JSON ([main.go:135](file:///workspace/cmd/mcp/main.go#L135), [tools_wiki.go:87](file:///workspace/cmd/mcp/tools_wiki.go#L87)). **Text appears only on the error path** (`makeTextResult`: `query is required` / `error: …` / `note not found: …` / `refusing to update note N: …`).
+The "Consequences" section says "`repotory_notes_search` / `repotory_wiki_search` return text, so each needs its own parser". Checking `cmd/mcp` one by one shows **this does not hold**: both go through `makeJSONResult` and return structured JSON ([main.go:135](../../../cmd/mcp/main.go#L135), [tools_wiki.go:87](../../../cmd/mcp/tools_wiki.go#L87)). **Text appears only on the error path** (`makeTextResult`: `query is required` / `error: …` / `note not found: …` / `refusing to update note N: …`).
 
 So there are no "two text parsers" — there is **one JSON parser plus an error branch**: text that does not parse as JSON means the tool refused, and it must **fail loudly** rather than be read as an empty result. An empty result is the one answer a user cannot tell apart from "nothing matched", which is worse than an error. While landing this, that rule was pinned as a regression case per tool mapping (`ide/jetbrains/src/test/kotlin/dev/repotory/jetbrains/McpPayloadsTest.kt`).
 
@@ -178,3 +178,16 @@ Both the landing checklist (item 2) and the "Consequences" section say "sync `do
 - the shipped skill's tool-signature references: `SKILL.md`, `skill/repotory/references/mcp-tools.md`, `skill/repotory/SKILL.md` (the latter claims its signatures are "taken from the actual `tools/list` response", so a new parameter makes them stale — that is drift).
 
 **Landing record (2026-11-01)**: ① `cmd/mcp`'s `repotory_notes_update` gained an optional boolean `pinned` (omission keeps the current value; `false` and omission are different requests, told apart by whether the argument is PRESENT); ② `ide/jetbrains/` gained `McpStdioClient.kt` (protocol), `McpPayloads.kt` (parsers), `McpBinaryResolver.kt` (binary lookup) and `RepotoryMcp.kt` (the eight capabilities); the eight data calls moved onto MCP, `MoveNote` and the web-UI probe stayed on HTTP; ③ the settings page gained an "MCP binary" field and a "Check MCP channel" diagnostic; ④ the VS Code side's `openHit` gained the `servesWebUi` pre-check; ⑤ the plugin gained 27 JVM unit tests, now run in CI (`gradle test`).
+
+**Revision (2026-11-26): decision 6's deep link is void; HTTP carries `MoveNote` only.**
+Decision 6 made deep links "best-effort" because opening the web UI was one way out of the plugin.
+ADR-0044's third revision replaced the card's **Open in Cinder** with asking in place (the body
+already opens in place, so the button's only contribution was leaving the panel), which left that
+channel with **no caller**: `RepotoryClient.deepLink` / `servesWebUi`, `RepotoryHit.route`,
+`openCard` / `offerFallback`, and on the VS Code side `openHit` / `servesWebUi` /
+`Transport.openExternal` are gone, and the settings page's "API and web UI both reachable" test
+went with them — it only taught the user to add `--web-dist` for deep links. **The HTTP gap-filler
+surface shrinks from two entries to one**: `MoveNote` (decision 2, human-only). The other half of
+decision 6 (the server stays optional; deep links are no client's precondition) is now truer than
+before: it is not even a precondition for itself. Gate C's second journey now asserts that a card
+reads its whole body in place.

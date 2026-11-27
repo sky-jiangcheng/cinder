@@ -2,7 +2,7 @@
 
 Status: **Accepted (2026-11-05, the user picked option (c) "full Manus-style restructure" among the four routes offered for "how do we redefine the brand and the UI"; the same day the three words were settled: parent brand **Cinder** / desktop **Cinder Desktop** / Agent **Warden** — the landing process is recorded under "Landing record" at the end)**
 Date: 2026-11-05
-Related: [ADR-0037](../../docs/en/adr/0037-brand-legibility-and-ui-language.md) (brand legibility and UI language — this ADR **narrowed the scope of its decision 4**), [ADR-0047](../../docs/en/adr/0047-resident-agent-separate-host.md) (two products, one job each), [ADR-0048](../../docs/en/adr/0048-core-contract-version.md) (the contract version), [ADR-0034](../../docs/en/adr/0034-desktop-three-column-shell.md) (the precedent for separating the display name from the binary name), [ADR-0006](../../docs/en/adr/0006-scope-freeze.md) (scope freeze and frozen identifiers)
+Related: [ADR-0037](../../../docs/en/adr/0037-brand-legibility-and-ui-language.md) (brand legibility and UI language — this ADR **narrowed the scope of its decision 4**), [ADR-0047](../../../docs/en/adr/0047-resident-agent-separate-host.md) (two products, one job each), [ADR-0048](../../../docs/en/adr/0048-core-contract-version.md) (the contract version), [ADR-0034](../../../docs/en/adr/0034-desktop-three-column-shell.md) (the precedent for separating the display name from the binary name), [ADR-0006](../../../docs/en/adr/0006-scope-freeze.md) (scope freeze and frozen identifiers)
 Starting schema: v28 (**this ADR does not change the schema**)
 
 ## Background
@@ -15,7 +15,7 @@ That is not a request to "swap the name" — it is a structural check-up. The in
 
 ### Fact one: the repo already ran a brand diagnosis — and it explicitly dodged the name half of the question
 
-[ADR-0037](../../docs/en/adr/0037-brand-legibility-and-ui-language.md) decision 4 says:
+[ADR-0037](../../../docs/en/adr/0037-brand-legibility-and-ui-language.md) decision 4 says:
 
 > **The brand name `Repotory` stays**: it is a frozen identifier (ADR-0006). The "legibility" problem is in the **visual construct**, not in the name.
 
@@ -25,8 +25,8 @@ That is not a brush-off — ADR-0037's diagnosis is solid (the "R" on the master
 
 | Role | The wording the repo already uses | What the product names say |
 |---|---|---|
-| Engine / memory layer | First screen: "The local-first memory layer for AI coding agents" ([README.md:8](../../README.md)); the artifact table calls `repotory-mcp` the "**Core agent memory engine**" ([README.md:64](../../README.md)) | `repotory-mcp` ✓ |
-| Desktop workbench | The artifact table calls it "**Repotory Desktop**" ([README.md:65](../../README.md)) | `wails.json`'s `productName` is "**Repotory**" — **the surface shares its name with the engine** |
+| Engine / memory layer | First screen: "The local-first memory layer for AI coding agents" ([README.md:8](../../../README.md)); the artifact table calls `repotory-mcp` the "**Core agent memory engine**" ([README.md:64](../../../README.md)) | `repotory-mcp` ✓ |
+| Desktop workbench | The artifact table calls it "**Repotory Desktop**" ([README.md:65](../../../README.md)) | `wails.json`'s `productName` is "**Repotory**" — **the surface shares its name with the engine** |
 | Second product | — | "**Repotory Agent**" (the `repotory-agent` repo's `tauri.conf.json`) — **a qualifier-suffix name** |
 
 In other words: **the name "Repotory Desktop" exists only in the README; the app itself does not use it.** That is a live inconsistency independent of any word choice — **it has to be fixed whichever route is taken**.
@@ -57,7 +57,7 @@ So one fact has to go into the decision: **this is the fourth rename, and the da
 
 ### Fact six: the identifier layer and the display layer are two layers, and the repo has separated them once
 
-[README.md:221](../../README.md) lists the frozen identifiers: `repotory` = binary name, user data directory, MCP server `repotory-mcp`, tool prefix `repotory_*`. And [ADR-0034](../../docs/en/adr/0034-desktop-three-column-shell.md) decision 6 already performed **a display-layer-only rename**: `wails.json`'s `name` became `Repotory` (while `outputfilename` stayed `repotory`) — **the binary name `repotory` is a frozen identifier; only the bundle directory changed**.
+[README.md:221](../../../README.md) lists the frozen identifiers: `repotory` = binary name, user data directory, MCP server `repotory-mcp`, tool prefix `repotory_*`. And [ADR-0034](../../../docs/en/adr/0034-desktop-three-column-shell.md) decision 6 already performed **a display-layer-only rename**: `wails.json`'s `name` became `Repotory` (while `outputfilename` stayed `repotory`) — **the binary name `repotory` is a frozen identifier; only the bundle directory changed**.
 
 **So "renaming is expensive" is an illusion**: what is expensive is wiping the brand assets (the master art plus ADR-0037 decision 1's "recitable construct" have to be re-verified once), not the migration. The migration only touches the display layer.
 
@@ -294,7 +294,7 @@ Two concrete things triggered this, one shared root cause: **all 16 shipped asse
 
 **Shipping both names is not optional — it is what makes this rename valid at all**. Existing users have `repotory-mcp` written into `.mcp.json`, into VS Code / JetBrains settings and into hook scripts; an archive with only the new name would **break every configured client on the first upgrade**. So every install channel carries a compatibility layer: `install.sh` creates symlinks, `install.ps1` writes copies (Windows symlinks need developer mode), Homebrew gets `binary "cinder-mcp", target: "repotory-mcp"`, Scoop gets a dual shim, the Docker image gets an `ln -s`, and the archives are packed with the symlink already in place. Binary lookup in the IDE plugins and in `repotory-init` became **iteration over a name list** (new name first, old name as fallback), and the common directories now include both the old and the new package directories.
 
-**One real defect this flushed out**: once asset names carry a version, `releases/latest/download/<fixed-file-name>` **stops working** — and both install scripts relied on exactly that URL. The fix resolves the latest tag first and then assembles a versioned URL (`install.sh` follows the `curl -I` redirect and takes its tail, `install.ps1` uses the API), keeping `VERSION` / `RELEASES` / `CINDER_RELEASE_BASE` as override points so the install smoke test can point at a fixture instead of a real release. **The in-app updater changed in the same batch**: `appAssetPattern` accepts the new shape and `legacyAppAssetPattern` the old one, while `platformAsset` went from a prefix match to "contains `-<os>-<arch>.`" — **the version now sits between the brand and the platform, so a prefix match can only ever miss**, and this is the easiest spot to overlook (missing it means "the update button does nothing").
+**One real defect this flushed out**: once asset names carry a version, `releases/latest/download/<fixed-file-name>` **stops working** — and both install scripts relied on exactly that URL. The fix resolves the latest tag first and then assembles a versioned URL (`install.sh` follows the `curl -I` redirect and takes its tail, `install.ps1` uses the API), keeping override points so the install smoke test can point at a fixture instead of a real release — `install.sh` has `VERSION` / `RELEASES`, `install.ps1` has `$env:VERSION` / `$env:CINDER_RELEASE_BASE` (one set per script, not all three names on both). **The in-app updater changed in the same batch**: `appAssetPattern` accepts the new shape and `legacyAppAssetPattern` the old one, while `platformAsset` went from a prefix match to "contains `-<os>-<arch>.`" — **the version now sits between the brand and the platform, so a prefix match can only ever miss**, and this is the easiest spot to overlook (missing it means "the update button does nothing").
 
 **Not changed**: the MCP server name is still `repotory-mcp` (the argument to `NewMCPServer` is the **server identity clients see**, not a file name — changing it is a contract change); the `REPOTORY_MCP_BIN` environment variable, the `repotory_*` tool prefix, the data directory, the cask/bucket tokens and the skill directory `skill/repotory/` all stay as they were. **The package-manager manifest file names did not change either** — `brew install sky-jiangcheng/homebrew-repo/repotory-mcp` is a command users have saved, and renaming the token kills it.
 
