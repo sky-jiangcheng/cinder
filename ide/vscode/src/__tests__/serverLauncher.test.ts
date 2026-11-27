@@ -136,17 +136,16 @@ test("resolveServerBinary: nothing found returns null and a search list", () => 
   }
 });
 
-test("buildServerArgs: --port always, --web-dist only with a web/ next to the binary", () => {
+test("buildServerArgs: --port only, never --web-dist", () => {
   const withWeb = tmpDir();
   const binWithWeb = fakeBinary(withWeb, true);
   const args = buildServerArgs(binWithWeb, 19000);
-  assert.deepEqual(args.slice(0, 3), [binWithWeb, "--port", "19000"]);
-  assert.ok(args.includes("--web-dist"));
+  assert.deepEqual(args, [binWithWeb, "--port", "19000"]);
 
   const withoutWeb = tmpDir();
   const binNoWeb = fakeBinary(withoutWeb, false);
   const args2 = buildServerArgs(binNoWeb, 18765);
-  assert.ok(!args2.includes("--web-dist"));
+  assert.deepEqual(args2, [binNoWeb, "--port", "18765"]);
 });
 
 test("isLoopbackUrl and portOf", () => {
@@ -214,12 +213,10 @@ test("start: a healthy start returns started with the built command", async () =
   });
   const outcome = await launcher.start("http://127.0.0.1:18765", () => bin);
   assert.equal(outcome.kind, "started");
-  const started = outcome as { port: number; webUi: boolean; healthy: boolean };
+  const started = outcome as { port: number; healthy: boolean };
   assert.equal(started.port, 18765);
-  assert.equal(started.webUi, true);
   assert.equal(started.healthy, true);
-  assert.deepEqual(spawned[0]?.slice(0, 3), [bin, "--port", "18765"]);
-  assert.ok(spawned[0]?.includes("--web-dist"));
+  assert.deepEqual(spawned[0], [bin, "--port", "18765"]);
 });
 
 test("start: a process that exits during startup fails with its log tail", async () => {

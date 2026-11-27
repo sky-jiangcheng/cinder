@@ -34,7 +34,6 @@ import {
   parseWikiPages,
   parseWikiRead,
   parseWorkspaceResolution,
-  servesWebUi,
   type NoteHit,
   type OrganizeProposal,
   type WikiPageSummary,
@@ -71,8 +70,6 @@ export interface Transport {
   serverUrl(): string;
   /** The folder the session is standing in, if any. */
   workspacePath(): string | undefined;
-  /** Open a URL outside the IDE. */
-  openExternal(url: string): Promise<void>;
 }
 
 /** The prefix the ask tool uses when the configured AI endpoint failed. */
@@ -209,9 +206,6 @@ export class ChatSession {
         break;
       case "expandCard":
         await this.expandCard(msg.turnId, msg.cardType, msg.cardId);
-        break;
-      case "open":
-        await this.openHit(msg.card);
         break;
       case "edit":
         await this.openEditorForNote(msg.turnId, msg.cardType, msg.cardId);
@@ -400,7 +394,7 @@ export class ChatSession {
       // local service can test) — name both ways out.
       const hint =
         !apiKey.trim() && /auth failed/i.test(text)
-          ? `${text}. This endpoint requires a key — type it above, or start the Cinder desktop app to test with the saved one.`
+          ? `${text}. This endpoint requires a key — type it above, or start the local service (Cinder: Start Local Service) so the saved one can be read.`
           : aiFailureHint(text);
       this.post({
         type: "providerResult",
@@ -742,34 +736,6 @@ export class ChatSession {
       body: card.snippet,
       source: "snippet",
     };
-  }
-
-  /**
-   * Deep-link a hit into the Cinder web UI.
-   *
-   * Deep links are best-effort (ADR-0035 decision 6): a headless server
-   * started without `--web-dist` answers the API but 404s every other path, so
-   * opening the URL would drop the user on a dead page with no explanation at
-   * all. The probe asks the server whether it serves the UI first — the same
-   * question, the same way, the JetBrains plugin asks.
-   */
-  private async openHit(card: HitCard | undefined): Promise<void> {
-    if (!card) return;
-    const route =
-      card.type === "wiki"
-        ? `/wiki/${card.id}`
-        : card.type === "todo"
-          ? `/project/${card.project_id}?tab=todos`
-          : `/project/${card.project_id}?noteId=${card.id}`;
-    const base = this.transport.serverUrl().replace(/\/+$/, "");
-    if (!(await servesWebUi(base))) {
-      this.announce(
-        "warn",
-        "The local service serves the API only (no --web-dist), so that link would open a 404. A local service with the web UI is needed.",
-      );
-      return;
-    }
-    await this.transport.openExternal(`${base}${route}`);
   }
 
   // ------------------------------------------------------- note maintenance

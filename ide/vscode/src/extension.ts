@@ -13,7 +13,7 @@ import * as vscode from "vscode";
 import * as path from "node:path";
 import * as os from "node:os";
 import { accessSync, constants as fsConstants, existsSync, mkdirSync } from "node:fs";
-import { exec, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import { McpStdioClient } from "./mcpClient.js";
 import { getJson, postJson } from "./headless.js";
 import { RepotoryChatConsoleProvider } from "./chatConsole.js";
@@ -308,11 +308,7 @@ async function startServerCommand(): Promise<void> {
       return;
     case "started":
       if (outcome.healthy) {
-        void vscode.window.showInformationMessage(
-          outcome.webUi
-            ? `Cinder: 本地服务已就绪（${serverUrl()}），深链可用。`
-            : `Cinder: 本地服务已就绪（${serverUrl()}）。该二进制旁没有 web/，深链将不可用。`,
-        );
+        void vscode.window.showInformationMessage(`Cinder: 本地服务已就绪（${serverUrl()}）。`);
       } else {
         void vscode.window.showWarningMessage(
           `Cinder: 服务进程在运行，但 ${serverUrl()} 尚未应答。查看输出面板里的启动日志。`,
@@ -714,40 +710,6 @@ async function diagnose(context: vscode.ExtensionContext): Promise<void> {
   if (picked) await picked.run();
 }
 
-// 打开 Cinder 桌面应用：优先用平台原生方式启动，找不到时引导到 Releases 下载。
-async function openDesktop(): Promise<void> {
-  let cmd: string;
-  switch (process.platform) {
-    case "darwin":
-      cmd = "open -a Cinder";
-      break;
-    case "win32":
-      cmd = "start \"\" repotory.exe";
-      break;
-    default:
-      cmd = "repotory";
-      break;
-  }
-  exec(cmd, (err) => {
-    if (err) {
-      void vscode.window
-        .showErrorMessage(
-          "Cinder: 桌面应用未找到。请先从 GitHub Releases 下载并安装 Cinder 桌面应用。",
-          "打开 Releases 页面",
-        )
-        .then((choice) => {
-          if (choice === "打开 Releases 页面") {
-            void vscode.env.openExternal(
-              vscode.Uri.parse(
-                "https://github.com/sky-jiangcheng/cinder/releases",
-              ),
-            );
-          }
-        });
-    }
-  });
-}
-
 // 首次安装引导：让新用户一眼看出这是 Cinder 扩展，并一步进入配置向导。
 async function onboard(context: vscode.ExtensionContext): Promise<void> {
   const already = context.globalState.get<boolean>("repotory.onboarded");
@@ -790,24 +752,13 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     serverUrl,
     workspacePath,
-    openExternal: async (url) => {
-      await vscode.env.openExternal(vscode.Uri.parse(url));
-    },
   };
   const session = new ChatSession(transport, (message) => chatConsole.post(message));
-  // The panel's own action strip (ADR-0044 decision 1). Two of the four
-  // actions are host-side commands — they were `view/title` registrations
-  // before, and the host chrome cropped the third one off the panel edge.
-  // They live in the webview's header now, so the host answers them here.
+  // The one host-side action the panel still asks for: starting the local
+  // service, which the announcement bar offers when a human-only write (moving
+  // a note between projects) needs it. Everything else in the header is the
+  // webview's own business.
   chatConsole.onMessage = async (msg) => {
-    if (msg.type === "openDiagnostics") {
-      await diagnose(context);
-      return;
-    }
-    if (msg.type === "openDesktop") {
-      await openDesktop();
-      return;
-    }
     if (msg.type === "startServer") {
       await startServerCommand();
       return;
@@ -872,7 +823,6 @@ export function activate(context: vscode.ExtensionContext): void {
   register("repotory.setMcpPath", async () => {
     await pickMcpBinary();
   });
-  register("repotory.openDesktop", () => openDesktop());
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(CONSOLE_VIEW_ID, chatConsole, {

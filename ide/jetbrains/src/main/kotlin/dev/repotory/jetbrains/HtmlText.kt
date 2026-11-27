@@ -1,15 +1,15 @@
-// HTML rendering for the knowledge reader's detail pane.
+// The HTML the panel's panes are built from: escaping, theme colour, and the
+// markdown subset.
 //
 // JEditorPane speaks a small dialect of HTML 3.2 with partial CSS, so the
 // builders here stay inside it: no flexbox, no CSS variables, no external
 // stylesheets — a <style> block on the kit plus inline styles, and colours
 // pulled from the IDE's own UIManager keys so the pane follows the theme.
 //
-// Note bodies are markdown. A wall of raw asterisks would undo the point
-// of a detail pane, so MarkdownLite renders the common subset (fenced
-// code, headings, bold, inline code, links, lists, paragraphs) and
-// ESCAPES everything else: unknown syntax is shown verbatim, never
-// dropped and never interpreted.
+// Note bodies are markdown. A wall of raw asterisks would undo the point of a
+// reader, so MarkdownLite renders the common subset (fenced code, headings,
+// bold, inline code, links, lists, paragraphs) and ESCAPES everything else:
+// unknown syntax is shown verbatim, never dropped and never interpreted.
 package dev.repotory.jetbrains
 
 import com.intellij.ui.JBColor
@@ -17,6 +17,15 @@ import java.awt.Color
 import javax.swing.UIManager
 import javax.swing.text.html.HTMLEditorKit
 import javax.swing.text.html.StyleSheet
+
+/*
+ * There used to be a second, static detail pane in this file — the pane a
+ * result replaced instead of joining a conversation (promoHtml, noteHtml,
+ * wikiPageHtml, and their "Open in Cinder" line). The feed replaced it
+ * (ADR-0036 / ADR-0044), and once the panel stopped jumping out to the web UI
+ * there was nothing left for that pane to say, so it is gone rather than kept
+ * as a second way to render the same note.
+ */
 
 /** The IDE's own secondary-text colour as #rrggbb, for HTML the theme cannot tint. */
 internal fun metaColorHex(): String {
@@ -26,7 +35,7 @@ internal fun metaColorHex(): String {
     return String.format("#%02x%02x%02x", c.red, c.green, c.blue)
 }
 
-/** An HTMLEditorKit carrying the pane's stylesheet; one per pane is enough. */
+/** An HTMLEditorKit carrying the panes' stylesheet; one per pane is enough. */
 internal fun detailHtmlKit(): HTMLEditorKit {
     val kit = HTMLEditorKit()
     val sheet: StyleSheet = kit.styleSheet
@@ -42,93 +51,6 @@ internal fun detailHtmlKit(): HTMLEditorKit {
     return kit
 }
 
-/** The idle pane before the first search — the product pitch, not an error. */
-internal fun promoHtml(): String = """
-    <html><body style="padding:6px">
-    <h2>Knowledge, where you already are.</h2>
-    <p>Cinder keeps what your coding agents learn — why a decision was
-    made, what gotcha you hit, what to do next — in a local, searchable
-    store.</p>
-    <p>Type a query on the left. Results open in full, right here — the
-    first one is selected for you. Double-click (or <b>Open in Cinder</b>)
-    jumps to the item in the Cinder web app.</p>
-    <p style="color:${metaColorHex()}">Everything stays on this machine: the
-    plugin talks to the loopback-only Cinder service and never uploads
-    anything.</p>
-    </body></html>
-""".trimIndent()
-
-/** Shown the instant a hit is selected, before the full body arrives. */
-internal fun loadingHtml(hit: RepotoryHit): String = """
-    <html><body style="padding:6px">
-    <h2>${esc(hit.title.ifBlank { "(untitled)" })}</h2>
-    <p style="color:${metaColorHex()}">${esc(badgeLabel(hit))} · #${hit.id} · loading…</p>
-    ${if (hit.snippet.isBlank()) "" else "<p>${snippetHtml(hit.snippet)}</p>"}
-    </body></html>
-""".trimIndent()
-
-/** A note read in full: meta line, then the markdown body. */
-internal fun noteHtml(detail: NoteDetail): String {
-    val meta = buildString {
-        append("note · #").append(detail.id)
-        if (detail.updatedAt.isNotBlank()) append(" · updated ").append(detail.updatedAt.take(10))
-        if (detail.tags.isNotBlank()) append(" · ").append(esc(detail.tags))
-    }
-    return """
-        <html><body style="padding:6px">
-        <h2>${esc(detail.title.ifBlank { "(untitled)" })}</h2>
-        <p style="color:${metaColorHex()}">$meta</p>
-        ${MarkdownLite.toHtml(detail.body)}
-        </body></html>
-    """.trimIndent()
-}
-
-/**
- * An approved knowledge page read in full (ADR-0032): meta line, the page
- * body, and the graph around it.
- *
- * The edges are plain text, not links: a JEditorPane renders an <a> as blue
- * underlined text but does not follow it, so a link here would look clickable
- * and do nothing. "Open in Cinder" is the way out of the pane.
- */
-internal fun wikiPageHtml(detail: WikiPageDetail): String {
-    val meta = buildString {
-        append(esc(detail.kind.ifBlank { "page" }))
-        append(" · #").append(detail.id)
-        if (detail.slug.isNotBlank()) append(" · /").append(esc(detail.slug))
-        append(" · ").append(if (detail.projectId > 0) "project ${detail.projectId}" else "global")
-        if (detail.updatedAt.isNotBlank()) append(" · updated ").append(detail.updatedAt.take(10))
-        if (detail.source.isNotBlank()) append(" · ").append(esc(detail.source))
-    }
-    return """
-        <html><body style="padding:6px">
-        <h2>${esc(detail.title.ifBlank { "(untitled)" })}</h2>
-        <p style="color:${metaColorHex()}">$meta</p>
-        ${MarkdownLite.toHtml(detail.content)}
-        ${edgesHtml("Links", detail.outLinks)}
-        ${edgesHtml("Backlinks", detail.inLinks)}
-        ${notesHtml(detail.sourceNoteIds)}
-        </body></html>
-    """.trimIndent()
-}
-
-/** One graph edge list: "Links: 时态图 (relates-to) · 网关". */
-private fun edgesHtml(label: String, edges: List<PageEdge>): String {
-    if (edges.isEmpty()) return ""
-    val items = edges.joinToString(" · ") { edge ->
-        val name = edge.title.ifBlank { edge.slug.ifBlank { "#${edge.pageId}" } }
-        if (edge.relation.isBlank()) esc(name) else esc(name) + " (" + esc(edge.relation) + ")"
-    }
-    return "<p style=\"color:${metaColorHex()}\">$label: $items</p>"
-}
-
-/** The notes a page was compiled from: "Compiled from notes: #3 · #7". */
-private fun notesHtml(ids: List<Long>): String {
-    if (ids.isEmpty()) return ""
-    return "<p style=\"color:${metaColorHex()}\">Compiled from notes: " +
-        ids.joinToString(" · ") { "#$it" } + "</p>"
-}
-
 /**
  * The label a hit carries in its badge: the note/todo type, or the page kind
  * for an approved page. "WIKI" alone says nothing about what the page IS.
@@ -138,29 +60,40 @@ internal fun badgeLabel(hit: RepotoryHit): String = when (hit.type) {
     else -> hit.type
 }
 
-/**
- * A todo, or a note whose full read failed: the matched excerpt is what
- * the search contract returned, and the pane says so instead of pretending
- * it is the whole item.
- */
-internal fun excerptHtml(hit: RepotoryHit, full: Boolean = false): String {
-    val label = if (full) "full body unavailable — matched excerpt" else "excerpt"
-    return """
-        <html><body style="padding:6px">
-        <h2>${esc(hit.title.ifBlank { "(untitled)" })}</h2>
-        <p style="color:${metaColorHex()}">${esc(badgeLabel(hit))} · #${hit.id} · $label</p>
-        ${if (hit.snippet.isBlank()) "<p><i>No snippet returned.</i></p>" else snippetHtml(hit.snippet)}
-        </body></html>
-    """.trimIndent()
-}
-
 internal fun esc(text: String): String = text
     .replace("&", "&amp;")
     .replace("<", "&lt;")
     .replace(">", "&gt;")
     .replace("\"", "&quot;")
 
-/** The markdown subset the note store actually uses, rendered to the pane's HTML. */
+/** One model reply, split into its inline reasoning and the answer. */
+internal data class ThinkingSplit(val thoughts: List<String>, val body: String)
+
+/**
+ * A gateway that does not separate reasoning_content leaves the model's
+ * reasoning inline in content, wrapped in `<think>…</think>`.
+ *
+ * It is the model's notes, not the answer, so the panes fold it behind one
+ * row instead of laying it out as prose — the shape CodeBuddy and the other
+ * IDE agents use. An unterminated block is folded too: streaming delivers the
+ * open tag long before the close, and the notes must not flash in while the
+ * model is still thinking.
+ */
+internal fun splitThinking(src: String): ThinkingSplit {
+    val thoughts = mutableListOf<String>()
+    val body = src
+        .replace(Regex("<(think|thinking|reason|reasoning)>([\\s\\S]*?)(?:</\\1>|$)", RegexOption.IGNORE_CASE)) { m ->
+            val inner = m.groupValues[2].trim()
+            if (inner.isNotEmpty()) thoughts.add(inner)
+            ""
+        }
+        .replace(Regex("</?(?:think|thinking|reason|reasoning)>", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("^\\s*\\n+"), "")
+        .trimEnd()
+    return ThinkingSplit(thoughts, body)
+}
+
+/** The markdown subset the note store actually uses, rendered to the panes' HTML. */
 internal object MarkdownLite {
 
     fun toHtml(src: String): String {
@@ -171,7 +104,7 @@ internal object MarkdownLite {
         // diagram-source block: Swing has no diagram engine, so the source
         // stays visible (and editable) instead of being silently swallowed
         // — the same contract as the VS Code webview's diagram card.
-        var text = src.replace(Regex("```([^\\n]*)\\n([\\s\\S]*?)```")) { m ->
+        var text = splitThinking(src).body.replace(Regex("```([^\\n]*)\\n([\\s\\S]*?)```")) { m ->
             val lang = m.groupValues[1].trim().lowercase()
             val code = m.groupValues[2].trimStart('\n')
             if (lang == "mermaid") {

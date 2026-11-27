@@ -9,13 +9,14 @@
 //
 // ADR-0035 (Accepted 2026-10-30) decision 2 moved the EIGHT data calls onto
 // MCP (see RepotoryMcp.kt), which is the same switch the VS Code extension
-// made long ago: "MCP primary, HTTP filling the gaps". Two things stay here
-// on purpose:
+// made long ago: "MCP primary, HTTP filling the gaps". One thing stays here on
+// purpose:
 //
-//   ① MoveNote — re-filing knowledge between projects is a human decision an
-//      agent must not make, so it never enters MCP.
-//   ② the web-UI probe and the deep links — a deep link needs a server that
-//      actually serves the UI, which is a property of the HTTP deployment.
+//   MoveNote — re-filing knowledge between projects is a human decision an
+//   agent must not make, so it never enters MCP.
+//
+// (The web-UI probe went with the deep links in ADR-0044's third revision:
+// nothing in the panel links into the web UI any more.)
 //
 // Everything else the plugin used to fetch over /api/rpc now goes through the
 // MCP channel, so the panel works with no `repotory-server` running at all.
@@ -41,8 +42,6 @@ data class RepotoryHit(
     val projectId: Long,
     val title: String,
     val snippet: String,
-    /** The SPA route this hit opens, e.g. "/project/12?noteId=345". */
-    val route: String,
     /**
      * The wiki page kind (concept | entity | synthesis | source | …) for a page
      * hit; empty for a note or a todo. The badge shows it, because "page" alone
@@ -210,31 +209,6 @@ class RepotoryClient {
     }
 
     /**
-     * True when the running server also serves the Cinder web UI, i.e. it was
-     * started with `--web-dist` (see cmd/server/main.go: without it the process
-     * is API-only and every non-/api path 404s).
-     *
-     * Results deep-link into that UI, so a plain API-only server answers the API
-     * but turns every "Open in Cinder" click into a 404. The plugin starts its
-     * own local server with the sibling `web/` directory when the release bundle
-     * ships one (see RepotoryServer.kt); for a server the user started, the
-     * plugin asks this question and says the answer out loud.
-     */
-    fun servesWebUi(serverUrl: String): Boolean = try {
-        val conn = open(serverUrl, "/", "GET")
-        try {
-            // The SPA root is index.html (serveIndex in cmd/server/main.go). A
-            // 404 from the API mux, or any non-HTML answer, means no web UI here.
-            conn.responseCode == 200 && (conn.contentType ?: "").contains("text/html", ignoreCase = true)
-        } finally {
-            conn.disconnect()
-        }
-    } catch (e: Exception) {
-        Logger.getInstance(LOG).debug("repotory web-ui probe failed: ${e.message}")
-        false
-    }
-
-    /**
      * Calls one binding over the generic JSON-RPC bridge.
      *
      * The bridge is the same one the desktop Wails app is bound to, so the
@@ -305,12 +279,6 @@ class RepotoryClient {
         } finally {
             conn.disconnect()
         }
-    }
-
-    /** The SPA URL a hit opens in the browser. */
-    fun deepLink(serverUrl: String, hit: RepotoryHit): String {
-        val base = serverUrl.trimEnd('/')
-        return "$base${hit.route}"
     }
 
     /**

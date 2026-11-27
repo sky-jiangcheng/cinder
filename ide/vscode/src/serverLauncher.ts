@@ -40,7 +40,6 @@ export type StartOutcome =
   | {
       kind: "started";
       port: number;
-      webUi: boolean;
       binary: ServerBinary;
       /** /health answered within the wait. A process that is up but silent is
        *  NOT the same as a working service. */
@@ -144,17 +143,16 @@ export function searchedLocations(): string {
 }
 
 /**
- * Builds the server command line: `--port` always, `--web-dist` when the
- * release bundle's `web/` sits next to the binary (the bundle lays them
- * together, so deep links work without the user passing the flag by hand).
+ * Builds the server command line: `--port` and nothing else.
+ *
+ * No `--web-dist`: the panel stopped linking into the web UI when the card's
+ * deep link became "ask in place" (ADR-0044, third revision), and the only
+ * consumer of a service this module starts is the human-only `MoveNote`. The
+ * release bundle still ships `web/` — a user who wants the knowledge UI in a
+ * browser starts the server themselves and passes the flag by hand.
  */
 export function buildServerArgs(binaryFile: string, port: number): string[] {
-  const args = [binaryFile, "--port", String(port)];
-  const webDist = path.join(path.dirname(binaryFile), "web");
-  if (fs.existsSync(path.join(webDist, "index.html"))) {
-    args.push("--web-dist", webDist);
-  }
-  return args;
+  return [binaryFile, "--port", String(port)];
 }
 
 /**
@@ -266,7 +264,6 @@ export class ServerLauncher {
 
     const port = portOf(serverUrl);
     const command = buildServerArgs(binary.file, port);
-    const webUi = command.includes("--web-dist");
 
     try {
       const child = this.spawnFn(command, this.logPath);
@@ -278,7 +275,7 @@ export class ServerLauncher {
       while (Date.now() < deadline) {
         if (await this.pingFn(serverUrl)) {
           onProgress?.("服务已就绪。");
-          return { kind: "started", port, webUi, binary, healthy: true };
+          return { kind: "started", port, binary, healthy: true };
         }
         if (child.exitCode !== null || child.signalCode !== null) {
           const tail = logTail(this.logPath);
@@ -300,7 +297,7 @@ export class ServerLauncher {
       // The process is alive but /health never answered: not a working
       // service. Say so instead of handing back a promise the next call breaks.
       onProgress?.("进程在运行，但服务尚未应答。");
-      return { kind: "started", port, webUi, binary, healthy: false };
+      return { kind: "started", port, binary, healthy: false };
     } catch (err) {
       return {
         kind: "failed",

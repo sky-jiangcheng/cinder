@@ -226,7 +226,6 @@ test("rule scope.path: a shared ask carries no scope (ADR-0061 / TODO 11.1)", as
     },
     async rpc() { return null; },
     serverUrl: () => "http://127.0.0.1:18765",
-    openExternal: async () => {},
   };
   const session = new ChatSession(transport as never, () => {});
   await session.run("why?", "ask");

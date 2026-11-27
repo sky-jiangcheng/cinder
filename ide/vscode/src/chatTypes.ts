@@ -205,19 +205,11 @@ export type ExtMessage =
   | { type: "toggleEarlier" }
   | { type: "toggleSources"; turnId: string }
   | { type: "expandCard"; turnId: string; cardType: string; cardId: number }
-  | { type: "open"; turnId: string; card: HitCard }
   | { type: "edit"; turnId: string; cardType: string; cardId: number }
   | { type: "create"; turnId: string; cardType: string; cardId: number }
   | { type: "organize"; turnId: string; cardType: string; cardId: number }
   | { type: "save"; turnId: string; cardType: string; cardId: number; draft: EditorDraft }
   | { type: "cancelEdit"; turnId: string; cardType: string; cardId: number }
-  // ---- the panel's own action strip (ADR-0044 decision 1) --------------------
-  // These four used to live in VS Code's `view/title`, where the host drew
-  // them at the far right of the sidebar title bar and cropped the third one
-  // off the panel's edge. The webview cannot draw that strip, so the actions
-  // moved into the header the panel draws itself.
-  | { type: "openDiagnostics" }
-  | { type: "openDesktop" }
   // ---- project recognition (ADR-0044 decision 6) ----------------------------
   | { type: "pickProject"; projectId: number };
 /** host → webview. */

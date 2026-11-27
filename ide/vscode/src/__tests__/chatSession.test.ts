@@ -51,7 +51,6 @@ function fakeTransport(
     },
     serverUrl: () => "http://127.0.0.1:18765",
     workspacePath: () => "/tmp/work",
-    openExternal: async () => {},
   };
 }
 

@@ -164,37 +164,6 @@ export interface WikiPageDetail {
 }
 
 /**
- * True when the running server also serves the Cinder web UI.
- *
- * A headless server started without `--web-dist` answers the API but 404s
- * every other path, so a deep link opened against it lands the user on a dead
- * page with no explanation. The probe asks for the SPA root and requires an
- * HTML answer: a 404 from the API mux, or a JSON body, means there is no web
- * UI here.
- *
- * The JetBrains plugin asks the same question the same way
- * (RepotoryClient.servesWebUi): deep links are best-effort in BOTH IDEs
- * (ADR-0035 decision 6), and the two must not drift apart on what counts as
- * "the UI is there".
- */
-export async function servesWebUi(base: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const req = http.request(base.replace(/\/+$/, "") + "/", { method: "GET" }, (res) => {
-      const type = String(res.headers["content-type"] ?? "").toLowerCase();
-      resolve(res.statusCode === 200 && type.includes("text/html"));
-      // Drain the body so the socket can be reused/closed cleanly.
-      res.resume();
-    });
-    req.on("error", () => resolve(false));
-    req.setTimeout(4000, () => {
-      req.destroy();
-      resolve(false);
-    });
-    req.end();
-  });
-}
-
-/**
  * Parse the `repotory_wiki_search` tool result into page summaries.
  *
  * The result is a bare JSON array, like every other list tool (see

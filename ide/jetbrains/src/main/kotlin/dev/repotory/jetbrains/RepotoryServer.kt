@@ -16,14 +16,12 @@
 // process; every answer still comes from the shared service layer over HTTP.
 package dev.repotory.jetbrains
 
-import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Disposer
 import java.io.File
 import java.net.URI
@@ -45,8 +43,6 @@ private const val START_TIMEOUT_MS = 30_000L
 /** How often the health probe is repeated while waiting for the server. */
 private const val HEALTH_POLL_MS = 250L
 
-private const val RELEASES_URL = "https://github.com/sky-jiangcheng/cinder/releases"
-
 /** Where a resolved server binary came from, for the settings/diagnostics text. */
 data class ServerBinary(val file: File, val source: String)
 
@@ -60,7 +56,7 @@ sealed interface StartOutcome {
      * has to be able to tell the two apart — otherwise "started" is a promise
      * the next search breaks.
      */
-    data class Started(val port: Int, val webUi: Boolean, val binary: ServerBinary, val healthy: Boolean = true) : StartOutcome
+    data class Started(val port: Int, val binary: ServerBinary, val healthy: Boolean = true) : StartOutcome
 
     /** Something already answered /health; the plugin did not spawn anything. */
     data object AlreadyRunning : StartOutcome
@@ -172,14 +168,12 @@ class RepotoryServerManager {
             ?: return StartOutcome.BinaryMissing(searchedLocations())
 
         val port = if (uri.port > 0) uri.port else 18765
+        // `--port` and nothing else: the panel stopped linking into the web UI
+        // when the card's deep link became "ask in place" (ADR-0044, third
+        // revision), so the only consumer of a service started from here is the
+        // human-only MoveNote. Someone who wants the knowledge UI in a browser
+        // starts the server themselves and passes `--web-dist` by hand.
         val command = mutableListOf(binary.file.absolutePath, "--port", port.toString())
-        val webDist = File(binary.file.parentFile ?: File("."), "web")
-        val webUi = File(webDist, "index.html").isFile
-        if (webUi) {
-            // The release bundle lays the server binary next to `web/`, so the
-            // deep links work without the user passing --web-dist by hand.
-            command += listOf("--web-dist", webDist.absolutePath)
-        }
 
         return try {
             val logFile = File(com.intellij.openapi.application.PathManager.getLogPath(), "repotory-server.log")
@@ -196,7 +190,7 @@ class RepotoryServerManager {
             while (System.currentTimeMillis() < deadline) {
                 if (repotoryClient.ping(serverUrl)) {
                     onProgress?.invoke("Service is up.")
-                    return StartOutcome.Started(port, webUi, binary, healthy = true)
+                    return StartOutcome.Started(port, binary, healthy = true)
                 }
                 if (!child.isAlive) {
                     val tail = logTail(logFile)
@@ -223,7 +217,7 @@ class RepotoryServerManager {
             // working service: say so instead of handing back a promise the
             // next search would break.
             onProgress?.invoke("The process is running but the service is not answering yet.")
-            StartOutcome.Started(port, webUi, binary, healthy = false)
+            StartOutcome.Started(port, binary, healthy = false)
         } catch (e: Exception) {
             Logger.getInstance(LOG).warn("repotory-server start failed", e)
             StartOutcome.Failed("Could not start ${binary.file.absolutePath}: ${e.message ?: e.javaClass.simpleName}")
@@ -314,35 +308,6 @@ fun chooseServerBinary(): File? {
         .withTitle("Select the repotory-server executable")
     val chosen = FileChooser.chooseFile(descriptor, null, null) ?: return null
     return File(chosen.path)
-}
-
-/** The install guidance shown when no binary was found; returns the user's choice. */
-fun offerServerBinaryHelp(searched: String): Boolean {
-    val choice = Messages.showDialog(
-        "No repotory-server executable was found. Looked in:\n\n$searched\n\n" +
-            "Download the release bundle (the binary plus its web UI) and point the plugin at it, " +
-            "or set repotory.serverBinaryPath in Settings | Tools | Cinder.",
-        "Cinder: local service binary not found",
-        arrayOf("Set Path…", "Open Download Page", "Cancel"),
-        0,
-        Messages.getWarningIcon(),
-    )
-    return when (choice) {
-        0 -> {
-            val chosen = chooseServerBinary()
-            if (chosen != null) {
-                RepotorySettings.setServerBinaryPath(chosen.absolutePath)
-                true
-            } else {
-                false
-            }
-        }
-        1 -> {
-            BrowserUtil.browse(RELEASES_URL)
-            false
-        }
-        else -> false
-    }
 }
 
 /**

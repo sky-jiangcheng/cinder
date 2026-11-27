@@ -13,7 +13,7 @@ One VSIX covers the whole fork family — **VS Code, Cursor and Windsurf**.
 | Command `Cinder: Ask the Knowledge Base` | Asks `repotory_ask` and appends the answer — with its sources — to the chat console |
 | Command `Cinder: Search Knowledge` | Full-text search (FTS5) across every note you captured; the workspace path is sent so notes recorded in the matched repository rank first (ranking only, nothing filtered). The hits are appended to the chat console as a **Notes** turn |
 | Command `Cinder: Search Approved Knowledge Pages` | Searches the approved knowledge pages (`repotory_wiki_search`) and appends them as a **Pages** turn |
-| Sidebar view "Cinder Chat" (Cinder activity bar) | The chat console — see below. The panel is a conversation: one turn per question, the old turns folded away, every detail opened in place. Its scope chip is **locked to the current project** by default; click it to search across all projects. The panel draws its **own** header row — brand plus four inline icon buttons: **Search notes**, **AI provider**, **Diagnostics** and **Desktop app**. They live inside the panel, not in the view's title bar, so the host cannot clip them (ADR-0044) |
+| Sidebar view "Cinder Chat" (Cinder activity bar) | The chat console — see below. The panel is a conversation: one turn per question, the old turns folded away, every detail opened in place. Its scope chip is **locked to the current project** by default; click it to search across all projects. The panel draws its **own** header row — brand plus three inline icon buttons: **conversation history**, **new conversation**, **AI provider**. They live inside the panel, not in the view's title bar, so the host cannot clip them (ADR-0044). There is no "open the desktop app" action anywhere — not in the panel, not in the command palette: the panel is the product in this window |
 | Status bar `$(repo) Cinder` | Click = load context; the tooltip names the resolved workspace (project / repository and its path) once resolved |
 | Command `Cinder: Register MCP Server` | Runs the bundled `repotory-init --with-hook` silently in the background (no terminal): registers the MCP server for Claude Code / Cursor / VS Code / Windsurf and installs the SessionEnd hook. The installer ships inside the extension, so this works in any project — it is not limited to the Cinder repository |
 | Command `Cinder: Setup & Diagnostics` | One panel showing four checks — `cinder-mcp` binary, local service, workspace resolution, MCP client config — each with the fix action next to it. Use this instead of guessing why something is not working |
@@ -25,7 +25,7 @@ The panel is a **conversation**, not a result list (ADR-0036). You ask a questio
 
 ```
 ┌──────────────────────────────────────────────┐
-│ Cinder                        ⌕  ⚙  ⚠  ↗   │  ← brand + four icon buttons
+│ Cinder                          ☰  ＋  ⚙  │  ← brand + three icon buttons
 ├──────────────────────────────────────────────┤
 │ ▸ 3 earlier turns                            │  ← the folded history
 │                                              │
@@ -41,14 +41,14 @@ The panel is a **conversation**, not a result list (ADR-0036). You ask a questio
 │ ┌──────────────────────────────────────────┐ │
 │ │ Ask about this project…            [➤]   │ │  ← the send key sits in the box
 │ └──────────────────────────────────────────┘ │
-│ [Ask][Notes][Pages]                   [🔒 Cinder] │
+│ (Ask)(Notes)(Pages)                  (⚿ Cinder) │  ← one segmented control
 └──────────────────────────────────────────────┘
 ```
 
 - **Four modes.** **Ask** (the default) calls `repotory_ask` and gives an *answer* with its sources — not a list of titles. **Notes** calls `repotory_notes_search`, **Pages** calls `repotory_wiki_search`. The mode switch sits in the composer, next to the scope chip.
-- **Locked to this project.** The chip shows `🔒 <project>`: the panel asks about the project your workspace belongs to. Click the chip to unlock it and search across all projects — the lock is a default, not a restriction. For **Ask** and **Pages** the project is a real server-side filter; **Notes** has no project parameter in the tool surface, so the panel filters the returned hits itself and says how many of them belong to the locked project (the count is never dressed up as "everything").
+- **Locked to this project.** The chip shows a lock and `<project>`: the panel asks about the project your workspace belongs to. Click the chip to unlock it and search across all projects — the lock is a default, not a restriction. For **Ask** and **Pages** the project is a real server-side filter; **Notes** has no project parameter in the tool surface, so the panel filters the returned hits itself and says how many of them belong to the locked project (the count is never dressed up as "everything").
 - **The history folds.** Only the two most recent turns stay open; older ones collapse into one row (`▸ N earlier turns`). Every answer's source list collapses into `Sources (N)`. The fold state is explicit and sticks — a collapsed turn stays collapsed while the next turn arrives.
-- **Details open in place.** Clicking a card fetches the full body over `repotory_notes_read` / `repotory_wiki_read` and opens it inside the card, with **Open in Cinder**, **Copy**, and — for notes — **Edit**, **New note here** and **AI Tidy**. **Open in Cinder** deep-links the item into the Cinder web UI (`/project/<id>?noteId=<id>` for a note, `?tab=todos` for a todo, `/wiki/<id>` for a page); it is best-effort — the extension asks the local service whether it actually serves the web UI first, and says so instead of dropping you on a 404 when it does not.
+- **Details open in place.** Clicking a card fetches the full body over `repotory_notes_read` / `repotory_wiki_read` and opens it inside the card — and **Ask about this** asks about that exact item: the question goes into the composer and is submitted, so the follow-up is the next turn in the same feed. For notes the card also offers **Edit**, **New note here** and **AI Tidy**. Nothing jumps out to another window: the card is a pointer, not a destination.
 - **Status and errors live in an announcement bar** at the top of the feed, not in a status line at the bottom — dismissible, and the bottom belongs to the composer.
 
 The panel follows your editor theme — every surface is a VS Code theme color — so it looks native in light and dark alike.
@@ -89,12 +89,12 @@ The tidy proposal is generated server-side by the shared service layer (`Organiz
 | `Ctrl+Alt+R` `H` (`Ctrl+Cmd+R` `H` on macOS) | Record Session Handoff |
 | `Ctrl+Alt+R` `S` (`Ctrl+Cmd+R` `S` on macOS) | Search Knowledge |
 
-All commands remain in the Command Palette; rebind them in *Preferences → Keyboard Shortcuts* if the defaults collide with yours. The panel's own header carries the four icon buttons instead — the view's title bar stays empty, which is what keeps them from being clipped by the host.
+All commands remain in the Command Palette; rebind them in *Preferences → Keyboard Shortcuts* if the defaults collide with yours. The panel's own header carries the three icon buttons instead — the view's title bar stays empty, which is what keeps them from being clipped by the host.
 
 ## Requirements
 
 - The `cinder-mcp` binary — install it via Homebrew, Scoop or the GitHub Releases page. It does **not** have to be on your PATH: the extension resolves it in this order and stops at the first hit — `repotory.mcpPath`, `REPOTORY_MCP_BIN`, the extension's own storage, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. If none matches, **"Cinder: Set cinder-mcp Path"** opens a file picker. The desktop app is optional; the MCP server alone is enough.
-- Optional: a running `repotory server`. The chat console works without it over `cinder-mcp` alone — the **project lock runs over MCP too**: the panel asks the `repotory_workspace_resolve` tool (the MCP twin of the read-only `ResolveWorkspacePath` binding, ADR-0062) which project your folder belongs to, and with no MCP channel there is no project to lock to, so the panel says so and searches across all projects instead. The local service is still needed for **filing** an unrecognized folder under a project (`BindWorkspaceToProject`), moving a note between projects, deep links, and the panel's **AI provider settings** — and since ADR-0063 (A-light) it starts with one click: **"Cinder: Start Local Service"** (command palette, the diagnostics panel's 本地服务 row, or the announcement button when the provider sheet cannot reach the service). It never fights a running instance, only starts a loopback address, only from a binary you already have (`repotory.serverBinary` / `REPOTORY_SERVER_BIN` / PATH / common dirs), and stops only the process it started. Fetch it once from the GitHub Releases page (the `cinder-server-*` archive carries the binary and its `web/`).
+- Optional: a running `repotory server`. The chat console works without it over `cinder-mcp` alone — the **project lock runs over MCP too**: the panel asks the `repotory_workspace_resolve` tool (the MCP twin of the read-only `ResolveWorkspacePath` binding, ADR-0062) which project your folder belongs to, and with no MCP channel there is no project to lock to, so the panel says so and searches across all projects instead. The local service is still needed for **filing** an unrecognized folder under a project (`BindWorkspaceToProject`) and moving a note between projects — the panel's **AI provider settings** go over MCP since ADR-0063 — and since ADR-0063 (A-light) it starts with one click: **"Cinder: Start Local Service"** (command palette, the diagnostics panel's 本地服务 row, or the announcement button when the provider sheet cannot reach the service). It never fights a running instance, only starts a loopback address, only from a binary you already have (`repotory.serverBinary` / `REPOTORY_SERVER_BIN` / PATH / common dirs), and stops only the process it started. Fetch it once from the GitHub Releases page (the `cinder-server-*` archive carries the binary and its `web/`).
 
 ## First launch
 

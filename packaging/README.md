@@ -37,16 +37,18 @@ tag, and the manifests below point at them:
 | `cinder-capture-<version>-darwin-arm64.tar.gz` / `cinder-capture-<version>-darwin-amd64.tar.gz` | macOS capture CLI | Homebrew Cask |
 | `cinder-capture-<version>-linux-amd64.tar.gz` | Linux capture CLI | Homebrew Formula |
 | `cinder-capture-<version>-windows-amd64.zip` | Windows capture CLI | Scoop |
-| `cinder-server-<version>-darwin-arm64.tar.gz` / `cinder-server-<version>-darwin-amd64.tar.gz` | macOS headless server + web UI | manual — deep links (enhancement) + IDE provider configuration (substantive gap, see ADR-0063) |
-| `cinder-server-<version>-linux-amd64.tar.gz` | Linux headless server + web UI | manual — deep links (enhancement) + IDE provider configuration (substantive gap, see ADR-0063) |
-| `cinder-server-<version>-windows-amd64.zip` | Windows headless server + web UI | manual — deep links (enhancement) + IDE provider configuration (substantive gap, see ADR-0063) |
+| `cinder-server-<version>-darwin-arm64.tar.gz` / `cinder-server-<version>-darwin-amd64.tar.gz` | macOS headless server + web UI | manual — the plugin needs it only for human-only writes (`MoveNote`, filing a workspace; see ADR-0063) |
+| `cinder-server-<version>-linux-amd64.tar.gz` | Linux headless server + web UI | manual — the plugin needs it only for human-only writes (`MoveNote`, filing a workspace; see ADR-0063) |
+| `cinder-server-<version>-windows-amd64.zip` | Windows headless server + web UI | manual — the plugin needs it only for human-only writes (`MoveNote`, filing a workspace; see ADR-0063) |
 
 The desktop app is macOS/Windows/Linux, but only macOS has a real installer
 artifact (`.dmg`); Linux ships a bare tarball and Windows a zip. The MCP server
 is a pure Go / zero-CGO binary, so it installs cleanly everywhere via a Formula
-or Cask `binary` stanza. The `cinder-server-*` bundles carry the binary plus
-its `web/` directory; the JetBrains plugin passes `--web-dist <bundle>/web`
-when it starts one, so result deep links work without any manual flag.
+or Cask `binary` stanza. The `cinder-server-*` bundles carry the binary plus its `web/` directory.
+Neither plugin passes `--web-dist` when it starts one: since the card's deep link
+became "ask in place", the panels never link into the web UI (ADR-0044, third
+revision), and the only consumer of a service they start is the human-only
+`MoveNote`. Pass the flag yourself if you want the knowledge UI in a browser.
 
 ## Version is never edited by hand
 

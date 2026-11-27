@@ -7,9 +7,8 @@
 // makes?
 //
 //   1. search  — a query returns hits the panel can render;
-//   2. deep link — a hit opens the SPA route, and a server WITHOUT `--web-dist`
-//                  is refused with the panel's own explanation instead of a
-//                  dead 404 (ADR-0035 decision 6);
+//   2. read    — opening a card loads its whole body in place, over MCP; the
+//                pane has no second window to fall back on;
 //   3. ask     — a question comes back as an answer with its source list.
 //
 // No editor, no webview, no display: the model is plain TypeScript (ADR-0036
@@ -33,7 +32,6 @@ import type { Transport } from "../chatSession.js";
 
 const MCP_BIN = process.env.CINDER_E2E_MCP ?? "";
 const SERVER_BIN = process.env.CINDER_E2E_SERVER ?? "";
-const WEB_DIST = process.env.CINDER_E2E_WEB_DIST ?? "";
 const HOME_DIR = process.env.CINDER_E2E_HOME ?? "";
 
 /** The port the fake model listens on. */
@@ -46,8 +44,6 @@ let ai: Server | null = null;
 /** The seeded note's id, read back from the write. */
 let noteId = 0;
 
-/** What the panel asked the host to open. */
-const opened: string[] = [];
 /** Everything the panel posted, so a turn can be read back. */
 const posted: ViewMessage[] = [];
 
@@ -76,10 +72,14 @@ async function waitHealthy(url: string, timeoutMs = 20_000): Promise<void> {
   throw new Error(`cinder-server never became healthy at ${url}: ${lastErr}`);
 }
 
-function startServer(port: number, withWebDist: boolean): ChildProcess {
-  const args = ["-port", String(port)];
-  if (withWebDist && WEB_DIST) args.push("--web-dist", WEB_DIST);
-  return spawn(SERVER_BIN, args, {
+/**
+ * Start a server on `port`.
+ *
+ * No `--web-dist`: the panels no longer link into the web UI, so the API is all
+ * the gate needs (the panel's own read path is MCP).
+ */
+function startServer(port: number): ChildProcess {
+  return spawn(SERVER_BIN, ["-port", String(port)], {
     env: { ...process.env, HOME: HOME_DIR },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -141,9 +141,6 @@ function realTransport(): Transport {
     rpc: (method, args) => rpc(method, args),
     serverUrl: () => serverUrl,
     workspacePath: () => undefined,
-    openExternal: async (url: string) => {
-      opened.push(url);
-    },
   };
 }
 
@@ -159,11 +156,10 @@ before(async () => {
 
   ai = await startFakeModel();
 
-  // ONE server, started WITH the web UI: the deep-link journey needs a server
-  // that serves the SPA (the other branch is covered by the second journey
-  // below, which points the panel at an API-only port).
+  // ONE server, API-only: seeding goes through its RPC bridge, the panel's own
+  // read path is MCP, and nothing links into the web UI any more.
   const port = 19872;
-  server = startServer(port, true);
+  server = startServer(port);
   serverUrl = `http://127.0.0.1:${port}`;
   server.stderr?.on("data", () => {});
   await waitHealthy(serverUrl);
@@ -212,46 +208,26 @@ test("journey 1: the panel searches the real MCP server and renders hits", async
   session.dispose();
 });
 
-test("journey 2: a deep link opens the SPA route, and an API-only server is refused out loud", async () => {
+test("journey 2: a card opens in place and its whole body arrives over MCP", async () => {
   const session = new ChatSession(realTransport(), m => posted.push(m));
   await session.run("retry 503", "notes");
   const card = (lastTurn().cards ?? [])[0] as HitCard;
   assert.ok(card);
 
-  // (a) The UI-serving server: the route reaches openExternal.
-  opened.length = 0;
-  await session.handle({ type: "open", card } as ExtMessage);
-  assert.equal(opened.length, 1, "the deep link never reached the host");
-  assert.equal(
-    opened[0],
-    `http://127.0.0.1:19872/project/1?noteId=${noteId}`,
-    "the deep link must point at the row the search actually returned",
-  );
+  // The panel has no second window: the card is opened where it sits, and the
+  // body comes back inside the same turn. This journey used to assert a deep
+  // link into the web UI — the link is gone because the body was always here.
+  await session.handle({
+    type: "expandCard",
+    turnId: lastTurn().id,
+    cardType: card.type,
+    cardId: card.id,
+  } as ExtMessage);
 
-  // (b) An API-only server: the panel must SAY so, not open a 404.
-  const apiOnly = startServer(19873, false);
-  apiOnly.stderr?.on("data", () => {});
-  try {
-    await waitHealthy("http://127.0.0.1:19873");
-    const apiUrl = "http://127.0.0.1:19873";
-    // Point the same session at the API-only port for this call.
-    const transport = realTransport();
-    const apiSession = new ChatSession(
-      { ...transport, serverUrl: () => apiUrl, openExternal: async u => void opened.push(u) },
-      m => posted.push(m),
-    );
-    await apiSession.run("retry 503", "notes");
-    const apiCard = (lastTurn().cards ?? [])[0] as HitCard;
-    assert.ok(apiCard);
-    opened.length = 0;
-    await apiSession.handle({ type: "open", card: apiCard } as ExtMessage);
-    assert.equal(opened.length, 0, "an API-only server must not be opened as if it served the UI");
-    const warns = posted.filter(m => m.type === "announce" && m.level === "warn");
-    assert.ok(warns.length >= 1, "the refusal must be announced, not silent");
-    apiSession.dispose();
-  } finally {
-    apiOnly.kill();
-  }
+  const opened = (lastTurn().cards ?? []).find(c => c.type === card.type && c.id === card.id);
+  assert.equal(opened?.detail?.source, "note", `the card body did not arrive: ${JSON.stringify(opened?.detail)}`);
+  assert.equal(opened?.detail?.id, noteId, "the card opened a different note");
+  assert.match(opened?.detail?.body ?? "", /pay-gateway/, "the body is not the note the search returned");
   session.dispose();
 });
 

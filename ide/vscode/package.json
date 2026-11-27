@@ -61,14 +61,6 @@
       {
         "command": "repotory.setMcpPath",
         "title": "Cinder: Set repotory-mcp Path"
-      },
-      {
-        "command": "repotory.openDesktop",
-        "title": "Cinder: Open Desktop App",
-        "icon": {
-          "light": "media/icon-desktop-light.svg",
-          "dark": "media/icon-desktop-dark.svg"
-        }
       }
     ],
     "keybindings": [
