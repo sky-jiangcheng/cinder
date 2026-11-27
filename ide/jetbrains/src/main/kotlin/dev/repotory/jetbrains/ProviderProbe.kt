@@ -1,7 +1,7 @@
-// Direct probes for the AI provider dialog, sent by the IDE straight at the
+// Direct probes for the AI provider settings page, sent by the IDE straight at the
 // configured endpoint.
 //
-// Same reason as the VS Code panel's aiProbe.ts: the dialog's other actions
+// Same reason as the VS Code panel's aiProbe.ts: the page's other actions
 // (read config, save, "test the saved provider") go through the local Cinder
 // service's /api/rpc bridge, because the settings and the stored key live in
 // the service's database. But "does this endpoint answer" is a property of the

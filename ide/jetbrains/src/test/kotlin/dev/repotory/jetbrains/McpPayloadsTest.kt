@@ -32,10 +32,8 @@ class McpPayloadsTest {
         assertEquals(7L, hits[0].projectId)
         assertEquals("FTS5 quirk", hits[0].title)
         assertEquals("content tables answer", hits[0].snippet)
-        // The route vocabulary belongs to the frontend (web/src/App.tsx): a
-        // note opens ?noteId=, a todo opens the todo tab.
-        assertEquals("/project/7?noteId=42", hits[0].route)
-        assertEquals("/project/7?tab=todos", hits[1].route)
+        assertEquals("todo", hits[1].type)
+        assertEquals(9L, hits[1].id)
     }
 
     @Test
@@ -168,7 +166,7 @@ class McpPayloadsTest {
         assertEquals("time-state-graph", page.slug)
         assertEquals("concept", page.kind)
         assertEquals(0L, page.projectId)
-        assertEquals("/wiki/45", page.route)
+        assertEquals("Time-state graph", page.title)
         assertEquals("why we need it", page.snippet)
     }
 

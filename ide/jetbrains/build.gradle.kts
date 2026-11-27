@@ -189,7 +189,6 @@ tasks {
             "CINDER_E2E_MCP" to "cinder.e2e.mcp",
             "CINDER_E2E_SERVER" to "cinder.e2e.server",
             "CINDER_E2E_HOME" to "cinder.e2e.home",
-            "CINDER_E2E_WEB_DIST" to "cinder.e2e.webDist",
         )
         var gateConfigured = false
         for ((envKey, prop) in gateProps) {

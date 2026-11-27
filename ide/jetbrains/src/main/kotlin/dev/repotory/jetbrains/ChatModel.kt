@@ -123,6 +123,30 @@ sealed interface CardBody {
 /** One search hit as a card in the feed, with its body once it is opened. */
 data class ChatCard(val hit: RepotoryHit, val body: CardBody? = null)
 
+/**
+ * The question "Ask about this" asks about a card.
+ *
+ * The card is a pointer, not a destination: its body already opens in place,
+ * so what a reader wants next is an answer ABOUT it — in this feed — not a
+ * trip to another window.
+ *
+ * The id and the title are in the question because `repotory_ask` retrieves
+ * by text — naming the item is what keeps the answer about THIS one.
+ */
+fun followUpQuestion(hit: RepotoryHit): String {
+    val kind = when (hit.type) {
+        "wiki" -> "page"
+        "todo" -> "todo"
+        else -> "note"
+    }
+    // The title sits inside quotes, so its own quotes become apostrophes: a
+    // nested pair would end the phrase early and read as a typo.
+    val title = hit.title.trim().replace('"', '\'')
+        .let { if (it.length <= 80) it else it.take(79) + "…" }
+        .ifBlank { "(untitled)" }
+    return "Tell me about $kind #${hit.id} \"$title\": what it says, and why it matters."
+}
+
 /** One question and everything it produced. */
 data class ChatTurn(
     /** Session-assigned id; the UI uses it to address this turn. */

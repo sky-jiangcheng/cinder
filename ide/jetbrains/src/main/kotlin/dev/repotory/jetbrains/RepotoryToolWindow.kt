@@ -6,9 +6,10 @@
 // region:
 //
 //   ┌──────────────────────────────────────────────────────────┐
-//   │ ▪ Cinder  the local-first memory layer…    [● online][↻][▶]│  ① header
-//   ├──────────────────────────────────────────────────────────┤
-//   │ ⚠ announcement bar — one line, dismissible                │  ② announcement
+//   │ ▪ Cinder                                   ●  ☰  ＋  ⚙  │  ① header
+//   ├──────────────────────────────────────────────────────────┤     (icon strip,
+//   │ ⚠ announcement bar — one line, dismissible, only when     │  ② only when there
+//   │   there is something to say                               │     is something to say)
 //   ├──────────────────────────────────────────────────────────┤
 //   │ ▸ 3 earlier turns                                        │  ④ folded history
 //   │ [ASK] why does the gateway retry 503?                     │  ③ the feed
@@ -18,12 +19,24 @@
 //   │       ┌ note #42 ──────────────────────────────┐          │
 //   │       │ FTS5 quirk                             │          │
 //   │       │ content tables answer…                 │          │
-//   │       │ Open in Cinder · Copy · Edit …       │          │
+//   │       │ Ask about this · Edit · AI Tidy …    │          │
 //   │       └────────────────────────────────────────┘          │
 //   ├──────────────────────────────────────────────────────────┤
-//   │ [ what do you want to know?                       ]        │  ⑤ input area
-//   │ [Ask][Notes][Pages]                    [🔒 pay-common][Send]│
+//   │ ┌ what do you want to know?                       ┌───┐ │  ⑤ the composer
+//   │ │                                                │ ↑ │ │
+//   │ └────────────────────────────────────────────────└───┘ │
+//   │ (Ask)(Notes)(Pages)                     (⚿ pay-common)   │
 //   └──────────────────────────────────────────────────────────┘
+//
+// The chrome is HIDDEN (2026-11-26, ADR-0044 revision): the header is a mark,
+// a wordmark, one channel dot and three 24px icons; every setup-class action
+// (locate the MCP binary, start the local service, configure the AI provider)
+// lives in the settings tree the gear opens. The conversation row above the
+// feed exists only in shared mode. Nothing else is drawn permanently — a
+// 300px sidebar has room for the conversation or for chrome, not both.
+// There is NO "open the desktop app" button: the panel is the product in this
+// window, and a button whose only job is to send the reader elsewhere says
+// the panel is a preview of the real thing.
 //
 // Why it changed: a result that REPLACES the previous one cannot be read as
 // a sequence, and Cinder's value is in the sequence — a gotcha is the
@@ -47,21 +60,15 @@
 //     while other turns arrive.
 package dev.repotory.jetbrains
 
-import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.actionSystem.ActionGroup
-import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.openapi.actionSystem.ActionToolbar
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -78,15 +85,13 @@ import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Component
-import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Font
 import java.awt.Graphics
 import java.awt.Graphics2D
+import java.awt.FlowLayout
 import java.awt.GridLayout
-import java.awt.Insets
 import java.awt.RenderingHints
-import java.awt.datatransfer.StringSelection
 import java.awt.event.FocusAdapter
 import java.awt.event.FocusEvent
 import java.awt.event.KeyAdapter
@@ -94,10 +99,7 @@ import java.awt.event.KeyEvent
 import java.awt.image.BufferedImage
 import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
-import javax.swing.BorderFactory
 import javax.swing.BoxLayout
-import javax.swing.ButtonGroup
-import javax.swing.Icon
 import javax.swing.ImageIcon
 import javax.swing.DefaultListCellRenderer
 import javax.swing.JButton
@@ -109,7 +111,6 @@ import javax.swing.JEditorPane
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JTextArea
-import javax.swing.JToggleButton
 import javax.swing.SwingUtilities
 import javax.swing.UIManager
 import javax.swing.event.HyperlinkEvent
@@ -117,24 +118,6 @@ import kotlin.math.ceil
 
 /** The notification group the plugin posts its service problems to. */
 private const val NOTIFICATION_GROUP = "Cinder"
-
-/** Where the desktop app is downloaded from, when it is not installed. */
-private const val RELEASES_URL = "https://github.com/sky-jiangcheng/cinder/releases"
-
-/**
- * The state of the connection to the Cinder service.
- *
- * It is a closed set because the panel shows it as a pill and every state
- * needs its own wording: "offline" and "starting" mean different things to
- * the user, and collapsing them into "not connected" is how a reader ends up
- * waiting for a service that was never coming.
- */
-private enum class LinkState {
-    ONLINE,
-    OFFLINE,
-    STARTING,
-    CHECKING,
-}
 
 class RepotoryToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -178,7 +161,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private var displayedThread: String? = null
     private var localDraft = ""
     private val sharedDrafts = mutableMapOf<String?, String>()
-    private val modeToggles = mutableMapOf<ChatMode, JToggleButton>()
+    private val modeToggles = mutableMapOf<ChatMode, ModePill>()
 
     /**
      * The conversation picker, built once and hosted in a DIALOG.
@@ -191,10 +174,20 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      */
     private lateinit var pickerPanel: JPanel
 
-    /** The conversation the panel is showing: local console or a shared thread. */
-    private val topicLabel = JLabel("Local console · Ask / Notes / Pages")
+    /**
+     * One line above the feed naming the conversation in use.
+     *
+     * It exists ONLY in shared mode. The local console is the default and its
+     * name is the panel's name; a permanent "Local console · Ask / Notes /
+     * Pages" row said nothing the mode group and the header do not already
+     * say (the VS Code panel has no such row at all).
+     */
+    private val topicLabel = JLabel("")
 
-    /** Once-per-panel offer to open the AI provider dialog (a 404 is fixable). */
+    /** The bar that hosts [topicLabel]; hidden while the local console is on. */
+    private val topicBar = JPanel(BorderLayout(JBUI.scale(6), 0))
+
+    /** Once-per-panel offer to open the AI provider settings (a 404 is fixable). */
     private var providerHelpOffered = false
 
     private data class ThreadChoice(val id: String?, val label: String) {
@@ -203,19 +196,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private val feed = JEditorPane()
     private val feedScroll = JBScrollPane(feed)
     private val announcement = AnnouncementBar()
-    private val pill = ConnectionPill()
-    private val serviceToolbar: ActionToolbar
-
-    /**
-     * The panel's own action strip (ADR-0044 decision 2).
-     *
-     * The SAME four actions the VS Code panel draws in its header, in the
-     * same order. There the host's title bar cropped the third one off the
-     * panel edge, so the strip moved into the webview; Swing draws its own
-     * chrome, so here it was always the panel's — but it has to be the same
-     * four, or the two IDEs stop being the same product.
-     */
-    private val actionToolbar: ActionToolbar
+    private val statusDot = StatusDot()
 
     /** The composer's text field. */
     private val inputField = ChatTextArea()
@@ -223,8 +204,11 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     /** The composer's scroll pane — it grows with the question. */
     private val fieldScroll = JBScrollPane(inputField)
 
+    /** The composer's frame: the input and the send key in one rounded box. */
+    private val fieldBox = ComposerField()
+
     /** The scope chip: which project the panel is locked to. */
-    private val scopeChipButton = JButton("All projects")
+    private val scopeChipButton = ChipButton("All projects", "Which project the panel is scoped to")
 
     /**
      * The collapsed turns, the expanded source lists and the opened cards.
@@ -236,6 +220,9 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     private val collapsedTurns = mutableSetOf<String>()
     private val expandedSources = mutableSetOf<String>()
     private val expandedCards = mutableSetOf<String>()
+
+    /** Turns whose inline reasoning is open. Folded by default (Thinking ▸). */
+    private val expandedThoughts = mutableSetOf<String>()
 
     /** Whether the folded history is open. */
     private var showEarlier = false
@@ -254,9 +241,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      */
     private var mcpHelpOffered = false
 
-    /** True while a start is in flight, so a second click cannot double-spawn. */
-    private var starting = false
-
     init {
         // JPanel ships with a FlowLayout; BorderLayout has to replace it
         // before the regions are added, and removeAll() clears the
@@ -264,17 +248,15 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         removeAll()
         layout = BorderLayout(0, 0)
 
-        serviceToolbar = buildToolbar("RepotoryService", serviceActions())
-        actionToolbar = buildToolbar("RepotoryActions", actionActions())
-        // Built before the header so the "Conversations" action has something
-        // to show; it is added to a dialog on demand, never to the panel.
+        // Built before the header so the history button has something to
+        // show; it is added to a dialog on demand, never to the panel.
         pickerPanel = conversationPicker()
 
         add(headerStrip(), BorderLayout.NORTH)
         add(conversationArea(), BorderLayout.CENTER)
         add(inputArea(), BorderLayout.SOUTH)
 
-        pill.onClick = { reconnect() }
+        statusDot.onClick = { reconnect() }
         feed.addHyperlinkListener { event -> onHyperlink(event) }
         announcement.onDismiss = { announcement.dismiss() }
         renderScope()
@@ -356,20 +338,23 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     }
 
     /**
-     * One line above the feed naming the conversation in use.
+     * One line above the feed naming the conversation in use — shared mode only.
      *
      * The picker moved into a dialog, so the panel must still say which
-     * conversation an answer will land in — otherwise "New conversation"
-     * silently changes the destination.
+     * conversation an answer will land in: "New conversation" must never
+     * change the destination silently. The local console needs no such line —
+     * it IS the panel, and the mode group already names its three faces.
      */
     private fun renderTopicLabel() {
         val state = shared.snapshot()
-        topicLabel.text = if (sharedSection) {
-            val title = state.selected?.title?.takeIf { it.isNotBlank() }
-            "Shared · " + (title ?: "no conversation selected")
-        } else {
-            "Local console · Ask / Notes / Pages"
+        if (!sharedSection) {
+            topicLabel.text = ""
+            topicBar.isVisible = false
+            return
         }
+        val title = state.selected?.title?.takeIf { it.isNotBlank() }
+        topicLabel.text = "Shared · " + (title ?: "no conversation selected")
+        topicBar.isVisible = true
     }
 
     private fun renderShared() {
@@ -406,132 +391,72 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     // ------------------------------------------------------------- header strip
 
     /**
-     * The top band: the mark, the wordmark, the panel's own action strip and
-     * the service actions.
+     * The top band: the mark, the wordmark, the channel dot and three icon
+     * buttons — the same strip the VS Code panel draws (ADR-0044 decision 2).
      *
-     * A slim native strip, not a printed card: every region has a flexible
-     * width, so a narrow tool window reflows instead of clipping.
+     * It used to be two platform `ActionToolbar`s whose actions carry no icon,
+     * so Swing drew them as TEXT buttons: "Refresh", "Start local service",
+     * "Conversations", "New", "AI provider", "Desktop app" plus a bordered
+     * `online` pill. Six words and a box, on the narrowest strip in the
+     * product, said nothing a 24px glyph cannot. The actions did not change —
+     * only where "Start local service" and "Refresh" live: setup and health
+     * belong on the settings page, and the dot re-checks the channel.
      *
-     * The action strip is the desktop app action the VS Code panel draws in
-     * its header (ADR-0044 decision 2): opening Cinder Desktop. VS Code had
-     * to move its panel actions out of the host title bar, where the host
-     * crops them; Swing draws its own chrome, so here it stays in-panel —
-     * but it is the same single action on both IDEs.
+     * The "Desktop app" button is GONE (2026-11-26): the panel is the product
+     * in this window, and a button whose only job is to send the reader
+     * somewhere else says the panel is a preview of the real thing.
      */
     private fun headerStrip(): JPanel {
-        val header = JPanel(BorderLayout(JBUI.scale(8), 0))
+        val header = JPanel(BorderLayout(JBUI.scale(6), 0))
         header.border = JBUI.Borders.compound(
             JBUI.Borders.customLineBottom(JBColor.border()),
-            JBUI.Borders.empty(5, 8),
+            JBUI.Borders.empty(3, 6),
         )
 
         val brand = JPanel(BorderLayout(JBUI.scale(6), 0))
         brand.isOpaque = false
-        markLabel(JBUI.scale(18))?.let { brand.add(it, BorderLayout.WEST) }
+        markLabel(JBUI.scale(16))?.let { brand.add(it, BorderLayout.WEST) }
         // The slogan line is gone (ADR-0044 decision 4): the panel says what
         // it does, not what the product is.
         val name = JLabel("Cinder")
         name.font = name.font.deriveFont(Font.BOLD)
         brand.add(name, BorderLayout.CENTER)
 
-        // The right side of the strip: the service actions, the panel's own
-        // actions and the status pill, side by side. They share ONE panel so
-        // they stay together at the right edge — a BorderLayout.CENTER would
-        // stretch the action strip and push the buttons away from the pill.
-        val right = JPanel(BorderLayout(JBUI.scale(6), 0))
-        right.isOpaque = false
-        right.add(serviceToolbar.component, BorderLayout.WEST)
-        val actions = JPanel(BorderLayout())
-        actions.isOpaque = false
-        actions.add(actionToolbar.component, BorderLayout.WEST)
-        right.add(actions, BorderLayout.CENTER)
-        right.add(pill, BorderLayout.EAST)
+        // The strip: the channel dot, then the three actions the VS Code
+        // panel draws — history, new conversation, settings.
+        val strip = JPanel()
+        strip.isOpaque = false
+        strip.layout = BoxLayout(strip, BoxLayout.X_AXIS)
+        strip.add(statusDot)
+        strip.add(IconButton(PanelIcons.history(), "Conversations — local console or a shared one") {
+            showConversations()
+        })
+        strip.add(IconButton(PanelIcons.plus(), "New shared conversation") { newSharedConversation() })
+        strip.add(IconButton(PanelIcons.gear(), "Settings — channel, local service, AI provider") { openSettings() })
 
         header.add(brand, BorderLayout.WEST)
-        header.add(right, BorderLayout.EAST)
+        header.add(strip, BorderLayout.EAST)
         return header
     }
 
-    /**
-     * The panel's own action strip: the desktop app action, the same action
-     * the VS Code panel draws in its header, with the same tooltip wording.
-     */
-    private fun actionActions(): ActionGroup = DefaultActionGroup(
-        // The same three entries the VS Code panel draws as header icons:
-        // history, new conversation, provider settings. Swing renders dirless
-        // actions as compact text buttons, which is the platform's own shape.
-        object : AnAction("Conversations", "Switch conversation (local console or a shared one)", null), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) = showConversations()
-        },
-        object : AnAction("New", "New shared conversation", null), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) = newSharedConversation()
-        },
-        object : AnAction("AI provider", "Configure the model endpoint that answers", null), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) = ProviderDialog().show()
-        },
-        object : AnAction("Desktop app", "Open the Cinder Desktop app", AllIcons.General.Web), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) = openDesktopApp()
-        },
-    )
-
     // ------------------------------------------------------- the header actions
 
-    /**
-     * The provider sheet (ADR-0044 decision 5).
-     *
-     * It is a dialog because Swing has no inline form surface, and it reads
-     * and writes the LOCAL SERVICE's settings — the plugin keeps no second
-     * copy, so the desktop app and this panel always use the same endpoint.
-     */
+    /** The gear: the plugin's settings page, with the provider page a step in. */
+    private fun openSettings() {
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, RepotoryConfigurable::class.java)
+    }
 
     /**
-     * Open the Cinder Desktop app.
+     * The AI provider page.
      *
-     * The desktop app is the FULL product; the panel is a thin client over
-     * it. Nothing is downloaded: when the app is not installed, the offer is
-     * the releases page.
+     * It used to be a `DialogWrapper` reachable from the header (ADR-0044
+     * decision 5). It is now a page of the settings tree: the endpoint, the
+     * key and the model are configuration, and configuration has one home —
+     * the same home as the MCP binary and the server address, so "where do I
+     * change that?" has one answer. See ADR-0044's 2026-11-26 revision.
      */
-    private fun openDesktopApp() {
-        val os = System.getProperty("os.name", "").lowercase()
-        val command = when {
-            os.contains("mac") -> listOf("open", "-a", "Cinder Desktop")
-            os.contains("win") -> listOf("repotory.exe")
-            else -> listOf("repotory")
-        }
-        background({
-            try {
-                val process = ProcessBuilder(command).redirectErrorStream(true).start()
-                if (!process.waitFor(10, TimeUnit.SECONDS)) {
-                    process.destroy()
-                    false
-                } else {
-                    process.exitValue() == 0
-                }
-            } catch (e: Exception) {
-                false
-            }
-        }) { started ->
-            if (started) {
-                showAnnouncement(ChatLevel.INFO, "Cinder Desktop app launched.")
-            } else {
-                val choice = Messages.showDialog(
-                    "The Cinder Desktop app was not found. Install it from the releases page.",
-                    "Cinder: desktop app not found",
-                    arrayOf("Open the releases page", "Cancel"),
-                    0,
-                    Messages.getWarningIcon(),
-                )
-                if (choice == 0) BrowserUtil.browse(RELEASES_URL)
-            }
-        }
+    private fun openProviderSettings() {
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, RepotoryProviderConfigurable::class.java)
     }
 
     /** The brand mark as an ImageIcon, scaled from the bundled PNG (Swing has no SVG). */
@@ -542,70 +467,29 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         return JLabel(ImageIcon(scaled))
     }
 
-    /**
-     * A platform toolbar for [group].
-     *
-     * The platform draws the buttons (hover, disabled, keyboard), so the
-     * panel does not have to keep its own copies of that behaviour.
-     */
-    private fun buildToolbar(place: String, group: ActionGroup): ActionToolbar {
-        val toolbar = ActionManager.getInstance().createActionToolbar(place, group, true)
-        toolbar.targetComponent = this
-        val component = toolbar.component
-        component.isOpaque = false
-        component.border = JBUI.Borders.empty()
-        return toolbar
-    }
-
-    /** Refresh (re-probe the channel) and Start (bring the local service up). */
-    private fun serviceActions(): ActionGroup = DefaultActionGroup(
-        object : AnAction("Refresh", "Re-check the Cinder channel", AllIcons.Actions.Refresh), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun actionPerformed(e: AnActionEvent) = reconnect()
-        },
-        object : AnAction("Start local service", "Start the local Cinder service", AllIcons.Actions.Execute), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
-
-            override fun update(e: AnActionEvent) {
-                // Always available: the local service is an OPTIONAL
-                // enhancement (deep links, moving a note between projects),
-                // not the panel's data channel.
-                e.presentation.isEnabled = !starting
-            }
-
-            override fun actionPerformed(e: AnActionEvent) = startLocalService()
-        },
-    )
-
     // --------------------------------------------------------- conversation area
 
     /**
-     * The announcement bar and the feed.
+     * The conversation bar and the feed.
      *
      * The feed is the ONLY scroll area (ADR-0036 decision 1): there is no
      * detail pane beside it, so a narrow tool window never squeezes a column
-     * of text into something unreadable.
-     */
-    /**
-     * The one-line conversation bar above the feed.
-     *
-     * It replaces the permanently visible picker: the conversation in use is
-     * still named (a switch must never be silent), the switch itself is one
-     * click away, and everything else the picker held lives in its dialog.
+     * of text into something unreadable. The bar above it is hidden unless a
+     * shared conversation is on screen — the local console needs no label.
      */
     private fun topicBar(): JPanel {
-        val bar = JPanel(BorderLayout(JBUI.scale(6), 0))
-        bar.border = JBUI.Borders.empty(3, 8)
-        bar.isOpaque = false
-        topicLabel.font = topicLabel.font.deriveFont(Font.PLAIN)
-        bar.add(topicLabel, BorderLayout.CENTER)
+        topicBar.border = JBUI.Borders.empty(3, 8)
+        topicBar.isOpaque = false
+        topicLabel.font = topicLabel.font.deriveFont(Font.PLAIN, topicLabel.font.size2D - 0.5f)
+        topicLabel.foreground = PanelPalette.muted
+        topicBar.add(topicLabel, BorderLayout.CENTER)
         val switch = JButton("Switch…").apply {
             toolTipText = "Choose the local console or a shared conversation"
             addActionListener { showConversations() }
         }
-        bar.add(switch, BorderLayout.EAST)
-        return bar
+        topicBar.add(switch, BorderLayout.EAST)
+        topicBar.isVisible = false
+        return topicBar
     }
 
     private fun conversationArea(): JPanel {
@@ -619,7 +503,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         feed.isEditable = false
         feed.editorKit = detailHtmlKit()
         feed.border = JBUI.Borders.empty()
-        feed.text = ChatConsoleHtml.render(emptyList(), false, emptySet(), emptySet(), emptySet())
+        feed.text = ChatConsoleHtml.render(emptyList(), false, emptySet(), emptySet(), emptySet(), emptySet())
         feed.caretPosition = 0
 
         // The scroll pane may take an empty border; its VIEWPORT may not:
@@ -637,37 +521,52 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     // ------------------------------------------------------------- input area
 
     /**
-     * The composer: the question, the three modes, the scope chip and Send.
+     * The composer: the question with its send key inside the box, the three
+     * modes and the scope chip on the row under it.
      *
-     * It is ALWAYS there (ADR-0036 decision 6): the old panel stacked "query on
-     * top, results below, detail below that", and the bottom of the window was
-     * a status line that had to be squeezed out of the way.
+     * It is ALWAYS there (ADR-0036 decision 6). The shape is the VS Code
+     * panel's (ADR-0044 decision 3): a bordered input with the send key
+     * inside it, a pill row under it — not a text field with a "Send" button
+     * beside it and three chunky toggles below.
      */
     private fun inputArea(): JPanel {
         val area = JPanel(BorderLayout(0, 0))
         area.border = JBUI.Borders.compound(
             JBUI.Borders.customLineTop(JBColor.border()),
-            JBUI.Borders.empty(6, 8),
+            JBUI.Borders.empty(6, 8, 7, 8),
         )
 
         val composer = JPanel(BorderLayout(0, JBUI.scale(5)))
+        composer.isOpaque = false
         inputField.placeholder = mode.placeholder
         inputField.onSubmit = { submit() }
         inputField.onResize = { fitInput() }
         inputField.addComponentListener(object : java.awt.event.ComponentAdapter() {
             override fun componentResized(e: java.awt.event.ComponentEvent) = fitInput()
         })
-        fieldScroll.border = BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(JBColor.border()),
-            JBUI.Borders.empty(1, 1),
-        )
-        composer.add(fieldScroll, BorderLayout.CENTER)
+        inputField.addFocusListener(object : FocusAdapter() {
+            override fun focusGained(e: FocusEvent) = run { fieldBox.focused = true }
+            override fun focusLost(e: FocusEvent) = run { fieldBox.focused = false }
+        })
+        fieldScroll.border = JBUI.Borders.empty(3, 2)
+        fieldScroll.isOpaque = false
+        fieldScroll.viewport.isOpaque = false
+        fieldBox.add(fieldScroll, BorderLayout.CENTER)
+        // The send key keeps its 26px size and sits at the field's bottom
+        // edge: a BorderLayout.EAST component would be stretched to the
+        // field's height, and the accent square would become an accent wall
+        // the moment the question wraps to five lines.
+        val sendCorner = JPanel(BorderLayout())
+        sendCorner.isOpaque = false
+        sendCorner.border = JBUI.Borders.empty(0, 1, 3, 3)
+        sendCorner.add(sendButton(), BorderLayout.SOUTH)
+        fieldBox.add(sendCorner, BorderLayout.EAST)
+        composer.add(fieldBox, BorderLayout.CENTER)
 
         val row = JPanel(BorderLayout(JBUI.scale(6), 0))
         row.isOpaque = false
         row.add(modeButtons(), BorderLayout.WEST)
-        row.add(scopeChip(), BorderLayout.CENTER)
-        row.add(sendButton(), BorderLayout.EAST)
+        row.add(scopeChip(), BorderLayout.EAST)
         composer.add(row, BorderLayout.SOUTH)
 
         area.add(composer, BorderLayout.CENTER)
@@ -688,38 +587,31 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         fieldScroll.revalidate()
     }
 
-    /** The three knowledge faces, as one selected at a time. */
+    /**
+     * The three knowledge faces, as one chosen at a time.
+     *
+     * They sit in ONE [SegmentTrack] because they are one choice: three
+     * separately bordered pills read as three unrelated switches, and on a
+     * narrow tool window they also used to take the whole row.
+     */
     private fun modeButtons(): JPanel {
-        val group = ButtonGroup()
-        val panel = JPanel(GridLayout(1, 3, JBUI.scale(3), 0))
-        panel.isOpaque = false
+        val track = SegmentTrack()
         for (candidate in ChatMode.entries) {
-            val button = JToggleButton(candidate.label)
+            val button = ModePill(candidate.label, candidate.placeholder)
             modeToggles[candidate] = button
-            button.isSelected = candidate == mode
-            button.toolTipText = candidate.placeholder
-            group.add(button)
-            button.addActionListener {
-                // A ButtonGroup lets the last toggle switch itself off; the
-                // panel always has exactly one mode, so it goes back on.
-                if (!button.isSelected) {
-                    button.isSelected = true
-                    return@addActionListener
-                }
-                switchMode(candidate)
-            }
-            panel.add(button)
+            button.chosen = candidate == mode
+            button.addActionListener { switchMode(candidate) }
+            track.add(button)
         }
-        return panel
+        return track
     }
 
     /** The scope chip: which project the panel is locked to. */
     private fun scopeChip(): JPanel {
-        val panel = JPanel(BorderLayout())
+        val panel = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0))
         panel.isOpaque = false
-        scopeChipButton.toolTipText = ""
         scopeChipButton.addActionListener { onScopeChipClicked() }
-        panel.add(scopeChipButton, BorderLayout.EAST)
+        panel.add(scopeChipButton)
         return panel
     }
 
@@ -757,12 +649,19 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         background { session.bindProject(candidates[index].id) }
     }
 
-    /** The send button. */
-    private fun sendButton(): JButton {
-        val button = JButton("Send")
-        button.addActionListener { submit() }
-        return button
-    }
+    /**
+     * The send key, inside the input box.
+     *
+     * A 26px accent square with a white arrow — the VS Code panel's `.send`
+     * sits at the same corner of the same box. A labelled "Send" button under
+     * the field read as a form submit and took its own row of width.
+     */
+    private fun sendButton(): JButton = IconButton(
+        PanelIcons.send(),
+        "Send (Enter). Shift+Enter for a new line.",
+        accent = true,
+        size = 26,
+    ) { submit() }
 
     /** Ask the current mode the question in the composer, and clear it. */
     private fun submit() {
@@ -808,8 +707,8 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             is ChatEvent.Announce -> {
                 showAnnouncement(event.level, event.message)
                 // A model-endpoint failure is the one error the reader can fix
-                // from this panel, so it points at the provider dialog instead
-                // of leaving a dead-end message.
+                // from this panel, so it points at the provider settings page
+                // instead of leaving a dead-end message.
                 if (event.level == ChatLevel.ERROR && needsProviderHint(event.message)) {
                     offerProviderHelpOnce()
                 }
@@ -829,7 +728,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             message.contains("404")
 
     /**
-     * Offer the provider dialog once per panel.
+     * Offer the provider settings page once per panel.
      *
      * A notification, not a modal: the endpoint can fail on every question, and
      * an unrequested dialog would interrupt the work each time. The reader can
@@ -842,10 +741,11 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         if (!manager.isGroupRegistered(NOTIFICATION_GROUP)) return
         manager.getNotificationGroup(NOTIFICATION_GROUP).createNotification(
             "Cinder: AI provider",
-            "The answer failed at the model endpoint. Configure the Base URL and model in the AI provider dialog.",
+            "The answer failed at the model endpoint. Configure the Base URL and model on the " +
+                "AI Provider settings page.",
             NotificationType.WARNING,
         ).apply {
-            addAction(NotificationAction.createSimple("AI provider…") { ProviderDialog().show() })
+            addAction(NotificationAction.createSimple("AI Provider settings…") { openProviderSettings() })
             notify(null)
         }
     }
@@ -861,7 +761,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
 
     private fun renderMode() {
         inputField.placeholder = if (sharedSection) "Ask the knowledge base in this shared conversation…" else mode.placeholder
-        modeToggles.forEach { (candidate, button) -> button.isSelected = candidate == mode }
+        modeToggles.forEach { (candidate, button) -> button.chosen = candidate == mode }
     }
 
     /**
@@ -895,25 +795,26 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                     "This workspace does not resolve to a Cinder project yet — " +
                         "the panel searches across all projects."
                 }
+                chip.locked = false
                 chip.isEnabled = true
             }
             scope.locked -> {
-                chip.text = scopeLabel("🔒 " + scope.projectName)
+                chip.text = scopeLabel(scope.projectName)
                 chip.toolTipText = "Locked to ${scope.projectName} — click to search across all projects."
+                chip.locked = true
                 chip.isEnabled = true
             }
             else -> {
                 chip.text = "All projects"
                 chip.toolTipText = "Searching across all projects — click to lock back to ${scope.projectName}."
+                chip.locked = false
                 chip.isEnabled = true
             }
         }
     }
 
-    /** The scope chip's wording is rendered by [renderScope]. */
-
     /**
-     * The announcement bar: one line, with a background, dismissible.
+     * The announcement bar: one line, with a level badge, dismissible.
      *
      * It replaces the old status line (ADR-0036 decision 5): a failure that
      * sits at the bottom of the window, under everything, is a failure the
@@ -934,6 +835,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             collapsedTurns = collapsedTurns,
             expandedSources = expandedSources,
             expandedCards = expandedCards,
+            expandedThoughts = expandedThoughts,
         )
         val bar = feedScroll.verticalScrollBar
         val wasAtBottom = bar.value + bar.visibleAmount >= bar.maximum - 16
@@ -983,18 +885,19 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                 showEarlier = !showEarlier
                 renderFeed()
             }
-            // The idle state's examples: they switch the knowledge face and
-            // put the cursor in the composer, so the reader's next move is
-            // one keystroke away.
-            "example" -> {
-                switchMode(
-                    when (parts.getOrNull(1)) {
-                        "notes" -> ChatMode.NOTES
-                        "pages" -> ChatMode.PAGES
-                        else -> ChatMode.ASK
-                    },
-                )
-                inputField.requestFocusInWindow()
+            // The idle state's examples. The two mode rows switch the face
+            // they name; the question row asks — its label IS a question, and
+            // a click that only moved the caret left the reader to retype it.
+            "example" -> when (parts.getOrNull(1)) {
+                "notes" -> {
+                    switchMode(ChatMode.NOTES)
+                    inputField.requestFocusInWindow()
+                }
+                "pages" -> {
+                    switchMode(ChatMode.PAGES)
+                    inputField.requestFocusInWindow()
+                }
+                else -> askNow(ChatConsoleHtml.EXAMPLE_ASK)
             }
             "turn" -> {
                 val turnId = parts.getOrNull(1) ?: return
@@ -1005,6 +908,9 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                     "sources" -> {
                         if (!expandedSources.remove(turnId)) expandedSources.add(turnId)
                     }
+                    "think" -> {
+                        if (!expandedThoughts.remove(turnId)) expandedThoughts.add(turnId)
+                    }
                 }
                 renderFeed()
             }
@@ -1014,7 +920,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
                 val cardId = parts.getOrNull(3)?.toLongOrNull() ?: return
                 when (parts.getOrNull(4)) {
                     "toggle" -> toggleCard(turnId, cardType, cardId)
-                    "open" -> openCard(turnId, cardType, cardId)
+                    "ask" -> askAboutCard(turnId, cardType, cardId)
                     "edit" -> editCard(turnId, cardType, cardId)
                     "create" -> newNoteUnder(turnId, cardType, cardId)
                     "organize" -> organizeCard(turnId, cardType, cardId)
@@ -1053,76 +959,37 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             ?.cards?.firstOrNull { it.hit.type == cardType && it.hit.id == cardId }
 
     /**
-     * Deep-link a card into the Cinder web UI.
+     * Ask a question about this card — now, in this feed.
      *
-     * Deep links are best-effort (ADR-0035 decision 6): a headless server
-     * started without `--web-dist` answers the API but 404s every other path,
-     * so opening the URL would drop the user on a dead page with no
-     * explanation at all. The probe asks the server whether it serves the UI
-     * first — the same question, the same way, the JetBrains plugin asks.
+     * The panel has no second window to fall back on: the body is already on
+     * screen (clicking the title loads it), and the conversation about it
+     * starts here too. The click IS the request: the composer is filled first
+     * (so the turn shows what was asked) and then submitted through the same
+     * path Enter uses. A button labelled "Ask about this" that only fills a
+     * field is asking the reader to press Enter for it.
+     *
+     * When the shared turn is busy, submit() declines and keeps the draft, so
+     * a click is never silently dropped.
      */
-    private fun openCard(turnId: String, cardType: String, cardId: Long) {
+    private fun askAboutCard(turnId: String, cardType: String, cardId: Long) {
         val hit = card(turnId, cardType, cardId)?.hit ?: return
-        val serverUrl = RepotorySettings.serverUrl()
-        val url = repotoryClient.deepLink(serverUrl, hit)
-        background({ repotoryClient.servesWebUi(serverUrl) }) { servesUi ->
-            if (!servesUi) {
-                offerFallback(url)
-            } else {
-                showAnnouncement(ChatLevel.INFO, "Opened $url")
-                BrowserUtil.browse(url)
-            }
-        }
+        askNow(followUpQuestion(hit))
     }
 
     /**
-     * The headless server serves its web UI only when it was started with
-     * `--web-dist` (cmd/server/main.go); without it every non-/api path is
-     * a 404 and the deep link goes nowhere. A server the plugin started carries
-     * its sibling `web/` automatically (RepotoryServer.kt); for one the user
-     * started by hand, the plugin cannot add the flag — but it can stop the
-     * user from landing on a bare 404 with no explanation.
+     * Ask [text] now: the composer first (so the turn records the question),
+     * then the same submit path Enter uses.
+     *
+     * Two places name a question — a card's "Ask about this" and the idle
+     * panel's question example — and they must behave alike: a click that
+     * names a question asks it. When the shared turn is busy, submit() keeps
+     * the draft and says so, so the click is never silently dropped.
      */
-    private fun offerFallback(url: String) {
-        val choice = Messages.showDialog(
-            "Cinder answered, but it is not serving its web UI, so this link lands on a 404 page.\n\n" +
-                "Either restart the running server with:\n" +
-                "  repotory-server --port 18765 --web-dist <release bundle>/web\n" +
-                "or stop it and press the start button, which launches the release bundle " +
-                "together with its web/ directory.\n\n" +
-                "URL: $url",
-            "Cinder: web UI not available",
-            arrayOf("Open Anyway", "Copy URL", "Cancel"),
-            2,
-            Messages.getWarningIcon(),
-        )
-        when (choice) {
-            0 -> BrowserUtil.browse(url)
-            1 -> {
-                CopyPasteManager.getInstance().setContents(StringSelection(url))
-                showAnnouncement(ChatLevel.INFO, "URL copied to clipboard")
-            }
-            else -> showAnnouncement(ChatLevel.INFO, "Cancelled — the link would have 404ed")
-        }
-    }
-
-    /** Copy the card's title and body to the clipboard. */
-    private fun copyCard(turnId: String, cardType: String, cardId: Long) {
-        val found = card(turnId, cardType, cardId) ?: return
-        val hit = found.hit
-        val body = when (val cardBody = found.body) {
-            null -> hit.snippet
-            is CardBody.NoteBody -> cardBody.note.body
-            is CardBody.PageBody -> cardBody.page.content
-            is CardBody.TextBody -> cardBody.text
-        }
-        val text = buildString {
-            appendLine(hit.title.ifBlank { "(untitled)" })
-            appendLine()
-            append(body)
-        }
-        CopyPasteManager.getInstance().setContents(StringSelection(text))
-        showAnnouncement(ChatLevel.INFO, "Copied to clipboard")
+    private fun askNow(text: String) {
+        switchMode(ChatMode.ASK)
+        inputField.text = text
+        submit()
+        inputField.requestFocusInWindow()
     }
 
     /**
@@ -1326,8 +1193,8 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
     /**
      * The card a freshly created note becomes.
      *
-     * The route vocabulary belongs to the frontend (web/src/App.tsx): a note
-     * opens the project page on the notes tab with ?noteId=.
+     * It is a card like any other: its body loads in place through
+     * `repotory_notes_read`, so nothing here points anywhere else.
      */
     private fun hitOf(note: NoteDetail): RepotoryHit = RepotoryHit(
         type = "note",
@@ -1335,7 +1202,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         projectId = note.projectId,
         title = note.title,
         snippet = snippetPlain(note.body, 140),
-        route = "/project/${note.projectId}?noteId=${note.id}",
     )
 
     // ------------------------------------------------------------- connection
@@ -1348,7 +1214,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      */
     private fun probeConnection() {
         if (disposed) return
-        pill.state = LinkState.CHECKING
+        statusDot.state = LinkState.CHECKING
         background({
             // The channel the panel actually depends on is MCP (ADR-0035),
             // not the local service: ask, search, read, write and organize all
@@ -1357,10 +1223,14 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
         }) { resolution ->
             if (resolution.found) {
-                pill.state = LinkState.ONLINE
+                statusDot.state = LinkState.ONLINE
             } else {
-                pill.state = LinkState.OFFLINE
+                statusDot.state = LinkState.OFFLINE
                 showAnnouncement(ChatLevel.WARN, resolution.problem ?: "repotory-mcp was not found.")
+                // The startup warning carries the offer (dirs tried + Locate… +
+                // Open settings); the dot's own click opens the picker instead,
+                // so a SECOND click is not a no-op.
+                offerMcpBinaryOnce()
             }
         }
     }
@@ -1370,18 +1240,32 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
      */
     private fun reconnect() {
         if (disposed) return
-        pill.state = LinkState.CHECKING
+        statusDot.state = LinkState.CHECKING
         background({
             McpBinaryResolver.resolveHere(RepotorySettings.mcpBinaryPath())
         }) { resolution ->
             if (resolution.found) {
-                pill.state = LinkState.ONLINE
-                showAnnouncement(ChatLevel.INFO, "Cinder MCP channel ready.")
+                statusDot.state = LinkState.ONLINE
+                showAnnouncement(ChatLevel.INFO, "repotory-mcp found — the panel will use it for the next call.")
             } else {
-                pill.state = LinkState.OFFLINE
+                statusDot.state = LinkState.OFFLINE
                 showAnnouncement(ChatLevel.WARN, resolution.problem ?: "repotory-mcp was not found.")
-                offerMcpBinaryOnce()
+                // The tooltip says "click to locate it", so the click opens the
+                // picker. It used to re-raise the once-per-panel balloon, which
+                // made every click after the first do nothing at all.
+                locateMcpBinary()
             }
+        }
+    }
+
+    /** Pick a `repotory-mcp` binary, apply it, and re-check the channel. */
+    private fun locateMcpBinary() {
+        chooseMcpBinary()?.let {
+            RepotorySettings.setMcpBinaryPath(it.absolutePath)
+            // The client points at the old path (or never started): a new
+            // setting has to take effect now, not at the next IDE restart.
+            repotoryMcp.shutdown()
+            reconnect()
         }
     }
 
@@ -1410,16 +1294,7 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
             NotificationType.WARNING,
         )
         notification.addAction(
-            NotificationAction.createSimple("Locate…") {
-                chooseMcpBinary()?.let {
-                    RepotorySettings.setMcpBinaryPath(it.absolutePath)
-                    // The client points at the old path (or never started):
-                    // a new setting has to take effect now, not at the next
-                    // IDE restart.
-                    repotoryMcp.shutdown()
-                    reconnect()
-                }
-            },
+            NotificationAction.createSimple("Locate…") { locateMcpBinary() },
         )
         notification.addAction(
             NotificationAction.createSimple("Open settings") {
@@ -1429,81 +1304,6 @@ class RepotoryPanel(private val project: Project?) : JPanel(), Disposable {
         notification.notify(null)
     }
 
-    /**
-     * Starts the local Cinder service.
-     *
-     * The local service is an OPTIONAL enhancement since ADR-0035 decision 6:
-     * the panel's data comes over MCP, and the service is only needed for the
-     * two things that stay on HTTP — deep links into the web UI, and moving a
-     * note between projects.
-     *
-     * The spawn waits on the binary and on /health, so it runs on a pooled
-     * thread; the EDT only gets the outcome. Nothing is downloaded: when no
-     * binary exists, the user is offered the file picker or the release page.
-     */
-    private fun startLocalService() {
-        if (disposed || starting) return
-        starting = true
-        pill.state = LinkState.STARTING
-        showAnnouncement(ChatLevel.INFO, "Starting the local Cinder service…")
-        val serverUrl = RepotorySettings.serverUrl()
-        background({
-            repotoryServer.start(serverUrl) { message ->
-                ApplicationManager.getApplication().invokeLater {
-                    if (!disposed) showAnnouncement(ChatLevel.INFO, message)
-                }
-            }
-        }) { outcome ->
-            starting = false
-            when (outcome) {
-                is StartOutcome.Started -> {
-                    if (!outcome.healthy) {
-                        // The process is up but /health never answered:
-                        // say so instead of promising a service that is
-                        // not there yet.
-                        pill.state = LinkState.STARTING
-                        showAnnouncement(
-                            ChatLevel.WARN,
-                            "The server process is running but is not answering yet — " +
-                                "click the status pill to retry.",
-                        )
-                    } else {
-                        pill.state = LinkState.ONLINE
-                        showAnnouncement(
-                            ChatLevel.INFO,
-                            if (outcome.webUi) {
-                                "Service on port ${outcome.port}."
-                            } else {
-                                "Service on port ${outcome.port} (API-only — “Open in Cinder” would 404)."
-                            },
-                        )
-                    }
-                }
-                StartOutcome.AlreadyRunning -> {
-                    pill.state = LinkState.ONLINE
-                    showAnnouncement(ChatLevel.INFO, "The service is already running.")
-                }
-                is StartOutcome.BinaryMissing -> {
-                    pill.state = LinkState.OFFLINE
-                    showAnnouncement(
-                        ChatLevel.WARN,
-                        "No repotory-server binary found — set its path in Settings | Tools | Cinder.",
-                    )
-                    // The user PRESSED the button, so a dialog is welcome
-                    // here — this is not the panel interrupting itself. It
-                    // offers the file picker and the release page, the
-                    // same two ways out the VS Code extension gives.
-                    if (offerServerBinaryHelp(outcome.searched)) {
-                        startLocalService()
-                    }
-                }
-                is StartOutcome.Failed -> {
-                    pill.state = LinkState.OFFLINE
-                    showAnnouncement(ChatLevel.ERROR, outcome.message)
-                }
-            }
-        }
-    }
 
     // ------------------------------------------------------------- the plumbing
 
@@ -1568,6 +1368,9 @@ private class ChatTextArea : JTextArea() {
         rows = 1
         font = Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(12))
         border = JBUI.Borders.empty(2, 4)
+        // The composer's frame paints the rounded fill and border; an opaque
+        // field would square off the corners it is drawn inside.
+        isOpaque = false
         addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
                 if (e.keyCode == KeyEvent.VK_ENTER && !e.isShiftDown) {
@@ -1613,14 +1416,17 @@ private class ChatTextArea : JTextArea() {
 }
 
 /**
- * The announcement bar: one line, with a background, dismissible.
+ * The announcement bar: one line, with a level badge, dismissible.
  *
  * It replaces the old status line (ADR-0036 decision 5): the status of the
  * panel is not a footnote under the conversation, it is a banner above it.
+ * The badge is what separates "this failed" from "this is done" without
+ * relying on the reader's colour vision.
  */
 private class AnnouncementBar : JPanel(BorderLayout(JBUI.scale(6), 0)) {
+    private val badge = JLabel()
     private val message = AnnouncementText()
-    private val dismiss = JButton("✕")
+    private val dismiss = IconButton(PanelIcons.close(JBUI.scale(12)), "Dismiss") { onDismiss?.invoke() }
 
     /** Called when the reader dismisses the banner. */
     var onDismiss: (() -> Unit)? = null
@@ -1632,9 +1438,7 @@ private class AnnouncementBar : JPanel(BorderLayout(JBUI.scale(6), 0)) {
             JBUI.Borders.empty(5, 8),
         )
         message.foreground = JBColor.foreground()
-        dismiss.margin = Insets(0, 2, 0, 2)
-        dismiss.toolTipText = "Dismiss"
-        dismiss.addActionListener { onDismiss?.invoke() }
+        add(badge, BorderLayout.WEST)
         add(message, BorderLayout.CENTER)
         add(dismiss, BorderLayout.EAST)
     }
@@ -1642,6 +1446,7 @@ private class AnnouncementBar : JPanel(BorderLayout(JBUI.scale(6), 0)) {
     /** Show a message, replacing whatever was there. */
     fun show(level: ChatLevel, text: String) {
         message.text = text
+        badge.icon = LevelBadgeIcon(level)
         background = when (level) {
             ChatLevel.INFO -> JBColor.background()
             ChatLevel.WARN -> JBColor(Color(0xFF, 0xF6, 0xD5), Color(0x3B, 0x33, 0x14))
@@ -1707,97 +1512,7 @@ private class AnnouncementText : JTextArea() {
     }
 }
 
-/**
- * The connection pill: a coloured dot, the state, and a click that reconnects.
- *
- * It replaces the old "start the service" button, which only appeared after
- * a search had already failed. The pill is always visible, so the reader
- * always knows whether the channel is there — and clicking it is the way to
- * try again.
- */
-private class ConnectionPill : JPanel(BorderLayout(JBUI.scale(5), 0)) {
-    private val dotIcon = ColorDotIcon(JBUI.scale(8), JBColor.foreground())
-    private val dot = JLabel(dotIcon)
-    private val label = JLabel("checking…")
-
-    /** Called when the user clicks the pill. */
-    var onClick: (() -> Unit)? = null
-
-    var state: LinkState = LinkState.CHECKING
-        set(value) {
-            field = value
-            render()
-        }
-
-    init {
-        isOpaque = false
-        add(dot, BorderLayout.WEST)
-        add(label, BorderLayout.CENTER)
-        cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-        addMouseListener(object : java.awt.event.MouseAdapter() {
-            override fun mouseClicked(e: java.awt.event.MouseEvent) {
-                onClick?.invoke()
-            }
-        })
-        render()
-    }
-
-    private fun render() {
-        val (color, text, tip) = when (state) {
-            LinkState.ONLINE -> Triple(
-                JBColor(Color(0x3F, 0x8F, 0x4E), Color(0x73, 0xBD, 0x79)),
-                "online",
-                "The Cinder MCP channel is ready — asking, searching, reading and writing work now. " +
-                    "The local service is only needed for deep links and moving a note between projects. " +
-                    "Click to re-check.",
-            )
-            LinkState.OFFLINE -> Triple(
-                JBColor(Color(0xC0, 0x3A, 0x2B), Color(0xE8, 0x6C, 0x5A)),
-                "offline",
-                "The Cinder MCP channel is not available — repotory-mcp was not found. " +
-                    "Click to locate it.",
-            )
-            LinkState.STARTING -> Triple(
-                JBColor(Color(0xB4, 0x8A, 0x2F), Color(0xE2, 0xC0, 0x6A)),
-                "starting…",
-                "The local Cinder service is starting. Click to re-check.",
-            )
-            LinkState.CHECKING -> Triple(
-                JBColor.foreground(),
-                "checking…",
-                "Checking whether repotory-mcp is available.",
-            )
-        }
-        dotIcon.color = color
-        label.text = text
-        label.foreground = color
-        toolTipText = tip
-        border = JBUI.Borders.compound(
-            BorderFactory.createLineBorder(color),
-            JBUI.Borders.empty(2, 6),
-        )
-    }
-}
-
-/** A filled dot; the colour is set by the pill when the state changes. */
-private class ColorDotIcon(private val size: Int, var color: Color) : Icon {
-    override fun getIconWidth(): Int = size
-
-    override fun getIconHeight(): Int = size
-
-    override fun paintIcon(c: Component, g: Graphics, x: Int, y: Int) {
-        val g2 = g.create() as Graphics2D
-        try {
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-            g2.color = color
-            g2.fillOval(x, y, size, size)
-        } finally {
-            g2.dispose()
-        }
-    }
-}
-
-/** "Open in Cinder" as a toolbar action, so the tool window has a title bar button. */
+/** Opens the Cinder tool window — the action behind its title bar button. */
 class OpenRepotoryAction : AnAction(), DumbAware {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 

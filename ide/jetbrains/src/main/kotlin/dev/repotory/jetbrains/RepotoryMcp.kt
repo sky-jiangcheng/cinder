@@ -1,9 +1,9 @@
 // Cinder for JetBrains — the plugin's data channel, over MCP.
 //
 // ADR-0035 (Accepted 2026-10-30) decision 2: the plugin's EIGHT data
-// capabilities go over MCP, and only two things stay on HTTP — MoveNote
-// (re-filing knowledge is a human decision an agent must not make) and the
-// web-UI probe (the deep link needs a server that serves the UI).
+// capabilities go over MCP, and one thing stays on HTTP — MoveNote
+// (re-filing knowledge is a human decision an agent must not make). The web-UI
+// probe left with the deep links (ADR-0044, third revision).
 //
 // Why this is a repair and not a rewrite: the HTTP bridge and the MCP tools
 // are two doors into the SAME service layer, so the payload shapes are
@@ -13,9 +13,8 @@
 // `repotory-server` to search, read, write or organize anything.
 //
 // The consequence users feel: install `repotory-mcp` and the panel works with
-// no service running. Everything the server alone could still do (moving a
-// note between projects, deep links into the web UI) says so plainly instead
-// of failing vaguely.
+// no service running. The one thing the server alone can still do (moving a
+// note between projects) says so plainly instead of failing vaguely.
 package dev.repotory.jetbrains
 
 import com.google.gson.JsonObject

@@ -1,18 +1,29 @@
-// Settings page for the Cinder plugin.
+// Settings page for the Cinder plugin — the channel and the local service.
 //
-// ADR-0027 decision 2③ and its 2026-10-22 usability revision: the server
-// address (default http://127.0.0.1:18765), the optional path to a local
-// `repotory-server` binary, a connection health check, and a one-click start
-// for that local service. Nothing here downloads or builds a server: the
-// plugin only launches a binary the user already has.
+// ADR-0027 decision 2③ and its 2026-10-22 usability revision, regrouped
+// 2026-11-26: the page used to be one flat column of fields and buttons where
+// a text field, a button and two paragraphs of status text sat at the same
+// level. Three titled groups now say what belongs to what:
+//
+//   CHANNEL         the cinder-mcp binary — every data call goes through it
+//   LOCAL SERVICE   optional: moving a note between projects
+//   AI PROVIDER     a page of its own (Settings ▸ Tools ▸ Cinder ▸ AI Provider)
+//
+// The provider form is NOT here: it is configuration with its own fields,
+// buttons and status, and a sub-page keeps this one answerable at a glance.
+// Nothing here downloads or builds a server — the plugin only launches a
+// binary the user already has.
 package dev.repotory.jetbrains
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
+import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
+import java.awt.FlowLayout
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -68,21 +79,20 @@ class RepotoryConfigurable : Configurable {
                 McpBinaryResolver.resolveHere(mcpBinary.text?.trim().orEmpty()),
             )
         }
+        val mcpActions = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0))
+        mcpActions.isOpaque = false
+        mcpActions.add(checkMcp)
 
         val test = JButton("Test connection")
         test.addActionListener {
             val target = url.text?.trim().orEmpty()
-            // /health answering is not the same as the deployment being usable:
-            // a server without --web-dist serves the API but 404s every result
-            // link, so a bare "Connected" would be a green light for a broken
-            // click. The probe distinguishes the two cases.
+            // /health answering means the one HTTP dependency left is there:
+            // moving a note between projects. Everything else — ask, search,
+            // read, write, organize — goes through MCP and needs no server.
             status.text = when {
                 target.isEmpty() -> "Enter a server address first."
                 !repotoryClient.ping(target) -> "No response from $target. Is the Cinder server running?"
-                repotoryClient.servesWebUi(target) -> "Connected: $target — API and web UI both reachable."
-                else ->
-                    "Connected: $target, but API-only: \"Open in Cinder\" would 404. " +
-                        "Use Start local service (release bundle) or restart it with --web-dist."
+                else -> "Connected: $target — the project move will work."
             }
         }
 
@@ -101,33 +111,59 @@ class RepotoryConfigurable : Configurable {
                 app.invokeLater { status.text = describeStart(outcome, target) }
             }
         }
-
-        // The model endpoint the answers come from. It lives in the SERVICE's
-        // settings (SharedConfig), so this is an entry to the same dialog the
-        // panel's header opens — not a second copy of those fields.
-        val provider = JButton("Configure AI provider…")
-        provider.addActionListener { ProviderDialog().show() }
-        val providerRow = JPanel(BorderLayout(6, 0))
-        providerRow.add(provider, BorderLayout.WEST)
-        val providerHint = JBLabel(
-            "OpenAI-compatible Base URL + model. A 404 from the panel usually means " +
-                "the Base URL is a full endpoint instead of the server root.",
-        )
+        val serviceActions = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0))
+        serviceActions.isOpaque = false
+        serviceActions.add(test)
+        serviceActions.add(start)
 
         return FormBuilder.createFormBuilder()
+            .addComponent(sectionLabel("Channel"))
+            .addComponent(hint("Every search, read and write goes through the cinder-mcp binary. " +
+                "Leave the path empty to detect it from PATH, Homebrew/Scoop and ~/.local/bin."))
             .addLabeledComponent(JBLabel("MCP binary:"), mcpRow, 1, false)
-            .addComponent(checkMcp)
+            .addComponent(mcpActions)
+            .addVerticalGap(JBUI.scale(14))
+            .addComponent(sectionLabel("Local service (optional)"))
+            .addComponent(hint("Only one thing still speaks HTTP: moving a note between projects. " +
+                "Ask, search, read, write, organize and the AI provider all go through MCP."))
             .addLabeledComponent(JBLabel("Server address:"), url, 1, false)
             .addLabeledComponent(JBLabel("Server binary:"), binaryRow, 1, false)
-            .addComponent(test)
-            .addComponent(start)
+            .addComponent(serviceActions)
+            .addVerticalGap(JBUI.scale(6))
             .addComponent(status)
-            .addSeparator()
-            .addComponent(providerRow)
-            .addComponent(providerHint)
+            .addVerticalGap(JBUI.scale(14))
+            .addComponent(sectionLabel("AI provider"))
+            .addComponent(hint("The endpoint, the key and the model have their own page — " +
+                "they are the same settings the desktop app uses."))
+            .addComponent(providerLink())
             .addComponentFillVertically(JPanel(), 0)
             .panel
     }
+
+    /**
+     * The entry to the provider page.
+     *
+     * The endpoint, the key and the model live on a page of their own — they
+     * are configuration with their own fields, buttons and status, and folding
+     * them into this page is what made it unreadable. The link is here because
+     * "where do I change the model?" is a question this page must answer.
+     */
+    private fun providerLink(): JButton = JButton("AI Provider settings…").apply {
+        toolTipText = "Base URL, API key and model of the endpoint that answers"
+        addActionListener {
+            ShowSettingsUtil.getInstance().showSettingsDialog(null, RepotoryProviderConfigurable::class.java)
+        }
+    }
+
+    private fun sectionLabel(text: String): JBLabel = JBLabel(text.uppercase()).apply {
+        font = font.deriveFont(java.awt.Font.BOLD, font.size2D - 1f)
+        foreground = PanelPalette.muted
+    }
+
+    private fun hint(text: String): JBLabel =
+        JBLabel("<html><body style='width:520px'>" + text + "</body></html>").apply {
+            foreground = PanelPalette.muted
+        }
 
     override fun isModified(): Boolean =
         serverUrlField?.text?.trim() != RepotorySettings.serverUrl() ||
@@ -172,9 +208,9 @@ class RepotoryConfigurable : Configurable {
         if (resolution.found) {
             return "repotory-mcp found at ${resolution.path} (via ${resolution.source})."
         }
-        val tried = resolution.attempts.take(12).joinToString("\n")
-        val more = if (resolution.attempts.size > 12) "\n… and ${resolution.attempts.size - 12} more" else ""
-        return (resolution.problem ?: "repotory-mcp not found") + "\nLooked in:\n" + tried + more
+        val tried = resolution.attempts.take(12).joinToString("<br>")
+        val more = if (resolution.attempts.size > 12) "<br>… and ${resolution.attempts.size - 12} more" else ""
+        return "<html>" + (resolution.problem ?: "repotory-mcp not found") + "<br>Looked in:<br>" + tried + more + "</html>"
     }
 
     private fun describeStart(outcome: StartOutcome, target: String): String = when (outcome) {
@@ -182,15 +218,17 @@ class RepotoryConfigurable : Configurable {
             if (!outcome.healthy) {
                 "Started ${outcome.binary.file.name} on port ${outcome.port}, but the service is not " +
                     "answering yet. Wait a moment and press Test connection again."
-            } else if (outcome.webUi) {
-                "Started ${outcome.binary.file.name} on port ${outcome.port} — API and web UI reachable."
             } else {
-                "Started ${outcome.binary.file.name} on port ${outcome.port}, API-only " +
-                    "(no sibling web/ directory): result links would 404."
+                "Started ${outcome.binary.file.name} on port ${outcome.port} — the service is answering."
             }
         StartOutcome.AlreadyRunning -> "$target already answers — reusing the running service."
+        // No "download…" clause: this page has no download and no link, so the
+        // sentence may only name what is on it. (It used to tell the reader to
+        // "download a release bundle", which only the dead dialog it replaced
+        // ever offered.)
         is StartOutcome.BinaryMissing ->
-            "No repotory-server binary found. Use Locate… to pick one, or download a release bundle."
+            "No repotory-server binary found. Use Locate… to pick one — it ships with the Cinder " +
+                "release bundle, next to its web/ directory."
         is StartOutcome.Failed -> outcome.message
     }
 }

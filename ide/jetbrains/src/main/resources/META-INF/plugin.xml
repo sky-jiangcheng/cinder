@@ -19,6 +19,14 @@
       bar, always-there composer) rather than a searcher, and the VS Code
       extension ships the same console.
 
+      ADR-0044 revision (2026-11-26): the header is a hidden-chrome strip —
+      the mark, the channel dot and three 24px icon buttons (history, new
+      conversation, settings), with no text buttons and no bordered status
+      pill. Everything that is setup rather than daily work moved into the
+      settings tree, and the AI provider is a settings PAGE under it rather
+      than a DialogWrapper of its own. There is no "open the desktop app"
+      button: the panel is the product in this window.
+
       The plugin is a DISTRIBUTION surface, not a platform (ADR-0006): the
       binary name, the data directory and the MCP prefix are untouched.
     -->
@@ -53,19 +61,23 @@
           the panel filters the hits itself and tells you how many it
           dropped. A folder that is not in the knowledge base yet says so and
           offers the projects it could belong to — one click files it.
-        • Your own AI provider, configured in place: the panel's gear button
-          opens the endpoint, the key and the model, and writes them to the
-          local Cinder service — the same settings the desktop app uses, so
-          the two never disagree. "List models" asks the endpoint what it
-          offers; "Test" proves the answer comes back before you save.
+        • Your own AI provider, configured where settings live: the gear in the
+          panel header opens Cinder's settings, and "AI Provider" is its own
+          page there — endpoint, key and model, written to the local Cinder
+          service, the same settings the desktop app uses, so the two never
+          disagree. "Fetch models" asks the endpoint what it offers; "Test"
+          proves the answer comes back before you save.
         • Full-text search (FTS5) over every note and todo you ever captured,
           ranked exactly as the Cinder Desktop app ranks it — the plugin
           reimplements no ranking, no snippet extraction, no gating.
-        • One-click jump: "Open in Cinder" deep-links the item into the
-          Cinder Desktop app.
-        • A diagnostics report: the panel's third button answers "why does
-          this not work?" — the MCP binary, the local service and the
-          workspace's resolution, each with what it found.
+        • Nothing to leave the editor for: a card opens in place, and "Ask
+          about this" asks about that exact item — the question goes into the
+          composer and is sent, so the follow-up is the next turn in the
+          same feed.
+        • One settings tree, not two: the gear opens Cinder's settings — the
+          cinder-mcp binary with a "Check MCP channel" report that lists every
+          place it looked, the optional local service with "Test connection"
+          and "Start local service", and the AI provider on its own page.
         • Note maintenance without leaving the IDE: edit a note's title, kind,
           tags and 项目 (project), add a new note under the same 项目, or let
           the AI tidy a note into a restructured proposal — sections, an
@@ -73,15 +85,16 @@
           process. The proposal opens in the editor for your review; nothing
           is saved until you save it.
         • Works out of the box: the tool window checks the channel when it
-          opens and shows the result as a status pill. If nothing answers,
-          it starts the local repotory-server you already have — nothing is
-          downloaded or built, and a service you started yourself is never
-          touched.
+          opens and shows the result as a dot in its header — green when
+          cinder-mcp is there, red when it is not, and clicking it re-checks.
+          Every setup step (locate the binary, start the local service) lives
+          in the settings tree; nothing is downloaded or built, and a service
+          you started yourself is never touched.
 
         The plugin is a thin client: its data goes over MCP to repotory-mcp,
-        which opens the same local database the desktop app uses, and the two
-        things that still speak HTTP talk to the loopback-only Cinder
-        service. Everything stays on your machine — there is nothing to
+        which opens the same local database the desktop app uses, and the one
+        thing that still speaks HTTP — moving a note between projects — talks
+        to the loopback-only Cinder service. Everything stays on your machine — there is nothing to
         authenticate and nothing that leaves it. One build covers the whole
         IntelliJ family (IDEA, PyCharm, WebStorm, GoLand and the rest), on
         IntelliJ 2024.2 or newer, independently of your project's JDK.
@@ -101,6 +114,14 @@
                                  instance="dev.repotory.jetbrains.RepotoryConfigurable"
                                  id="dev.repotory.jetbrains.settings"
                                  displayName="Cinder"/>
+        <!-- The AI provider is a settings PAGE, not a dialog (ADR-0044 revision
+             2026-11-26): the endpoint, the key and the model are configuration,
+             and configuration lives in the settings tree next to the MCP binary
+             and the server address. The panel header's gear opens this tree. -->
+        <applicationConfigurable parentId="dev.repotory.jetbrains.settings"
+                                 instance="dev.repotory.jetbrains.RepotoryProviderConfigurable"
+                                 id="dev.repotory.jetbrains.settings.provider"
+                                 displayName="AI Provider"/>
         <!-- The tool window posts its service problems here (no local server
              binary, the port is taken) instead of opening a modal dialog the
              user did not ask for. -->

@@ -199,7 +199,7 @@ object McpPayloads {
         )
     }
 
-    /** One note or todo hit, with the SPA route it opens. */
+    /** One note or todo hit. */
     private fun parseHit(raw: JsonElement): RepotoryHit? {
         if (!raw.isJsonObject) return null
         val obj = raw.asJsonObject
@@ -208,27 +208,16 @@ object McpPayloads {
         val id = obj.long("id")
         if (id <= 0L) return null
         val projectId = obj.long("project_id")
-        // The SPA routes (web/src/App.tsx): a note opens the project page on
-        // the notes tab with ?noteId= (ProjectDetail reads `noteId`, not
-        // `note`); a todo opens the project's todo tab. The route vocabulary
-        // belongs to the frontend, so it is read from the frontend's contract
-        // rather than invented here.
-        val route = when (type) {
-            "note" -> "/project/$projectId?noteId=$id"
-            "todo" -> "/project/$projectId?tab=todos"
-            else -> "/project/$projectId"
-        }
         return RepotoryHit(
             type = type,
             id = id,
             projectId = projectId,
             title = obj.str("title"),
             snippet = obj.str("snippet"),
-            route = route,
         )
     }
 
-    /** One approved page as a list row; its route is the SPA's /wiki/:id. */
+    /** One approved page as a list row. */
     private fun parseWikiHit(raw: JsonElement): RepotoryHit? {
         if (!raw.isJsonObject) return null
         val obj = raw.asJsonObject
@@ -241,7 +230,6 @@ object McpPayloads {
             projectId = projectId,
             title = obj.str("title"),
             snippet = obj.str("snippet"),
-            route = "/wiki/$id",
             kind = obj.str("kind"),
             slug = obj.str("slug"),
         )

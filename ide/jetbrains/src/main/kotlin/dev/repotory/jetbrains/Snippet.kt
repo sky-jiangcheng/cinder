@@ -1,10 +1,9 @@
 // The search excerpt, as it crosses the wire.
 //
 // The service HTML-escapes the matched window and wraps the hit term in
-// <mark> tags (FTS5 highlight). Two consumers read that excerpt: the plain
-// label of a result row and the HTML detail pane. Both decode it here, so
-// neither has to know about the markup — a row shows prose, the pane shows
-// the matched term in bold, and neither shows the literal tag.
+// <mark> tags (FTS5 highlight). A card's snippet is plain prose, so it is
+// decoded here: the reader sees "&" and not "&amp;", and never the literal
+// <mark> tag.
 package dev.repotory.jetbrains
 
 /** The tags the service wraps the matched term in. */
@@ -24,37 +23,6 @@ internal fun snippetPlain(snippet: String, max: Int = 140): String {
         .replace(Regex("\\s+"), " ")
         .trim()
     return if (flat.length <= max) flat else flat.take(max - 1) + "…"
-}
-
-/**
- * The excerpt as the detail pane's HTML: the matched term in bold.
- *
- * The excerpt is a slice of a note body, so the pane shows it as prose —
- * a fenced block or a list in the middle of a window would only add
- * structure the reader did not ask for. The entities the service escaped
- * are decoded once, so an "&" in a note reads as "&" and not as "&amp;".
- */
-internal fun snippetHtml(snippet: String): String {
-    val out = StringBuilder()
-    var rest = snippet
-    while (rest.isNotEmpty()) {
-        val open = rest.indexOf(MARK_OPEN)
-        if (open < 0) {
-            out.append(esc(decodeEntities(rest)))
-            break
-        }
-        out.append(esc(decodeEntities(rest.substring(0, open))))
-        val close = rest.indexOf(MARK_CLOSE, open + MARK_OPEN.length)
-        if (close < 0) {
-            out.append(esc(decodeEntities(rest.substring(open + MARK_OPEN.length))))
-            break
-        }
-        out.append("<b>")
-            .append(esc(decodeEntities(rest.substring(open + MARK_OPEN.length, close))))
-            .append("</b>")
-        rest = rest.substring(close + MARK_CLOSE.length)
-    }
-    return out.toString().replace("\n", "<br>")
 }
 
 /** The excerpt without the service's highlight tags. */

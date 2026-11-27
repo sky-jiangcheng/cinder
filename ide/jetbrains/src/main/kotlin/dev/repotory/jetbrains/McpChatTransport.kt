@@ -8,9 +8,8 @@
 //     project lock (ADR-0062: repotory_workspace_resolve, the MCP twin of
 //     the ResolveWorkspacePath binding).
 //   · HTTP carries the bindings MCP deliberately does not have: MoveNote
-//     (re-filing knowledge is a human decision), BindWorkspaceToProject
-//     (filing a folder under a project is a write a human decides), and the
-//     web-UI probe behind the deep link.
+//     (re-filing knowledge is a human decision) and BindWorkspaceToProject
+//     (filing a folder under a project is a write a human decides).
 //
 // The workspace path is the IDE project's own directory: the panel locks
 // itself to the project the user is standing in (ADR-0036 decision 2).

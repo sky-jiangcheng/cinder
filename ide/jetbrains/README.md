@@ -10,18 +10,19 @@ The panel is a **conversation console**, not a result list (ADR-0036). One quest
 
 | Surface | What it does |
 |---|---|
-| Tool window **Cinder** | The chat console. Five regions: a header (brand + channel state), an **announcement bar** (one line, dismissible — it replaced the old status line), the **conversation feed** (the only scroll area), the **folded history** (older turns fold into one row) and the **input area** at the bottom (always there) |
-| Brand header | The mark and the wordmark, plus the channel state (a pill: `online` / `offline` / `checking…`), the **service actions** — **Refresh** and **Start local service** — and the **panel actions**: **Search notes**, **AI provider**, **Diagnostics** and **Desktop app**. Clicking the pill re-checks the channel |
+| Tool window **Cinder** | The chat console: a **hidden-chrome header**, an **announcement bar** (one line with a level badge, dismissible — only when there is something to say), the **conversation feed** (the only scroll area, older turns fold into one row) and the **composer** at the bottom (always there). Nothing else is ever on screen |
+| Header | The mark, the wordmark, one **channel dot** and three 24px icon buttons — **history** (conversations), **new** (shared conversation), **gear** (settings). No text buttons, no bordered status pill: the icons light up on hover, the dot is green when `repotory-mcp` is found, red when it is not, grey while checking (it reports what it measures — a file on disk, not a channel that answered), and clicking it re-checks. The icons are the same glyphs, grid and stroke weight as the VS Code panel's. There is no "open the desktop app" button — the panel is the product in this window, and everything else setup-class lives behind the gear |
 | Conversation feed | One turn per question: the mode it was asked in (`ASK` / `NOTES` / `PAGES`), the question, and the answer or the cards it produced. The newest **2** turns stay open; everything older folds into `▸ N earlier turns` and opens on click |
 | **Ask** mode (default) | `repotory_ask` answers with prose plus a `Sources:` list. The answer is the body; the sources are its footnote, folded behind `Sources (N) ▸`. A source list that cannot be parsed is shown **verbatim** — the raw text — so nothing is ever swallowed |
 | **Notes** mode | `repotory_notes_search` answers with cards (notes / todos). Clicking a title opens the item **in place**, inside the turn that produced it — there is no separate detail pane |
 | **Pages** mode | `repotory_wiki_search` answers with the approved knowledge pages, opened in place the same way |
-| Card actions | **Open in Cinder** (deep link into the web UI), **Copy** (title + body), and for notes **Edit** / **New note here** / **AI Tidy** — see *Maintaining notes without leaving the IDE* below |
-| Scope chip | The panel is **locked to the current project** by default. The chip shows `🔒 <project>`; clicking it unlocks the panel back to cross-project. A workspace that resolves to no project offers the candidate projects to pick from instead of a dead end — see *When the folder is not in the knowledge base yet* |
+| Card actions | **Ask about this** — asks a question about the card right away (in the composer, then submitted), so the detail and the follow-up happen in the same feed — plus, for notes, **Edit** / **New note here** / **AI Tidy** — see *Maintaining notes without leaving the IDE* below. There is no "Open in Cinder": the body is already on screen, and a card whose only other move is to leave the panel is a dead end |
+| Scope chip | The panel is **locked to the current project** by default. The chip shows a drawn lock next to `<project>`; clicking it unlocks the panel back to cross-project. A workspace that resolves to no project offers the candidate projects to pick from instead of a dead end — see *When the folder is not in the knowledge base yet* |
 | **Tools → Cinder** | Opens the tool window (also on its title bar) |
-| **Settings → Tools → Cinder** | The **`cinder-mcp`** binary (the plugin's data channel) with a **Check MCP channel** diagnostic that lists every place it looked, plus the optional server address, server binary path, a **Test connection** button that tells "API and web UI both reachable" from "API-only, the link would 404", and **Start local service** for a one-click launch |
+| **Settings → Tools → Cinder** | Three groups. **Channel**: the **`cinder-mcp`** binary with a **Check MCP channel** diagnostic that lists every place it looked. **Local service** (optional): server address, server binary path, **Test connection** and **Start local service**. **AI provider**: a link to its own page — see below |
+| **Settings → Tools → Cinder → AI Provider** | The model endpoint that answers: **Base URL**, **Model**, **API key**, **Fetch models** and **Test**, saved to the Cinder service |
 
-The layout is the same console the VS Code extension ships, so the two IDE surfaces feel like one product (ADR-0036 decision 8): same regions, same wording, same fold rules.
+The layout is the same console the VS Code extension ships, so the two IDE surfaces feel like one product (ADR-0036 decision 8): same regions, same wording, same fold rules — and the same **hidden chrome**: the header and the composer are the only permanent chrome, everything else (conversations, settings, the provider) opens on demand.
 
 ### The project lock, per mode
 
@@ -37,15 +38,15 @@ A workspace that resolves to no project, or an MCP channel that is not reachable
 
 ## The external AI provider
 
-The **AI provider** action in the panel header opens a dialog that configures the model the panel talks to: **Base URL**, **API key** and **Model**, plus **List models** (ask the endpoint what it serves) and **Test** (send one minimal completion and show what came back). Save writes it to the Cinder service.
+The **AI Provider** page (**Settings → Tools → Cinder → AI Provider**, also the gear's tree) configures the model the panel talks to: **Base URL**, **Model** and **API key**, plus **Fetch models** (ask the endpoint what it serves) and **Test** (send one minimal completion and show what came back). **Apply** writes it to the Cinder service.
 
 Three things worth knowing:
 
 - **It is the server's configuration, not the plugin's.** The plugin reads and writes the same `ai_chat_*` settings the desktop app uses (Settings → AI). Two copies would drift, and the key belongs to the service anyway — so **there is no AI key in the plugin's settings**, and what you configure in JetBrains is the same endpoint when you open the panel in VS Code.
 - **An empty key means "leave the stored key alone."** The service masks a stored secret, so the dialog never sees it; saving with the key field empty keeps what is already stored instead of deleting it.
-- **The panel works without one.** Ask falls back to the service's own answer path when no provider is configured; the dialog says so instead of failing silently.
+- **The panel works without one.** Ask falls back to the service's own answer path when no provider is configured; the page says so instead of failing silently.
 
-> **A deliberate difference from the VS Code panel:** there, the provider form is a **sheet inside the webview**; Swing has no inline form surface, so the JetBrains plugin opens a `DialogWrapper` dialog. The fields, the buttons and the status wording are the same on both sides — only the carrier differs (ADR-0044).
+> **A deliberate difference from the VS Code panel:** there, the provider form is a **sheet inside the panel**; here it is a **settings page**. Both read and write the same `ai_chat_*` rows, and the fields, buttons and status wording are the same on both sides — only the carrier differs (ADR-0044, revision 2026-11-26).
 
 ## When the folder is not in the knowledge base yet
 
@@ -57,7 +58,7 @@ If there are no candidates either (the MCP channel is unreachable, or nothing ma
 
 - **IntelliJ IDEA 2024.2 or newer** (any IntelliJ-family IDE). The plugin runs on the JRE the IDE ships with (JBR 21 on 2024.2+), **independently of your project's JDK**. A project that compiles with **JDK 8** is fully supported — the plugin never loads your project's JDK, never compiles your code, and never needs Java 8 APIs. Building the plugin from source is the only Java-21 task (see Development).
 - A **`cinder-mcp`** binary — this is the plugin's **data channel**: searching, reading, editing, creating and organizing all go through it over MCP stdio, exactly like the VS Code extension. The plugin looks for the binary in this order — **Settings | Tools | Cinder → MCP binary**, `REPOTORY_MCP_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories. It ships with the release (`install.sh`, Homebrew and Scoop all carry it) and the plugin **never downloads it**: if no binary is found, the tool window offers the file picker and the release page instead.
-- A **`cinder-server`** binary — **optional**. The server is no longer a prerequisite: the plugin talks to your knowledge base through `cinder-mcp`, which opens the same local SQLite database the desktop app uses. The server is only needed for the two things that still speak HTTP: **deep links** into the web UI, and **moving a note between projects**. The plugin can start a local one with one click; it looks for the binary in this order — **Settings | Tools | Cinder → Server binary**, `REPOTORY_SERVER_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories.
+- A **`cinder-server`** binary — **optional**. The server is no longer a prerequisite: the plugin talks to your knowledge base through `cinder-mcp`, which opens the same local SQLite database the desktop app uses. The server is only needed for the one thing that still speaks HTTP: **moving a note between projects**. The plugin can start a local one with one click; it looks for the binary in this order — **Settings | Tools | Cinder → Server binary**, `REPOTORY_SERVER_BIN`, `PATH`, then the usual Homebrew / Scoop / `~/.local/bin` directories.
 
 Everything is loopback-only by design, so there is nothing to authenticate and nothing that leaves your machine.
 
@@ -66,29 +67,26 @@ Everything is loopback-only by design, so there is nothing to authenticate and n
 The one-click start is just a shortcut for:
 
 ```bash
-./cinder-server --port 18765 --web-dist <bundle>/web
+./cinder-server --port 18765
 ```
 
-`--web-dist` matters for result links. Without it the server is API-only: the API answers, but every result link 404s — and the plugin says exactly that instead of dropping you on a dead page. The release bundle's `web/` directory is the **server** build of the web assets (base `/`); the desktop `web/dist` (base `./`) is not interchangeable. The plugin does not embed the SPA itself (one rendering of the knowledge UI, the desktop app's).
+Add `--web-dist <bundle>/web` only if you also want to browse the knowledge UI in a browser: that flag serves the SPA, and the plugin itself never needs it. The release bundle's `web/` directory is the **server** build of the web assets (base `/`); the desktop `web/dist` (base `./`) is not interchangeable. The plugin does not embed the SPA itself (one rendering of the knowledge UI, the desktop app's).
 
 ## First launch
 
 1. Open the **Cinder** tool window from the right-hand tool window bar, or **Tools | Cinder**.
 2. Pick a mode — **Ask** (default), **Notes** or **Pages** — type a question and press **Enter** (Shift+Enter breaks the line). The turn appears in the feed; asking does **not** need a server — the plugin talks to `cinder-mcp`, which reads your local knowledge base directly.
-3. The panel locks itself to the project your IDE project belongs to. The chip next to the modes says `🔒 <project>`; click it to search across all projects, click it again to lock back.
+3. The panel locks itself to the project your IDE project belongs to. The chip next to the modes shows a lock and the project name; click it to search across all projects, click it again to lock back.
 4. If the plugin cannot find `cinder-mcp`, the announcement bar says so and offers **Locate…** (file picker) or **Open settings**. Point it at the binary and the next question works.
-5. **Open in Cinder** (on an opened card) jumps into the Cinder web UI, and that one DOES need a local server that serves the UI. The plugin starts one for you with **Start local service**: it looks for `cinder-server` (see Requirements), starts it on the configured port with its bundled `web/` directory and waits for `/health`.
+5. Click a card's title to read it in place, then **Ask about this** to ask about that exact item — the question goes into the composer and is submitted, so the answer arrives as the next turn, with its sources. Nothing opens outside the panel; the only HTTP dependency left is **moving a note between projects**, which needs a local service (**Settings → Tools → Cinder → Start local service** starts one).
 6. Prefer to check things by hand? **Settings | Tools | Cinder** has the MCP binary, the address, the server binary path, **Check MCP channel**, **Test connection** and **Start local service**:
    - *cinder-mcp found at … (via …).* → the data channel is ready.
-   - *Connected: … — API and web UI both reachable.* → deep links work.
-   - *Connected: …, but API-only: "Open in Cinder" would 404.* → the running server has no web UI; restart it with `--web-dist` or use the release bundle.
+   - *Connected: … — the project move will work.* → the one HTTP call has a service behind it.
    - *No response from …* → nothing is listening; press **Start local service**.
-
-If you click **Open in Cinder** while the service is API-only, you do not land on a bare 404: the plugin says so and offers **Open Anyway** / **Copy URL** / **Cancel**.
 
 ## Maintaining notes without leaving the IDE
 
-The console is also the editor. Open a card in the feed (click its title) and the card's actions appear: **Edit**, **New note here** and **AI Tidy** — the same three maintenance actions the desktop app's note list and the VS Code extension ship.
+The console is also the editor. Open a card in the feed (click its title) and the card's actions appear: **Ask about this**, **Edit**, **New note here** and **AI Tidy** — the same three maintenance actions the desktop app's note list and the VS Code extension ship.
 
 | Action | What it does |
 |---|---|
@@ -99,17 +97,17 @@ The console is also the editor. Open a card in the feed (click its title) and th
 > **A deliberate difference from the VS Code console:** there, the editor opens *inside* the card. Swing has no inline editing surface, so the JetBrains plugin opens the shared `NoteEditorDialog` instead — a platform modal form with a live preview. The gate is the same: the AI writes a proposal, the human saves it.
 
 
-The tidy proposal is generated server-side by the shared service layer (`OrganizeNote`, twin tool `repotory_notes_organize`) and writes nothing by itself — the human save is the gate, exactly as in the desktop app. The AI endpoint is configured once — in the desktop app (Settings → AI) or from the panel's **AI provider** dialog, which writes the same setting. Either way it lives in the knowledge base, so the headless service this plugin talks to reads the same one. In the dialog's preview a mermaid block shows as labelled source code — the same note renders it as a graphic in the desktop app.
+The tidy proposal is generated server-side by the shared service layer (`OrganizeNote`, twin tool `repotory_notes_organize`) and writes nothing by itself — the human save is the gate, exactly as in the desktop app. The AI endpoint is configured once — in the desktop app (Settings → AI) or on the plugin's **AI Provider** settings page, which writes the same setting. Either way it lives in the knowledge base, so the headless service this plugin talks to reads the same one. In the dialog's preview a mermaid block shows as labelled source code — the same note renders it as a graphic in the desktop app.
 
 ## Settings
 
 | Setting | Default | Description |
 |---|---|---|
 | MCP binary | empty (auto-detect) | Path to `cinder-mcp` — the plugin's data channel; empty means `REPOTORY_MCP_BIN`, then `PATH`, then common install directories |
-| Server address | `http://127.0.0.1:18765` | Cinder headless service URL (deep links and moving notes) |
+| Server address | `http://127.0.0.1:18765` | Cinder headless service URL (moving a note between projects) |
 | Server binary | empty (auto-detect) | Path to `cinder-server`; empty means `REPOTORY_SERVER_BIN`, then `PATH`, then common install directories |
 
-All three values are stored in the IDE's own properties store (`repotory.xml`), not in Cinder's database — a client must not write into the service's storage. **The AI provider is not here either**: it lives in the service's configuration and is edited from the panel (see *The external AI provider*), so there is nothing to keep in sync between the IDE and the desktop app.
+All three values are stored in the IDE's own properties store (`repotory.xml`), not in Cinder's database — a client must not write into the service's storage. **The AI provider is not here either**: it lives in the service's configuration and is edited on its own settings page (see *The external AI provider*), so there is nothing to keep in sync between the IDE and the desktop app.
 
 ## Scope
 

@@ -13,8 +13,8 @@ import kotlin.test.assertTrue
  * real `cinder-server` over HTTP — completing the three journeys a user makes:
  *
  *   1. search — a query returns hits the panel can render;
- *   2. deep link — a hit produces the SPA route, and an API-only server is
- *      refused instead of opened as a dead 404 (ADR-0035 decision 6);
+ *   2. read — opening a card loads its whole body in place, over MCP; the pane
+ *      has no second window to fall back on;
  *   3. ask — a question comes back as an answer with its source list.
  *
  * No IDE, no tool window, no display: the model is plain Kotlin behind a
@@ -33,7 +33,6 @@ class E2eGateCTest {
     private val mcpBin = System.getenv("CINDER_E2E_MCP") ?: ""
     private val serverBin = System.getenv("CINDER_E2E_SERVER") ?: ""
     private val homeDir = System.getenv("CINDER_E2E_HOME") ?: ""
-    private val webDist = System.getenv("CINDER_E2E_WEB_DIST") ?: ""
 
     private fun requireBinaries(): Boolean {
         if (mcpBin.isBlank() || serverBin.isBlank() || homeDir.isBlank()) {
@@ -43,14 +42,14 @@ class E2eGateCTest {
         return true
     }
 
-    /** Start a server on [port] and wait for /health. */
-    private fun startServer(port: Int, withWebDist: Boolean): Process {
-        val args = mutableListOf(serverBin, "-port", port.toString())
-        if (withWebDist && webDist.isNotBlank()) {
-            args.add("--web-dist")
-            args.add(webDist)
-        }
-        val builder = ProcessBuilder(args)
+    /**
+     * Start a server on [port] and wait for /health.
+     *
+     * No `--web-dist`: the panels no longer link into the web UI, so the API is
+     * all the gate needs (the panel's own read path is MCP).
+     */
+    private fun startServer(port: Int): Process {
+        val builder = ProcessBuilder(serverBin, "-port", port.toString())
         builder.environment()["HOME"] = homeDir
         builder.redirectErrorStream(false)
         val proc = builder.start()
@@ -134,11 +133,11 @@ class E2eGateCTest {
         events.filterIsInstance<ChatEvent.Turn>().lastOrNull()?.turn
 
     @Test
-    fun thePanelCompletesSearchDeepLinkAndAskAgainstRealBinaries() {
+    fun thePanelCompletesSearchReadAndAskAgainstRealBinaries() {
         if (!requireBinaries()) return
 
         val aiServer = startFakeModel(19899)
-        val server = startServer(19872, withWebDist = true)
+        val server = startServer(19872)
         val client = McpStdioClient(
             command = mcpBin,
             // Isolated HOME: the gate must never read or write the user's real
@@ -173,47 +172,32 @@ class E2eGateCTest {
 
             // ---- journey 1: search ----------------------------------------
             session.run("retry 503", ChatMode.NOTES)
-            val searchTurn = lastTurn(events)
-            assertEquals(TurnState.DONE, searchTurn?.state, "search failed: ${searchTurn?.error}")
-            val cards = searchTurn?.cards.orEmpty()
+            val searchTurn = lastTurn(events) ?: error("the search produced no turn")
+            assertEquals(TurnState.DONE, searchTurn.state, "search failed: ${searchTurn.error}")
+            val cards = searchTurn.cards
             assertTrue(cards.isNotEmpty(), "no hits came back from the real MCP server")
             assertTrue(
                 cards.first().hit.title.contains("Retry policy", ignoreCase = true),
                 "unexpected first hit: ${cards.first().hit.title}",
             )
 
-            // ---- journey 2: deep link -------------------------------------
+            // ---- journey 2: the card reads in place ------------------------
+            // The panel has no second window: opening a card loads the whole
+            // body over MCP and shows it inside the turn that produced it. The
+            // journey used to assert a deep link into the web UI; the link is
+            // gone (the body was already on screen), so what the gate proves
+            // now is that the in-place read reaches the real binary and brings
+            // back the row the search returned.
             val hit = cards.first().hit
-            assertEquals(
-                "$serverUrl/project/1?noteId=$noteId",
-                RepotoryClient().deepLink(serverUrl, hit),
-                "the deep link must point at the row the search actually returned",
+            session.expandCard(searchTurn.id, hit.type, hit.id)
+            val opened = lastTurn(events)?.cards?.firstOrNull { it.hit.type == hit.type && it.hit.id == hit.id }
+            val body = opened?.body
+            assertTrue(body is CardBody.NoteBody, "the card body did not arrive: $body")
+            assertTrue(
+                (body as CardBody.NoteBody).note.body.contains("pay-gateway"),
+                "the card body is not the note the search returned: ${body.note.body}",
             )
-            // The accepting branch: the server serves the SPA. Only meaningful
-            // when a built frontend was supplied — without one the server is
-            // API-only by definition, which is the REFUSING branch's premise,
-            // not a product defect.
-            if (webDist.isNotBlank() && java.io.File(webDist, "index.html").exists()) {
-                assertTrue(
-                    RepotoryClient().servesWebUi(serverUrl),
-                    "a server started with --web-dist must be recognised as serving the UI",
-                )
-            } else {
-                println("gate C: no built web frontend (CINDER_E2E_WEB_DIST) — accepting deep-link branch skipped")
-            }
-
-            // The refusing branch: an API-only server must be recognised as
-            // NOT serving the UI, so the panel can explain instead of opening
-            // a dead link.
-            val apiOnly = startServer(19873, withWebDist = false)
-            try {
-                assertTrue(
-                    !RepotoryClient().servesWebUi("http://127.0.0.1:19873"),
-                    "an API-only server must not be mistaken for a UI server",
-                )
-            } finally {
-                apiOnly.destroyForcibly()
-            }
+            assertEquals(noteId, body.note.id, "the card opened a different note")
 
             // ---- journey 3: ask -------------------------------------------
             session.run("why do we retry on 503?", ChatMode.ASK)
