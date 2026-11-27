@@ -978,7 +978,8 @@
     "workday": "工作日",
     "weekend": "周末",
     "date": "日期",
-    "importFailed": "导入失败"
+    "importFailed": "导入失败",
+    "thinking": "思考过程"
   },
   "status": {
     "time": "当前时间：",

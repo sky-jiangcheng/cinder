@@ -230,6 +230,35 @@ function injectCallouts(html: string, callouts: CalloutBlock[]): string {
   return html
 }
 
+// A gateway that does not separate reasoning_content leaves the model's
+// reasoning inline in content, wrapped in <think>…</think>. It is the model's
+// notes, not the answer: the answer is rendered as usual and the notes fold
+// behind a summary, the shape CodeBuddy and the other IDE agents use. An
+// unterminated block folds too — streaming delivers the open tag long before
+// the close.
+const THINK_BLOCK = /<(think|thinking|reason|reasoning)>([\s\S]*?)(?:<\/\1>|$)/gi
+const THINK_TAG = /<\/?(?:think|thinking|reason|reasoning)>/gi
+
+export function splitThinking(content: string): { thoughts: string[]; body: string } {
+  const thoughts: string[] = []
+  const body = String(content ?? '')
+    .replace(THINK_BLOCK, (_, _tag: string, inner: string) => {
+      const text = inner.trim()
+      if (text) thoughts.push(text)
+      return ''
+    })
+    .replace(THINK_TAG, '')
+    .replace(/^\s*\n+/, '')
+    .trimEnd()
+  return { thoughts, body }
+}
+
+/** The answer without its reasoning notes (excerpts never show them). */
+export function stripThinking(content: string): string {
+  return splitThinking(content).body
+}
+
+
 // renderMarkdown renders markdown to HTML synchronously (no mermaid).
 // Suitable for card snippets, note bodies, and any non-preview context where
 // mermaid diagrams are not expected.
@@ -336,7 +365,7 @@ async function renderMermaidBlocks(text: string): Promise<string> {
 // construct it owns — a bullet marker is only a bullet at the start of a line,
 // an emphasis `_` only when it is not intraword (so `lines_added` survives).
 export function stripMarkdown(content: string, max = 140): string {
-  const cleaned = stripCalloutLines(content)
+  const cleaned = stripCalloutLines(stripThinking(content))
     .replace(/^---\n[\s\S]*?\n---\n?/, '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')   // images → alt text

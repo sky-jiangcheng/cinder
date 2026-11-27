@@ -23,7 +23,7 @@ vi.mock('highlight.js', () => ({
   },
 }))
 
-import { renderMarkdown, stripMarkdown, parseTags, joinTags } from './markdown'
+import { renderMarkdown, stripMarkdown, stripThinking, parseTags, joinTags } from './markdown'
 
 describe('renderMarkdown', () => {
   it('returns empty string for empty input', () => {
@@ -257,5 +257,30 @@ describe('joinTags', () => {
 
   it('returns empty string for empty array', () => {
     expect(joinTags([])).toBe('')
+  })
+})
+
+describe('stripThinking', () => {
+  it('removes a closed reasoning block', () => {
+    expect(stripThinking('<think>plan: read the note first</think>The retry budget was raised.'))
+      .toBe('The retry budget was raised.')
+  })
+
+  it('recognises both spellings, any case, and reasoning', () => {
+    expect(stripThinking('<thinking>x</thinking>A.')).toBe('A.')
+    expect(stripThinking('<THINK>x</THINK>A.')).toBe('A.')
+    expect(stripThinking('<reasoning>x</reasoning>A.')).toBe('A.')
+  })
+
+  it('drops an unterminated block to the end (a streaming answer)', () => {
+    expect(stripThinking('Answer so far.\n<think>still thinking')).toBe('Answer so far.')
+  })
+
+  it('removes a stray tag and keeps the text around it', () => {
+    expect(stripThinking('Answer.</think>')).toBe('Answer.')
+  })
+
+  it('keeps the notes out of an excerpt', () => {
+    expect(stripMarkdown('<think>notes</think>The answer.')).toBe('The answer.')
   })
 })

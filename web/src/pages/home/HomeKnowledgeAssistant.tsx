@@ -20,6 +20,7 @@ import {
   type SearchHit,
 } from '../../api/client'
 import { useRenderedMarkdown } from '../../hooks/useRenderedMarkdown'
+import { renderMarkdown, splitThinking } from '../../utils/markdown'
 import type { PushToast } from '../../hooks/useToast'
 import { publishAssistantCards } from '../../hooks/assistantCards'
 import s from './HomeKnowledgeAssistant.module.css'
@@ -1311,12 +1312,30 @@ export default function HomeKnowledgeAssistant({
  * sync fallback still shows the latest text immediately while it settles.
  */
 export function AssistantAnswerBody({ content, warningTitle }: { content: string; warningTitle: string }) {
-  const html = useRenderedMarkdown(normalizeAnswerMarkdown(content, warningTitle), 120)
+  const { t } = useTranslation()
+  // The model often thinks before it answers, and a gateway that does not
+  // separate reasoning_content leaves those notes in content. They are the
+  // model's working, not the answer: fold them behind one row above it, the
+  // shape CodeBuddy and the IDE panes show. The answer is rendered exactly as
+  // before once the notes are split out.
+  const { thoughts, body } = splitThinking(content)
+  const html = useRenderedMarkdown(normalizeAnswerMarkdown(body, warningTitle), 120)
   return (
-    <div
-      className={`${s.markdownText} markdown-body`}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      {thoughts.length > 0 && (
+        <details className="think-block">
+          <summary>{t('common.thinking', { defaultValue: 'Thinking' })}</summary>
+          <div
+            className="think-body markdown-body"
+            dangerouslySetInnerHTML={{ __html: thoughts.map((thought) => renderMarkdown(thought)).join('') }}
+          />
+        </details>
+      )}
+      <div
+        className={`${s.markdownText} markdown-body`}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </>
   )
 }
 

@@ -104,3 +104,25 @@
 [data-theme="dark"] .markdown-body .callout-warning { background: rgba(201, 87, 87, 0.1); }
 [data-theme="dark"] .markdown-body .callout-caution { background: rgba(155, 44, 44, 0.12); }
 [data-theme="dark"] .markdown-body .callout-question { background: rgba(90, 127, 160, 0.1); }
+
+/* Folded model reasoning: the model's notes, not the answer. The block is
+   removed from the answer's flow (it is emitted above it) and only opens on
+   demand, the same shape CodeBuddy uses. */
+.think-block {
+  margin: 0 0 0.9em 0;
+  border-left: 2px solid var(--border-subtle);
+  padding-left: 10px;
+}
+.think-block > summary {
+  cursor: pointer;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  list-style: none;
+}
+.think-block > summary::-webkit-details-marker { display: none; }
+.think-block > summary::before { content: '▸ '; }
+.think-block[open] > summary::before { content: '▾ '; }
+.think-block .think-body {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}

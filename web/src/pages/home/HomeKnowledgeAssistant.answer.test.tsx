@@ -8,7 +8,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-import { normalizeAnswerMarkdown, AnswerHead, type DialogueMessage } from './HomeKnowledgeAssistant'
+import { AssistantAnswerBody, normalizeAnswerMarkdown, AnswerHead, type DialogueMessage } from './HomeKnowledgeAssistant'
 import { renderMarkdown } from '../../utils/markdown'
 import type { Project } from '../../api/client'
 
@@ -44,5 +44,29 @@ describe('AnswerHead', () => {
     expect(screen.getByText('6 项目')).toBeTruthy()
     expect(screen.getByText('3 知识')).toBeTruthy()
     expect(screen.getByText('5 字')).toBeTruthy()
+  })
+})
+
+describe('AssistantAnswerBody', () => {
+  it('folds the model reasoning above the answer', async () => {
+    const { container } = render(
+      <AssistantAnswerBody
+        content={'<think>plan: read the note first</think>The retry budget was raised.'}
+        warningTitle="注意"
+      />,
+    )
+    const details = container.querySelector('details.think-block')
+    expect(details).toBeTruthy()
+    // The notes are still there, one click away — not deleted, not the answer.
+    expect(details?.querySelector('summary')?.textContent).toBe('Thinking')
+    expect(details?.textContent).toContain('plan: read the note first')
+    expect(await screen.findByText(/The retry budget was raised/)).toBeTruthy()
+  })
+
+  it('does not draw a disclosure when there is no reasoning', async () => {
+    const { container } = render(
+      <AssistantAnswerBody content={'The retry budget was raised.'} warningTitle="注意" />,
+    )
+    expect(container.querySelector('details.think-block')).toBeNull()
   })
 })

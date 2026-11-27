@@ -27,9 +27,34 @@ internal object ChatConsoleHtml {
     /** The href scheme every action in the feed uses. */
     const val LINK_SCHEME = "repotory:"
 
+    /**
+     * The idle panel's question example.
+     *
+     * Here, not inline in the HTML: the row is a link that ASKS, so the
+     * dispatcher needs the same sentence the reader clicked — one constant, or
+     * the label and the question drift apart.
+     */
+    const val EXAMPLE_ASK = "Why was the retry budget raised?"
+
     /** Colours pulled from the IDE theme, as #rrggbb for the HTML renderer. */
     private val meta: String get() = metaColorHex()
     private val border: String get() = colorHex(JBColor.border())
+
+    /**
+     * The wash behind a question.
+     *
+     * Mixed from the theme's own two colours (6% of the way toward the
+     * foreground), the same ratio the segmented track and the VS Code panel's
+     * `textCodeBlock-background` wash use — so the block reads as part of the
+     * theme in every scheme instead of as a pasted grey box.
+     */
+    private val tint: String
+        get() {
+            val bg = JBColor.background()
+            val fg = JBColor.foreground()
+            fun mix(base: Int, toward: Int): Int = (base + (toward - base) * 0.06).toInt()
+            return colorHex(Color(mix(bg.red, fg.red), mix(bg.green, fg.green), mix(bg.blue, fg.blue)))
+        }
 
     /**
      * The whole feed: the fold row, then the visible turns.
@@ -44,6 +69,7 @@ internal object ChatConsoleHtml {
         collapsedTurns: Set<String>,
         expandedSources: Set<String>,
         expandedCards: Set<String>,
+        expandedThoughts: Set<String>,
     ): String {
         val sb = StringBuilder()
         sb.append("<html><body style=\"margin:0px; padding:8px 10px 14px 10px;\">")
@@ -56,7 +82,7 @@ internal object ChatConsoleHtml {
             }
             val visible = if (showEarlier) turns else turns.takeLast(VISIBLE_TURNS)
             for (turn in visible) {
-                sb.append(turnHtml(turn, collapsedTurns, expandedSources, expandedCards))
+                sb.append(turnHtml(turn, collapsedTurns, expandedSources, expandedCards, expandedThoughts))
             }
         }
         sb.append("</body></html>")
@@ -127,12 +153,12 @@ internal object ChatConsoleHtml {
      * pitch described the product instead of telling the reader what to do.
      */
     private fun emptyStateHtml(): String = """
-        <p style="font-size:12pt; font-weight:bold; margin-top:8px;">Ask what your project knows.</p>
-        <p>Cinder answers from the notes your coding agents left behind, with the sources listed.</p>
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;">
-        <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/ask">Why was the retry budget raised?</a></td></tr>
-        <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/notes">Search the notes &amp; todos</a></td></tr>
-        <tr><td style="padding:2px 0;"><a href="${LINK_SCHEME}//example/pages">Browse the approved knowledge pages</a></td></tr>
+        <p style="font-size:13pt; font-weight:bold; margin-top:10px; margin-bottom:6px;">Ask what your project knows.</p>
+        <p style="color:$meta; margin-top:0px;">Cinder answers from the notes your coding agents left behind, with the sources listed.</p>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
+        <tr><td style="padding:4px 0;"><a href="${LINK_SCHEME}//example/ask">→ ${EXAMPLE_ASK}</a></td></tr>
+        <tr><td style="padding:4px 0;"><a href="${LINK_SCHEME}//example/notes">→ Search the notes &amp; todos</a></td></tr>
+        <tr><td style="padding:4px 0;"><a href="${LINK_SCHEME}//example/pages">→ Browse the approved knowledge pages</a></td></tr>
         </table>
     """.trimIndent()
 
@@ -148,29 +174,43 @@ internal object ChatConsoleHtml {
         """.trimIndent()
     }
 
-    /** One turn: the question, and everything it produced. */
+    /**
+     * One turn: the question, and everything it produced.
+     *
+     * The question sits on a wash of its own (the VS Code panel's `.turn-head`)
+     * so it cannot merge into the answer under it — one column of text where
+     * the question and the reply look alike is the thing that made a long
+     * thread unreadable. The mode label is coloured per face: it is the only
+     * thing that says which part of the knowledge base answered.
+     */
     private fun turnHtml(
         turn: ChatTurn,
         collapsedTurns: Set<String>,
         expandedSources: Set<String>,
         expandedCards: Set<String>,
+        expandedThoughts: Set<String>,
     ): String {
         val collapsed = turn.id in collapsedTurns
+        val label = turn.mode.label.uppercase()
+        val color = modeColor(turn.mode)
+        // A collapsed turn is only its head, so the gap the body would have
+        // carried has to move onto the head itself.
+        val headGap = if (collapsed) 14 else 2
         val sb = StringBuilder()
         sb.append(
             """
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+            <table width="100%" cellpadding="4" cellspacing="0" style="margin-bottom:${headGap}px;">
             <tr>
-              <td valign="top" style="padding-right:6px;"><span style="font-size:8pt; color:$meta;">${turn.mode.label.uppercase()}</span></td>
-              <td valign="top" style="font-weight:bold;">${esc(turn.query)}</td>
-              <td valign="top" align="right" style="width:16px;"><a href="${LINK_SCHEME}//turn/${turn.id}/toggle">${if (collapsed) "▸" else "▾"}</a></td>
+              <td valign="top" bgcolor="$tint" style="width:40px;"><span style="font-size:8pt; font-weight:bold; color:$color;">$label</span></td>
+              <td valign="top" bgcolor="$tint" style="font-weight:bold;">${esc(turn.query)}</td>
+              <td valign="top" bgcolor="$tint" align="right" style="width:14px;"><a href="${LINK_SCHEME}//turn/${turn.id}/toggle">${if (collapsed) "▸" else "▾"}</a></td>
             </tr>
             </table>
             """.trimIndent(),
         )
         if (!collapsed) {
-            sb.append("<div style=\"margin-left:4px;\">")
-            sb.append(turnBodyHtml(turn, expandedSources, expandedCards))
+            sb.append("<div style=\"margin-left:5px; margin-bottom:12px;\">")
+            sb.append(turnBodyHtml(turn, expandedSources, expandedCards, expandedThoughts))
             sb.append("</div>")
         }
         return sb.toString()
@@ -181,6 +221,7 @@ internal object ChatConsoleHtml {
         turn: ChatTurn,
         expandedSources: Set<String>,
         expandedCards: Set<String>,
+        expandedThoughts: Set<String>,
     ): String {
         if (turn.state == TurnState.PENDING) {
             return "<p><i>Working…</i></p>"
@@ -189,14 +230,15 @@ internal object ChatConsoleHtml {
             return errorBoxHtml(turn.error.ifBlank { "The request failed." })
         }
         if (turn.mode == ChatMode.ASK) {
-            val answer = if (turn.verbatim) {
+            val split = splitThinking(turn.answer)
+            val answer = when {
                 // The source list could not be parsed: show the tool's text as
                 // it came, so nothing is swallowed.
-                "<pre>" + esc(turn.answer) + "</pre>"
-            } else {
-                MarkdownLite.toHtml(turn.answer)
+                turn.verbatim -> if (split.body.isBlank()) "" else "<pre>" + esc(split.body) + "</pre>"
+                split.body.isBlank() -> ""
+                else -> MarkdownLite.toHtml(split.body)
             }
-            return answer + sourcesHtml(turn, expandedSources)
+            return thoughtsHtml(turn, split.thoughts, expandedThoughts) + answer + sourcesHtml(turn, expandedSources)
         }
         val sb = StringBuilder()
         for (card in turn.cards) {
@@ -214,6 +256,42 @@ internal object ChatConsoleHtml {
      * The answer is the body; the evidence is its footnote (ADR-0036
      * decision 3), so the list stays closed until the reader asks for it.
      */
+    /**
+     * The model's inline reasoning, folded behind one row.
+     *
+     * The model often thinks before it answers, and a gateway that does not
+     * separate reasoning_content leaves those notes in content. They are the
+     * model's working, not the answer, so they stay behind a row that says
+     * what they are — the same shape CodeBuddy and other IDE agents show.
+     *
+     * Swing's HTML kit has no <details>, so the fold is the link-and-rerender
+     * shape the Sources list already uses: the row carries the state, and the
+     * content is emitted only while the turn is open.
+     */
+    private fun thoughtsHtml(
+        turn: ChatTurn,
+        thoughts: List<String>,
+        expandedThoughts: Set<String>,
+    ): String {
+        if (thoughts.isEmpty()) return ""
+        val open = turn.id in expandedThoughts
+        val sb = StringBuilder()
+        sb.append(
+            "<p style=\"margin:0 0 4px 0; font-size:9pt;\">" +
+                "<a href=\"${LINK_SCHEME}//turn/${turn.id}/think\">Thinking ${if (open) "\u25be" else "\u25b8"}</a>" +
+                "</p>",
+        )
+        if (!open) return sb.toString()
+        for (thought in thoughts) {
+            sb.append(
+                "<div style=\"margin:0 0 8px 6px; padding-left:8px; border-left:2px solid $meta; color:$meta;\">" +
+                    MarkdownLite.toHtml(thought) +
+                    "</div>",
+            )
+        }
+        return sb.toString()
+    }
+
     private fun sourcesHtml(turn: ChatTurn, expandedSources: Set<String>): String {
         if (turn.sources.isEmpty()) return ""
         val open = turn.id in expandedSources
@@ -317,11 +395,18 @@ internal object ChatConsoleHtml {
         }
     }
 
-    /** The actions of an opened card — the same set the VS Code console ships. */
+    /**
+     * The actions of an opened card — the same set the VS Code console ships.
+     *
+     * No "Open in Cinder": the body is already on screen, so the only thing
+     * that button ever added was a way OUT of the feed. A reader who wants
+     * more about the card wants it answered, not relocated — "Ask about this"
+     * puts that question in the composer and sends it.
+     */
     private fun cardActionsHtml(turn: ChatTurn, hit: RepotoryHit): String {
         val sb = StringBuilder()
         sb.append("<p style=\"font-size:9pt; margin-top:6px;\">")
-        sb.append("<a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/open\">Open in Cinder</a>")
+        sb.append("<a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/ask\">Ask about this</a>")
         if (hit.type == "note") {
             sb.append(" · <a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/edit\">Edit</a>")
             sb.append(" · <a href=\"${LINK_SCHEME}//card/${turn.id}/${hit.type}/${hit.id}/create\">New note here</a>")
@@ -341,6 +426,17 @@ internal object ChatConsoleHtml {
         "todo" -> colorHex(JBColor(Color(0x8B, 0x6F, 0x3A), Color(0xD9, 0xB7, 0x73)))
         "wiki" -> colorHex(JBColor(Color(0x6F, 0x42, 0xC1), Color(0xD2, 0xA8, 0xFF)))
         else -> colorHex(JBColor(Color(0x1D, 0x4E, 0xD8), Color(0x60, 0xA5, 0xFA)))
+    }
+
+    /**
+     * The colour of a mode label — the same three the VS Code panel uses for
+     * `.mode.ask` / `.mode.notes` / `.mode.pages`, so a Notes turn is amber on
+     * both IDEs and the reader learns the mapping once.
+     */
+    private fun modeColor(mode: ChatMode): String = when (mode) {
+        ChatMode.ASK -> colorHex(JBColor(Color(0x1D, 0x4E, 0xD8), Color(0x60, 0xA5, 0xFA)))
+        ChatMode.NOTES -> colorHex(JBColor(Color(0x8B, 0x6F, 0x3A), Color(0xD9, 0xB7, 0x73)))
+        ChatMode.PAGES -> colorHex(JBColor(Color(0x6F, 0x42, 0xC1), Color(0xD2, 0xA8, 0xFF)))
     }
 
     /** The failure colour, paired light/dark. */

@@ -979,7 +979,8 @@
     "workday": "Workday",
     "weekend": "Weekend",
     "date": "Date",
-    "importFailed": "Import failed"
+    "importFailed": "Import failed",
+    "thinking": "Thinking"
   },
   "status": {
     "time": "Current time:",

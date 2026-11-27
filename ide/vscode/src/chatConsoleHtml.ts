@@ -14,8 +14,6 @@ export const VISIBLE_TURNS = 2;
 // VS Code as an empty box, which is harder to diagnose than a missing button.
 // All of them draw with `currentColor`, so they follow the theme by themselves.
 
-const ICON_DESKTOP = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 13.5h5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`;
-
 // Conversation history: three lines, the same glyph Warden uses for its
 // "conversations" sheet. The list itself is HIDDEN until asked for — a sidebar
 // that always draws a topic dropdown plus two buttons above the feed spends
@@ -24,7 +22,20 @@ const ICON_HISTORY = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="fal
 
 const ICON_PLUS = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2.8v10.4M2.8 8h10.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 
-const ICON_GEAR = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.6v1.7M8 12.7v1.7M1.6 8h1.7M12.7 8h1.7M3.5 3.5l1.2 1.2M11.3 11.3l1.2 1.2M12.5 3.5l-1.2 1.2M4.7 11.3l-1.2 1.2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+// A cog, not a sun: the first version was a hub plus eight radial spokes with no
+// rim, and at 16px it read as a sun. The rim (r 4.6) plus the hole is what makes
+// it a gear; the eight teeth only have to say "teeth", not be gear-accurate.
+const ICON_GEAR = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.4M8 13.6V15M1 8h1.4M13.6 8H15M3.2 3.2l1 1M11.8 11.8l1 1M12.8 3.2l-1 1M4.2 11.8l-1 1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
+// The send key is a glyph, not a word and not a keyboard symbol: "↵" is the
+// Enter legend, and it read as a hint rather than as the button that sends.
+// Same drawing as the JetBrains panel's PanelIcons.send().
+const ICON_SEND = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 13.2V3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M4 7.4 8 3.4l4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// The scope chip's lock. It used to be the 🔒 emoji, which comes out as
+// another vendor's coloured glyph in half the platforms — a picture of a lock
+// in a 11px line-icon row.
+const ICON_LOCK = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><rect x="3.6" y="7" width="8.8" height="6.4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.8 7V5.4a2.2 2.2 0 0 1 4.4 0V7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 
 const KINDS = ["knowledge", "log", "idea", "other"];
 
@@ -79,19 +90,20 @@ export function consoleHtml(nonce: string): string {
      chrome and left almost nothing for the conversation. */
   header.bar {
     display: flex; align-items: center; gap: 8px; flex: none;
-    padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--r-border);
+    padding: 7px 8px 7px 10px; border-bottom: 1px solid var(--r-border);
   }
-  .mark { flex: none; display: block; border-radius: 3px; }
+  .mark { flex: none; display: block; border-radius: 5px; }
   .wordmark {
-    flex: 1; min-width: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+    flex: 1; min-width: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.01em;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .actions { display: flex; align-items: center; gap: 1px; flex: none; }
+  .actions { display: flex; align-items: center; gap: 2px; flex: none; }
   .icon-btn {
-    flex: none; width: 24px; height: 24px; cursor: pointer; position: relative;
+    flex: none; width: 26px; height: 26px; cursor: pointer; position: relative;
     display: flex; align-items: center; justify-content: center;
-    background: none; border: none; border-radius: 4px;
+    background: none; border: none; border-radius: 6px;
     color: var(--vscode-foreground, #333);
+    transition: background 110ms ease;
   }
   .icon-btn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
   .icon-btn:focus-visible { outline: 1px solid var(--r-accent); outline-offset: -1px; }
@@ -132,23 +144,36 @@ export function consoleHtml(nonce: string): string {
     flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
     padding: 10px 12px 18px;
   }
-  .turn { margin-bottom: 16px; }
-  .turn-head { display: flex; align-items: flex-start; gap: 6px; }
-  .turn-head .mode {
-    flex: none; font-size: 9px; font-weight: 700; letter-spacing: .06em;
-    text-transform: uppercase; padding: 1px 5px; border-radius: 4px;
-    border: 1px solid currentColor; color: var(--r-muted);
+  .turn { margin-bottom: 18px; }
+  /* The question sits on a wash instead of running into its own answer: with
+     nothing between them, a long answer and the question that asked for it
+     read as one column of text. A wash, not a box — no border, so the
+     question still reads as a line of the conversation and not as a field. */
+  .turn-head {
+    display: flex; align-items: flex-start; gap: 7px;
+    padding: 6px 8px; border-radius: 8px;
+    background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.10));
   }
+  .turn-head .mode {
+    flex: none; margin-top: 1px; font-size: 9px; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+  /* One colour per mode, the same three the cards use for their badges: the
+     label is the only thing that says which face answered, so it cannot be
+     the same grey as the metadata. */
+  .mode.ask { color: var(--vscode-textLink-foreground, #06c); }
+  .mode.notes { color: var(--vscode-editorWarning-foreground, #b90); }
+  .mode.pages { color: var(--vscode-charts-purple, #8250df); }
   .turn-head .q {
     flex: 1; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.45;
     overflow-wrap: anywhere;
   }
   .turn-head .chev {
-    flex: none; background: none; border: none; cursor: pointer;
+    flex: none; background: none; border: none; cursor: pointer; margin-top: -1px;
     color: var(--r-muted); font-size: 12px; line-height: 1.3; padding: 0 2px;
   }
   .turn-head .chev:hover { color: var(--vscode-foreground, #333); }
-  .turn-body { margin-top: 6px; padding-left: 2px; }
+  .turn-body { margin-top: 8px; padding-left: 9px; }
   .pending { font-size: 12px; color: var(--r-muted); font-style: italic; }
   .turn-error {
     font-size: 12px; line-height: 1.5; padding: 7px 9px;
@@ -199,6 +224,10 @@ export function consoleHtml(nonce: string): string {
   .sources-toggle:hover { color: var(--vscode-foreground, #333); }
   .sources {
     margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--r-border);
+  }
+  .thinking {
+    margin: 4px 0 8px 0; padding-left: 8px; border-left: 2px solid var(--r-border);
+    font-size: 11px; color: var(--r-muted);
   }
   .src-item { font-size: 11px; line-height: 1.5; margin-bottom: 5px; overflow-wrap: anywhere; }
   .src-item .ref { font-weight: 700; font-family: var(--vscode-editor-font-family, monospace); }
@@ -285,58 +314,78 @@ export function consoleHtml(nonce: string): string {
   /* ---------- the composer (always there) ---------- */
   footer.composer {
     flex: none; position: relative;
-    border-top: 1px solid var(--r-border); padding: 8px 10px 8px;
+    border-top: 1px solid var(--r-border); padding: 9px 10px 9px;
   }
   .input-wrap { position: relative; }
   .composer textarea {
-    display: block; width: 100%; min-height: 32px; max-height: 190px; resize: none;
-    padding: 6px 30px 6px 8px; font-size: 12px; line-height: 1.5;
+    display: block; width: 100%; min-height: 34px; max-height: 190px; resize: none;
+    padding: 7px 36px 7px 9px; font-size: 12px; line-height: 1.5;
     font-family: var(--vscode-font-family, sans-serif);
     color: var(--vscode-input-foreground, #333);
     background: var(--vscode-input-background, #fff);
-    border: 1px solid var(--vscode-input-border, #ccc); border-radius: 5px; outline: none;
+    border: 1px solid var(--vscode-input-border, #ccc); border-radius: 9px; outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
   }
-  .composer textarea:focus { border-color: var(--r-accent); }
+  .composer textarea:focus {
+    border-color: var(--r-accent);
+    box-shadow: 0 0 0 1px var(--r-accent);
+  }
+  /* One line of hint, ellipsized. A wrapping placeholder is drawn inside a
+     one-line-tall box and its second line is cut in half — a truncated hint
+     looks like a broken field. */
+  .composer textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The send key sits INSIDE the input box (Windsurf's shape), so the input
      grows downward and never covers it. */
   .send {
-    position: absolute; right: 3px; bottom: 3px;
-    width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 1; cursor: pointer;
+    position: absolute; right: 4px; bottom: 4px;
+    width: 26px; height: 26px; padding: 0; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    border: none; border-radius: 4px;
+    border: none; border-radius: 7px;
     color: var(--vscode-button-foreground, #fff);
     background: var(--vscode-button-background, #06c);
-    transition: background 120ms ease, opacity 120ms ease;
+    transition: background 120ms ease, color 120ms ease;
   }
+  .send svg { width: 15px; height: 15px; display: block; }
   .send:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, var(--vscode-button-background, #06c)); filter: brightness(.94); }
   .send:active:not(:disabled) { filter: brightness(.88); }
   .send:focus-visible { outline: 1px solid var(--vscode-focusBorder, #06c); outline-offset: 1px; }
-  .send:disabled { opacity: .5; cursor: default; }
+  /* Disabled is an empty key, not a faded blue one: nothing to send means
+     no button, and a half-opaque accent square still reads as "press me". */
+  .send:disabled {
+    background: transparent; color: var(--r-muted); cursor: default; filter: none;
+  }
   /* The tool row: the mode group on the left, the project chip on the right.
      It wraps instead of clipping: a narrow side bar used to hide the chip
      beyond overflow:hidden, which made project scope unreachable. */
-  .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 6px; margin-top: 7px; }
-  .modes { display: flex; gap: 3px; flex: none; flex-wrap: wrap; }
-  .mode-btn {
-    padding: 4px 8px; min-height: 24px; font-size: 11px; cursor: pointer; border-radius: 6px;
-    border: 1px solid var(--r-border);
-    color: var(--r-muted); background: transparent;
-    transition: color 120ms ease, border-color 120ms ease;
+  .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 6px; margin-top: 8px; }
+  /* A segmented control, not three separate pills: the three modes are one
+     choice, and three bordered buttons read as three unrelated switches. */
+  .modes {
+    display: inline-flex; flex: none; flex-wrap: wrap; gap: 2px; padding: 2px;
+    border: 1px solid var(--r-border); border-radius: 8px;
+    background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.10));
   }
-  .mode-btn:hover { color: var(--vscode-foreground, #333); }
-  .mode-btn:active { color: var(--vscode-foreground, #333); border-color: var(--vscode-foreground, #333); }
+  .mode-btn {
+    padding: 3px 9px; min-height: 20px; font-size: 11px; cursor: pointer; border-radius: 6px;
+    border: none; color: var(--r-muted); background: transparent;
+    transition: color 110ms ease, background 110ms ease;
+  }
+  .mode-btn:hover { color: var(--vscode-foreground, #333); background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
   .mode-btn:focus-visible { outline: 1px solid var(--vscode-focusBorder, #06c); outline-offset: 1px; }
   .mode-btn.active {
     color: var(--vscode-button-foreground, #fff);
-    background: var(--vscode-button-background, #06c); border-color: transparent;
+    background: var(--vscode-button-background, #06c);
   }
+  .mode-btn.active:hover { filter: brightness(1.06); }
   .chip {
     margin-left: auto; flex: none; max-width: 100%; min-height: 24px; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 9px; font-size: 11px; cursor: pointer; border-radius: 6px;
     border: 1px solid var(--r-border); background: transparent; color: var(--r-muted);
-    transition: color 120ms ease, border-color 120ms ease;
+    transition: color 110ms ease, border-color 110ms ease;
   }
+  .chip svg { width: 11px; height: 11px; flex: none; }
+  .chip .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chip:active { color: var(--vscode-foreground, #333); }
   .chip:focus-visible { outline: 1px solid var(--vscode-focusBorder, #06c); outline-offset: 1px; }
   .chip.locked { color: var(--vscode-foreground, #333); border-color: var(--r-accent); }
@@ -418,22 +467,32 @@ export function consoleHtml(nonce: string): string {
   .form-status.ok { color: var(--vscode-testing-iconPassed, #1a7f37); }
   .form-status.err { color: var(--vscode-errorForeground, #c33); }
   /* ---------- the empty state ---------- */
-  .empty { padding: 18px 12px; font-size: 12px; line-height: 1.6; color: var(--r-muted); }
-  .empty h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--vscode-foreground, #333); }
-  .empty p { margin: 0 0 8px; }
+  .empty { padding: 20px 12px 12px; font-size: 12px; line-height: 1.6; color: var(--r-muted); }
+  .empty h2 {
+    margin: 0 0 6px; font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+    color: var(--vscode-foreground, #333);
+  }
+  .empty p { margin: 0 0 6px; }
   .empty kbd {
     padding: 1px 5px; font-size: 10px; border-radius: 3px;
     font-family: var(--vscode-editor-font-family, monospace);
     border: 1px solid var(--r-border);
   }
-  .examples { list-style: none; margin: 0; padding: 0; }
-  .examples li { margin-bottom: 5px; }
+  .examples { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .examples li { margin: 0; }
   .examples button {
-    width: 100%; text-align: left; padding: 6px 9px; font-size: 12px; cursor: pointer;
-    border: 1px solid var(--r-border); border-radius: 5px;
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    padding: 7px 10px; font-size: 12px; cursor: pointer; border-radius: 7px;
+    border: 1px solid var(--r-border);
     color: var(--vscode-foreground, #333); background: transparent;
+    transition: border-color 110ms ease, background 110ms ease;
   }
-  .examples button:hover { border-color: var(--r-accent); }
+  /* The arrow says "this starts something" without a word of copy. */
+  .examples button::before { content: "→"; flex: none; color: var(--r-muted); }
+  .examples button:hover {
+    border-color: var(--r-accent);
+    background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.10));
+  }
 </style>
 </head>
 <body>
@@ -444,7 +503,6 @@ export function consoleHtml(nonce: string): string {
     <button class="icon-btn" id="history-open" type="button" title="Conversation history" aria-label="Conversation history" aria-haspopup="dialog" aria-controls="history-sheet">${ICON_HISTORY}</button>
     <button class="icon-btn" id="topic-new" type="button" title="New conversation" aria-label="New conversation">${ICON_PLUS}</button>
     <button class="icon-btn" id="provider-open" type="button" title="AI provider settings" aria-label="AI provider settings" aria-haspopup="dialog" aria-controls="provider-sheet">${ICON_GEAR}</button>
-    <button class="icon-btn" id="act-desktop" type="button" title="Open the Cinder Desktop app" aria-label="Open the Cinder Desktop app">${ICON_DESKTOP}</button>
   </span>
 </header>
 <div class="announce" id="announce" hidden>
@@ -457,7 +515,7 @@ export function consoleHtml(nonce: string): string {
   <div class="pop" id="project-pop" hidden></div>
   <div class="input-wrap">
     <textarea id="q" rows="1" placeholder="Ask about this project…" spellcheck="false"></textarea>
-    <button class="send" id="send" type="button" title="Send (Enter)" aria-label="Send">↵</button>
+    <button class="send" id="send" type="button" title="Send (Enter)" aria-label="Send">${ICON_SEND}</button>
   </div>
   <div class="tools">
     <span class="modes" role="group" aria-label="Knowledge mode">
@@ -500,7 +558,7 @@ export function consoleHtml(nonce: string): string {
     <button class="icon-btn" type="button" data-close="provider-sheet" aria-label="Close AI provider settings" title="Close">✕</button>
   </header>
   <div class="sheet-body">
-    <p class="sheet-hint">Any OpenAI-compatible endpoint: OpenRouter, OpenAI, DeepSeek, vLLM, LM Studio, Ollama. Answers are written by this endpoint; the key stays on this machine. Fetching models and testing the typed values connect directly; saving — and testing the saved key — need the local Cinder service (start the desktop app).</p>
+    <p class="sheet-hint">Any OpenAI-compatible endpoint: OpenRouter, OpenAI, DeepSeek, vLLM, LM Studio, Ollama. Answers are written by this endpoint; the key stays on this machine. Fetching models and testing the typed values connect directly; saving — and testing the saved key — need the local Cinder service (Cinder: Start Local Service).</p>
     <label class="field">
       <span class="flabel">Base URL</span>
       <input id="p-base" type="text" placeholder="https://api.deepseek.com  or  http://localhost:1234/v1" spellcheck="false" autocomplete="off">
@@ -526,6 +584,7 @@ export function consoleHtml(nonce: string): string {
 
 <script nonce="${nonce}">
 const MARK_SVG = ${JSON.stringify(MARK_SVG)};
+const ICON_LOCK = ${JSON.stringify(ICON_LOCK)};
 const KINDS = ${JSON.stringify(KINDS)};
 const VISIBLE_TURNS = ${VISIBLE_TURNS};
 const vscode = acquireVsCodeApi();
@@ -557,6 +616,8 @@ const drafts = new Map();
 let topicSignature = '';
 let collapsedTurns = new Set();
 let expandedSources = new Set();
+// Turns whose inline reasoning is open. Folded by default (Thinking ▸).
+let expandedThoughts = new Set();
 let expandedCards = new Set();
 let showEarlier = false;
 let announcement = null;
@@ -573,12 +634,31 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 
+// A gateway that does not separate reasoning_content leaves the model's
+// reasoning inline in content, wrapped in <think>…</think>. It is the model's
+// notes, not the answer: the pane folds them behind a "Thinking" row, the
+// same shape the Sources list and the JetBrains panel use. An unterminated
+// block folds too — streaming delivers the open tag long before the close,
+// and the notes must not flash in while the model is still thinking.
+function splitThinking(src) {
+  const thoughts = [];
+  const body = String(src ?? '')
+    .replace(/<(think|thinking|reason|reasoning)>([\\s\\S]*?)(?:<\\/\\1>|$)/gi, (_, tag, inner) => {
+      thoughts.push(inner);
+      return '';
+    })
+    .replace(/<\\/?(?:think|thinking|reason|reasoning)>/gi, '')
+    .replace(/^\\s*\\n+/, '')
+    .replace(/\\s+$/, '');
+  return { thoughts, body };
+}
+
 // Minimal markdown: the note store is markdown, and a wall of raw asterisks
 // undoes the point of a reader. Anything unknown is escaped and shown
 // verbatim — never dropped.
 function md(src) {
   const blocks = [];
-  let text = String(src ?? '');
+  let text = splitThinking(src).body;
   text = text.replace(/\`\`\`([^\\n]*)\\n([\\s\\S]*?)\`\`\`/g, (_, lang, code) => {
     if (lang.trim().toLowerCase() === 'mermaid') {
       blocks.push('<div class="diagram"><div class="diagram-head">Flowchart · mermaid source</div>' +
@@ -704,17 +784,17 @@ function renderTopics() {
 // opens the project picker instead.
 function renderScope() {
   if (!scope.projectId) {
-    chip.textContent = candidates.length ? 'Choose project' : 'All projects';
+    chip.innerHTML = '<span class="label">' + esc(candidates.length ? 'Choose project' : 'All projects') + '</span>';
     chip.className = 'chip pick';
     chip.title = 'This workspace does not resolve to a Cinder project yet — click to pick one.';
     return;
   }
   if (scope.locked) {
-    chip.textContent = '🔒 ' + scope.projectName;
+    chip.innerHTML = ICON_LOCK + '<span class="label">' + esc(scope.projectName) + '</span>';
     chip.className = 'chip locked';
     chip.title = 'Locked to ' + scope.projectName + ' — click to search across all projects.';
   } else {
-    chip.textContent = 'All projects';
+    chip.innerHTML = '<span class="label">All projects</span>';
     chip.className = 'chip';
     chip.title = 'Searching across all projects — click to lock back to ' + scope.projectName + '.';
   }
@@ -803,8 +883,7 @@ function renderFeed() {
       '<li><button type="button" data-example="ask">Why was the retry budget raised?</button></li>' +
       '<li><button type="button" data-example="notes">Search the notes &amp; todos</button></li>' +
       '<li><button type="button" data-example="pages">Browse the approved knowledge pages</button></li>' +
-      '</ul>';
-    for (const btn of Array.from(empty.querySelectorAll('[data-example]'))) {
+      '</ul>';    for (const btn of Array.from(empty.querySelectorAll('[data-example]'))) {
       btn.addEventListener('click', () => {
         const kind = btn.getAttribute('data-example');
         if (kind === 'notes' || kind === 'pages') {
@@ -813,7 +892,9 @@ function renderFeed() {
           q.focus();
           return;
         }
-        q.focus();
+        // The question example: its label IS a question, so the click asks it
+        // instead of just moving the caret into an empty composer.
+        askNow(btn.textContent.trim());
       });
     }
     feedEl.appendChild(empty);
@@ -845,7 +926,7 @@ function renderTurn(turn) {
   const head = document.createElement('div');
   head.className = 'turn-head';
   const modeLabel = turn.mode === 'ask' ? 'Ask' : (turn.mode === 'notes' ? 'Notes' : 'Pages');
-  head.innerHTML = '<span class="mode">' + esc(modeLabel) + '</span>' +
+  head.innerHTML = '<span class="mode ' + esc(turn.mode) + '">' + esc(modeLabel) + '</span>' +
     '<span class="q">' + esc(turn.query) + '</span>';
   const chev = document.createElement('button');
   chev.className = 'chev';
@@ -883,17 +964,43 @@ function renderTurnBody(turn) {
     return frag;
   }
   if (turn.mode === 'ask') {
+    const split = splitThinking(turn.answer || '');
+    if (split.thoughts.length) {
+      // The model's notes, folded: the answer below is what the question
+      // asked for. The row carries the state, exactly like the Sources list.
+      const isOpen = expandedThoughts.has(turn.id);
+      const thinkBtn = document.createElement('button');
+      thinkBtn.className = 'sources-toggle';
+      thinkBtn.type = 'button';
+      thinkBtn.textContent = 'Thinking ' + (isOpen ? '\u25be' : '\u25b8');
+      thinkBtn.addEventListener('click', () => {
+        if (isOpen) expandedThoughts.delete(turn.id);
+        else expandedThoughts.add(turn.id);
+        renderFeed();
+      });
+      frag.appendChild(thinkBtn);
+      if (isOpen) {
+        const notes = document.createElement('div');
+        notes.className = 'thinking';
+        for (const thought of split.thoughts) {
+          const part = document.createElement('div');
+          part.innerHTML = md(thought);
+          notes.appendChild(part);
+        }
+        frag.appendChild(notes);
+      }
+    }
     if (turn.verbatim) {
       // The source list could not be parsed: show the tool's text as it came,
       // so nothing is swallowed.
       const pre = document.createElement('pre');
       pre.className = 'raw';
-      pre.textContent = turn.answer || '';
+      pre.textContent = split.body;
       frag.appendChild(pre);
     } else {
       const a = document.createElement('div');
       a.className = 'answer';
-      a.innerHTML = md(turn.answer || '');
+      a.innerHTML = md(split.body);
       frag.appendChild(a);
     }
     const sources = turn.sources || [];
@@ -1027,6 +1134,54 @@ function renderDetail(d) {
   return frag;
 }
 
+/**
+ * The question "Ask about this" asks about a card.
+ *
+ * A card is a pointer, not a destination: its body already opens in place, so
+ * the next thing a reader wants is an answer ABOUT it — in this feed — not a
+ * trip to another window.
+ *
+ * Same wording as the JetBrains panel's followUpQuestion: the two surfaces must
+ * ask the same question about the same card (ADR-0036 decision 8).
+ */
+function followUp(card) {
+  const kind = card.type === 'wiki' ? 'page' : (card.type === 'todo' ? 'todo' : 'note');
+  // The title sits inside quotes, so its own quotes become apostrophes: a
+  // nested pair would end the phrase early and read as a typo.
+  const title = String(card.title || '').trim().replace(/"/g, "'");
+  const shown = title.length <= 80 ? title : title.slice(0, 79) + '…';
+  return 'Tell me about ' + kind + ' #' + card.id + ' "' + (shown || '(untitled)') +
+    '": what it says, and why it matters.';
+}
+
+/**
+ * Ask the question now: the click IS the request.
+ *
+ * It used to only draft, on the theory that a mis-click should not spend a
+ * model call. But the click is deliberate and it names a question, so the
+ * extra Enter made the label a promise the button did not keep — and the mode
+ * switch could leave the question sitting in the composer instead of answered.
+ * The composer is filled first (so the turn shows what was asked) and then
+ * submitted by the same path Enter uses. If a shared turn is in flight submit()
+ * declines and the text stays as a draft: the click is never silently dropped.
+ *
+ * Two callers name a question — a card's "Ask about this" and the idle panel's
+ * question example — and both must behave alike.
+ */
+function askNow(text) {
+  setMode('ask');
+  vscode.postMessage({ type: 'mode', mode: 'ask' });
+  q.value = text;
+  q.dispatchEvent(new Event('input'));
+  submit();
+  q.focus();
+}
+
+/** The card's follow-up: the question about that one item, asked. */
+function askAbout(card) {
+  askNow(followUp(card));
+}
+
 function renderCardActions(turn, card) {
   const bar = document.createElement('div');
   bar.className = 'card-actions';
@@ -1038,9 +1193,7 @@ function renderCardActions(turn, card) {
     b.addEventListener('click', (ev) => { ev.stopPropagation(); fn(b); });
     return b;
   };
-  bar.appendChild(mk('Open in Cinder', '', () => {
-    vscode.postMessage({ type: 'open', turnId: turn.id, card });
-  }));
+  bar.appendChild(mk('Ask about this', '', () => askAbout(card)));
   if (card.type === 'note') {
     bar.appendChild(mk('Edit', 'secondary', () => {
       vscode.postMessage({ type: 'edit', turnId: turn.id, cardType: card.type, cardId: card.id });
@@ -1183,10 +1336,10 @@ chip.addEventListener('click', () => {
 sendBtn.addEventListener('click', submit);
 
 // ---- the panel's own action strip -----------------------------------------
-document.getElementById('act-desktop').addEventListener('click', () => {
-  vscode.postMessage({ type: 'openDesktop' });
-});
-
+// There is no "open the desktop app" button here. The panel is the product in
+// this window; a button whose only job is to send you somewhere else is a
+// button that says the panel is a preview of the real thing. The desktop app
+// still has a command of its own in the palette.
 historyBtn.addEventListener('click', () => {
   renderTopics();
   openSheet('history-sheet');
