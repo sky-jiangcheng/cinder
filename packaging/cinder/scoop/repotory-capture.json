@@ -1,9 +1,9 @@
 {
-  "version": "2.46.0",
+  "version": "2.47.0",
   "description": "Session-end capture CLI that writes Cinder handoff notes from Claude Code sessions",
   "homepage": "https://github.com/sky-jiangcheng/cinder",
   "license": "MIT",
-  "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.46.0/cinder-capture-2.46.0-windows-amd64.zip",
+  "url": "https://github.com/sky-jiangcheng/cinder/releases/download/v2.47.0/cinder-capture-2.47.0-windows-amd64.zip",
   "hash": "sha256:baa0baff8642084d0ab0593e4ebe956c3e7350056024a9656fe96fcb4d8bf221",
   "bin": ["cinder-capture.exe", ["cinder-capture.exe", "repotory-capture"]],
   "checkver": {
